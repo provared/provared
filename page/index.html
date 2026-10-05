@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Provared: check a record</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+  <h1>Check a record</h1>
+  <p class="motto">Provared, draft version 0. Evidence, not a verdict.</p>
+  <p>Choose a record file. It is checked here, in this browser. Nothing is sent anywhere.</p>
+  <p>
+    <label class="file">Choose a record file<input type="file" id="file" accept=".jsonl,.json,.txt"></label>
+    <button type="button" class="second" id="sample">Check the sample record</button>
+  </p>
+  <details id="trust" class="more">
+    <summary>What you already trust (optional)</summary>
+    <p class="quiet">A check says more when you tell it which keys and services you expect. Put one fingerprint on each line. Use fingerprints you obtained yourself, from the people concerned.</p>
+    <label for="trust-issuer">The person's passkey (its thumbprint)</label>
+    <textarea id="trust-issuer" rows="2" spellcheck="false"></textarea>
+    <label for="trust-sealer">Whoever keeps and seals the book (the fingerprint of its key set)</label>
+    <textarea id="trust-sealer" rows="2" spellcheck="false"></textarea>
+    <label for="trust-stamps">Time-stamp services (the fingerprint of each service's certificate)</label>
+    <textarea id="trust-stamps" rows="2" spellcheck="false"></textarea>
+    <label for="trust-vouchers">Organisations whose vouching for names you trust (the fingerprint of each one's key set)</label>
+    <textarea id="trust-vouchers" rows="2" spellcheck="false"></textarea>
+    <label for="trust-blocks">Blocks of a public blockchain that you trust to be part of the chain (the fingerprint of each block: 64 characters, the digits 0 to 9 and the letters a to f)</label>
+    <textarea id="trust-blocks" rows="2" spellcheck="false"></textarea>
+  </details>
+  <details id="beside" class="more">
+    <summary>What you were handed with the record (optional)</summary>
+    <p class="quiet">Choose these files first, then choose the record file. They stay chosen, and are used with every record you check, until you clear them. The sample record is checked without them.</p>
+    <label for="cancellations">The person's own copies of cancellations: one file for each, up to 16. A copy counts even where the book leaves the cancellation out. A file may also hold what the agent's side signed when it was handed the cancellation.</label>
+    <input type="file" id="cancellations" accept=".json,.txt" multiple>
+    <label for="disclosures">Disclosures for covered fields of a slip: one file</label>
+    <input type="file" id="disclosures" accept=".json,.txt">
+    <p><button type="button" class="second" id="clear-beside">Clear these files</button></p>
+  </details>
+  <p id="status" role="status"></p>
+  <section id="result"></section>
+  <noscript><p>This page needs JavaScript to check a record.</p></noscript>
+</main>
+<script type="module" src="check-page.js"></script>
+</body>
+</html>

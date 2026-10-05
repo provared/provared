@@ -1,0 +1,57 @@
+{
+  "name": "provared",
+  "version": "0.1.0",
+  "description": "Proof of what an AI agent was allowed to do, and what it then did. Evidence, not a verdict.",
+  "author": "Pavel Izmaylov",
+  "license": "Apache-2.0 AND CC-BY-4.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/provared/provared.git"
+  },
+  "files": [
+    "src/",
+    "bin/",
+    "net/",
+    "spec/",
+    "docs/",
+    "samples/",
+    "page/index.html",
+    "page/check-page.js",
+    "page/render.js",
+    "page/style.css",
+    "LICENSE-CC-BY-4.0.txt",
+    "CHANGELOG.md"
+  ],
+  "type": "module",
+  "main": "./src/index.js",
+  "types": "./src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.js"
+    },
+    "./check": {
+      "types": "./src/check.d.ts",
+      "default": "./src/check.js"
+    },
+    "./passkey-browser": {
+      "types": "./src/passkey-browser.d.ts",
+      "default": "./src/passkey-browser.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "provared-check": "bin/provared-check.mjs",
+    "provared-headers": "bin/provared-headers.mjs"
+  },
+  "engines": {
+    "node": ">=24.7"
+  },
+  "scripts": {
+    "test": "node --disable-warning=ExperimentalWarning --test",
+    "check": "node --disable-warning=ExperimentalWarning bin/provared-check.mjs",
+    "headers": "node bin/provared-headers.mjs",
+    "demo": "node --disable-warning=ExperimentalWarning demo/server.mjs"
+  },
+  "dependencies": {}
+}

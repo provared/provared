@@ -1,0 +1,82 @@
+{
+  "about": "What a checker must find in office-supplies.jsonl. Written once, with the sample.",
+  "size": 10,
+  "root": "2ZydTcdlWXrOX56lNwbsRNC4KeirZ7tXtN4s0RK85pA",
+  "issuerKey": "ihy9Ars_PYFEEa48Nz8VOp4d2DHjC03vpEffGvOkPOM",
+  "sealKeys": [
+    "DOg-0-l1OXO-AJ2z1vI-l5yXjuqNh5yOasQr8vyhdfc"
+  ],
+  "stampServices": [
+    "l3_bEVZ-I9DONwBvZqLwnBwOXYlOSs_nhUeH9XPWdYQ"
+  ],
+  "sealed": {
+    "entries": 9,
+    "when": "2026-10-05T10:16:00Z",
+    "seal": 9,
+    "by": "service"
+  },
+  "fingerprints": [
+    "PJ92TUWhvOsXdGOYN-Ihg7n8_t0PjHe_yVL-X2_4lXI",
+    "DTeb-MKAkH7FCGLyHQ3hkTXhpjO6IL0fiCljrxgVLFY",
+    "SzVv2Lu_luaxil-relJ4Ic2EkiMPymBs9U8jkb8_ShE",
+    "hC2OcS5qW0QLVR07E_VhlLAyjropjH9RUD23aH9c8ho",
+    "8m4JZv0ME5nfHKxbT3RpAG3K4eEAddH8kAGI3vdcdvk",
+    "qo5yVfgZsvuKi3jpXYnLIRQpPOG5zKmmAv91dWzuU-E",
+    "YXEbfSjx9O923skjuFj3xe33-2_jtdUbxqIlZOCn0tU",
+    "_5VIGre3UoeELENBHHyoB_loAjGfgL2vHiv5ZNXFhQM",
+    "GgqxEq7aSnEOANaRyxNaK048_7dUavxh4ClBn8RX3xY",
+    "St1v4SDm88OdbJBurGixAgyv7N2mcMVNGKO66HpBoqU"
+  ],
+  "summary": {
+    "intact": true,
+    "fullyChecked": true,
+    "withinSlips": false,
+    "firstBreach": 5,
+    "counts": {
+      "slips": 1,
+      "stubs": 6,
+      "countersigned": 3,
+      "oneSided": 3,
+      "approved": 1,
+      "refusals": 1,
+      "terms": 1,
+      "seals": 1,
+      "cancellations": 0,
+      "acknowledgements": 0,
+      "vouchings": 0,
+      "passes": 0
+    }
+  },
+  "breaches": [
+    [],
+    [],
+    [],
+    [],
+    [],
+    [
+      "countersignature-missing"
+    ],
+    [
+      "over-limit",
+      "approval-missing"
+    ],
+    [],
+    [
+      "action-not-allowed",
+      "prohibited"
+    ],
+    []
+  ],
+  "running": [
+    null,
+    null,
+    "45",
+    null,
+    "125",
+    "150",
+    "230",
+    null,
+    null,
+    null
+  ]
+}

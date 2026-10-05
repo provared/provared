@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Provared: the demonstration</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+  <h1>The demonstration</h1>
+  <p class="motto">Provared, draft version 0. Evidence, not a verdict.</p>
+  <p>An office agent works under a permission that sets limits and conditions. It goes outside the permission four times. The record shows exactly where.</p>
+  <p class="quiet">Everything here is invented: the supplier, the orders and the amounts. Nothing is bought, sent or deleted, and no money moves. It all runs on this computer.</p>
+
+  <ol class="steps">
+    <li id="step1">
+      <h2>Give the permission</h2>
+      <p>This is the Slip: what you allow the agent to do.</p>
+      <dl id="slip-words"></dl>
+      <p><button type="button" id="sign" disabled>Sign this permission with a passkey</button></p>
+      <p id="sign-status" role="status"></p>
+      <p class="quiet">The first time, your device asks twice: once to make a passkey for this demonstration, and once to sign. If this device cannot use a passkey here, you can still <a href="index.html">check the ready-made sample record</a>.</p>
+    </li>
+    <li id="step2" class="waiting">
+      <h2>Let the agent work</h2>
+      <p>The agent takes seven steps. It writes a Stub (a signed receipt) for each action, and the supplier countersigns its orders. For one order the agent stops and asks you first. At the end the book is sealed and time-stamped. The time-stamp service here is made up and runs on this computer.</p>
+      <p><button type="button" id="run" disabled>Run the agent</button></p>
+      <p id="run-status" role="status"></p>
+      <p id="approve-line" hidden><button type="button" id="approve" disabled>Approve this one order with your passkey</button></p>
+      <table id="orders" hidden>
+        <thead><tr><th>Step</th><th>What the agent did</th><th class="number">Value</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </li>
+    <li id="step3" class="waiting">
+      <h2>Check the record</h2>
+      <p id="check-status" role="status">The result appears here when the agent has finished.</p>
+      <p id="save-line" hidden>
+        <button type="button" class="second" id="save">Save the record as a file</button>
+        You can check the saved file again on <a href="index.html">the checking page</a>.
+      </p>
+      <section id="result"></section>
+    </li>
+  </ol>
+  <noscript><p>This page needs JavaScript.</p></noscript>
+</main>
+<script type="module" src="demo-page.js"></script>
+</body>
+</html>

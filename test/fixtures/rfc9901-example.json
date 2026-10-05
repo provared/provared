@@ -1,0 +1,151 @@
+{
+  "source": "RFC 9901, section 5.1: the claims, the payload with covered fields, and every disclosure with its SHA-256 fingerprint. Each fingerprint was confirmed when this file was written.",
+  "claims": {
+    "sub": "user_42",
+    "given_name": "John",
+    "family_name": "Doe",
+    "email": "johndoe@example.com",
+    "phone_number": "+1-202-555-0101",
+    "phone_number_verified": true,
+    "address": {
+      "street_address": "123 Main St",
+      "locality": "Anytown",
+      "region": "Anystate",
+      "country": "US"
+    },
+    "birthdate": "1940-01-01",
+    "updated_at": 1570000000,
+    "nationalities": [
+      "US",
+      "DE"
+    ]
+  },
+  "payload": {
+    "_sd": [
+      "CrQe7S5kqBAHt-nMYXgc6bdt2SH5aTY1sU_M-PgkjPI",
+      "JzYjH4svliH0R3PyEMfeZu6Jt69u5qehZo7F7EPYlSE",
+      "PorFbpKuVu6xymJagvkFsFXAbRoc2JGlAUA2BA4o7cI",
+      "TGf4oLbgwd5JQaHyKVQZU9UdGE0w5rtDsrZzfUaomLo",
+      "XQ_3kPKt1XyX7KANkqVR6yZ2Va5NrPIvPYbyMvRKBMM",
+      "XzFrzwscM6Gn6CJDc6vVK8BkMnfG8vOSKfpPIZdAfdE",
+      "gbOsI4Edq2x2Kw-w5wPEzakob9hV1cRD0ATN3oQL9JM",
+      "jsu9yVulwQQlhFlM_3JlzMaSFzglhQG0DpfayQwLUK4"
+    ],
+    "iss": "https://issuer.example.com",
+    "iat": 1683000000,
+    "exp": 1883000000,
+    "sub": "user_42",
+    "nationalities": [
+      {
+        "...": "pFndjkZ_VCzmyTa6UjlZo3dh-ko8aIKQc9DlGzhaVYo"
+      },
+      {
+        "...": "7Cf6JkPudry3lcbwHgeZ8khAv1U1OSlerP0VkBJrWZ0"
+      }
+    ],
+    "_sd_alg": "sha-256",
+    "cnf": {
+      "jwk": {
+        "kty": "EC",
+        "crv": "P-256",
+        "x": "TCAER19Zvu3OHF4j4W4vfSVoHIP1ILilDls7vCeGemc",
+        "y": "ZxjiWWbZMQGHVWKVQ4hbSIirsVfuecCE6t4jT9F2HZQ"
+      }
+    }
+  },
+  "disclosures": [
+    {
+      "hash": "jsu9yVulwQQlhFlM_3JlzMaSFzglhQG0DpfayQwLUK4",
+      "disclosure": "WyIyR0xDNDJzS1F2ZUNmR2ZyeU5STjl3IiwgImdpdmVuX25hbWUiLCAiSm9obiJd",
+      "contents": [
+        "2GLC42sKQveCfGfryNRN9w",
+        "given_name",
+        "John"
+      ]
+    },
+    {
+      "hash": "TGf4oLbgwd5JQaHyKVQZU9UdGE0w5rtDsrZzfUaomLo",
+      "disclosure": "WyJlbHVWNU9nM2dTTklJOEVZbnN4QV9BIiwgImZhbWlseV9uYW1lIiwgIkRvZSJd",
+      "contents": [
+        "eluV5Og3gSNII8EYnsxA_A",
+        "family_name",
+        "Doe"
+      ]
+    },
+    {
+      "hash": "JzYjH4svliH0R3PyEMfeZu6Jt69u5qehZo7F7EPYlSE",
+      "disclosure": "WyI2SWo3dE0tYTVpVlBHYm9TNXRtdlZBIiwgImVtYWlsIiwgImpvaG5kb2VAZXhhbXBsZS5jb20iXQ",
+      "contents": [
+        "6Ij7tM-a5iVPGboS5tmvVA",
+        "email",
+        "johndoe@example.com"
+      ]
+    },
+    {
+      "hash": "PorFbpKuVu6xymJagvkFsFXAbRoc2JGlAUA2BA4o7cI",
+      "disclosure": "WyJlSThaV205UW5LUHBOUGVOZW5IZGhRIiwgInBob25lX251bWJlciIsICIrMS0yMDItNTU1LTAxMDEiXQ",
+      "contents": [
+        "eI8ZWm9QnKPpNPeNenHdhQ",
+        "phone_number",
+        "+1-202-555-0101"
+      ]
+    },
+    {
+      "hash": "XQ_3kPKt1XyX7KANkqVR6yZ2Va5NrPIvPYbyMvRKBMM",
+      "disclosure": "WyJRZ19PNjR6cUF4ZTQxMmExMDhpcm9BIiwgInBob25lX251bWJlcl92ZXJpZmllZCIsIHRydWVd",
+      "contents": [
+        "Qg_O64zqAxe412a108iroA",
+        "phone_number_verified",
+        true
+      ]
+    },
+    {
+      "hash": "XzFrzwscM6Gn6CJDc6vVK8BkMnfG8vOSKfpPIZdAfdE",
+      "disclosure": "WyJBSngtMDk1VlBycFR0TjRRTU9xUk9BIiwgImFkZHJlc3MiLCB7InN0cmVldF9hZGRyZXNzIjogIjEyMyBNYWluIFN0IiwgImxvY2FsaXR5IjogIkFueXRvd24iLCAicmVnaW9uIjogIkFueXN0YXRlIiwgImNvdW50cnkiOiAiVVMifV0",
+      "contents": [
+        "AJx-095VPrpTtN4QMOqROA",
+        "address",
+        {
+          "street_address": "123 Main St",
+          "locality": "Anytown",
+          "region": "Anystate",
+          "country": "US"
+        }
+      ]
+    },
+    {
+      "hash": "gbOsI4Edq2x2Kw-w5wPEzakob9hV1cRD0ATN3oQL9JM",
+      "disclosure": "WyJQYzMzSk0yTGNoY1VfbEhnZ3ZfdWZRIiwgImJpcnRoZGF0ZSIsICIxOTQwLTAxLTAxIl0",
+      "contents": [
+        "Pc33JM2LchcU_lHggv_ufQ",
+        "birthdate",
+        "1940-01-01"
+      ]
+    },
+    {
+      "hash": "CrQe7S5kqBAHt-nMYXgc6bdt2SH5aTY1sU_M-PgkjPI",
+      "disclosure": "WyJHMDJOU3JRZmpGWFE3SW8wOXN5YWpBIiwgInVwZGF0ZWRfYXQiLCAxNTcwMDAwMDAwXQ",
+      "contents": [
+        "G02NSrQfjFXQ7Io09syajA",
+        "updated_at",
+        1570000000
+      ]
+    },
+    {
+      "hash": "pFndjkZ_VCzmyTa6UjlZo3dh-ko8aIKQc9DlGzhaVYo",
+      "disclosure": "WyJsa2x4RjVqTVlsR1RQVW92TU5JdkNBIiwgIlVTIl0",
+      "contents": [
+        "lklxF5jMYlGTPUovMNIvCA",
+        "US"
+      ]
+    },
+    {
+      "hash": "7Cf6JkPudry3lcbwHgeZ8khAv1U1OSlerP0VkBJrWZ0",
+      "disclosure": "WyJuUHVvUW5rUkZxM0JJZUFtN0FuWEZBIiwgIkRFIl0",
+      "contents": [
+        "nPuoQnkRFq3BIeAm7AnXFA",
+        "DE"
+      ]
+    }
+  ]
+}

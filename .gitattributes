@@ -1,0 +1,3 @@
+# Line endings are LF in the repository and in every checkout, so sample
+# records and their fingerprints are byte-identical on every machine.
+* text=auto eol=lf

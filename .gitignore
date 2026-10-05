@@ -1,0 +1,16 @@
+# Local notes and editor settings: never committed.
+CLAUDE.local.md
+.claude/settings.local.json
+
+# Never commit secrets or machine files
+.env
+.env.*
+*.key
+*.pem
+*.jwk
+*.seed
+node_modules/
+# The checking page built as a single file (tools/make-single-page.mjs)
+provared-check.html
+.DS_Store
+Thumbs.db
