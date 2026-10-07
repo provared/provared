@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- 2026-10-08: shared test files, and the start of a Python version.
+  - `test-vectors/` holds records and values, each with the answer this
+    library gives: the canonical form, base64url, times, keys, a
+    passkey's signature, the envelope of a record, the content of a stub
+    and of a countersignature, page addresses and 170 slips, sound and
+    faulty. `tools/make-vectors.mjs` writes them;
+    `test/vectors.test.mjs` checks that this library still gives every
+    answer. Any other implementation of the format can be tested against
+    them.
+  - `python/` holds the start of a Python version, built in stages
+    against the same files. It is not yet published.
+  - A slip whose page address cannot be read, and one whose address is
+    not in its plain form, are now refused with the same words. The code
+    (`bad-field`) is unchanged.
 - 2026-10-07: the README links to the individual Internet-Draft
   `draft-izmaylov-agent-permission-receipts`, which describes the core of
   the format.

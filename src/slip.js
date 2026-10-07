@@ -19,15 +19,19 @@ function checkOrigin(origin, rpId) {
   if (typeof rpId !== 'string' || !/^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$/.test(rpId)) {
     throw f.fail('issuer.rpId', 'must be a website name in lower case, such as example.org.');
   }
-  let url;
+  // url.origin has no path and no default port, so this also refuses
+  // anything after the host. An address that cannot be read and one that is
+  // not in its plain form get the same words, so that a checker written
+  // without a full reader of addresses can give the same answer.
+  let url = null;
   try {
     url = new URL(origin);
   } catch {
-    throw f.fail('issuer.origin', 'must be the address of a page, such as https://sign.example.org.');
+    url = null;
   }
-  // url.origin has no path and no default port, so this also refuses
-  // anything after the host.
-  if (url.origin !== origin) throw f.fail('issuer.origin', 'must be a bare address with no path, such as https://sign.example.org.');
+  if (url === null || url.origin !== origin) {
+    throw f.fail('issuer.origin', 'must be the address of a page, with nothing after the host and the port, such as https://sign.example.org.');
+  }
   if (!(url.protocol === 'https:' || (url.protocol === 'http:' && url.hostname === 'localhost'))) {
     throw f.fail('issuer.origin', 'must begin https://, or http://localhost.');
   }

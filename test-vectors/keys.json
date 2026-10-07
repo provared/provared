@@ -1,0 +1,618 @@
+{
+ "about": "Confirming the shape of a public key, and its thumbprint (format description, section 3.8).",
+ "function": "checkKey",
+ "cases": [
+  {
+   "name": "an Ed25519 key",
+   "key": {
+    "alg": "Ed25519",
+    "crv": "Ed25519",
+    "kty": "OKP",
+    "x": "fHIv_3yk625LVzyIT5i9UwfBCZUotb2M2jTGN-zaLxY"
+   },
+   "allowed": [
+    "Ed25519"
+   ],
+   "expected": {
+    "ok": {
+     "alg": "Ed25519",
+     "thumbprint": "IR6uui9lUFarKmI_RtXoFjk0JkzsQ7opJDosL-11pmw"
+    }
+   }
+  },
+  {
+   "name": "an ML-DSA-87 key",
+   "key": {
+    "alg": "ML-DSA-87",
+    "kty": "AKP",
+    "pub": "xCAhxCoVO8Tbg5bt8DcvVNhbrGtRqVsIDAP3JDmCV0dgYAs-JVieB-TG78k3w7hIAQazFNZV-5AZM2JsDql6ZHg25bK2XfELn85y8xrHkviVHjbtJzcI0AuV6LAsgtdvn5OcNZokzRNA16m_U4oQrTo_nDWAnFdL1FIpczqyXKs-8CqKHmaPZvSP_47rGQCeydm8H_5g9TgWk26OIeq5SSJO6WYbWRnLwTYIWM6KdcnjLfT7c5SfZSPZaCdqugI1UsBXvHScxLL5cMheHKdxJJ--u1jUU_Zb8nhBEy5psYQU2JGHV320uLE8zE8_qzUCJ2Fqh55E3dNP-3TgW7RFvWmO97Z-RWcD_lDzWFQUINuShHLn0bWhUPlyJg4HJfYkrNJlwwHQRz33xnWe0TbdI9AztsgK3rkhDDMWfXEIPueHA8BO1H5SEcEb0veeiA3y-303b9_OGSciJIS2f9k4GXVwIV1pn7-kyhWAB71emNXztrNsn955yAY04L0NEMv8bJVnNQgpEnVzXR1VroT3DT6dCZdEJ9phLVZVtDWYFQmNX7dZ1-197xiL0-OTEAtaMZH24F11-wMVzNziulyhkWjI2W43NOC7spY_7xLy4Wuh6kay57GchvSI5lv5bD98ftunkROKCfHPKsFZlB__8_NNThVaT9y-mfeRT4mE5YqCmNW8gM1ZmyzM8yQoY9Y_ww6aUWcpKcABG1qZe09Pm8MgCb5VICfOD8U3cect_LzLhrBD4V-siaOeWNOq9u4Z3tM54kOw1-0LJON-7y-R-3SvrDp4aXyGQL8Y0Oo9V5mEUUDo2PAYLT3YqzIlkpuZ-_wfmZuldUs16dWh42_CQXArCt76hCeuMFXGdIau9Vd7Ipm2hewT6LNmhjWHR3XLjn-Yl5maHNCXFWkLw0swmPm78CQUaf1ks800sgXO1OyyYJJ6YhUdZsiKvm4rGH_6WwCCWNRmKorQ4epjxNiasEx0F6WVJI3UqLb6eOLdwX6gdEOrujtDYNoBNT_aI_123r256MmFHZ04thkmuE_TC-yqtCDdy-4hZyWll2kI_PPkl8Dv9gxyeic42XKae5WL20Byd9KiKq6n8QFr0ATs2h7tPK9Lz1MLs3bF9U5MSBLsLs1Is-ag36KeqgN8ZpTySo-4ysrMAgCmQxAZxex8kvz45u2ZjXQzgmz3F6Pgbwak_uddGd9SqzjpDV9kTZDducH6884QfEqUQKTSu9ANsNG4uV1VdVwm_MqrvLHHTQKuau_uOs8Dy8NjLlAxD0g4Ytff7dGMSu4nD6193gua6yMM8oK09hiBF8-B_CbWPGMmWMF7jd_Uy1WxvJckAXhjVIVmT4_cEtGfsgYEh_NJl1Q7WRfHlltzjXLjm7nhlo6mjQZH-KWFqyGH5a0FucgPTfZJ1GHdGwW4Aj4eAxth9QSvfCcFlHtYGhG9kyS__8i_WsRi4ae5OwgzeY8DLXlH2Y2n63EZTaNERszvTb-jllX3ss1VpDRhjqoQKFO6X-qXqz_oeoRn8JU039XEabG2eOj5-TyvsxbkzMkPh_TCX0NzA5vLGLSCn0Q0itXxo_5hP4GtWUvLHnUIj9uzoIbbE9yYplhOWUt6sfjw-gnw2KofmIFm-nMEkLPAEZv0yuSi_ehLVr_MHPrE72SCnGsYr-zjbdR3GrU_YLymweXsVYkYzzUsieSKbdMfYS8H4ddYm2WD4EUe9KvdCw87TpQ-uUjABDfbQyONwqeyPck39wuAjSO5USounDSIiZM-ED9G_TeAFEfUymI46JIjd2w296H8rkwyl0hQx5jJ6P4ta80wGqhQboGHs2ZMZWNvBaMvERkyNTEDcqNugg36C4OBrN1WF7KsvHpF-DTg2ligtDIOCzU2gmi6Kg90GQP6w6-he6xTzFrZp6rZ7MyIZwYmXVYSiuOEbzKbx5m6zhvyPGTOipITyqLeJKh8uObh2hWMFgSh0Ti4SOGrV4zfh39E7Q6H6574qU_pfgenO36m5UppToqcFRV8hDrPvzdcEuNvwsVGU56_9eExOoYTD4PTXf5TzNZAg_o3sxsFo8djHQgOzZYk1-T2QufGryUavWxE0hNKbVjBsNDy38guGYt78lXuHCUEAxwwvTfIudbLS0fmL4V3gplhLkPcb02X4iNcIVLTNHTeQ-sznNCmyRUOdAdcKTxiKwOrq8dvhi5udVy3SO6tNa8ION6EHfWw2X2Oukczlphh-6McjL8fJrsuvHXGvAEHejlbZY921jJ8HkdwSHa-E9oJ2g6sqQ8JiXDAcojxf3B-_HgkHPBxJyuvvhdyTbvHlRte8g58FvZyRx2QFobSoGH4hNoYOyAaRq0oyRTap3tM3RtLXYYPFkXCHWs63hljWxSp46wOn3d1YMkcZNTAzUjjdFLgnlyX4fS-Pn8zNyW1eIUs5jXrT4Cxi88twOiYL2Si06aLONxg4969ijJdww5_fC9xSTukL0oJaIZ8L1M8Ag7miW_1tcf6VIZeIHzyv1sZrKbtAimn97tvrMDB4sXjsLw_BBHvv_B0VuqE3nVEp8BN1jDtTF-obic3ITFBoSHPWRJNXmYbDe-oCS_I_hs3KHqWbO-WgP-RkxetA3_KGcUR5DKiaW5Qp2c061L_meiFvt8MHSk950ImXE44LkAqYsU7-wwm1kNf-i8BKY1MesJQ4IZML-f_iu14JZtSX3XZMvhwZ5Jq8Kq7elfYyeFJqDe7gKfYyEE3D0X_leyoI1LdFki8Qb44ssNtaGfrYOWcubNzXtNfgCG-y1SZp01JVOHCtJY-n9ODxJr9LxXUj3_8fi5co3McXUV-JOt43ZRtZSf1WuwygBFPNBfNnIkxt9cJp1orQ8Xs1sRBa1mVrSeo54r4KdPMNxK4RrPhxvFMb069sjpLAVFGuSNuG2uI3hqiWDn_Y8fMrZCOLtWIGELuyxcz0406iBQpT8V_yUImhSsoak9b60JzwumuOK5PEUaw9o8Qa2bGSklWxsy9GUAjBTEVKn85iCDup1SkDDjYAFQ9ubuGtSocY604DVJhqNgXX7Pw2QjE8j5uBpOirUJvPTN5Dcx3CD085AzuWbOFSPYBnEuQRGSkSto4MRE9wdPnBvjihxy8MZWLkDlo4C-S4O9THa3Gu1ztfb3bwWVh8_mqEmOjxhyTvQ8LKO6NQeU_rs0u6fdIpDqY04zhiJa8NG_l6mP_6idDex3qm_kHj0Vw9p5MVWerYJgL_IlBwDb0Edl_iOUO-n8o3bYRyJPY6WJTX7lktK3AZTcQHQPicR6Eq-SiKQxayMNvcLsDbq8FZ2zQSjw0QXLdHIaGV4qzIJsGIkskxzfPqPmr3Ew9dQgixmsBQEWu9D0fRPduHwSi4-rD5pxHJnFP-lrqXiFIHpkVO3kiK9WRxm1hIoCThChVD4MmEcta9mbqbGBcXemJZldFX-Kr1b0AHem5Ba-08tJm5Ytd"
+   },
+   "allowed": [
+    "ML-DSA-87"
+   ],
+   "expected": {
+    "ok": {
+     "alg": "ML-DSA-87",
+     "thumbprint": "QwDiwn2D_LV6lHUtYMxIDZdLNGQGQ0YhcA3NEav-Lo0"
+    }
+   }
+  },
+  {
+   "name": "an SLH-DSA key",
+   "key": {
+    "alg": "SLH-DSA-SHA2-256s",
+    "kty": "AKP",
+    "pub": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+   },
+   "allowed": [
+    "SLH-DSA-SHA2-256s"
+   ],
+   "expected": {
+    "ok": {
+     "alg": "SLH-DSA-SHA2-256s",
+     "thumbprint": "HSC7sN2gIhWs7kM3ZjXzeJGEyPinb9GCJGFSUutPug4"
+    }
+   }
+  },
+  {
+   "name": "an ES256 passkey",
+   "key": {
+    "alg": "ES256",
+    "crv": "P-256",
+    "kty": "EC",
+    "x": "jznvIH2mvygCJTjB8O7eh_Gr_-GcZU8yoMYcwJQv8Jo",
+    "y": "QXxgujreeLkGiwUysL0TMaYOVFdQfZO0E2nEWY2RUAQ"
+   },
+   "allowed": [
+    "ES256",
+    "RS256",
+    "Ed25519"
+   ],
+   "expected": {
+    "ok": {
+     "alg": "ES256",
+     "thumbprint": "mUjTweSZOwktU1iEq6DeKvD65HUkEnRxCUiOXNHJRYI"
+    }
+   }
+  },
+  {
+   "name": "an RS256 passkey",
+   "key": {
+    "alg": "RS256",
+    "e": "AQAB",
+    "kty": "RSA",
+    "n": "x2NGljcAoqJJVvgkzeHGbzKu6Vuik5YL4bPjlyB92fnzA7_47HzEb8DDTGFoBtEioGDHxkgciKCnmbNvn6S9N10_5LrC5Oe3GldxDqUSmvf1_ruEg1OWeFwK734HxsFVAtLNNFXERNp1pVz2XkAapQUw-jFDV00m7CqXowvZdNXo0cxWjVSVA3SOMb1tFxGtf1Ns_1twWOsgXoLHyidUJpzqQjCqZ2PLIQ4pFx2aR3vUWscPB1y9QT4Gzec0oUctfgXTvYFpf5Mw5hiV3ljiqfFJH2atUSeGUWkJzWRqouzdjSufw7DmXK1VuJzsmPL88Lm3DtdYyucp-YkXiFHhYw"
+   },
+   "allowed": [
+    "ES256",
+    "RS256",
+    "Ed25519"
+   ],
+   "expected": {
+    "ok": {
+     "alg": "RS256",
+     "thumbprint": "zpWVpMsKyTi5DkvgZU_kXnpKv3IAnSAvUaAtHdGgbX8"
+    }
+   }
+  },
+  {
+   "name": "an Ed25519 passkey",
+   "key": {
+    "alg": "Ed25519",
+    "crv": "Ed25519",
+    "kty": "OKP",
+    "x": "6rRR4pnmgpt8z_OH8pJ2p-QosrloYIYOIXAhqE5E3NA"
+   },
+   "allowed": [
+    "ES256",
+    "RS256",
+    "Ed25519"
+   ],
+   "expected": {
+    "ok": {
+     "alg": "Ed25519",
+     "thumbprint": "j_-9ui_y5Ktzx6sPOF9LPTgv82WkVcqWNCORzphEa7s"
+    }
+   }
+  },
+  {
+   "name": "a method not allowed here",
+   "key": {
+    "alg": "ML-DSA-87",
+    "kty": "AKP",
+    "pub": "xCAhxCoVO8Tbg5bt8DcvVNhbrGtRqVsIDAP3JDmCV0dgYAs-JVieB-TG78k3w7hIAQazFNZV-5AZM2JsDql6ZHg25bK2XfELn85y8xrHkviVHjbtJzcI0AuV6LAsgtdvn5OcNZokzRNA16m_U4oQrTo_nDWAnFdL1FIpczqyXKs-8CqKHmaPZvSP_47rGQCeydm8H_5g9TgWk26OIeq5SSJO6WYbWRnLwTYIWM6KdcnjLfT7c5SfZSPZaCdqugI1UsBXvHScxLL5cMheHKdxJJ--u1jUU_Zb8nhBEy5psYQU2JGHV320uLE8zE8_qzUCJ2Fqh55E3dNP-3TgW7RFvWmO97Z-RWcD_lDzWFQUINuShHLn0bWhUPlyJg4HJfYkrNJlwwHQRz33xnWe0TbdI9AztsgK3rkhDDMWfXEIPueHA8BO1H5SEcEb0veeiA3y-303b9_OGSciJIS2f9k4GXVwIV1pn7-kyhWAB71emNXztrNsn955yAY04L0NEMv8bJVnNQgpEnVzXR1VroT3DT6dCZdEJ9phLVZVtDWYFQmNX7dZ1-197xiL0-OTEAtaMZH24F11-wMVzNziulyhkWjI2W43NOC7spY_7xLy4Wuh6kay57GchvSI5lv5bD98ftunkROKCfHPKsFZlB__8_NNThVaT9y-mfeRT4mE5YqCmNW8gM1ZmyzM8yQoY9Y_ww6aUWcpKcABG1qZe09Pm8MgCb5VICfOD8U3cect_LzLhrBD4V-siaOeWNOq9u4Z3tM54kOw1-0LJON-7y-R-3SvrDp4aXyGQL8Y0Oo9V5mEUUDo2PAYLT3YqzIlkpuZ-_wfmZuldUs16dWh42_CQXArCt76hCeuMFXGdIau9Vd7Ipm2hewT6LNmhjWHR3XLjn-Yl5maHNCXFWkLw0swmPm78CQUaf1ks800sgXO1OyyYJJ6YhUdZsiKvm4rGH_6WwCCWNRmKorQ4epjxNiasEx0F6WVJI3UqLb6eOLdwX6gdEOrujtDYNoBNT_aI_123r256MmFHZ04thkmuE_TC-yqtCDdy-4hZyWll2kI_PPkl8Dv9gxyeic42XKae5WL20Byd9KiKq6n8QFr0ATs2h7tPK9Lz1MLs3bF9U5MSBLsLs1Is-ag36KeqgN8ZpTySo-4ysrMAgCmQxAZxex8kvz45u2ZjXQzgmz3F6Pgbwak_uddGd9SqzjpDV9kTZDducH6884QfEqUQKTSu9ANsNG4uV1VdVwm_MqrvLHHTQKuau_uOs8Dy8NjLlAxD0g4Ytff7dGMSu4nD6193gua6yMM8oK09hiBF8-B_CbWPGMmWMF7jd_Uy1WxvJckAXhjVIVmT4_cEtGfsgYEh_NJl1Q7WRfHlltzjXLjm7nhlo6mjQZH-KWFqyGH5a0FucgPTfZJ1GHdGwW4Aj4eAxth9QSvfCcFlHtYGhG9kyS__8i_WsRi4ae5OwgzeY8DLXlH2Y2n63EZTaNERszvTb-jllX3ss1VpDRhjqoQKFO6X-qXqz_oeoRn8JU039XEabG2eOj5-TyvsxbkzMkPh_TCX0NzA5vLGLSCn0Q0itXxo_5hP4GtWUvLHnUIj9uzoIbbE9yYplhOWUt6sfjw-gnw2KofmIFm-nMEkLPAEZv0yuSi_ehLVr_MHPrE72SCnGsYr-zjbdR3GrU_YLymweXsVYkYzzUsieSKbdMfYS8H4ddYm2WD4EUe9KvdCw87TpQ-uUjABDfbQyONwqeyPck39wuAjSO5USounDSIiZM-ED9G_TeAFEfUymI46JIjd2w296H8rkwyl0hQx5jJ6P4ta80wGqhQboGHs2ZMZWNvBaMvERkyNTEDcqNugg36C4OBrN1WF7KsvHpF-DTg2ligtDIOCzU2gmi6Kg90GQP6w6-he6xTzFrZp6rZ7MyIZwYmXVYSiuOEbzKbx5m6zhvyPGTOipITyqLeJKh8uObh2hWMFgSh0Ti4SOGrV4zfh39E7Q6H6574qU_pfgenO36m5UppToqcFRV8hDrPvzdcEuNvwsVGU56_9eExOoYTD4PTXf5TzNZAg_o3sxsFo8djHQgOzZYk1-T2QufGryUavWxE0hNKbVjBsNDy38guGYt78lXuHCUEAxwwvTfIudbLS0fmL4V3gplhLkPcb02X4iNcIVLTNHTeQ-sznNCmyRUOdAdcKTxiKwOrq8dvhi5udVy3SO6tNa8ION6EHfWw2X2Oukczlphh-6McjL8fJrsuvHXGvAEHejlbZY921jJ8HkdwSHa-E9oJ2g6sqQ8JiXDAcojxf3B-_HgkHPBxJyuvvhdyTbvHlRte8g58FvZyRx2QFobSoGH4hNoYOyAaRq0oyRTap3tM3RtLXYYPFkXCHWs63hljWxSp46wOn3d1YMkcZNTAzUjjdFLgnlyX4fS-Pn8zNyW1eIUs5jXrT4Cxi88twOiYL2Si06aLONxg4969ijJdww5_fC9xSTukL0oJaIZ8L1M8Ag7miW_1tcf6VIZeIHzyv1sZrKbtAimn97tvrMDB4sXjsLw_BBHvv_B0VuqE3nVEp8BN1jDtTF-obic3ITFBoSHPWRJNXmYbDe-oCS_I_hs3KHqWbO-WgP-RkxetA3_KGcUR5DKiaW5Qp2c061L_meiFvt8MHSk950ImXE44LkAqYsU7-wwm1kNf-i8BKY1MesJQ4IZML-f_iu14JZtSX3XZMvhwZ5Jq8Kq7elfYyeFJqDe7gKfYyEE3D0X_leyoI1LdFki8Qb44ssNtaGfrYOWcubNzXtNfgCG-y1SZp01JVOHCtJY-n9ODxJr9LxXUj3_8fi5co3McXUV-JOt43ZRtZSf1WuwygBFPNBfNnIkxt9cJp1orQ8Xs1sRBa1mVrSeo54r4KdPMNxK4RrPhxvFMb069sjpLAVFGuSNuG2uI3hqiWDn_Y8fMrZCOLtWIGELuyxcz0406iBQpT8V_yUImhSsoak9b60JzwumuOK5PEUaw9o8Qa2bGSklWxsy9GUAjBTEVKn85iCDup1SkDDjYAFQ9ubuGtSocY604DVJhqNgXX7Pw2QjE8j5uBpOirUJvPTN5Dcx3CD085AzuWbOFSPYBnEuQRGSkSto4MRE9wdPnBvjihxy8MZWLkDlo4C-S4O9THa3Gu1ztfb3bwWVh8_mqEmOjxhyTvQ8LKO6NQeU_rs0u6fdIpDqY04zhiJa8NG_l6mP_6idDex3qm_kHj0Vw9p5MVWerYJgL_IlBwDb0Edl_iOUO-n8o3bYRyJPY6WJTX7lktK3AZTcQHQPicR6Eq-SiKQxayMNvcLsDbq8FZ2zQSjw0QXLdHIaGV4qzIJsGIkskxzfPqPmr3Ew9dQgixmsBQEWu9D0fRPduHwSi4-rD5pxHJnFP-lrqXiFIHpkVO3kiK9WRxm1hIoCThChVD4MmEcta9mbqbGBcXemJZldFX-Kr1b0AHem5Ba-08tJm5Ytd"
+   },
+   "allowed": [
+    "ES256",
+    "RS256",
+    "Ed25519"
+   ],
+   "expected": {
+    "refused": {
+     "code": "bad-key",
+     "message": "key: the signing method must be one of ES256, RS256, Ed25519."
+    }
+   }
+  },
+  {
+   "name": "an unknown method",
+   "key": {
+    "alg": "EdDSA",
+    "crv": "Ed25519",
+    "kty": "OKP",
+    "x": "fHIv_3yk625LVzyIT5i9UwfBCZUotb2M2jTGN-zaLxY"
+   },
+   "allowed": [
+    "Ed25519",
+    "ML-DSA-87",
+    "SLH-DSA-SHA2-256s",
+    "ES256",
+    "RS256",
+    "Ed25519"
+   ],
+   "expected": {
+    "refused": {
+     "code": "bad-key",
+     "message": "key: the signing method must be one of Ed25519, ML-DSA-87, SLH-DSA-SHA2-256s, ES256, RS256, Ed25519."
+    }
+   }
+  },
+  {
+   "name": "no method",
+   "key": {
+    "kty": "OKP",
+    "crv": "Ed25519",
+    "x": "fHIv_3yk625LVzyIT5i9UwfBCZUotb2M2jTGN-zaLxY"
+   },
+   "allowed": [
+    "Ed25519",
+    "ML-DSA-87",
+    "SLH-DSA-SHA2-256s",
+    "ES256",
+    "RS256",
+    "Ed25519"
+   ],
+   "expected": {
+    "refused": {
+     "code": "bad-key",
+     "message": "key: the signing method must be one of Ed25519, ML-DSA-87, SLH-DSA-SHA2-256s, ES256, RS256, Ed25519."
+    }
+   }
+  },
+  {
+   "name": "a list",
+   "key": [
+    {
+     "alg": "Ed25519",
+     "crv": "Ed25519",
+     "kty": "OKP",
+     "x": "fHIv_3yk625LVzyIT5i9UwfBCZUotb2M2jTGN-zaLxY"
+    }
+   ],
+   "allowed": [
+    "Ed25519",
+    "ML-DSA-87",
+    "SLH-DSA-SHA2-256s",
+    "ES256",
+    "RS256",
+    "Ed25519"
+   ],
+   "expected": {
+    "refused": {
+     "code": "bad-key",
+     "message": "key: a key must be an object."
+    }
+   }
+  },
+  {
+   "name": "null",
+   "key": null,
+   "allowed": [
+    "Ed25519",
+    "ML-DSA-87",
+    "SLH-DSA-SHA2-256s",
+    "ES256",
+    "RS256",
+    "Ed25519"
+   ],
+   "expected": {
+    "refused": {
+     "code": "bad-key",
+     "message": "key: a key must be an object."
+    }
+   }
+  },
+  {
+   "name": "an extra member",
+   "key": {
+    "alg": "Ed25519",
+    "crv": "Ed25519",
+    "kty": "OKP",
+    "x": "fHIv_3yk625LVzyIT5i9UwfBCZUotb2M2jTGN-zaLxY",
+    "kid": "a"
+   },
+   "allowed": [
+    "Ed25519",
+    "ML-DSA-87",
+    "SLH-DSA-SHA2-256s",
+    "ES256",
+    "RS256",
+    "Ed25519"
+   ],
+   "expected": {
+    "refused": {
+     "code": "bad-key",
+     "message": "key: a Ed25519 key must hold exactly alg, crv, kty, x."
+    }
+   }
+  },
+  {
+   "name": "a private part",
+   "key": {
+    "alg": "Ed25519",
+    "crv": "Ed25519",
+    "kty": "OKP",
+    "x": "fHIv_3yk625LVzyIT5i9UwfBCZUotb2M2jTGN-zaLxY",
+    "d": "AAAA"
+   },
+   "allowed": [
+    "Ed25519",
+    "ML-DSA-87",
+    "SLH-DSA-SHA2-256s",
+    "ES256",
+    "RS256",
+    "Ed25519"
+   ],
+   "expected": {
+    "refused": {
+     "code": "bad-key",
+     "message": "key: a Ed25519 key must hold exactly alg, crv, kty, x."
+    }
+   }
+  },
+  {
+   "name": "a member that is not text",
+   "key": {
+    "alg": "Ed25519",
+    "crv": 1,
+    "kty": "OKP",
+    "x": "fHIv_3yk625LVzyIT5i9UwfBCZUotb2M2jTGN-zaLxY"
+   },
+   "allowed": [
+    "Ed25519",
+    "ML-DSA-87",
+    "SLH-DSA-SHA2-256s",
+    "ES256",
+    "RS256",
+    "Ed25519"
+   ],
+   "expected": {
+    "refused": {
+     "code": "bad-key",
+     "message": "key: \"crv\" must be text."
+    }
+   }
+  },
+  {
+   "name": "the wrong curve",
+   "key": {
+    "alg": "Ed25519",
+    "crv": "Ed448",
+    "kty": "OKP",
+    "x": "fHIv_3yk625LVzyIT5i9UwfBCZUotb2M2jTGN-zaLxY"
+   },
+   "allowed": [
+    "Ed25519",
+    "ML-DSA-87",
+    "SLH-DSA-SHA2-256s",
+    "ES256",
+    "RS256",
+    "Ed25519"
+   ],
+   "expected": {
+    "refused": {
+     "code": "bad-key",
+     "message": "key: an Ed25519 key has kty OKP and crv Ed25519."
+    }
+   }
+  },
+  {
+   "name": "the wrong key type",
+   "key": {
+    "alg": "Ed25519",
+    "crv": "Ed25519",
+    "kty": "EC",
+    "x": "fHIv_3yk625LVzyIT5i9UwfBCZUotb2M2jTGN-zaLxY"
+   },
+   "allowed": [
+    "Ed25519",
+    "ML-DSA-87",
+    "SLH-DSA-SHA2-256s",
+    "ES256",
+    "RS256",
+    "Ed25519"
+   ],
+   "expected": {
+    "refused": {
+     "code": "bad-key",
+     "message": "key: an Ed25519 key has kty OKP and crv Ed25519."
+    }
+   }
+  },
+  {
+   "name": "a short Ed25519 key",
+   "key": {
+    "alg": "Ed25519",
+    "crv": "Ed25519",
+    "kty": "OKP",
+    "x": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+   },
+   "allowed": [
+    "Ed25519",
+    "ML-DSA-87",
+    "SLH-DSA-SHA2-256s",
+    "ES256",
+    "RS256",
+    "Ed25519"
+   ],
+   "expected": {
+    "refused": {
+     "code": "bad-key",
+     "message": "key: an Ed25519 public key is 32 bytes."
+    }
+   }
+  },
+  {
+   "name": "an Ed25519 key that is not base64url",
+   "key": {
+    "alg": "Ed25519",
+    "crv": "Ed25519",
+    "kty": "OKP",
+    "x": "fHIv_3yk625LVzyIT5i9UwfBCZUotb2M2jTGN-zaLxY="
+   },
+   "allowed": [
+    "Ed25519",
+    "ML-DSA-87",
+    "SLH-DSA-SHA2-256s",
+    "ES256",
+    "RS256",
+    "Ed25519"
+   ],
+   "expected": {
+    "refused": {
+     "code": "bad-key",
+     "message": "key: \"x\" is not base64url."
+    }
+   }
+  },
+  {
+   "name": "a short ML-DSA-87 key",
+   "key": {
+    "alg": "ML-DSA-87",
+    "kty": "AKP",
+    "pub": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+   },
+   "allowed": [
+    "Ed25519",
+    "ML-DSA-87",
+    "SLH-DSA-SHA2-256s",
+    "ES256",
+    "RS256",
+    "Ed25519"
+   ],
+   "expected": {
+    "refused": {
+     "code": "bad-key",
+     "message": "key: an ML-DSA-87 public key is 2,592 bytes."
+    }
+   }
+  },
+  {
+   "name": "an ML-DSA-87 key of the wrong type",
+   "key": {
+    "alg": "ML-DSA-87",
+    "kty": "OKP",
+    "pub": "xCAhxCoVO8Tbg5bt8DcvVNhbrGtRqVsIDAP3JDmCV0dgYAs-JVieB-TG78k3w7hIAQazFNZV-5AZM2JsDql6ZHg25bK2XfELn85y8xrHkviVHjbtJzcI0AuV6LAsgtdvn5OcNZokzRNA16m_U4oQrTo_nDWAnFdL1FIpczqyXKs-8CqKHmaPZvSP_47rGQCeydm8H_5g9TgWk26OIeq5SSJO6WYbWRnLwTYIWM6KdcnjLfT7c5SfZSPZaCdqugI1UsBXvHScxLL5cMheHKdxJJ--u1jUU_Zb8nhBEy5psYQU2JGHV320uLE8zE8_qzUCJ2Fqh55E3dNP-3TgW7RFvWmO97Z-RWcD_lDzWFQUINuShHLn0bWhUPlyJg4HJfYkrNJlwwHQRz33xnWe0TbdI9AztsgK3rkhDDMWfXEIPueHA8BO1H5SEcEb0veeiA3y-303b9_OGSciJIS2f9k4GXVwIV1pn7-kyhWAB71emNXztrNsn955yAY04L0NEMv8bJVnNQgpEnVzXR1VroT3DT6dCZdEJ9phLVZVtDWYFQmNX7dZ1-197xiL0-OTEAtaMZH24F11-wMVzNziulyhkWjI2W43NOC7spY_7xLy4Wuh6kay57GchvSI5lv5bD98ftunkROKCfHPKsFZlB__8_NNThVaT9y-mfeRT4mE5YqCmNW8gM1ZmyzM8yQoY9Y_ww6aUWcpKcABG1qZe09Pm8MgCb5VICfOD8U3cect_LzLhrBD4V-siaOeWNOq9u4Z3tM54kOw1-0LJON-7y-R-3SvrDp4aXyGQL8Y0Oo9V5mEUUDo2PAYLT3YqzIlkpuZ-_wfmZuldUs16dWh42_CQXArCt76hCeuMFXGdIau9Vd7Ipm2hewT6LNmhjWHR3XLjn-Yl5maHNCXFWkLw0swmPm78CQUaf1ks800sgXO1OyyYJJ6YhUdZsiKvm4rGH_6WwCCWNRmKorQ4epjxNiasEx0F6WVJI3UqLb6eOLdwX6gdEOrujtDYNoBNT_aI_123r256MmFHZ04thkmuE_TC-yqtCDdy-4hZyWll2kI_PPkl8Dv9gxyeic42XKae5WL20Byd9KiKq6n8QFr0ATs2h7tPK9Lz1MLs3bF9U5MSBLsLs1Is-ag36KeqgN8ZpTySo-4ysrMAgCmQxAZxex8kvz45u2ZjXQzgmz3F6Pgbwak_uddGd9SqzjpDV9kTZDducH6884QfEqUQKTSu9ANsNG4uV1VdVwm_MqrvLHHTQKuau_uOs8Dy8NjLlAxD0g4Ytff7dGMSu4nD6193gua6yMM8oK09hiBF8-B_CbWPGMmWMF7jd_Uy1WxvJckAXhjVIVmT4_cEtGfsgYEh_NJl1Q7WRfHlltzjXLjm7nhlo6mjQZH-KWFqyGH5a0FucgPTfZJ1GHdGwW4Aj4eAxth9QSvfCcFlHtYGhG9kyS__8i_WsRi4ae5OwgzeY8DLXlH2Y2n63EZTaNERszvTb-jllX3ss1VpDRhjqoQKFO6X-qXqz_oeoRn8JU039XEabG2eOj5-TyvsxbkzMkPh_TCX0NzA5vLGLSCn0Q0itXxo_5hP4GtWUvLHnUIj9uzoIbbE9yYplhOWUt6sfjw-gnw2KofmIFm-nMEkLPAEZv0yuSi_ehLVr_MHPrE72SCnGsYr-zjbdR3GrU_YLymweXsVYkYzzUsieSKbdMfYS8H4ddYm2WD4EUe9KvdCw87TpQ-uUjABDfbQyONwqeyPck39wuAjSO5USounDSIiZM-ED9G_TeAFEfUymI46JIjd2w296H8rkwyl0hQx5jJ6P4ta80wGqhQboGHs2ZMZWNvBaMvERkyNTEDcqNugg36C4OBrN1WF7KsvHpF-DTg2ligtDIOCzU2gmi6Kg90GQP6w6-he6xTzFrZp6rZ7MyIZwYmXVYSiuOEbzKbx5m6zhvyPGTOipITyqLeJKh8uObh2hWMFgSh0Ti4SOGrV4zfh39E7Q6H6574qU_pfgenO36m5UppToqcFRV8hDrPvzdcEuNvwsVGU56_9eExOoYTD4PTXf5TzNZAg_o3sxsFo8djHQgOzZYk1-T2QufGryUavWxE0hNKbVjBsNDy38guGYt78lXuHCUEAxwwvTfIudbLS0fmL4V3gplhLkPcb02X4iNcIVLTNHTeQ-sznNCmyRUOdAdcKTxiKwOrq8dvhi5udVy3SO6tNa8ION6EHfWw2X2Oukczlphh-6McjL8fJrsuvHXGvAEHejlbZY921jJ8HkdwSHa-E9oJ2g6sqQ8JiXDAcojxf3B-_HgkHPBxJyuvvhdyTbvHlRte8g58FvZyRx2QFobSoGH4hNoYOyAaRq0oyRTap3tM3RtLXYYPFkXCHWs63hljWxSp46wOn3d1YMkcZNTAzUjjdFLgnlyX4fS-Pn8zNyW1eIUs5jXrT4Cxi88twOiYL2Si06aLONxg4969ijJdww5_fC9xSTukL0oJaIZ8L1M8Ag7miW_1tcf6VIZeIHzyv1sZrKbtAimn97tvrMDB4sXjsLw_BBHvv_B0VuqE3nVEp8BN1jDtTF-obic3ITFBoSHPWRJNXmYbDe-oCS_I_hs3KHqWbO-WgP-RkxetA3_KGcUR5DKiaW5Qp2c061L_meiFvt8MHSk950ImXE44LkAqYsU7-wwm1kNf-i8BKY1MesJQ4IZML-f_iu14JZtSX3XZMvhwZ5Jq8Kq7elfYyeFJqDe7gKfYyEE3D0X_leyoI1LdFki8Qb44ssNtaGfrYOWcubNzXtNfgCG-y1SZp01JVOHCtJY-n9ODxJr9LxXUj3_8fi5co3McXUV-JOt43ZRtZSf1WuwygBFPNBfNnIkxt9cJp1orQ8Xs1sRBa1mVrSeo54r4KdPMNxK4RrPhxvFMb069sjpLAVFGuSNuG2uI3hqiWDn_Y8fMrZCOLtWIGELuyxcz0406iBQpT8V_yUImhSsoak9b60JzwumuOK5PEUaw9o8Qa2bGSklWxsy9GUAjBTEVKn85iCDup1SkDDjYAFQ9ubuGtSocY604DVJhqNgXX7Pw2QjE8j5uBpOirUJvPTN5Dcx3CD085AzuWbOFSPYBnEuQRGSkSto4MRE9wdPnBvjihxy8MZWLkDlo4C-S4O9THa3Gu1ztfb3bwWVh8_mqEmOjxhyTvQ8LKO6NQeU_rs0u6fdIpDqY04zhiJa8NG_l6mP_6idDex3qm_kHj0Vw9p5MVWerYJgL_IlBwDb0Edl_iOUO-n8o3bYRyJPY6WJTX7lktK3AZTcQHQPicR6Eq-SiKQxayMNvcLsDbq8FZ2zQSjw0QXLdHIaGV4qzIJsGIkskxzfPqPmr3Ew9dQgixmsBQEWu9D0fRPduHwSi4-rD5pxHJnFP-lrqXiFIHpkVO3kiK9WRxm1hIoCThChVD4MmEcta9mbqbGBcXemJZldFX-Kr1b0AHem5Ba-08tJm5Ytd"
+   },
+   "allowed": [
+    "Ed25519",
+    "ML-DSA-87",
+    "SLH-DSA-SHA2-256s",
+    "ES256",
+    "RS256",
+    "Ed25519"
+   ],
+   "expected": {
+    "refused": {
+     "code": "bad-key",
+     "message": "key: an ML-DSA-87 key has kty AKP."
+    }
+   }
+  },
+  {
+   "name": "a short SLH-DSA key",
+   "key": {
+    "alg": "SLH-DSA-SHA2-256s",
+    "kty": "AKP",
+    "pub": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+   },
+   "allowed": [
+    "Ed25519",
+    "ML-DSA-87",
+    "SLH-DSA-SHA2-256s",
+    "ES256",
+    "RS256",
+    "Ed25519"
+   ],
+   "expected": {
+    "refused": {
+     "code": "bad-key",
+     "message": "key: an SLH-DSA-SHA2-256s public key is 64 bytes."
+    }
+   }
+  },
+  {
+   "name": "a P-256 key with a short half",
+   "key": {
+    "alg": "ES256",
+    "crv": "P-256",
+    "kty": "EC",
+    "x": "jznvIH2mvygCJTjB8O7eh_Gr_-GcZU8yoMYcwJQv8Jo",
+    "y": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+   },
+   "allowed": [
+    "Ed25519",
+    "ML-DSA-87",
+    "SLH-DSA-SHA2-256s",
+    "ES256",
+    "RS256",
+    "Ed25519"
+   ],
+   "expected": {
+    "refused": {
+     "code": "bad-key",
+     "message": "key: the two halves of a P-256 public key are 32 bytes each."
+    }
+   }
+  },
+  {
+   "name": "an EC key on another curve",
+   "key": {
+    "alg": "ES256",
+    "crv": "P-384",
+    "kty": "EC",
+    "x": "jznvIH2mvygCJTjB8O7eh_Gr_-GcZU8yoMYcwJQv8Jo",
+    "y": "QXxgujreeLkGiwUysL0TMaYOVFdQfZO0E2nEWY2RUAQ"
+   },
+   "allowed": [
+    "Ed25519",
+    "ML-DSA-87",
+    "SLH-DSA-SHA2-256s",
+    "ES256",
+    "RS256",
+    "Ed25519"
+   ],
+   "expected": {
+    "refused": {
+     "code": "bad-key",
+     "message": "key: an ES256 key has kty EC and crv P-256."
+    }
+   }
+  },
+  {
+   "name": "an RSA key with another exponent",
+   "key": {
+    "alg": "RS256",
+    "e": "Aw",
+    "kty": "RSA",
+    "n": "x2NGljcAoqJJVvgkzeHGbzKu6Vuik5YL4bPjlyB92fnzA7_47HzEb8DDTGFoBtEioGDHxkgciKCnmbNvn6S9N10_5LrC5Oe3GldxDqUSmvf1_ruEg1OWeFwK734HxsFVAtLNNFXERNp1pVz2XkAapQUw-jFDV00m7CqXowvZdNXo0cxWjVSVA3SOMb1tFxGtf1Ns_1twWOsgXoLHyidUJpzqQjCqZ2PLIQ4pFx2aR3vUWscPB1y9QT4Gzec0oUctfgXTvYFpf5Mw5hiV3ljiqfFJH2atUSeGUWkJzWRqouzdjSufw7DmXK1VuJzsmPL88Lm3DtdYyucp-YkXiFHhYw"
+   },
+   "allowed": [
+    "Ed25519",
+    "ML-DSA-87",
+    "SLH-DSA-SHA2-256s",
+    "ES256",
+    "RS256",
+    "Ed25519"
+   ],
+   "expected": {
+    "refused": {
+     "code": "bad-key",
+     "message": "key: an RS256 key has kty RSA and e AQAB."
+    }
+   }
+  },
+  {
+   "name": "an RSA key of 1,024 bits",
+   "key": {
+    "alg": "RS256",
+    "e": "AQAB",
+    "kty": "RSA",
+    "n": "x2NGljcAoqJJVvgkzeHGbzKu6Vuik5YL4bPjlyB92fnzA7_47HzEb8DDTGFoBtEioGDHxkgciKCnmbNvn6S9N10_5LrC5Oe3GldxDqUSmvf1_ruEg1OWeFwK734HxsFVAtLNNFXERNp1pVz2XkAapQUw-jFDV00m7CqXowvZdNU"
+   },
+   "allowed": [
+    "Ed25519",
+    "ML-DSA-87",
+    "SLH-DSA-SHA2-256s",
+    "ES256",
+    "RS256",
+    "Ed25519"
+   ],
+   "expected": {
+    "refused": {
+     "code": "bad-key",
+     "message": "key: an RS256 key is 2,048 to 8,192 bits."
+    }
+   }
+  },
+  {
+   "name": "an RSA key with a leading zero",
+   "key": {
+    "alg": "RS256",
+    "e": "AQAB",
+    "kty": "RSA",
+    "n": "AMdjRpY3AKKiSVb4JM3hxm8yrulbopOWC-Gz45cgfdn58wO_-Ox8xG_Aw0xhaAbRIqBgx8ZIHIigp5mzb5-kvTddP-S6wuTntxpXcQ6lEpr39f67hINTlnhcCu9-B8bBVQLSzTRVxETadaVc9l5AGqUFMPoxQ1dNJuwql6ML2XTV6NHMVo1UlQN0jjG9bRcRrX9TbP9bcFjrIF6Cx8onVCac6kIwqmdjyyEOKRcdmkd71FrHDwdcvUE-Bs3nNKFHLX4F072BaX-TMOYYld5Y4qnxSR9mrVEnhlFpCc1kaqLs3Y0rn8Ow5lytVbic7Jjy_PC5tw7XWMrnKfmJF4hR4WM"
+   },
+   "allowed": [
+    "Ed25519",
+    "ML-DSA-87",
+    "SLH-DSA-SHA2-256s",
+    "ES256",
+    "RS256",
+    "Ed25519"
+   ],
+   "expected": {
+    "refused": {
+     "code": "bad-key",
+     "message": "key: an RS256 key is 2,048 to 8,192 bits."
+    }
+   }
+  },
+  {
+   "name": "an RSA key of 8,193 bits",
+   "key": {
+    "alg": "RS256",
+    "e": "AQAB",
+    "kty": "RSA",
+    "n": "Af____________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________8"
+   },
+   "allowed": [
+    "Ed25519",
+    "ML-DSA-87",
+    "SLH-DSA-SHA2-256s",
+    "ES256",
+    "RS256",
+    "Ed25519"
+   ],
+   "expected": {
+    "refused": {
+     "code": "bad-key",
+     "message": "key: an RS256 key is 2,048 to 8,192 bits."
+    }
+   }
+  },
+  {
+   "name": "an RSA key of 8,192 bits",
+   "key": {
+    "alg": "RS256",
+    "e": "AQAB",
+    "kty": "RSA",
+    "n": "_____________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________w"
+   },
+   "allowed": [
+    "Ed25519",
+    "ML-DSA-87",
+    "SLH-DSA-SHA2-256s",
+    "ES256",
+    "RS256",
+    "Ed25519"
+   ],
+   "expected": {
+    "ok": {
+     "alg": "RS256",
+     "thumbprint": "p8eLNOu6ool_5rYnV1KMup1a5nXRIGLU3YxbdudJznI"
+    }
+   }
+  }
+ ]
+}

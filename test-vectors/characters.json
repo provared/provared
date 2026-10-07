@@ -1,0 +1,55 @@
+{
+ "about": "Counting the characters of a text, as Unicode code points.",
+ "function": "countCharacters",
+ "cases": [
+  {
+   "name": "empty",
+   "text": "",
+   "expected": {
+    "ok": 0
+   }
+  },
+  {
+   "name": "ASCII",
+   "text": "abc",
+   "expected": {
+    "ok": 3
+   }
+  },
+  {
+   "name": "an accent",
+   "text": "é",
+   "expected": {
+    "ok": 1
+   }
+  },
+  {
+   "name": "an astral character",
+   "text": "😀",
+   "expected": {
+    "ok": 1
+   }
+  },
+  {
+   "name": "a lone first half",
+   "text": "\ud83d",
+   "expected": {
+    "ok": 1
+   }
+  },
+  {
+   "name": "a lone second half",
+   "text": "\ude00",
+   "expected": {
+    "ok": 0
+   }
+  },
+  {
+   "name": "a combining mark",
+   "text": "é",
+   "expected": {
+    "ok": 2
+   }
+  }
+ ]
+}

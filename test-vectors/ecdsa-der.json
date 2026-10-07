@@ -1,0 +1,107 @@
+{
+ "about": "Reading a passkey's ES256 signature from its DER form (format description, section 4.4).",
+ "function": "ecdsaDerToRaw",
+ "cases": [
+  {
+   "name": "two numbers",
+   "der": "30440220010101010101010101010101010101010101010101010101010101010101010102200101010101010101010101010101010101010101010101010101010101010101",
+   "expected": {
+    "ok": "01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101"
+   }
+  },
+  {
+   "name": "a number with its high bit set, padded",
+   "der": "3045022100800101010101010101010101010101010101010101010101010101010101010102200101010101010101010101010101010101010101010101010101010101010101",
+   "expected": {
+    "ok": "80010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101"
+   }
+  },
+  {
+   "name": "a number with its high bit set, not padded",
+   "der": "30440220800101010101010101010101010101010101010101010101010101010101010102200101010101010101010101010101010101010101010101010101010101010101",
+   "expected": {
+    "refused": {
+     "code": "passkey-bad-data",
+     "message": "The passkey signature holds a negative number."
+    }
+   }
+  },
+  {
+   "name": "a padded number that need not be",
+   "der": "3045022100010101010101010101010101010101010101010101010101010101010101010102200101010101010101010101010101010101010101010101010101010101010101",
+   "expected": {
+    "refused": {
+     "code": "passkey-bad-data",
+     "message": "The passkey signature is not in its shortest form."
+    }
+   }
+  },
+  {
+   "name": "short numbers",
+   "der": "3006020101020102",
+   "expected": {
+    "ok": "00000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000002"
+   }
+  },
+  {
+   "name": "a number of 33 bytes",
+   "der": "3045022101010101010101010101010101010101010101010101010101010101010101010102200101010101010101010101010101010101010101010101010101010101010101",
+   "expected": {
+    "refused": {
+     "code": "passkey-bad-data",
+     "message": "The passkey signature holds a number that is too large."
+    }
+   }
+  },
+  {
+   "name": "bytes left over",
+   "der": "3045022001010101010101010101010101010101010101010101010101010101010101010220010101010101010101010101010101010101010101010101010101010101010100",
+   "expected": {
+    "refused": {
+     "code": "passkey-bad-data",
+     "message": "The passkey signature has bytes left over."
+    }
+   }
+  },
+  {
+   "name": "a wrong length",
+   "der": "30ff0220010101010101010101010101010101010101010101010101010101010101010102200101010101010101010101010101010101010101010101010101010101010101",
+   "expected": {
+    "refused": {
+     "code": "passkey-bad-data",
+     "message": "The passkey signature is not a well-formed ECDSA signature."
+    }
+   }
+  },
+  {
+   "name": "not a sequence",
+   "der": "31440220010101010101010101010101010101010101010101010101010101010101010102200101010101010101010101010101010101010101010101010101010101010101",
+   "expected": {
+    "refused": {
+     "code": "passkey-bad-data",
+     "message": "The passkey signature is not a well-formed ECDSA signature."
+    }
+   }
+  },
+  {
+   "name": "an empty number",
+   "der": "3024020002200101010101010101010101010101010101010101010101010101010101010101",
+   "expected": {
+    "refused": {
+     "code": "passkey-bad-data",
+     "message": "The passkey signature is not a well-formed ECDSA signature."
+    }
+   }
+  },
+  {
+   "name": "too short",
+   "der": "300602010102",
+   "expected": {
+    "refused": {
+     "code": "passkey-bad-data",
+     "message": "The passkey signature is not a well-formed ECDSA signature."
+    }
+   }
+  }
+ ]
+}

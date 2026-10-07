@@ -1,0 +1,395 @@
+{
+ "about": "Reading JSON that must be in the canonical form (format description, section 3.4).",
+ "function": "parseCanonical",
+ "cases": [
+  {
+   "name": "an object",
+   "text": "{\"a\":1,\"b\":[2,\"x\"]}",
+   "expected": {
+    "ok": {
+     "a": 1,
+     "b": [
+      2,
+      "x"
+     ]
+    }
+   }
+  },
+  {
+   "name": "members out of order",
+   "text": "{\"b\":1,\"a\":2}",
+   "expected": {
+    "refused": {
+     "code": "payload-not-canonical",
+     "message": "The JSON is not in the canonical form (a repeated name, stray spaces, or members out of order)."
+    }
+   }
+  },
+  {
+   "name": "a space",
+   "text": "{\"a\": 1}",
+   "expected": {
+    "refused": {
+     "code": "payload-not-canonical",
+     "message": "The JSON is not in the canonical form (a repeated name, stray spaces, or members out of order)."
+    }
+   }
+  },
+  {
+   "name": "a repeated name",
+   "text": "{\"a\":1,\"a\":1}",
+   "expected": {
+    "refused": {
+     "code": "payload-not-canonical",
+     "message": "The JSON is not in the canonical form (a repeated name, stray spaces, or members out of order)."
+    }
+   }
+  },
+  {
+   "name": "a fraction",
+   "text": "{\"a\":1.5}",
+   "expected": {
+    "refused": {
+     "code": "payload-not-canonical",
+     "message": "A number must be a whole number from 0 to 9,007,199,254,740,991."
+    }
+   }
+  },
+  {
+   "name": "a whole number written with a point",
+   "text": "{\"a\":1.0}",
+   "expected": {
+    "refused": {
+     "code": "payload-not-canonical",
+     "message": "The JSON is not in the canonical form (a repeated name, stray spaces, or members out of order)."
+    }
+   }
+  },
+  {
+   "name": "an exponent",
+   "text": "{\"a\":1e2}",
+   "expected": {
+    "refused": {
+     "code": "payload-not-canonical",
+     "message": "The JSON is not in the canonical form (a repeated name, stray spaces, or members out of order)."
+    }
+   }
+  },
+  {
+   "name": "minus zero",
+   "text": "{\"a\":-0}",
+   "expected": {
+    "refused": {
+     "code": "payload-not-canonical",
+     "message": "A number must be a whole number from 0 to 9,007,199,254,740,991."
+    }
+   }
+  },
+  {
+   "name": "a negative number",
+   "text": "{\"a\":-1}",
+   "expected": {
+    "refused": {
+     "code": "payload-not-canonical",
+     "message": "A number must be a whole number from 0 to 9,007,199,254,740,991."
+    }
+   }
+  },
+  {
+   "name": "the largest number",
+   "text": "{\"a\":9007199254740991}",
+   "expected": {
+    "ok": {
+     "a": 9007199254740991
+    }
+   }
+  },
+  {
+   "name": "one more than the largest number",
+   "text": "{\"a\":9007199254740992}",
+   "expected": {
+    "refused": {
+     "code": "payload-not-canonical",
+     "message": "A number must be a whole number from 0 to 9,007,199,254,740,991."
+    }
+   }
+  },
+  {
+   "name": "a very long number",
+   "text": "{\"a\":123456789012345678901234567890}",
+   "expected": {
+    "refused": {
+     "code": "payload-not-canonical",
+     "message": "A number must be a whole number from 0 to 9,007,199,254,740,991."
+    }
+   }
+  },
+  {
+   "name": "true",
+   "text": "{\"a\":true}",
+   "expected": {
+    "refused": {
+     "code": "payload-not-canonical",
+     "message": "Only objects, lists, strings and whole numbers are allowed."
+    }
+   }
+  },
+  {
+   "name": "null",
+   "text": "{\"a\":null}",
+   "expected": {
+    "refused": {
+     "code": "payload-not-canonical",
+     "message": "Only objects, lists, strings and whole numbers are allowed."
+    }
+   }
+  },
+  {
+   "name": "NaN",
+   "text": "{\"a\":NaN}",
+   "expected": {
+    "refused": {
+     "code": "payload-not-canonical",
+     "message": "The text is not JSON."
+    }
+   }
+  },
+  {
+   "name": "not JSON",
+   "text": "{\"a\":",
+   "expected": {
+    "refused": {
+     "code": "payload-not-canonical",
+     "message": "The text is not JSON."
+    }
+   }
+  },
+  {
+   "name": "empty text",
+   "text": "",
+   "expected": {
+    "refused": {
+     "code": "payload-not-canonical",
+     "message": "The text is not JSON."
+    }
+   }
+  },
+  {
+   "name": "a byte order mark",
+   "text": "﻿{}",
+   "expected": {
+    "refused": {
+     "code": "payload-not-canonical",
+     "message": "The text is not JSON."
+    }
+   }
+  },
+  {
+   "name": "a lone surrogate written as an escape",
+   "text": "{\"a\":\"\\ud800\"}",
+   "expected": {
+    "refused": {
+     "code": "payload-not-canonical",
+     "message": "A string is not well-formed Unicode."
+    }
+   }
+  },
+  {
+   "name": "a pair written as escapes",
+   "text": "{\"a\":\"\\ud83d\\ude00\"}",
+   "expected": {
+    "refused": {
+     "code": "payload-not-canonical",
+     "message": "The JSON is not in the canonical form (a repeated name, stray spaces, or members out of order)."
+    }
+   }
+  },
+  {
+   "name": "a pair written as itself",
+   "text": "{\"a\":\"😀\"}",
+   "expected": {
+    "ok": {
+     "a": "😀"
+    }
+   }
+  },
+  {
+   "name": "an escape that need not be one",
+   "text": "{\"a\":\"\\u0041\"}",
+   "expected": {
+    "refused": {
+     "code": "payload-not-canonical",
+     "message": "The JSON is not in the canonical form (a repeated name, stray spaces, or members out of order)."
+    }
+   }
+  },
+  {
+   "name": "a control character escaped",
+   "text": "{\"a\":\"\\u0001\"}",
+   "expected": {
+    "ok": {
+     "a": "\u0001"
+    }
+   }
+  },
+  {
+   "name": "a control character escaped in capitals",
+   "text": "{\"a\":\"\\u001F\"}",
+   "expected": {
+    "refused": {
+     "code": "payload-not-canonical",
+     "message": "The JSON is not in the canonical form (a repeated name, stray spaces, or members out of order)."
+    }
+   }
+  },
+  {
+   "name": "a solidus escaped",
+   "text": "{\"a\":\"\\/\"}",
+   "expected": {
+    "refused": {
+     "code": "payload-not-canonical",
+     "message": "The JSON is not in the canonical form (a repeated name, stray spaces, or members out of order)."
+    }
+   }
+  },
+  {
+   "name": "delete written as itself",
+   "text": "{\"a\":\"\"}",
+   "expected": {
+    "ok": {
+     "a": ""
+    }
+   }
+  },
+  {
+   "name": "line separator written as itself",
+   "text": "{\"a\":\" \"}",
+   "expected": {
+    "ok": {
+     "a": " "
+    }
+   }
+  },
+  {
+   "name": "names sorted by UTF-16, not by code point",
+   "text": "{\"😀\":1,\"￿\":2}",
+   "expected": {
+    "ok": {
+     "😀": 1,
+     "￿": 2
+    }
+   }
+  },
+  {
+   "name": "names sorted by code point",
+   "text": "{\"￿\":1,\"😀\":2}",
+   "expected": {
+    "refused": {
+     "code": "payload-not-canonical",
+     "message": "The JSON is not in the canonical form (a repeated name, stray spaces, or members out of order)."
+    }
+   }
+  },
+  {
+   "name": "names that are numbers",
+   "text": "{\"10\":1,\"2\":2,\"a\":3}",
+   "expected": {
+    "ok": {
+     "2": 2,
+     "10": 1,
+     "a": 3
+    }
+   }
+  },
+  {
+   "name": "nesting of depth 8",
+   "text": "[[[[[[[[1]]]]]]]]",
+   "expected": {
+    "ok": [
+     [
+      [
+       [
+        [
+         [
+          [
+           [
+            1
+           ]
+          ]
+         ]
+        ]
+       ]
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "name": "nesting of depth 7",
+   "text": "[[[[[[[1]]]]]]]",
+   "expected": {
+    "ok": [
+     [
+      [
+       [
+        [
+         [
+          [
+           1
+          ]
+         ]
+        ]
+       ]
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "name": "nesting of depth 2000",
+   "text": "[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]",
+   "expected": {
+    "refused": {
+     "code": "payload-not-canonical",
+     "message": "The content nests too deeply."
+    }
+   }
+  },
+  {
+   "name": "a list at the top",
+   "text": "[1,2]",
+   "expected": {
+    "ok": [
+     1,
+     2
+    ]
+   }
+  },
+  {
+   "name": "a string at the top",
+   "text": "\"a\"",
+   "expected": {
+    "ok": "a"
+   }
+  },
+  {
+   "name": "a member named __proto__",
+   "text": "{\"__proto__\":1}",
+   "expected": {
+    "ok": {
+     "__proto__": 1
+    }
+   }
+  },
+  {
+   "name": "trailing text",
+   "text": "{} ",
+   "expected": {
+    "refused": {
+     "code": "payload-not-canonical",
+     "message": "The JSON is not in the canonical form (a repeated name, stray spaces, or members out of order)."
+    }
+   }
+  }
+ ]
+}

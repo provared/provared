@@ -1,0 +1,59 @@
+{
+ "about": "Confirming the members of a countersignature's content (format description, section 6).",
+ "function": "validateCountersignatureContent",
+ "cases": [
+  {
+   "name": "a countersignature",
+   "content": {
+    "type": "provared.countersignature.v0",
+    "stub": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "no stub",
+   "content": {
+    "type": "provared.countersignature.v0",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "countersignature: \"stub\" is missing."
+    }
+   }
+  },
+  {
+   "name": "an extra member",
+   "content": {
+    "type": "provared.countersignature.v0",
+    "stub": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": "2026-10-05T09:00:00Z",
+    "note": "x"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "countersignature: holds a member that is not known."
+    }
+   }
+  },
+  {
+   "name": "a bad time",
+   "content": {
+    "type": "provared.countersignature.v0",
+    "stub": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": "yesterday"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  }
+ ]
+}

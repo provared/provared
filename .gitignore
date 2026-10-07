@@ -14,3 +14,8 @@ node_modules/
 provared-check.html
 .DS_Store
 Thumbs.db
+
+# The Python version's own environment and caches
+python/.venv/
+__pycache__/
+*.egg-info/
