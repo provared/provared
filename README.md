@@ -11,6 +11,11 @@ keys. People decide what it means.
 own time; fixes as time allows. The format may still change, so do not
 rely on a draft record staying checkable.
 
+The core of the format is also written as an individual Internet-Draft
+at the IETF:
+[draft-izmaylov-agent-permission-receipts](https://datatracker.ietf.org/doc/draft-izmaylov-agent-permission-receipts/).
+An Internet-Draft is a working document, not a standard.
+
 ## The four parts
 
 | Part | What it is | In this draft |

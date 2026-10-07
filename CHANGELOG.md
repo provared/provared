@@ -2,7 +2,13 @@
 
 ## Unreleased
 
-Draft version 0 of the format. Nothing is published or frozen.
+- 2026-10-07: the README links to the individual Internet-Draft
+  `draft-izmaylov-agent-permission-receipts`, which describes the core of
+  the format.
+
+## 0.1.0 (6 October 2026)
+
+Draft version 0 of the format, published and not frozen.
 
 - 2026-10-05: `provared-headers` is marked as experimental, in the
   README and in what the command prints.
