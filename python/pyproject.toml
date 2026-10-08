@@ -4,11 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "provared"
-version = "0.1.0.dev0"
+version = "0.1.0"
 description = "Proof of what an AI agent was allowed to do, and what it then did. Evidence, not a verdict."
 readme = "README.md"
 authors = [{ name = "Pavel Izmaylov" }]
 license = "Apache-2.0 AND CC-BY-4.0"
+license-files = ["LICENSE", "LICENSE-CC-BY-4.0.txt"]
 requires-python = ">=3.11"
 # The one dependency: Python has no signatures built in. Version 48.0.0 is
 # the first whose ready-built packages hold ML-DSA (FIPS 204).
@@ -21,6 +22,8 @@ classifiers = [
 
 [project.urls]
 Source = "https://github.com/provared/provared"
+Documentation = "https://github.com/provared/provared/tree/main/python"
+Issues = "https://github.com/provared/provared/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -6,16 +6,16 @@ Proof of what an AI agent was allowed to do, and what it then did.
 
 This is the Python version of Provared. The format, the reasons for it
 and what a record does and does not prove are described in the
-repository's own [README](../README.md), the
-[format description](../spec/provared-format.md) and the
-[list of threats](../docs/threat-model.md). This page says only what is
+repository's own [README](https://github.com/provared/provared/blob/main/README.md), the
+[format description](https://github.com/provared/provared/blob/main/spec/provared-format.md) and the
+[list of threats](https://github.com/provared/provared/blob/main/docs/threat-model.md). This page says only what is
 particular to Python.
 
 ## Status
 
 **Not yet published.** It is built in stages from the JavaScript
 library, and gives the same answer, case for case, as the shared test
-files in [`test-vectors/`](../test-vectors) show: the same result, the
+files in [`test-vectors/`](https://github.com/provared/provared/tree/main/test-vectors) show: the same result, the
 same codes and the same words. Every shared file passes in both
 languages.
 
