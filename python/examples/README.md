@@ -50,6 +50,12 @@ from the model:
 - Pydantic AI: a `Hooks` capability with `tool_execute_error`, which
   hands the message back as `ToolFailed`.
 
+For LangChain and Pydantic AI there is also a ready class that puts
+every tool call of an agent behind the stub writer, with no change to
+the tools: `ProvaredMiddleware` in the package `provared-langchain`, and
+`ProvaredCapability` in the package `pydantic-ai-provared`. Both are in
+[`../integrations/`](../integrations).
+
 A recorded tool takes plain data only: text, numbers, lists, dicts,
 True, False and None. So a tool that takes the framework's own context
 object (Pydantic AI's `RunContext`, LangChain's `ToolRuntime`), or a

@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pydantic-ai-provared"
+version = "0.1.0"
+description = "A Pydantic AI capability that checks each tool call of an agent against the permission a person signed, and records it with Provared. Evidence, not a verdict."
+readme = "README.md"
+authors = [{ name = "Pavel Izmaylov" }]
+license = "Apache-2.0 AND CC-BY-4.0"
+license-files = ["LICENSE", "LICENSE-CC-BY-4.0.txt"]
+requires-python = ">=3.11"
+# Provared itself, and Pydantic AI's capabilities, as tested.
+dependencies = ["provared>=0.2.0", "pydantic-ai-slim>=2.54,<3"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Programming Language :: Python :: 3",
+  "Topic :: Security :: Cryptography",
+]
+
+[project.urls]
+Source = "https://github.com/provared/provared"
+Documentation = "https://github.com/provared/provared/tree/main/python/integrations/pydantic-ai-provared"
+Issues = "https://github.com/provared/provared/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]

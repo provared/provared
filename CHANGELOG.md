@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- 2026-10-08: two small Python packages for agent frameworks, in
+  `python/integrations/`, each in a folder of its own, which names its
+  framework. Each puts every tool call of an agent behind the stub
+  writer with no change to the tools: the check before acting is asked,
+  the tool runs only if the slip allows it, and a stub is written; a call
+  that is not allowed is not run, and the model is told why. Each works
+  with ordinary and asynchronous agents, and is tested with its
+  framework's own stand-in model, inside the examples' guard. They use
+  only the public interface of the `provared` package, which itself still
+  names no product. Not yet published.
+
 ## 0.2.0 (8 October 2026)
 
 - 2026-10-08: version 0.2.0, for the npm package and, for the first

@@ -40,7 +40,7 @@ An Internet-Draft is a working document, not a standard.
 | `tools/` | Three small tools: one wrote the sample record, one writes the checking page as a single file, one writes the shared test files |
 | `test/` | The tests |
 | `test-vectors/` | Shared test files: records and values, each with the answer this library gives. Another implementation of the format can be tested against them |
-| `python/` | The Python version, `pip install provared`, which gives the same answers. See its own [README](python/README.md), and its examples with three agent frameworks in `python/examples/` |
+| `python/` | The Python version, `pip install provared`, which gives the same answers. See its own [README](python/README.md), and its examples with three agent frameworks in `python/examples/`, and small packages for two of them in `python/integrations/` |
 
 The npm package holds `src/`, `bin/`, `net/`, `spec/`, `docs/`,
 `samples/` and the checking page. The tests, the shared test files, the
