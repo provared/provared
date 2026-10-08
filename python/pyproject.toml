@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "provared"
-version = "0.1.0"
+version = "0.2.0"
 description = "Proof of what an AI agent was allowed to do, and what it then did. Evidence, not a verdict."
 readme = "README.md"
 authors = [{ name = "Pavel Izmaylov" }]

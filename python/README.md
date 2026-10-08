@@ -13,8 +13,9 @@ particular to Python.
 
 ## Status
 
-**Not yet published.** It is built in stages from the JavaScript
-library, and gives the same answer, case for case, as the shared test
+**Version 0.2.0, a draft**, the same version as the JavaScript library.
+Published as it is, by one author in their own time; fixes as time
+allows. It gives the same answer, case for case, as the shared test
 files in [`test-vectors/`](https://github.com/provared/provared/tree/main/test-vectors) show: the same result, the
 same codes and the same words. Every shared file passes in both
 languages.
@@ -28,11 +29,11 @@ command-line checker.
 
 ## Install
 
-From a copy of the repository:
+```
+pip install provared
+```
 
-```
-pip install ./python
-```
+Or, from a copy of the repository, `pip install ./python`.
 
 You need Python 3.11 or later. The one dependency is `cryptography`,
 version 48 or later: Python has no signatures built in, and version 48

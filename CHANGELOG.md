@@ -1,7 +1,17 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 (8 October 2026)
 
+- 2026-10-08: version 0.2.0, for the npm package and, for the first
+  time, the Python package `provared` on the Python Package Index. Both
+  give the same answers, as the shared test files in `test-vectors/`
+  show. The version rises from 0.1.0 because the format's rules changed:
+  the exact rule for a page address in a slip, weak Ed25519 keys and
+  signatures refused, and strict keys in a time-stamp service's
+  certificate. Version 0.1.0 accepts a forged time-stamp where the
+  person checking names as trusted a service whose certificate has an RSA
+  public number of 1; 0.2.0 refuses it. The entries below say what
+  changed.
 - 2026-10-08: fixes from an independent review of `record_function`, the
   examples and the wording for a proposed action. None made a book read
   as intact, or within its slip, when it was not.

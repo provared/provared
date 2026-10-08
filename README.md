@@ -7,7 +7,7 @@ keys. People decide what it means.
 
 ## Status
 
-**Version 0.1.0, a draft.** Published as it is, by one author in their
+**Version 0.2.0, a draft.** Published as it is, by one author in their
 own time; fixes as time allows. The format may still change, so do not
 rely on a draft record staying checkable.
 
@@ -40,7 +40,7 @@ An Internet-Draft is a working document, not a standard.
 | `tools/` | Three small tools: one wrote the sample record, one writes the checking page as a single file, one writes the shared test files |
 | `test/` | The tests |
 | `test-vectors/` | Shared test files: records and values, each with the answer this library gives. Another implementation of the format can be tested against them |
-| `python/` | A Python version, not yet published, that gives the same answers. See its own [README](python/README.md), and its examples with three agent frameworks in `python/examples/` |
+| `python/` | The Python version, `pip install provared`, which gives the same answers. See its own [README](python/README.md), and its examples with three agent frameworks in `python/examples/` |
 
 The npm package holds `src/`, `bin/`, `net/`, `spec/`, `docs/`,
 `samples/` and the checking page. The tests, the shared test files, the
@@ -111,10 +111,10 @@ checker and the sample record in one file, copied in unchanged. Open it
 in a browser straight from the disk; it needs no server. The file allows
 itself no request of any kind: its content security policy lets nothing
 be loaded from anywhere. The tool prints the file's SHA-256 fingerprint,
-so that a copy can be compared with it. (Tried on 4 October 2026 in the
+so that a copy can be compared with it. (Tried on 8 October 2026 in the
 three browser builds this repository is tested with.) The file for
-version 0.1.0 is attached to the release on GitHub. Its SHA-256
-fingerprint is `ca4a15f820c9c715907952c2e7577717ffca92d87bcf633cc9a92f6dd5242746`.
+version 0.2.0 is attached to the release on GitHub. Its SHA-256
+fingerprint is `7e142fa119458ce00c5fdd6e1cafc75cb3bb4672624157a0a0ef4624f92812ae`.
 
 **Run the demonstration in a browser.**
 
