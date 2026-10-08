@@ -1002,7 +1002,12 @@ otherwise report a problem:
    does not otherwise use: a whole number or an object identifier that is
    not in its shortest form, a part that does not fill what holds it, or a
    part the standards do not allow in that place, is refused. The signed
-   data is of version 3, with exactly one signer.
+   data is of version 3, with exactly one signer. The public key in the
+   certificate that signed is written exactly as its own standard sets
+   out, with no unused bits: RSA as RFC 3279, section 2.3.1 (empty
+   parameters, two positive whole numbers in strict DER and nothing
+   after them), ECDSA as RFC 5480, section 2.2 (an uncompressed point),
+   Ed25519 as RFC 8410, section 4 (no parameters, 32 bytes).
 2. What it stamps is this seal's fingerprint (`stamp-wrong-data`).
 3. Its signed attributes name a time-stamp statement, hold the
    fingerprint of the statement, and name the certificate that signed, by
@@ -1015,7 +1020,8 @@ otherwise report a problem:
    signer names (RFC 5652, section 5.4): SHA-256, SHA-384 or SHA-512. A
    signing method that names another one is refused (`stamp-invalid`).
    The signing methods are RSA (PKCS #1 version 1.5; keys of 2,048 to
-   8,192 bits, with a public number of at most 32 bits), ECDSA on the
+   8,192 bits, with an odd public number from 3 to 2^32 - 1: never 1,
+   under which anyone can make a signature that checks), ECDSA on the
    curves P-256 and P-384, and Ed25519.
 5. The time it states lies within the time that certificate is in force
    (`stamp-invalid`).

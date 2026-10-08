@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- 2026-10-08: two faults in the check of a time-stamp from a service,
+  found while writing the Python version.
+  - An RSA key with the public number 1 in a service's certificate was
+    accepted. Under it, anyone can make a signature that checks, so a
+    time-stamp could be made without the service's private key. It
+    counted only where the person checking had named that certificate as
+    trusted. An even public number was accepted too. Now the public
+    number must be odd, from 3 to 2^32 - 1 (`stamp-invalid`).
+  - The public key inside a certificate was read loosely: a compressed or
+    "hybrid" point, RSA numbers with needless or missing sign bytes,
+    bytes after the key, any parameters, and unused bits all loaded. Now
+    the key must be written exactly as its own standard sets out
+    (`stamp-bad-data`), as the rest of a time-stamp already must be, so
+    that two checkers cannot disagree about whether it can be read.
+  - Each is a shared test (`test-vectors/stamps-strict-keys.json`).
 - 2026-10-08: shared test files, and the start of a Python version.
   - `test-vectors/` holds records and values, each with the answer this
     library gives: the canonical form, base64url, times, keys, a

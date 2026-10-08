@@ -107,21 +107,52 @@ function readStatement(bytes) {
   return { hash, stamped, time, accuracySeconds, critical };
 }
 
-// The size of an RSA key in a certificate: 2,048 to 8,192 bits, with a
-// small public number, so that checking a signature cannot be made slow.
-function checkRsaKey(bytes, keyBits) {
-  const inner = bytes.subarray(keyBits.start + 1, keyBits.end);
-  const key = expect(readElement(inner, 0), TAG.SEQUENCE, 'an RSA key');
-  const [n, e] = children(inner, key, 2);
-  expect(n, TAG.INTEGER, 'an RSA key');
-  expect(e, TAG.INTEGER, 'an RSA key');
+// The public key of a certificate, written exactly as its standard sets
+// out, so that two checkers cannot disagree about whether it can be read:
+// RSA as RFC 3279 section 2.3.1 sets out (the method's parameters empty,
+// the key two positive whole numbers in strict DER, nothing after them);
+// ECDSA as RFC 5480 section 2.2 (an uncompressed point of the named
+// curve); Ed25519 as RFC 8410 section 4 (no parameters, 32 bytes). In each,
+// the string of bits has no unused bits.
+//
+// An RSA key is 2,048 to 8,192 bits, with an odd public number from 3 to
+// 2^32 - 1: a small number, so that checking a signature cannot be made
+// slow, and never 1, under which anyone can make a signature that checks.
+function checkKeyEncoding(bytes, certificate, method, size) {
+  const why = 'the public key of a certificate is not written as its standard sets out.';
+  const bits = certificate.keyBits;
+  if (bits.end - bits.start < 1 || bytes[bits.start] !== 0) throw badStamp(why);
+  const inner = bytes.subarray(bits.start + 1, bits.end);
+  const parameters = certificate.keyParameters;
+  if (method === 'ECDSA') {
+    if (inner.length !== 1 + 2 * size || inner[0] !== 0x04) throw badStamp(why);
+    return;
+  }
+  if (method === 'Ed25519') {
+    if (parameters !== null || inner.length !== 32) throw badStamp(why);
+    return;
+  }
+  if (parameters === null || parameters.tag !== TAG.NULL) throw badStamp(why);
+  let n;
+  let e;
+  try {
+    const key = readElement(inner, 0);
+    if (key.tag !== TAG.SEQUENCE || key.end !== inner.length) throw new Error();
+    validateDer(inner, key);
+    const parts = children(inner, key, 3);
+    [n, e] = parts;
+    if (parts.length !== 2 || n.tag !== TAG.INTEGER || e.tag !== TAG.INTEGER || inner[n.start] & 0x80 || inner[e.start] & 0x80) throw new Error();
+  } catch {
+    throw badStamp(why);
+  }
   let modulus = contentOf(inner, n);
   if (modulus[0] === 0) modulus = modulus.subarray(1);
-  const bits = modulus.length === 0 ? 0 : (modulus.length - 1) * 8 + (32 - Math.clz32(modulus[0]));
+  const length = modulus.length === 0 ? 0 : (modulus.length - 1) * 8 + (32 - Math.clz32(modulus[0]));
   let exponent = contentOf(inner, e);
   if (exponent[0] === 0) exponent = exponent.subarray(1);
-  if (bits < 2048 || bits > 8192 || exponent.length === 0 || exponent.length > 4) {
-    throw invalid('A time-stamp was signed with an RSA key of a size that is not accepted.');
+  const odd = exponent.length > 0 && (exponent[exponent.length - 1] & 1) === 1;
+  if (length < 2048 || length > 8192 || exponent.length === 0 || exponent.length > 4 || !odd || (exponent.length === 1 && exponent[0] < 3)) {
+    throw invalid('A time-stamp was signed with an RSA key whose size or public number is not accepted.');
   }
 }
 
@@ -148,6 +179,7 @@ function readCertificate(bytes, element) {
     notAfter: timeOf(bytes, validity[1]),
     spki: wholeOf(bytes, keyInfo),
     keyOid: keyAlgorithm.oid,
+    keyParameters: keyAlgorithm.parameters ?? null,
     keyBits: expect(keyParts[1], TAG.BIT_STRING, 'the public key of a certificate'),
     curveOid: keyAlgorithm.parameters && keyAlgorithm.parameters.tag === TAG.OID ? hexOf(bytes, keyAlgorithm.parameters) : null,
   };
@@ -182,13 +214,14 @@ async function verifyWith(certificate, bytes, signatureOid, digestName, signatur
   let raw = signature;
   if (certificate.keyOid === OID.rsaEncryption) {
     if (signatureOid !== OID.rsaEncryption && RSA_WITH[signatureOid] !== digestName) return 'invalid';
-    checkRsaKey(bytes, certificate.keyBits);
+    checkKeyEncoding(bytes, certificate, 'RSA');
     method = 'RSA';
     importParams = { name: 'RSASSA-PKCS1-v1_5', hash: digestName };
     verifyParams = { name: 'RSASSA-PKCS1-v1_5' };
   } else if (certificate.keyOid === OID.ecPublicKey) {
     const curve = certificate.curveOid === OID.p256 ? ['P-256', 32] : certificate.curveOid === OID.p384 ? ['P-384', 48] : null;
     if (ECDSA_WITH[signatureOid] !== digestName || !curve) return 'invalid';
+    checkKeyEncoding(bytes, certificate, 'ECDSA', curve[1]);
     method = 'ECDSA';
     importParams = { name: 'ECDSA', namedCurve: curve[0] };
     verifyParams = { name: 'ECDSA', hash: digestName };
@@ -198,6 +231,7 @@ async function verifyWith(certificate, bytes, signatureOid, digestName, signatur
       return 'invalid';
     }
   } else if (certificate.keyOid === OID.ed25519 && signatureOid === OID.ed25519) {
+    checkKeyEncoding(bytes, certificate, 'Ed25519');
     method = 'Ed25519';
     importParams = { name: 'Ed25519' };
     verifyParams = { name: 'Ed25519' };

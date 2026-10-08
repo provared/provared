@@ -87,6 +87,7 @@ const METHODS = {
  * @param {object} [o]
  * @param {number} [o.notBefore] when its certificate begins, in milliseconds
  * @param {number} [o.notAfter] when its certificate ends
+ * @param {(spki: Uint8Array) => Uint8Array} [o.spki] changes how the public key is written in its certificates
  * @returns {Promise<{fingerprint: string, certificate: Uint8Array, secondCertificate: Uint8Array, stamp: Function}>}
  *   "fingerprint" is what a checker is told in order to trust this service.
  *   "secondCertificate" is another certificate for the same key.
@@ -107,7 +108,7 @@ export async function makeStampService(method = 'ECDSA', o = {}) {
       name,
       sequence(generalizedTime(o.notBefore ?? Date.parse('2026-01-01T00:00:00Z')), generalizedTime(o.notAfter ?? Date.parse('2036-01-01T00:00:00Z'))),
       name,
-      spki,
+      o.spki ? o.spki(spki) : spki,
     );
     return sequence(body, m.algorithm, der(0x03, new Uint8Array([0]), await signWith(body)));
   };

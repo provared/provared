@@ -127,23 +127,55 @@ def _read_statement(data):
     return {'hash': hash_oid, 'stamped': stamped, 'time': time, 'accuracySeconds': accuracy_seconds, 'critical': critical}
 
 
-def _check_rsa_key(data, key_bits):
-    """The size of an RSA key in a certificate: 2,048 to 8,192 bits, with a
-    small public number, so that checking a signature cannot be made slow."""
+def _check_key_encoding(data, certificate, method, size=None):
+    """The public key of a certificate, written exactly as its standard sets
+    out, so that two checkers cannot disagree about whether it can be read:
+    RSA as RFC 3279 section 2.3.1 sets out (the method's parameters empty,
+    the key two positive whole numbers in strict DER, nothing after them);
+    ECDSA as RFC 5480 section 2.2 (an uncompressed point of the named
+    curve); Ed25519 as RFC 8410 section 4 (no parameters, 32 bytes). In each,
+    the string of bits has no unused bits.
+
+    An RSA key is 2,048 to 8,192 bits, with an odd public number from 3 to
+    2^32 - 1: a small number, so that checking a signature cannot be made
+    slow, and never 1, under which anyone can make a signature that checks."""
+    why = 'the public key of a certificate is not written as its standard sets out.'
+    key_bits = certificate['keyBits']
+    if key_bits.end - key_bits.start < 1 or data[key_bits.start] != 0:
+        raise bad_stamp(why)
     inner = bytes(data[key_bits.start + 1:key_bits.end])
-    key = expect(read_element(inner, 0), TAG.SEQUENCE, 'an RSA key')
-    parts = children(inner, key, 2)
-    n = expect(item(parts, 0), TAG.INTEGER, 'an RSA key')
-    e = expect(item(parts, 1), TAG.INTEGER, 'an RSA key')
+    parameters = certificate['keyParameters']
+    if method == 'ECDSA':
+        if len(inner) != 1 + 2 * size or inner[0] != 0x04:
+            raise bad_stamp(why)
+        return
+    if method == 'Ed25519':
+        if parameters is not None or len(inner) != 32:
+            raise bad_stamp(why)
+        return
+    if parameters is None or parameters.tag != TAG.NULL:
+        raise bad_stamp(why)
+    try:
+        key = read_element(inner, 0)
+        if key.tag != TAG.SEQUENCE or key.end != len(inner):
+            raise ValueError
+        validate_der(inner, key)
+        parts = children(inner, key, 3)
+        if len(parts) != 2 or parts[0].tag != TAG.INTEGER or parts[1].tag != TAG.INTEGER or inner[parts[0].start] & 0x80 or inner[parts[1].start] & 0x80:
+            raise ValueError
+        n, e = parts
+    except Exception:
+        raise bad_stamp(why) from None
     modulus = content_of(inner, n)
     if len(modulus) > 0 and modulus[0] == 0:
         modulus = modulus[1:]
-    bits = 0 if len(modulus) == 0 else (len(modulus) - 1) * 8 + modulus[0].bit_length()
+    length = 0 if len(modulus) == 0 else (len(modulus) - 1) * 8 + modulus[0].bit_length()
     exponent = content_of(inner, e)
     if len(exponent) > 0 and exponent[0] == 0:
         exponent = exponent[1:]
-    if bits < 2048 or bits > 8192 or len(exponent) == 0 or len(exponent) > 4:
-        raise _invalid('A time-stamp was signed with an RSA key of a size that is not accepted.')
+    odd = len(exponent) > 0 and (exponent[-1] & 1) == 1
+    if length < 2048 or length > 8192 or len(exponent) == 0 or len(exponent) > 4 or not odd or (len(exponent) == 1 and exponent[0] < 3):
+        raise _invalid('A time-stamp was signed with an RSA key whose size or public number is not accepted.')
 
 
 def _read_certificate(data, element):
@@ -203,54 +235,11 @@ def _signing_certificate_of(data, value, v2):
     return {'hash': hash_name, 'value': content_of(data, expect(item(first, at), TAG.OCTET_STRING, 'the signing certificate attribute'))}
 
 
-def _der(tag, content):
-    length = len(content)
-    if length < 128:
-        head = bytes([tag, length])
-    else:
-        size = (length.bit_length() + 7) // 8
-        head = bytes([tag, 0x80 | size]) + length.to_bytes(size, 'big')
-    return head + content
-
-
-def _der_integer(value):
-    digits = value.to_bytes(max(1, (value.bit_length() + 7) // 8), 'big')
-    return _der(TAG.INTEGER, b'\x00' + digits if digits[0] & 0x80 else digits)
-
-
-def _key_bytes(data, key_bits):
-    """The bytes of a public key, as OpenSSL reads a bit string: the bits it
-    marks as unused, at the end of its last byte, are set to zero."""
-    unused = data[key_bits.start]
-    raw = bytearray(data[key_bits.start + 1:key_bits.end])
-    if raw:
-        raw[-1] &= (0xFF << unused) & 0xFF
-    return bytes(raw)
-
-
-def _public_key(certificate, data, method):
-    """The public key of a certificate, read as OpenSSL reads one, and so as
-    Node.js's Web Crypto loads it for the JavaScript library: for RSA, each
-    of the two numbers is the unsigned value of its bytes, the parameters of
-    the method are not read, and bytes after the key are not read; for
-    Ed25519, the method may have no parameters. The key is then written
-    again in the one strict form that "cryptography" reads, which refuses
-    some keys that OpenSSL loads (see check_stamp)."""
-    raw = _key_bytes(data, certificate['keyBits'])
-    if method == 'RSA':
-        key = expect(read_element(raw, 0), TAG.SEQUENCE, 'an RSA key')
-        n, e = children(raw, key, 2)
-        algorithm = _der(TAG.SEQUENCE, _der(TAG.OID, bytes.fromhex(OID['rsaEncryption'])) + b'\x05\x00')
-        body = _der(TAG.SEQUENCE, _der_integer(int.from_bytes(content_of(raw, n), 'big')) + _der_integer(int.from_bytes(content_of(raw, e), 'big')))
-    elif method == 'ECDSA':
-        algorithm = _der(TAG.SEQUENCE, _der(TAG.OID, bytes.fromhex(OID['ecPublicKey'])) + _der(TAG.OID, bytes.fromhex(certificate['curveOid'])))
-        body = raw
-    else:
-        if certificate['keyParameters'] is not None:
-            raise ValueError('an Ed25519 key has no parameters')
-        algorithm = _der(TAG.SEQUENCE, _der(TAG.OID, bytes.fromhex(OID['ed25519'])))
-        body = raw
-    return serialization.load_der_public_key(_der(TAG.SEQUENCE, algorithm + _der(TAG.BIT_STRING, b'\x00' + body)))
+def _public_key(certificate):
+    """The public key of a certificate, loaded for checking. It has already
+    passed _check_key_encoding, so it is in the one strict form that
+    "cryptography" reads, as Web Crypto reads it."""
+    return serialization.load_der_public_key(bytes(certificate['spki']))
 
 
 def _verify_with(certificate, data, signature_oid, digest_name, signature, signed, without):
@@ -264,7 +253,7 @@ def _verify_with(certificate, data, signature_oid, digest_name, signature, signe
     if certificate['keyOid'] == OID['rsaEncryption']:
         if signature_oid != OID['rsaEncryption'] and RSA_WITH.get(signature_oid) != digest_name:
             return 'invalid'
-        _check_rsa_key(data, certificate['keyBits'])
+        _check_key_encoding(data, certificate, 'RSA')
         method = 'RSA'
     elif certificate['keyOid'] == OID['ecPublicKey']:
         if certificate['curveOid'] == OID['p256']:
@@ -273,19 +262,21 @@ def _verify_with(certificate, data, signature_oid, digest_name, signature, signe
             curve = (ec.SECP384R1, 48)
         if ECDSA_WITH.get(signature_oid) != digest_name or curve is None:
             return 'invalid'
+        _check_key_encoding(data, certificate, 'ECDSA', curve[1])
         method = 'ECDSA'
         try:
             raw = ecdsa_to_raw(signature, curve[1])
         except Exception:
             return 'invalid'
     elif certificate['keyOid'] == OID['ed25519'] and signature_oid == OID['ed25519']:
+        _check_key_encoding(data, certificate, 'Ed25519')
         method = 'Ed25519'
     else:
         return 'invalid'
     if any(isinstance(w, str) and w == method for w in without):
         return 'unavailable'
     try:
-        key = _public_key(certificate, data, method)
+        key = _public_key(certificate)
     except Exception:
         return 'invalid'
     try:
@@ -327,13 +318,6 @@ def check_stamp(token, fingerprint_bytes, options=None):
 
     Raises a Refusal: "stamp-bad-data", "stamp-wrong-data" or "stamp-invalid".
 
-    Where this differs from the JavaScript library: an RSA key in a
-    service's certificate with the public number 1, or with an even public
-    number, is loaded by OpenSSL in Node.js but refused by "cryptography".
-    Under the number 1 the signature block itself counts as a signature, so
-    the JavaScript library can find such a time-stamp sound where this one
-    finds it "stamp-invalid". Either way it counts only if the person
-    checking named that certificate as trusted.
     """
     if not isinstance(options, dict):
         options = {}

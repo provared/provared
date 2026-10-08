@@ -1932,6 +1932,58 @@ function blocksInChainCases() {
   return cases;
 }
 
+// The public key inside a service's certificate, written in ways its
+// standard does not allow, and an RSA key with the public number 1, under
+// which anyone can make a signature that checks.
+function strictKeyCases() {
+  const cases = [];
+  const add = (name, key, spki, o = {}) => {
+    const cert = certificate(key, { spki });
+    cases.push({ name, token: b64(makeToken(key, { cert, ...o })), stamped: b64(STAMPED), options: { trusted: [authorityOf(cert)] } });
+  };
+  const spkiOf = (algorithm, bits) => seq(algorithm, bits);
+  const RSA_ALGORITHM = seq(oid('2a864886f70d010101'), NULL);
+  const rsa = makeKey('RSA-2048');
+  const n = fromBase64url(rsa.jwk.n);
+  const rsaKey = (...parts) => bitString(seq(...parts));
+  const DIGEST_INFO = H('3031300d060960864801650304020105000420');
+  // Under the public number 1, the padded fingerprint itself is a signature that checks.
+  const forged = (signedAttributes) => {
+    const info = concatBytes(DIGEST_INFO, digest('SHA-256', signedAttributes));
+    return concatBytes(H('0001'), new Uint8Array(n.length - 3 - info.length).fill(0xff), H('00'), info);
+  };
+  add('RSA, written as its standard sets out', rsa, rsa.spki);
+  add('RSA with the public number 1, and a signature anyone could make', rsa, spkiOf(RSA_ALGORITHM, rsaKey(intBytes(n), int(1))), { sign: forged });
+  add('RSA with the public number 2', rsa, spkiOf(RSA_ALGORITHM, rsaKey(intBytes(n), int(2))));
+  add('RSA with the public number 3, which is not this key', rsa, spkiOf(RSA_ALGORITHM, rsaKey(intBytes(n), int(3))));
+  add('RSA with a public number of five bytes', rsa, spkiOf(RSA_ALGORITHM, rsaKey(intBytes(n), int(2 ** 32 + 1))));
+  add('RSA with no parameters', rsa, spkiOf(seq(oid('2a864886f70d010101')), rsaKey(intBytes(n), int(65537))));
+  add('RSA with parameters that are not empty', rsa, spkiOf(seq(oid('2a864886f70d010101'), oid('2a03')), rsaKey(intBytes(n), int(65537))));
+  add('RSA with an unused bit', rsa, spkiOf(RSA_ALGORITHM, bitString(seq(intBytes(n), int(65537)), 1)));
+  add('RSA with a needless zero before its modulus', rsa, spkiOf(RSA_ALGORITHM, rsaKey(der(0x02, H('0000'), n), int(65537))));
+  add('RSA with a negative modulus', rsa, spkiOf(RSA_ALGORITHM, rsaKey(der(0x02, n), int(65537))));
+  add('RSA with a byte after the key', rsa, spkiOf(RSA_ALGORITHM, bitString(concatBytes(seq(intBytes(n), int(65537)), H('00')))));
+  add('RSA with three numbers', rsa, spkiOf(RSA_ALGORITHM, rsaKey(intBytes(n), int(65537), int(1))));
+  for (const [curve, size] of [['P-256', 32], ['P-384', 48]]) {
+    const ec = makeKey(curve);
+    const x = fromBase64url(ec.jwk.x);
+    const y = fromBase64url(ec.jwk.y);
+    const algorithm = seq(oid('2a8648ce3d0201'), oid(curve === 'P-256' ? '2a8648ce3d030107' : '2b81040022'));
+    add(`ECDSA ${curve}, written as its standard sets out`, ec, ec.spki);
+    add(`ECDSA ${curve}, a compressed point`, ec, spkiOf(algorithm, bitString(concatBytes(new Uint8Array([2 + (y[size - 1] & 1)]), x))));
+    add(`ECDSA ${curve}, a point in the hybrid form`, ec, spkiOf(algorithm, bitString(concatBytes(new Uint8Array([6 + (y[size - 1] & 1)]), x, y))));
+    add(`ECDSA ${curve}, a point cut short`, ec, spkiOf(algorithm, bitString(concatBytes(H('04'), x, y.subarray(1)))));
+    add(`ECDSA ${curve}, an unused bit`, ec, spkiOf(algorithm, bitString(concatBytes(H('04'), x, y), 1)));
+  }
+  const ed = makeKey('Ed25519');
+  const edKey = fromBase64url(ed.jwk.x);
+  add('Ed25519, written as its standard sets out', ed, ed.spki);
+  add('Ed25519 with parameters', ed, spkiOf(seq(oid('2b6570'), NULL), bitString(edKey)));
+  add('Ed25519 of 33 bytes', ed, spkiOf(seq(oid('2b6570')), bitString(concatBytes(edKey, H('00')))));
+  add('Ed25519 with an unused bit', ed, spkiOf(seq(oid('2b6570')), bitString(edKey, 1)));
+  return cases;
+}
+
 /** Each set of cases, by the name of its file. */
 export const CASES = {
   'tree-leaves': async () => vectorSet('The fingerprint of one leaf of the tree (RFC 6962 section 2.1): SHA-256 of 0x00 and the leaf.', 'leafHash', leafHashCases()),
@@ -1945,6 +1997,7 @@ export const CASES = {
   'der-times': async () => vectorSet('Reading a time in the two forms DER allows: milliseconds since 1970.', 'timeOf', timeOfCases()),
   'der-ecdsa': async () => vectorSet('An ECDSA signature from its DER form to the two numbers side by side.', 'ecdsaToRaw', ecdsaToRawCases()),
   stamps: async () => vectorSet('Checking a time-stamp from a service (RFC 3161; format description, section 21.2), made up here with every part changed in turn.', 'checkStamp', await stampCases()),
+  'stamps-strict-keys': async () => vectorSet("Checking a time-stamp whose service's certificate holds its public key written in ways its standard does not allow (format description, section 21.2).", 'checkStamp', strictKeyCases()),
   'stamps-openssl': async () => vectorSet('Checking time-stamps made by the OpenSSL program (test/fixtures/stamps.json), as made and changed.', 'checkStamp', opensslCases()),
   'stamps-flips-ecdsa': async () => {
     const key = makeKey('P-256');
