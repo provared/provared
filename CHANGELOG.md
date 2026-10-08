@@ -49,14 +49,14 @@
     same program does not hold, such as a proxy's. The tests check that
     nothing was refused while each example ran. Its README says exactly
     what it refuses.
-- 2026-10-08: examples for three Python agent frameworks, in
-  `python/examples/`: LangChain, the OpenAI Agents SDK and Pydantic AI.
-  Each records an agent's tools with `record_function`, runs the agent
-  with the framework's own stand-in model (no AI service is called;
-  tracing is switched off; any connection outside the program is refused
-  while it runs), and
-  checks the book. Each is tested (`python/examples/test_examples.py`).
-  The library itself still names no product.
+- 2026-10-08: examples for three widely used Python agent frameworks, in
+  `python/examples/`, the one folder that names them. Each records an
+  agent's tools with `record_function`, runs the agent with the
+  framework's own stand-in model (no AI service is called; tracing is
+  switched off; any connection outside the program is refused while it
+  runs), and checks the book. Each is tested
+  (`python/examples/test_examples.py`). The library itself still names no
+  product.
 - 2026-10-08: the check before acting speaks of an action that is only
   proposed: "With this action the total would be 280 GBP", not "With this
   stub the total is", since no stub exists for an action that is not

@@ -124,8 +124,7 @@ place into a `functools.partial` is no longer a parameter, so it is not
 in the record, and nor is any change that a decorator inside makes. The
 folder
 [`examples/`](https://github.com/provared/provared/tree/main/python/examples)
-shows this with three agent frameworks: LangChain, the OpenAI Agents SDK
-and Pydantic AI. `key_set_from_seeds` and `key_set_seeds` keep an
+shows this with three widely used agent frameworks. `key_set_from_seeds` and `key_set_seeds` keep an
 agent's keys between runs as two 32-byte seeds.
 
 Names follow Python's way (`check_book`, `write_stub`). Options may be
