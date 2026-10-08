@@ -6,6 +6,9 @@ import json
 import pathlib
 import unittest
 
+import answers_book
+import answers_records
+import answers_stamps
 from provared import _js
 from provared.encoding import count_characters, from_base64url, parse_canonical, parse_time, problem_from
 from provared.jws import parse_record
@@ -54,13 +57,27 @@ ANSWER = {
     'validateCountersignatureContent': lambda c: _answer(lambda: _true(validate_countersignature_content)(c['content'])),
     'plainOrigin': lambda c: {'ok': _plain_origin(c['text']) is not None},
     'checkSlip': lambda c: {'ok': check_slip(c['record'], c.get('options'), c['disclosures'] if 'disclosures' in c else _UNDEFINED)},
+    **answers_stamps.ANSWER,
+    **answers_records.ANSWER,
+    **answers_book.ANSWER,
 }
+
+
+def _json_values(value):
+    """As JSON.stringify writes a value: NaN and the infinities become null."""
+    if isinstance(value, float) and (value != value or value in (float('inf'), float('-inf'))):
+        return None
+    if isinstance(value, dict):
+        return {k: _json_values(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_values(v) for v in value]
+    return value
 
 
 def _plain(value):
     """The answer as JSON would carry it: whole numbers written as floats
     compare as whole numbers, as in JavaScript."""
-    return _js.parse(json.dumps(value, ensure_ascii=False))
+    return _js.parse(json.dumps(_json_values(value), ensure_ascii=False))
 
 
 def _read(path):
@@ -77,7 +94,7 @@ class SharedTestFiles(unittest.TestCase):
             data = _read(path)
             answer = ANSWER.get(data['function'])
             if answer is None:
-                continue
+                self.fail(f'{path.name}: no Python answer for "{data["function"]}"')
             for c in data['cases']:
                 with self.subTest(file=path.name, case=c['name']):
                     self.assertEqual(_plain(answer(c)), _plain(c['expected']))

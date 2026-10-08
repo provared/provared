@@ -2,6 +2,7 @@
 # Format description, sections 5 and 6.
 
 from . import fields as f
+from ._js import truthy
 from .encoding import fingerprint, format_time, now_ms, random_id, to_base64url
 from .jws import KINDS, encode_content, parse_record, protected_headers, signing_input, within_size
 from .keys import KEY_SET_METHODS
@@ -89,7 +90,7 @@ def write_stub(stub_fields, private_keys):
     Returns {"record", "fingerprint", "seq"}.
     """
     after = stub_fields.get('after')
-    seq = after['seq'] + 1 if after else 0
+    seq = after['seq'] + 1 if truthy(after) else 0
     when = stub_fields.get('when')
     given_id = stub_fields.get('id')
     content = {
@@ -100,13 +101,19 @@ def write_stub(stub_fields, private_keys):
         'action': stub_fields.get('action'),
         'when': format_time(now_ms() if when is None else when),
     }
-    if after:
+    # A member is written where JavaScript counts it as given, as the
+    # JavaScript writer does: an empty object or list is given.
+    if truthy(after):
         content['previous'] = after['fingerprint']
-    for name in ('amount', 'with', 'approval', 'terms', 'pass'):
-        if stub_fields.get(name):
+    for name in ('amount', 'with'):
+        if truthy(stub_fields.get(name)):
             content[name] = stub_fields[name]
-    if stub_fields.get('details'):
-        content['details'] = stub_fields['details']
+    details = stub_fields.get('details')
+    if truthy(details) and truthy(len(details) if isinstance(details, (list, str)) else None):
+        content['details'] = details
+    for name in ('approval', 'terms', 'pass'):
+        if truthy(stub_fields.get(name)):
+            content[name] = stub_fields[name]
     validate_stub_content(content)
     record, fp = sign_with_key_set('stub', content, private_keys)
     return {'record': record, 'fingerprint': fp, 'seq': seq}

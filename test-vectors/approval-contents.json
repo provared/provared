@@ -1,0 +1,2550 @@
+{
+ "about": "Confirming the members of an approval's content (format description, section 17).",
+ "function": "validateApprovalContent",
+ "cases": [
+  {
+   "name": "the least an approval holds",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "every member",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "amount": {
+     "unit": "GBP",
+     "value": 150
+    },
+    "with": "supplier",
+    "details": [
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     }
+    ]
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "a type of another kind, which this check does not read",
+   "content": {
+    "type": "provared.stub.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "an unknown member",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "colour": "red"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "approval: holds a member that is not known."
+    }
+   }
+  },
+  {
+   "name": "a member of a stub",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "seq": 0
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "approval: holds a member that is not known."
+    }
+   }
+  },
+  {
+   "name": "a member named __proto__",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "__proto__": 1
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "approval: holds a member that is not known."
+    }
+   }
+  },
+  {
+   "name": "a list",
+   "content": [
+    {}
+   ],
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "approval: must be an object."
+    }
+   }
+  },
+  {
+   "name": "null",
+   "content": null,
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "approval: must be an object."
+    }
+   }
+  },
+  {
+   "name": "text",
+   "content": "content",
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "approval: must be an object."
+    }
+   }
+  },
+  {
+   "name": "a number",
+   "content": 1,
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "approval: must be an object."
+    }
+   }
+  },
+  {
+   "name": "true",
+   "content": true,
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "approval: must be an object."
+    }
+   }
+  },
+  {
+   "name": "an empty object",
+   "content": {},
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "approval: \"action\" is missing."
+    }
+   }
+  },
+  {
+   "name": "no action",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "approval: \"action\" is missing."
+    }
+   }
+  },
+  {
+   "name": "no id",
+   "content": {
+    "type": "provared.approval.v0",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "approval: \"id\" is missing."
+    }
+   }
+  },
+  {
+   "name": "no slip",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "approval: \"slip\" is missing."
+    }
+   }
+  },
+  {
+   "name": "no type",
+   "content": {
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "approval: \"type\" is missing."
+    }
+   }
+  },
+  {
+   "name": "no when",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "approval: \"when\" is missing."
+    }
+   }
+  },
+  {
+   "name": "id: 16 bytes",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "id: 15 bytes",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgIC",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "id: must be a unique number of 16 bytes in base64url."
+    }
+   }
+  },
+  {
+   "name": "id: 17 bytes",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAgI",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "id: must be a unique number of 16 bytes in base64url."
+    }
+   }
+  },
+  {
+   "name": "id: 32 bytes",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "id: must be a unique number of 16 bytes in base64url."
+    }
+   }
+  },
+  {
+   "name": "id: padding",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg==",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "id: must be a unique number of 16 bytes in base64url."
+    }
+   }
+  },
+  {
+   "name": "id: a plus sign",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgIC+g",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "id: must be a unique number of 16 bytes in base64url."
+    }
+   }
+  },
+  {
+   "name": "id: stray bits",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAh",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "id: must be a unique number of 16 bytes in base64url."
+    }
+   }
+  },
+  {
+   "name": "id: an impossible length",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "A",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "id: must be a unique number of 16 bytes in base64url."
+    }
+   }
+  },
+  {
+   "name": "id: empty text",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "id: must be a unique number of 16 bytes in base64url."
+    }
+   }
+  },
+  {
+   "name": "id: a number",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": 1,
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "id: must be a unique number of 16 bytes in base64url."
+    }
+   }
+  },
+  {
+   "name": "id: null",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": null,
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "id: must be a unique number of 16 bytes in base64url."
+    }
+   }
+  },
+  {
+   "name": "id: a list",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": [
+     "AgICAgICAgICAgICAgICAg"
+    ],
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "id: must be a unique number of 16 bytes in base64url."
+    }
+   }
+  },
+  {
+   "name": "slip: 32 bytes",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "slip: 31 bytes",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "slip: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "slip: 33 bytes",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "slip: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "slip: 16 bytes",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AgICAgICAgICAgICAgICAg",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "slip: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "slip: padding",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "slip: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "slip: a slash",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBA/A",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "slip: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "slip: stray bits",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQF",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "slip: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "slip: empty text",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "slip: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "slip: a number",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": 1,
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "slip: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "slip: null",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": null,
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "slip: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "slip: true",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": true,
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "slip: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "action: a name of the writer",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "action: a shared action",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "provared.order.place",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "action: an unknown reserved action",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "provared.money.send",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "action: names that begin \"provared.\" are reserved, and this one is not on the shared list."
+    }
+   }
+  },
+  {
+   "name": "action: the reserved prefix alone",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "provared.",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "action: names that begin \"provared.\" are reserved, and this one is not on the shared list."
+    }
+   }
+  },
+  {
+   "name": "action: the prefix without its full stop",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "provared",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "action: a capital letter",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "Supplies.order",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "action: must be 1 to 64 lower-case letters, digits, full stops, hyphens or underscores."
+    }
+   }
+  },
+  {
+   "name": "action: 64 characters",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "action: 65 characters",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "action: must be 1 to 64 lower-case letters, digits, full stops, hyphens or underscores."
+    }
+   }
+  },
+  {
+   "name": "action: empty text",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "action: must be 1 to 64 lower-case letters, digits, full stops, hyphens or underscores."
+    }
+   }
+  },
+  {
+   "name": "action: a leading full stop",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": ".order",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "action: must be 1 to 64 lower-case letters, digits, full stops, hyphens or underscores."
+    }
+   }
+  },
+  {
+   "name": "action: a leading hyphen",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "-order",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "action: must be 1 to 64 lower-case letters, digits, full stops, hyphens or underscores."
+    }
+   }
+  },
+  {
+   "name": "action: a leading digit",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "9.order",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "action: an underscore and a hyphen",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "a_b-c",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "action: a space",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies order",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "action: must be 1 to 64 lower-case letters, digits, full stops, hyphens or underscores."
+    }
+   }
+  },
+  {
+   "name": "action: a line break after it",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order\n",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "action: must be 1 to 64 lower-case letters, digits, full stops, hyphens or underscores."
+    }
+   }
+  },
+  {
+   "name": "action: a letter with an accent",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.ordér",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "action: must be 1 to 64 lower-case letters, digits, full stops, hyphens or underscores."
+    }
+   }
+  },
+  {
+   "name": "action: a digit of another script",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.٣",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "action: must be 1 to 64 lower-case letters, digits, full stops, hyphens or underscores."
+    }
+   }
+  },
+  {
+   "name": "action: constructor",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "constructor",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "action: __proto__",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "__proto__",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "action: must be 1 to 64 lower-case letters, digits, full stops, hyphens or underscores."
+    }
+   }
+  },
+  {
+   "name": "action: toString",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "toString",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "action: must be 1 to 64 lower-case letters, digits, full stops, hyphens or underscores."
+    }
+   }
+  },
+  {
+   "name": "action: a number",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": 1,
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "action: must be 1 to 64 lower-case letters, digits, full stops, hyphens or underscores."
+    }
+   }
+  },
+  {
+   "name": "action: null",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": null,
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "action: must be 1 to 64 lower-case letters, digits, full stops, hyphens or underscores."
+    }
+   }
+  },
+  {
+   "name": "action: a list",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": [
+     "supplies.order"
+    ],
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "action: must be 1 to 64 lower-case letters, digits, full stops, hyphens or underscores."
+    }
+   }
+  },
+  {
+   "name": "amount: an amount",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "amount": {
+     "unit": "GBP",
+     "value": 150
+    }
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "amount: a value of 0",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "amount": {
+     "unit": "GBP",
+     "value": 0
+    }
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "amount: the largest value",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "amount": {
+     "unit": "GBP",
+     "value": 9007199254740991
+    }
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "amount: one more than the largest value",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "amount": {
+     "unit": "GBP",
+     "value": 9007199254740992
+    }
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "amount.value: must be a whole number, 0 or more."
+    }
+   }
+  },
+  {
+   "name": "amount: a value written with an exponent",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "amount": {
+     "unit": "GBP",
+     "value": 1e+21
+    }
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "amount.value: must be a whole number, 0 or more."
+    }
+   }
+  },
+  {
+   "name": "amount: a negative value",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "amount": {
+     "unit": "GBP",
+     "value": -1
+    }
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "amount.value: must be a whole number, 0 or more."
+    }
+   }
+  },
+  {
+   "name": "amount: a fraction",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "amount": {
+     "unit": "GBP",
+     "value": 1.5
+    }
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "amount.value: must be a whole number, 0 or more."
+    }
+   }
+  },
+  {
+   "name": "amount: a value that is text",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "amount": {
+     "unit": "GBP",
+     "value": "1"
+    }
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "amount.value: must be a whole number, 0 or more."
+    }
+   }
+  },
+  {
+   "name": "amount: a value that is true",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "amount": {
+     "unit": "GBP",
+     "value": true
+    }
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "amount.value: must be a whole number, 0 or more."
+    }
+   }
+  },
+  {
+   "name": "amount: a value that is null",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "amount": {
+     "unit": "GBP",
+     "value": null
+    }
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "amount.value: must be a whole number, 0 or more."
+    }
+   }
+  },
+  {
+   "name": "amount: no unit",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "amount": {
+     "value": 1
+    }
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "amount: \"unit\" is missing."
+    }
+   }
+  },
+  {
+   "name": "amount: no value",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "amount": {
+     "unit": "GBP"
+    }
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "amount: \"value\" is missing."
+    }
+   }
+  },
+  {
+   "name": "amount: an extra member",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "amount": {
+     "unit": "GBP",
+     "value": 1,
+     "tax": 0
+    }
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "amount: holds a member that is not known."
+    }
+   }
+  },
+  {
+   "name": "amount: a list",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "amount": [
+     {
+      "unit": "GBP",
+      "value": 1
+     }
+    ]
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "amount: must be an object."
+    }
+   }
+  },
+  {
+   "name": "amount: null",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "amount": null
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "amount: must be an object."
+    }
+   }
+  },
+  {
+   "name": "amount: a number",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "amount": 1
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "amount: must be an object."
+    }
+   }
+  },
+  {
+   "name": "amount: an empty object",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "amount": {}
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "amount: \"unit\" is missing."
+    }
+   }
+  },
+  {
+   "name": "amount: a unit: GBP",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "amount": {
+     "unit": "GBP",
+     "value": 1
+    }
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "amount: a unit: small letters",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "amount": {
+     "unit": "gbp",
+     "value": 1
+    }
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "amount: a unit: 16 characters",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "amount": {
+     "unit": "aaaaaaaaaaaaaaaa",
+     "value": 1
+    }
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "amount: a unit: 17 characters",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "amount": {
+     "unit": "aaaaaaaaaaaaaaaaa",
+     "value": 1
+    }
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "amount.unit: must be 1 to 16 letters, digits, full stops, hyphens or underscores, with no spaces."
+    }
+   }
+  },
+  {
+   "name": "amount: a unit: a space",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "amount": {
+     "unit": "G P",
+     "value": 1
+    }
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "amount.unit: must be 1 to 16 letters, digits, full stops, hyphens or underscores, with no spaces."
+    }
+   }
+  },
+  {
+   "name": "amount: a unit: empty text",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "amount": {
+     "unit": "",
+     "value": 1
+    }
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "amount.unit: must be 1 to 16 letters, digits, full stops, hyphens or underscores, with no spaces."
+    }
+   }
+  },
+  {
+   "name": "amount: a unit: a leading full stop",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "amount": {
+     "unit": ".GBP",
+     "value": 1
+    }
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "amount.unit: must be 1 to 16 letters, digits, full stops, hyphens or underscores, with no spaces."
+    }
+   }
+  },
+  {
+   "name": "amount: a unit: a line break after it",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "amount": {
+     "unit": "GBP\n",
+     "value": 1
+    }
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "amount.unit: must be 1 to 16 letters, digits, full stops, hyphens or underscores, with no spaces."
+    }
+   }
+  },
+  {
+   "name": "amount: a unit: a letter with an accent",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "amount": {
+     "unit": "É",
+     "value": 1
+    }
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "amount.unit: must be 1 to 16 letters, digits, full stops, hyphens or underscores, with no spaces."
+    }
+   }
+  },
+  {
+   "name": "amount: a unit: a number",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "amount": {
+     "unit": 1,
+     "value": 1
+    }
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "amount.unit: must be 1 to 16 letters, digits, full stops, hyphens or underscores, with no spaces."
+    }
+   }
+  },
+  {
+   "name": "details: one document",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "details": [
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     }
+    ]
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "details: 32 documents",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "details": [
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     }
+    ]
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "details: 33 documents",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "details": [
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     }
+    ]
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "details: must be a list of 1 to 32 items."
+    }
+   }
+  },
+  {
+   "name": "details: no documents",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "details": []
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "details: must be a list of 1 to 32 items."
+    }
+   }
+  },
+  {
+   "name": "details: an object",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "details": {
+     "0": {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     }
+    }
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "details: must be a list of 1 to 32 items."
+    }
+   }
+  },
+  {
+   "name": "details: a document without its fingerprint",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "details": [
+     {
+      "name": "order.pdf"
+     }
+    ]
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "details[0]: \"sha256\" is missing."
+    }
+   }
+  },
+  {
+   "name": "details: a document without its name",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "details": [
+     {
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     }
+    ]
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "details[0]: \"name\" is missing."
+    }
+   }
+  },
+  {
+   "name": "details: a document with an extra member",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "details": [
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+      "size": 1
+     }
+    ]
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "details[0]: holds a member that is not known."
+    }
+   }
+  },
+  {
+   "name": "details: a document name of 201 characters",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "details": [
+     {
+      "name": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     }
+    ]
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "details[0].name: must be text of 1 to 200 characters."
+    }
+   }
+  },
+  {
+   "name": "details: an empty document name",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "details": [
+     {
+      "name": "",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     }
+    ]
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "details[0].name: must be text of 1 to 200 characters."
+    }
+   }
+  },
+  {
+   "name": "details: a document fingerprint of 16 bytes",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "details": [
+     {
+      "name": "order.pdf",
+      "sha256": "AgICAgICAgICAgICAgICAg"
+     }
+    ]
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "details[0].sha256: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "details: a document that is text",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "details": [
+     "order.pdf"
+    ]
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "details[0]: must be an object."
+    }
+   }
+  },
+  {
+   "name": "details: a document that is null",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "details": [
+     null
+    ]
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "details[0]: must be an object."
+    }
+   }
+  },
+  {
+   "name": "details: a second document that is faulty",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "details": [
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "x"
+     }
+    ]
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "details[1].sha256: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "with: a service",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "with": "supplier"
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "with: a capital letter",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "with": "Supplier"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "with: must be 1 to 64 lower-case letters, digits, full stops, hyphens or underscores."
+    }
+   }
+  },
+  {
+   "name": "with: 64 characters",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "with": "ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss"
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "with: 65 characters",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "with": "sssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "with: must be 1 to 64 lower-case letters, digits, full stops, hyphens or underscores."
+    }
+   }
+  },
+  {
+   "name": "with: a reserved name",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "with": "provared.money.send"
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "with: empty text",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "with": ""
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "with: must be 1 to 64 lower-case letters, digits, full stops, hyphens or underscores."
+    }
+   }
+  },
+  {
+   "name": "with: a number",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "with": 1
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "with: must be 1 to 64 lower-case letters, digits, full stops, hyphens or underscores."
+    }
+   }
+  },
+  {
+   "name": "with: null",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "with": null
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "with: must be 1 to 64 lower-case letters, digits, full stops, hyphens or underscores."
+    }
+   }
+  },
+  {
+   "name": "when: a time",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "when: a leap day",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2024-02-29T00:00:00Z"
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "when: the year 0",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "0000-01-01T00:00:00Z"
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "when: the last second of the year 9999",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "9999-12-31T23:59:59Z"
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "when: before 1970",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "1969-12-31T23:59:59Z"
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "when: a fraction of a second",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00.000Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "when: an offset",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00+01:00"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "when: 30 February",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-02-30T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "when: 29 February in a year that is not a leap year",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-02-29T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "when: a leap second",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-12-31T23:59:60Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "when: hour 24",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T24:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "when: month 13",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-13-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "when: small letters",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05t09:00:00z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "when: a space in place of T",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05 09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "when: no seconds",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "when: a line break after it",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z\n"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "when: digits of another script",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "٢٠٢٦-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "when: milliseconds",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": 1791190800000
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "when: null",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": null
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "when: empty text",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": ""
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "every field faulty: the id is reported",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "A",
+    "slip": "A",
+    "action": "A",
+    "when": "x",
+    "amount": {},
+    "with": "S",
+    "details": []
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "id: must be a unique number of 16 bytes in base64url."
+    }
+   }
+  },
+  {
+   "name": "a faulty action, amount, service, documents and time: the action is reported",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "A",
+    "when": "x",
+    "amount": {},
+    "with": "S",
+    "details": []
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "action: must be 1 to 64 lower-case letters, digits, full stops, hyphens or underscores."
+    }
+   }
+  },
+  {
+   "name": "a faulty amount, service, documents and time: the amount is reported",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "x",
+    "amount": {},
+    "with": "S",
+    "details": []
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "amount: \"unit\" is missing."
+    }
+   }
+  },
+  {
+   "name": "a faulty service, documents and time: the service is reported",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "x",
+    "amount": {
+     "unit": "GBP",
+     "value": 150
+    },
+    "with": "S",
+    "details": []
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "with: must be 1 to 64 lower-case letters, digits, full stops, hyphens or underscores."
+    }
+   }
+  },
+  {
+   "name": "faulty documents and time: the documents are reported",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "x",
+    "amount": {
+     "unit": "GBP",
+     "value": 150
+    },
+    "with": "supplier",
+    "details": []
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "details: must be a list of 1 to 32 items."
+    }
+   }
+  }
+ ]
+}

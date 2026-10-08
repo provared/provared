@@ -1,0 +1,164 @@
+{
+ "about": "Checking a chain of Bitcoin block headers held in a file, by the rules of the real chain.",
+ "function": "checkHeaderChain",
+ "cases": [
+  {
+   "name": "only the first block of the Bitcoin chain",
+   "bytes": "0100000000000000000000000000000000000000000000000000000000000000000000003ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4a29ab5f49ffff001d1dac2b7c",
+   "now": 1791417600000,
+   "expected": {
+    "refused": {
+     "code": "headers-invalid",
+     "message": "The chain ends at block 0, before block 969696, which is known to be part of it. Fetch more headers."
+    }
+   }
+  },
+  {
+   "name": "the first block of the Bitcoin chain, changed",
+   "bytes": "0100000000000000000000000000000000000000000000000000000000000000000000003ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4a29ab5f49ffff001d1dac2b7c",
+   "now": 1791417600000,
+   "change": {
+    "flip": [
+     79,
+     1
+    ]
+   },
+   "expected": {
+    "refused": {
+     "code": "headers-invalid",
+     "message": "Block 0: this is not the chain's first block."
+    }
+   }
+  },
+  {
+   "name": "a made-up first block",
+   "bytes": "00000020000000000000000000000000000000000000000000000000000000000000000007070707070707070707070707070707070707070707070707070707070707079033e268ffff7f2001000000",
+   "now": 1791417600000,
+   "expected": {
+    "refused": {
+     "code": "headers-invalid",
+     "message": "Block 0: this is not the chain's first block."
+    }
+   }
+  },
+  {
+   "name": "nothing",
+   "bytes": "",
+   "now": 1791417600000,
+   "expected": {
+    "refused": {
+     "code": "headers-invalid",
+     "message": "A chain file holds whole headers of 80 bytes each, one after another, from the first block."
+    }
+   }
+  },
+  {
+   "name": "79 bytes",
+   "bytes": "00000000000000000000000000000000000000000000000000000000000000000000003ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4a29ab5f49ffff001d1dac2b7c",
+   "now": 1791417600000,
+   "expected": {
+    "refused": {
+     "code": "headers-invalid",
+     "message": "A chain file holds whole headers of 80 bytes each, one after another, from the first block."
+    }
+   }
+  },
+  {
+   "name": "the first block and half a header",
+   "bytes": "0100000000000000000000000000000000000000000000000000000000000000000000003ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4a29ab5f49ffff001d1dac2b7c0100000000000000000000000000000000000000000000000000000000000000000000003ba3edfd",
+   "now": 1791417600000,
+   "expected": {
+    "refused": {
+     "code": "headers-invalid",
+     "message": "A chain file holds whole headers of 80 bytes each, one after another, from the first block."
+    }
+   }
+  },
+  {
+   "name": "the first block twice",
+   "bytes": "0100000000000000000000000000000000000000000000000000000000000000000000003ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4a29ab5f49ffff001d1dac2b7c0100000000000000000000000000000000000000000000000000000000000000000000003ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4a29ab5f49ffff001d1dac2b7c",
+   "now": 1791417600000,
+   "expected": {
+    "refused": {
+     "code": "headers-invalid",
+     "message": "Block 1: it does not name the block before it."
+    }
+   }
+  },
+  {
+   "name": "the first two blocks of the Bitcoin chain",
+   "bytes": "0100000000000000000000000000000000000000000000000000000000000000000000003ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4a29ab5f49ffff001d1dac2b7c010000006fe28c0ab6f1b372c1a6a246ae63f74f931e8365e15a089c68d6190000000000982051fd1e4ba744bbbe680e1fee14677ba1a3c3540bf7b1cdb606e857233e0e61bc6649ffff001d01e36299",
+   "now": 1791417600000,
+   "expected": {
+    "refused": {
+     "code": "headers-invalid",
+     "message": "The chain ends at block 1, before block 969696, which is known to be part of it. Fetch more headers."
+    }
+   }
+  },
+  {
+   "name": "the first two blocks, the second changed",
+   "bytes": "0100000000000000000000000000000000000000000000000000000000000000000000003ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4a29ab5f49ffff001d1dac2b7c010000006fe28c0ab6f1b372c1a6a246ae63f74f931e8365e15a089c68d6190000000000982051fd1e4ba744bbbe680e1fee14677ba1a3c3540bf7b1cdb606e857233e0e61bc6649ffff001d01e36299",
+   "now": 1791417600000,
+   "change": {
+    "flip": [
+     120,
+     1
+    ]
+   },
+   "expected": {
+    "refused": {
+     "code": "headers-invalid",
+     "message": "Block 1: its hash does not meet its target, so it does not carry the work it claims."
+    }
+   }
+  },
+  {
+   "name": "the first two blocks, with the clock before the second",
+   "bytes": "0100000000000000000000000000000000000000000000000000000000000000000000003ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4a29ab5f49ffff001d1dac2b7c010000006fe28c0ab6f1b372c1a6a246ae63f74f931e8365e15a089c68d6190000000000982051fd1e4ba744bbbe680e1fee14677ba1a3c3540bf7b1cdb606e857233e0e61bc6649ffff001d01e36299",
+   "now": 1231462464000,
+   "expected": {
+    "refused": {
+     "code": "headers-invalid",
+     "message": "Block 1: its time is more than two hours ahead of this device's clock."
+    }
+   }
+  },
+  {
+   "name": "not bytes: null",
+   "bytesValue": null,
+   "now": 1791417600000,
+   "expected": {
+    "refused": {
+     "code": "headers-invalid",
+     "message": "A chain file holds whole headers of 80 bytes each, one after another, from the first block."
+    }
+   }
+  },
+  {
+   "name": "not bytes: text",
+   "bytesValue": "headers",
+   "now": 1791417600000,
+   "expected": {
+    "refused": {
+     "code": "headers-invalid",
+     "message": "A chain file holds whole headers of 80 bytes each, one after another, from the first block."
+    }
+   }
+  },
+  {
+   "name": "not bytes: a list",
+   "bytesValue": [
+    1,
+    2
+   ],
+   "now": 1791417600000,
+   "expected": {
+    "refused": {
+     "code": "headers-invalid",
+     "message": "A chain file holds whole headers of 80 bytes each, one after another, from the first block."
+    }
+   }
+  }
+ ]
+}

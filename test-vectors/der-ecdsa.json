@@ -1,0 +1,1333 @@
+{
+ "about": "An ECDSA signature from its DER form to the two numbers side by side.",
+ "function": "ecdsaToRaw",
+ "cases": [
+  {
+   "name": "small numbers, 32",
+   "der": "3006020105020107",
+   "size": 32,
+   "expected": {
+    "ok": "00000000000000000000000000000000000000000000000000000000000000050000000000000000000000000000000000000000000000000000000000000007"
+   }
+  },
+  {
+   "name": "numbers with a needed zero, 32",
+   "der": "3046022100ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff0221008080808080808080808080808080808080808080808080808080808080808080",
+   "size": 32,
+   "expected": {
+    "ok": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff8080808080808080808080808080808080808080808080808080808080808080"
+   }
+  },
+  {
+   "name": "numbers of 32 bytes, 32",
+   "der": "304402207f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f02200101010101010101010101010101010101010101010101010101010101010101",
+   "size": 32,
+   "expected": {
+    "ok": "7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f0101010101010101010101010101010101010101010101010101010101010101"
+   }
+  },
+  {
+   "name": "a number of 48 bytes, 32",
+   "der": "303502307f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f020101",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is too large."
+    }
+   }
+  },
+  {
+   "name": "a number of 49 bytes, 32",
+   "der": "303602317f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f020101",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is too large."
+    }
+   }
+  },
+  {
+   "name": "a number of 33 bytes, 32",
+   "der": "30260221111111111111111111111111111111111111111111111111111111111111111111020101",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is too large."
+    }
+   }
+  },
+  {
+   "name": "zero, 32",
+   "der": "3006020100020100",
+   "size": 32,
+   "expected": {
+    "ok": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+   }
+  },
+  {
+   "name": "small numbers, 48",
+   "der": "3006020105020107",
+   "size": 48,
+   "expected": {
+    "ok": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000005000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000007"
+   }
+  },
+  {
+   "name": "numbers with a needed zero, 48",
+   "der": "3046022100ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff0221008080808080808080808080808080808080808080808080808080808080808080",
+   "size": 48,
+   "expected": {
+    "ok": "00000000000000000000000000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff000000000000000000000000000000008080808080808080808080808080808080808080808080808080808080808080"
+   }
+  },
+  {
+   "name": "numbers of 32 bytes, 48",
+   "der": "304402207f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f02200101010101010101010101010101010101010101010101010101010101010101",
+   "size": 48,
+   "expected": {
+    "ok": "000000000000000000000000000000007f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f000000000000000000000000000000000101010101010101010101010101010101010101010101010101010101010101"
+   }
+  },
+  {
+   "name": "a number of 48 bytes, 48",
+   "der": "303502307f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f020101",
+   "size": 48,
+   "expected": {
+    "ok": "7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001"
+   }
+  },
+  {
+   "name": "a number of 49 bytes, 48",
+   "der": "303602317f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f020101",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is too large."
+    }
+   }
+  },
+  {
+   "name": "a number of 33 bytes, 48",
+   "der": "30260221111111111111111111111111111111111111111111111111111111111111111111020101",
+   "size": 48,
+   "expected": {
+    "ok": "000000000000000000000000000000111111111111111111111111111111111111111111111111111111111111111111000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001"
+   }
+  },
+  {
+   "name": "zero, 48",
+   "der": "3006020100020100",
+   "size": 48,
+   "expected": {
+    "ok": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+   }
+  },
+  {
+   "name": "negative",
+   "der": "3006020185020107",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "not in its shortest form",
+   "der": "300702020005020107",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number not in its shortest form."
+    }
+   }
+  },
+  {
+   "name": "one number",
+   "der": "3003020105",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature does not hold two numbers."
+    }
+   }
+  },
+  {
+   "name": "three numbers",
+   "der": "3009020105020107020109",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part holds too many items."
+    }
+   }
+  },
+  {
+   "name": "bytes left over",
+   "der": "300602010502010700",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature has bytes left over."
+    }
+   }
+  },
+  {
+   "name": "an empty number",
+   "der": "30050200020107",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "an octet string in place of a number",
+   "der": "3006040105020107",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a number of the signature is missing or of the wrong kind."
+    }
+   }
+  },
+  {
+   "name": "not a sequence",
+   "der": "3106020105020107",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: the signature is missing or of the wrong kind."
+    }
+   }
+  },
+  {
+   "name": "cut short",
+   "der": "30060201050201",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "empty",
+   "der": "",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "an empty sequence",
+   "der": "3000",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature does not hold two numbers."
+    }
+   }
+  },
+  {
+   "name": "a long length",
+   "der": "308106020105020107",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length that is not in its shortest form."
+    }
+   }
+  },
+  {
+   "name": "a second number that is negative",
+   "der": "3006020105020187",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "a second number with a needless zero",
+   "der": "300702010502020007",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number not in its shortest form."
+    }
+   }
+  },
+  {
+   "name": "random 0",
+   "der": "301c0201de02178ebc11ab0cefdd1b8acb4a00e20c9756c0356d318e39d7",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 1",
+   "der": "302202091acfd690abf32554810215a0afc1780080575cc968bcf78ef56396f61d6c1295",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 2",
+   "der": "30270207b884f1caae4268021c2148498858662bb25cc00f85dd1ab6528fb296410edc73d11a373231",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 3",
+   "der": "301402025f92020e43880fb8f36abdd38e821478198a",
+   "size": 48,
+   "expected": {
+    "ok": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000005f920000000000000000000000000000000000000000000000000000000000000000000043880fb8f36abdd38e821478198a"
+   }
+  },
+  {
+   "name": "random 4",
+   "der": "30270201f30222244c297c63234712ea3a3636bc738e44e0de6d06d514b3125080456729eea5763c57",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 5",
+   "der": "302a0212becce3fa39fe025935ad80813e1db2b6d13f0214bf5c3cf4ae638d0c686ac83aec38dc1800a24c58",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 6",
+   "der": "3039021fbccc702cd2bd1b05406036997b182c0370ca544e447317a3e4d0e6e2fcb74c021693846e6569a6c543cf39cea29c411ba773deed437ba1",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 7",
+   "der": "301d020b43cf18f2713d0e59741303020e57a12cd56f0f894e88991feabda2",
+   "size": 32,
+   "expected": {
+    "ok": "00000000000000000000000000000000000000000043cf18f2713d0e5974130300000000000000000000000000000000000057a12cd56f0f894e88991feabda2"
+   }
+  },
+  {
+   "name": "random 8",
+   "der": "301a020d29c5a80221b7b10899a000daeb0209e4591efdb88571b019",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 9",
+   "der": "30210218e64965c0cbd07416fc590775047696f137aafbd132f23a4e0205b997f0c7d8",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 10",
+   "der": "301502058b17a93b6c020c12177f621d010fd94a80f1fe",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 11",
+   "der": "301c020b6638b080a16fcad5dcce1d020d86714739f213830ca5b784530e",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 12",
+   "der": "30130202d95c020d60cbb9f1265c15035bd251af76",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 13",
+   "der": "30270210aec810288bcfe2de38f6c4119b061c9e02133c0c637fc0923f8c026865da2e36848db66533",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 14",
+   "der": "3031021990b9b1a87a053995f37dcde417f7745ee2fc0bf4e3345b84a802143b922595cdbb1cdeda4d67b4f359965abb1c4267",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 15",
+   "der": "302f021616436ee15ab4eaf4960453dd8b2d90159513571449c102152ac93166a02dfdb2d8042791f4b1b7e9354aebd911",
+   "size": 32,
+   "expected": {
+    "ok": "0000000000000000000016436ee15ab4eaf4960453dd8b2d90159513571449c100000000000000000000002ac93166a02dfdb2d8042791f4b1b7e9354aebd911"
+   }
+  },
+  {
+   "name": "random 16",
+   "der": "3023020703bc1939b8a6aa02189e20db994b29c662f7208ed738d699ee6a3c98eb3ea5b240",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 17",
+   "der": "3028020ece4f792ae0da2e8ca7c9506d449a021648a3a016ac8de42638e346600d6443d477ea6d03410c",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 18",
+   "der": "300c0204fb948fc802042d0412dd",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 19",
+   "der": "302a021fc915d4fe869418db87b8a08c8925adc9aa0b1ca7db37975972e6525ded26640207db2e84809ef9b0",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 20",
+   "der": "3019020e111cc3a25263b4ad21ca4f9f462d02077b71cfbdf32828",
+   "size": 32,
+   "expected": {
+    "ok": "000000000000000000000000000000000000111cc3a25263b4ad21ca4f9f462d000000000000000000000000000000000000000000000000007b71cfbdf32828"
+   }
+  },
+  {
+   "name": "random 21",
+   "der": "3033021a8f7b892c4ab039257fdcf039a2659c399a9d403b6963b777630d021514a6a96fe04c65149ea8aacb4a662f749474160a65",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 22",
+   "der": "303d021f23301fd02f6c5fc2bd6e1a10f184f6bbf9096cbb28d125ae0d26e1e8a53778021a7dab219774c700ee5848be949be798bfe932308c3c1f1741d58e",
+   "size": 48,
+   "expected": {
+    "ok": "000000000000000000000000000000000023301fd02f6c5fc2bd6e1a10f184f6bbf9096cbb28d125ae0d26e1e8a53778000000000000000000000000000000000000000000007dab219774c700ee5848be949be798bfe932308c3c1f1741d58e"
+   }
+  },
+  {
+   "name": "random 23",
+   "der": "3031020c2c9d761aaf8664680064e0dd02211886777f30bb837489c8538c05931b4396a6eb7e7507a7f6471b7ee68a95296f7d",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is too large."
+    }
+   }
+  },
+  {
+   "name": "random 24",
+   "der": "30140202c670020ee1052942d23cc0edbb2734e03895",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 25",
+   "der": "303c0218e96b1fb3a0d7ecafb70e4504a1b9a61082e2d9ea5409fa730220b08c78de8583682e02ecd6221faabcb76c694ea8bbbcbeda300d49b54fc671c2",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 26",
+   "der": "30390220358b800fb1908e3869e2a74d46a67f0ce8904b88e728ece5215803a72ea334cf0215f6d4b47ef5ba388f4df4ced04e9e7f72d705cc7d78",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 27",
+   "der": "302902077431b889ee3e58021ee8e3e9ea410e0fcda55a2590ddc2763f4908a036f1a1f95b7bbb9dc5ef8c",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 28",
+   "der": "3042021f17244716ea59f485448cf861e96415f585b8f06030499394b0007b216dd578021fde948d88e121a89b43f2c47c6fe1e275fb8ae4d0a1df30a7c695bbce9facc4",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 29",
+   "der": "303102181b7a7b0d7b49f3b3277f8ae231a2c03d2c88f9299e1b10ac02155d69b9ef07acbcafe719d149cf1ee254b89cb59974",
+   "size": 32,
+   "expected": {
+    "ok": "00000000000000001b7a7b0d7b49f3b3277f8ae231a2c03d2c88f9299e1b10ac00000000000000000000005d69b9ef07acbcafe719d149cf1ee254b89cb59974"
+   }
+  },
+  {
+   "name": "random 30",
+   "der": "30200214590338298e7af68ec300fae8c94e4ced4fc9740b0208105c5a2b9d3254ab",
+   "size": 48,
+   "expected": {
+    "ok": "00000000000000000000000000000000000000000000000000000000590338298e7af68ec300fae8c94e4ced4fc9740b00000000000000000000000000000000000000000000000000000000000000000000000000000000105c5a2b9d3254ab"
+   }
+  },
+  {
+   "name": "random 31",
+   "der": "301b021410d899d87b84512dd543e0f85ab10498e908328e0203c5bc94",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 32",
+   "der": "30290220f537294299fa6e79a80f791e7e3523e0d242346aef6c13f35052c331615e76610205029a89f9e6",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 33",
+   "der": "30220204aefef6ca021a3958ec48279a0331ce89326b986b9268fa5ae42e5606f384339a",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 34",
+   "der": "30240209b444bea4109145525f0217d647f127f7e924d9c314560556ac63cc4124ea9d1f132b",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 35",
+   "der": "303d0222a73f24549a0f848b0b32837f4da7586f890b2e27d7c344812240ef75f649fb5d14f402170e66c83a14b41ef01132bdae0dc160c552847ec40b2296",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 36",
+   "der": "3034021ad5e07172160de7f59889e1b1d4697d0154ed1ddd9745f95f240602168425780317b6aed0a8b50ff115b0b888eb58f7f4b186",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 37",
+   "der": "301f020eedbf593462c23b1ddd859edaa2be020dd432d32f0d09c82d3b9a8ad7dc",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 38",
+   "der": "301e02195abb18cbe51bf808678d53fbee2c942c85b60f2f4cbff695270201e0",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 39",
+   "der": "30180209780c0043db0327de8f020b3a42306e9b78592a5ba628",
+   "size": 32,
+   "expected": {
+    "ok": "0000000000000000000000000000000000000000000000780c0043db0327de8f0000000000000000000000000000000000000000003a42306e9b78592a5ba628"
+   }
+  },
+  {
+   "name": "random 40",
+   "der": "3017020ef2c58c6b54db2eeea1c6b37f9ff402051ce7af1d38",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 41",
+   "der": "301a020a04d4777fafc22e5dc1eb020c1d0a39cecb3c7f8581137d92",
+   "size": 48,
+   "expected": {
+    "ok": "000000000000000000000000000000000000000000000000000000000000000000000000000004d4777fafc22e5dc1eb0000000000000000000000000000000000000000000000000000000000000000000000001d0a39cecb3c7f8581137d92"
+   }
+  },
+  {
+   "name": "random 42",
+   "der": "302d0218cf4cd4a57ffe173574567679f678ff911463fd398718cb130211ac21c85b2c4bb5410794b72769d16ea1a9",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 43",
+   "der": "30390220a6ca37ad0fa1d96d7e24d3040302d77a976a580b50bfc1afe596ac68e030e572021555aa0fe74e6289df50d6b07d9d92decb330053b4c4",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 44",
+   "der": "30160210095ada2811d7bb8ac3397780835282fa020264c2",
+   "size": 32,
+   "expected": {
+    "ok": "00000000000000000000000000000000095ada2811d7bb8ac3397780835282fa00000000000000000000000000000000000000000000000000000000000064c2"
+   }
+  },
+  {
+   "name": "random 45",
+   "der": "302b0219bffdb3ab5be1fa0114d37680f488fe70b81eb81b7e3b94a641020eb8f696842ce8d87fc70aa4163baa",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 46",
+   "der": "30180213b9d10edf889417908fc41c0daaf059654a3e860201b6",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 47",
+   "der": "303802123bf1d5b7341afbe849c723c005ae726554ae0222f483efda872bc111421f6e7f820f17152f4e6b1cc313b6348c1aa6593e67be16d4ac",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 48",
+   "der": "302e021a638fba4042bc6d0acd9527f08ff1c91498202b62623ceff66a800210897715b0ca2faa5e336db21cc3812620",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 49",
+   "der": "3019020a29a1c2c0e654a59d8557020bdf1499e383c67f11dccf63",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 50",
+   "der": "30260203da2ca0021fd30898b27c27e54016ed920409f7ccbd55f4d18843247d048e0b20f0069df3",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 51",
+   "der": "301a020ff43c1aeb5d14cb9e3e58cad9342a5002076219078cc6d4f0",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 52",
+   "der": "30260205fb2e06b96a021d780629b2f511c5bda819c58e03be84124ac99f691d5abb9443015c63a5",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 53",
+   "der": "300a0203cc426802039a94dd",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 54",
+   "der": "301d02059ade405b90021455a60c1c6203f09faf8e868ebb8faa9b4759cc53",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 55",
+   "der": "3026021e3e26ccac1578cfa986f96ede95597e1877220c2af93b2a1fd873d6a2d30d020478e62059",
+   "size": 48,
+   "expected": {
+    "ok": "0000000000000000000000000000000000003e26ccac1578cfa986f96ede95597e1877220c2af93b2a1fd873d6a2d30d000000000000000000000000000000000000000000000000000000000000000000000000000000000000000078e62059"
+   }
+  },
+  {
+   "name": "random 56",
+   "der": "302f02215f125ae58801b5c18b2ad7a3390961580558edef1ad8fad3e4344bfac6d36a5a96020abeaa2099552bc7ba59e1",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is too large."
+    }
+   }
+  },
+  {
+   "name": "random 57",
+   "der": "30220219d59c758e3daa56c8df0335222564e4fb6493ac4190d0ed1f120205309ea41883",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 58",
+   "der": "302e021df7a0b5c2bf3b7cfc556a25c58a0f701334bd7af64b69d56dc2f560aaad020dc75fda294d96e327262877f598",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 59",
+   "der": "302b020ba9a8890c7001840c585d12021c4fa84a802a991af03b7545c5c65365d558efdf0fe0fb8422f9823900",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 60",
+   "der": "302b0218dbcf863a4ded3400582191e9c30f0deee1961fbb6ea6ad98020fbf16458011202dca0eebf56acd9f5e",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 61",
+   "der": "303a021470fd7169403df89be1acea6bd78c5a6213303025022280128adcd5437355ec0a9faaa61c75eee130844588ab2ff0c10dcac8c28c1b5bbd0e",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 62",
+   "der": "302f021bf066b00ec181e89a71fdd5f2d93bacf938f64054fcf2f1971843d202104e48e61b7c4cd150d183422c88ba2272",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 63",
+   "der": "302d022228babbfa6a2fdc240b71eb7122e0fd737561c65d9c69eabfc2d4b363f3e28772cd500207d3f175e1688ccf",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 64",
+   "der": "302d0215e26eec719b253aea5875b790b7945475ddff05df280214ce8b98e9613021bbf4b9e1469d4e06026131c25c",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 65",
+   "der": "30390222adf869da6dd667a2845bed149e189399b2c7a724eed8ea431e9edd5c19d367bd6c1b0213e730bc764ae99cfe4fbc5d876d6712d0aad1e3",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 66",
+   "der": "3032021808aa6e821558eb2cf7a2f45dad555890184c8d0829dd2a220216483483506e9831a4e6efa4e83768578ebd7468678f90",
+   "size": 32,
+   "expected": {
+    "ok": "000000000000000008aa6e821558eb2cf7a2f45dad555890184c8d0829dd2a2200000000000000000000483483506e9831a4e6efa4e83768578ebd7468678f90"
+   }
+  },
+  {
+   "name": "random 67",
+   "der": "302b02146f46f7978b46d9fda034502cce7c79901c58b1440213d4f5ae2b7ba3dda6fcc18e16ecc035237f6055",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 68",
+   "der": "3027021c2123a505722323bc825532026a0c3411118920d4fc055c62f3ab30560207c0519371ecdfdb",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 69",
+   "der": "30230210db4bdec4e1a1c69fafdf25e5d0b078ab020fa50d2207286f8ed3bf283eb501f952",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 70",
+   "der": "3021020b77b3123cc594fc26bb62d50212cded76ce753acb2eee4dce2098caabd8334a",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 71",
+   "der": "30260207ecc40c3acd5808021b1d709995bcf5be1380136a7d2cc83323803d931c7ba5c177c513e5",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 72",
+   "der": "30410221924e36ff7bd49634ac90c66d469c06510382d10c418ae493680bbc79377b48f527021c9082e8898b51b3435469e9e9973441c7ccd279f8a56c5328bc6b467a",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 73",
+   "der": "30150209362586341c05d457690208458c8fa1d756ff99",
+   "size": 32,
+   "expected": {
+    "ok": "0000000000000000000000000000000000000000000000362586341c05d45769000000000000000000000000000000000000000000000000458c8fa1d756ff99"
+   }
+  },
+  {
+   "name": "random 74",
+   "der": "3025021d89922f24e34150e8cf5b32eb1a66650e77e531bbeaeb41d947e34ce4f702044e870c59",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 75",
+   "der": "301802015102136c2adf613cbb6c3d1975520fbb1a0bcd084299",
+   "size": 48,
+   "expected": {
+    "ok": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000005100000000000000000000000000000000000000000000000000000000006c2adf613cbb6c3d1975520fbb1a0bcd084299"
+   }
+  },
+  {
+   "name": "random 76",
+   "der": "301c020cb81ffc28c09d9aa87d924f1e020cfd9b1f1dfee0273a05b5e83f",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 77",
+   "der": "3030020f77a28d773558a879fbc8d0ee033355021d91832fe7462fe210b399e4588921355689c0a401fff5015877523639ff",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 78",
+   "der": "301d0202770e0217f4ebf8b7621b7a3d3dc0cee298325253de84a96dd2ece8",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 79",
+   "der": "302e020dad37b2d69ff8b8481b582906d9021d3a5d063fd24faa05f8b31a0649021637d4cfc6a3979fbdcf81a4b864a5",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 80",
+   "der": "30230218c111898cc469dc76ee3d1ba9c1c0b23fe94f104d98f307500207c8fccdf8f70692",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 81",
+   "der": "3036021806019d507e5b779a87e264b241611d50a157c5426ae3cb3b021a32cb959dfc216f1360695930292672e64453ad47fd90a7004437",
+   "size": 32,
+   "expected": {
+    "ok": "000000000000000006019d507e5b779a87e264b241611d50a157c5426ae3cb3b00000000000032cb959dfc216f1360695930292672e64453ad47fd90a7004437"
+   }
+  },
+  {
+   "name": "random 82",
+   "der": "3034021e0b7b74dd8b6fa4cff78f14eaf02282a8bc9c16a218d0ec9a249c8ea5c35502123f6c2dfaba4755f350187cd0c3431ef659fd",
+   "size": 48,
+   "expected": {
+    "ok": "0000000000000000000000000000000000000b7b74dd8b6fa4cff78f14eaf02282a8bc9c16a218d0ec9a249c8ea5c3550000000000000000000000000000000000000000000000000000000000003f6c2dfaba4755f350187cd0c3431ef659fd"
+   }
+  },
+  {
+   "name": "random 83",
+   "der": "3020021aa174f8524d7033ad07cae35116b3ee3e3ca4c5fe1082ea3fd23802020b72",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 84",
+   "der": "303e02209d463ac473ac0ae71796a001bab39ae39ec3a7e9ec3ae0786b45fb0145dd669a021a6e18088b43a4e44ac0d52c181fe951652b26c291366d5fc94702",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 85",
+   "der": "3016020b429aaa2174877585d57df30207ed463af11e7197",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 86",
+   "der": "3023021cbf2f6ca7ee773a010ff40b03954db52ece99f566627828831c61f530020331eb7c",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 87",
+   "der": "30290220aa6eb4310c9433db783f7ccc51effedd1e32a974ece4cc300093b2b6da89bf8f0205a69d9df621",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 88",
+   "der": "302c0214ccd07f8cba84f685edb43683ae6c16921c404dd90214c0618c56a711651fc372fa654dd90e9f375eb2fb",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 89",
+   "der": "30300210dd0a7407d17deae26bf46a9631770507021c17902843ce09d4f19cd0ae628feb6a570653f99083048056d64af8aa",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 90",
+   "der": "3023021300bddc9c2600bc12c4ee3b8f266d99bf946116020c90cfbbb842a1f5a0f1fc9c50",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 91",
+   "der": "303e0218d7f6f92014340adaee34d488b888090918d2bceadef14e7102222ab40d5992babedcaa77ece3f510a616f9934535eb69f6590abb98d053d505811f41",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 92",
+   "der": "30330211d73aa12dbec20a64985160ff93081005ca021e6c8e4416efa23e18b90434633d8adf3bab7737497dfe1b5032e136a632ca",
+   "size": 32,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 93",
+   "der": "301d02054ddbc2a15d0214d05f03f698b36ec1a6f8cad312c9a2433a9d62e0",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 94",
+   "der": "30250217d0d3ae7415cfc17eb004e10177aff8948201643d89c64c020a33f26ad54f0dc81cec17",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 95",
+   "der": "30310217dc657b190d910561c5767c36a5db8c5d0d41db1447f5df0216796388d4613ef2155704242afbf88eedb97cc895e38a",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 96",
+   "der": "301c02081aa1b2d24e6487b30210caf074ea97aaa5d580efb75926881f39",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 97",
+   "der": "303e02227a23f615430eb0c26b18800dce0217a06a1b2313cc451707116233bd7e49aeb6772902188b70e4a2f515ceb8d8bde809b2ee6488b5882e7596d5ae65",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  },
+  {
+   "name": "random 98",
+   "der": "301e021509d90dec92ff914531193254f7a60b59184dba081402055064b4b0c2",
+   "size": 48,
+   "expected": {
+    "ok": "00000000000000000000000000000000000000000000000000000009d90dec92ff914531193254f7a60b59184dba0814000000000000000000000000000000000000000000000000000000000000000000000000000000000000005064b4b0c2"
+   }
+  },
+  {
+   "name": "random 99",
+   "der": "302902072ba116b4449406021ec7c8d628225df6731384859b7bcd8853e7e378984cac883f229099a1bd5d",
+   "size": 48,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a signature holds a number that is not positive."
+    }
+   }
+  }
+ ]
+}

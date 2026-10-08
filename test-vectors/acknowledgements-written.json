@@ -1,0 +1,188 @@
+{
+ "about": "Writing and signing an acknowledgement (format description, section 26).",
+ "function": "writeAcknowledgement",
+ "cases": [
+  {
+   "name": "an acknowledgement",
+   "seed": "0707070707070707070707070707070707070707070707070707070707070707",
+   "fields": {
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": 1791190800000
+   },
+   "expected": {
+    "ok": {
+     "fingerprint": "YpD19v9B2UqYuTD2WtzuhbUVOSFi8qw6TixT55Fozus",
+     "payload": "eyJjYW5jZWxsYXRpb24iOiJBd01EQXdNREF3TURBd01EQXdNREF3TURBd01EQXdNREF3TURBd01EQXdNIiwiaWQiOiJBZ0lDQWdJQ0FnSUNBZ0lDQWdJQ0FnIiwic2xpcCI6IkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUUiLCJ0eXBlIjoicHJvdmFyZWQuYWNrbm93bGVkZ2VtZW50LnYwIiwid2hlbiI6IjIwMjYtMTAtMDVUMDk6MDA6MDBaIn0",
+     "signatures": [
+      {
+       "protected": "eyJ0eXAiOiJ2bmQucHJvdmFyZWQuYWNrbm93bGVkZ2VtZW50LnYwK2pzb24iLCJhbGciOiJFZDI1NTE5In0",
+       "signature": "Qytsm0mgbRhUoB5Jee5E5PCbLz4BmTPIo4Ytzi2DoXs8yNSqnAxTtFZ--64pkecTX21pFQhSBQKzgZuD_F-PBA"
+      },
+      {
+       "protected": "eyJ0eXAiOiJ2bmQucHJvdmFyZWQuYWNrbm93bGVkZ2VtZW50LnYwK2pzb24iLCJhbGciOiJNTC1EU0EtODcifQ",
+       "check": "valid"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "of a helper agent",
+   "seed": "0707070707070707070707070707070707070707070707070707070707070707",
+   "fields": {
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": 1791190800000,
+    "pass": "CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk"
+   },
+   "expected": {
+    "ok": {
+     "fingerprint": "XlwtZ1vBj0JEZn9AjoEk-Jfw4eIZkhD0g7r25qg_J2A",
+     "payload": "eyJjYW5jZWxsYXRpb24iOiJBd01EQXdNREF3TURBd01EQXdNREF3TURBd01EQXdNREF3TURBd01EQXdNIiwiaWQiOiJBZ0lDQWdJQ0FnSUNBZ0lDQWdJQ0FnIiwicGFzcyI6IkNRa0pDUWtKQ1FrSkNRa0pDUWtKQ1FrSkNRa0pDUWtKQ1FrSkNRa0pDUWsiLCJzbGlwIjoiQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRSIsInR5cGUiOiJwcm92YXJlZC5hY2tub3dsZWRnZW1lbnQudjAiLCJ3aGVuIjoiMjAyNi0xMC0wNVQwOTowMDowMFoifQ",
+     "signatures": [
+      {
+       "protected": "eyJ0eXAiOiJ2bmQucHJvdmFyZWQuYWNrbm93bGVkZ2VtZW50LnYwK2pzb24iLCJhbGciOiJFZDI1NTE5In0",
+       "signature": "lpMPtQ5LGoSWaZ28z2vRknRMXyZntXPD8NsACbdNBzKrnv-lBqinJUQMSqG0lMT8ctwDsXDq7eXHUV4qT61uDw"
+      },
+      {
+       "protected": "eyJ0eXAiOiJ2bmQucHJvdmFyZWQuYWNrbm93bGVkZ2VtZW50LnYwK2pzb24iLCJhbGciOiJNTC1EU0EtODcifQ",
+       "check": "valid"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "a pass that is empty text is left out",
+   "seed": "0707070707070707070707070707070707070707070707070707070707070707",
+   "fields": {
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": 1791190800000,
+    "pass": ""
+   },
+   "expected": {
+    "ok": {
+     "fingerprint": "YpD19v9B2UqYuTD2WtzuhbUVOSFi8qw6TixT55Fozus",
+     "payload": "eyJjYW5jZWxsYXRpb24iOiJBd01EQXdNREF3TURBd01EQXdNREF3TURBd01EQXdNREF3TURBd01EQXdNIiwiaWQiOiJBZ0lDQWdJQ0FnSUNBZ0lDQWdJQ0FnIiwic2xpcCI6IkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUUiLCJ0eXBlIjoicHJvdmFyZWQuYWNrbm93bGVkZ2VtZW50LnYwIiwid2hlbiI6IjIwMjYtMTAtMDVUMDk6MDA6MDBaIn0",
+     "signatures": [
+      {
+       "protected": "eyJ0eXAiOiJ2bmQucHJvdmFyZWQuYWNrbm93bGVkZ2VtZW50LnYwK2pzb24iLCJhbGciOiJFZDI1NTE5In0",
+       "signature": "Qytsm0mgbRhUoB5Jee5E5PCbLz4BmTPIo4Ytzi2DoXs8yNSqnAxTtFZ--64pkecTX21pFQhSBQKzgZuD_F-PBA"
+      },
+      {
+       "protected": "eyJ0eXAiOiJ2bmQucHJvdmFyZWQuYWNrbm93bGVkZ2VtZW50LnYwK2pzb24iLCJhbGciOiJNTC1EU0EtODcifQ",
+       "check": "valid"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "a pass of 0 is left out",
+   "seed": "0707070707070707070707070707070707070707070707070707070707070707",
+   "fields": {
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": 1791190800000,
+    "pass": 0
+   },
+   "expected": {
+    "ok": {
+     "fingerprint": "YpD19v9B2UqYuTD2WtzuhbUVOSFi8qw6TixT55Fozus",
+     "payload": "eyJjYW5jZWxsYXRpb24iOiJBd01EQXdNREF3TURBd01EQXdNREF3TURBd01EQXdNREF3TURBd01EQXdNIiwiaWQiOiJBZ0lDQWdJQ0FnSUNBZ0lDQWdJQ0FnIiwic2xpcCI6IkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUUiLCJ0eXBlIjoicHJvdmFyZWQuYWNrbm93bGVkZ2VtZW50LnYwIiwid2hlbiI6IjIwMjYtMTAtMDVUMDk6MDA6MDBaIn0",
+     "signatures": [
+      {
+       "protected": "eyJ0eXAiOiJ2bmQucHJvdmFyZWQuYWNrbm93bGVkZ2VtZW50LnYwK2pzb24iLCJhbGciOiJFZDI1NTE5In0",
+       "signature": "Qytsm0mgbRhUoB5Jee5E5PCbLz4BmTPIo4Ytzi2DoXs8yNSqnAxTtFZ--64pkecTX21pFQhSBQKzgZuD_F-PBA"
+      },
+      {
+       "protected": "eyJ0eXAiOiJ2bmQucHJvdmFyZWQuYWNrbm93bGVkZ2VtZW50LnYwK2pzb24iLCJhbGciOiJNTC1EU0EtODcifQ",
+       "check": "valid"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "a pass that is an empty object",
+   "seed": "0707070707070707070707070707070707070707070707070707070707070707",
+   "fields": {
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": 1791190800000,
+    "pass": {}
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "pass: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "a pass that is too short",
+   "seed": "0707070707070707070707070707070707070707070707070707070707070707",
+   "fields": {
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": 1791190800000,
+    "pass": "AgICAgICAgICAgICAgICAg"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "pass: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "no cancellation",
+   "seed": "0707070707070707070707070707070707070707070707070707070707070707",
+   "fields": {
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": 1791190800000
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "cancellation: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "a time before 1970",
+   "seed": "0707070707070707070707070707070707070707070707070707070707070707",
+   "fields": {
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": -1000
+   },
+   "expected": {
+    "ok": {
+     "fingerprint": "7s25QG9E3kepOvIyVFmlUCIyGZ0atlwLiSbcDDssymE",
+     "payload": "eyJjYW5jZWxsYXRpb24iOiJBd01EQXdNREF3TURBd01EQXdNREF3TURBd01EQXdNREF3TURBd01EQXdNIiwiaWQiOiJBZ0lDQWdJQ0FnSUNBZ0lDQWdJQ0FnIiwic2xpcCI6IkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUUiLCJ0eXBlIjoicHJvdmFyZWQuYWNrbm93bGVkZ2VtZW50LnYwIiwid2hlbiI6IjE5NjktMTItMzFUMjM6NTk6NTlaIn0",
+     "signatures": [
+      {
+       "protected": "eyJ0eXAiOiJ2bmQucHJvdmFyZWQuYWNrbm93bGVkZ2VtZW50LnYwK2pzb24iLCJhbGciOiJFZDI1NTE5In0",
+       "signature": "HVvgdLlD8HgXMgfuLzuIbS-QfE-f0gZfEysKifA97-JHYcHjkLHWUzNneXiDZpsYn_5mC0Pf3_Su21FuTgI1Dw"
+      },
+      {
+       "protected": "eyJ0eXAiOiJ2bmQucHJvdmFyZWQuYWNrbm93bGVkZ2VtZW50LnYwK2pzb24iLCJhbGciOiJNTC1EU0EtODcifQ",
+       "check": "valid"
+      }
+     ]
+    }
+   }
+  }
+ ]
+}

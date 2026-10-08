@@ -1,0 +1,56 @@
+{
+ "about": "Putting a passkey's three values with a prepared cancellation (format description, section 22).",
+ "function": "assembleCancellation",
+ "cases": [
+  {
+   "name": "a record",
+   "prepared": {
+    "payloadB64": "eyJpZCI6IkFnSUNBZ0lDQWdJQ0FnSUNBZ0lDQWciLCJzbGlwIjoiQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRSIsInR5cGUiOiJwcm92YXJlZC5jYW5jZWxsYXRpb24udjAiLCJ3aGVuIjoiMjAyNi0xMC0wNVQwOTowMDowMFoifQ",
+    "protectedB64": "eyJ0eXAiOiJ2bmQucHJvdmFyZWQuY2FuY2VsbGF0aW9uLnYwK2pzb24iLCJhbGciOiJwcm92YS5yZWQvd2ViYXV0aG4vdjAifQ"
+   },
+   "authenticatorData": "01010101010101010101010101010101010101010101010101010101010101010101010101",
+   "clientDataJSON": "7b2274797065223a22776562617574686e2e676574227d",
+   "signature": "30440220111111111111111111111111111111111111111111111111111111111111111102202222222222222222222222222222222222222222222222222222222222222222",
+   "expected": {
+    "ok": {
+     "payload": "eyJpZCI6IkFnSUNBZ0lDQWdJQ0FnSUNBZ0lDQWciLCJzbGlwIjoiQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRSIsInR5cGUiOiJwcm92YXJlZC5jYW5jZWxsYXRpb24udjAiLCJ3aGVuIjoiMjAyNi0xMC0wNVQwOTowMDowMFoifQ",
+     "signatures": [
+      {
+       "protected": "eyJ0eXAiOiJ2bmQucHJvdmFyZWQuY2FuY2VsbGF0aW9uLnYwK2pzb24iLCJhbGciOiJwcm92YS5yZWQvd2ViYXV0aG4vdjAifQ",
+       "header": {
+        "authenticatorData": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ",
+        "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0In0"
+       },
+       "signature": "MEQCIBERERERERERERERERERERERERERERERERERERERERERAiAiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIg"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "empty values",
+   "prepared": {
+    "payloadB64": "eyJpZCI6IkFnSUNBZ0lDQWdJQ0FnSUNBZ0lDQWciLCJzbGlwIjoiQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRSIsInR5cGUiOiJwcm92YXJlZC5jYW5jZWxsYXRpb24udjAiLCJ3aGVuIjoiMjAyNi0xMC0wNVQwOTowMDowMFoifQ",
+    "protectedB64": "eyJ0eXAiOiJ2bmQucHJvdmFyZWQuY2FuY2VsbGF0aW9uLnYwK2pzb24iLCJhbGciOiJwcm92YS5yZWQvd2ViYXV0aG4vdjAifQ"
+   },
+   "authenticatorData": "",
+   "clientDataJSON": "",
+   "signature": "",
+   "expected": {
+    "ok": {
+     "payload": "eyJpZCI6IkFnSUNBZ0lDQWdJQ0FnSUNBZ0lDQWciLCJzbGlwIjoiQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRSIsInR5cGUiOiJwcm92YXJlZC5jYW5jZWxsYXRpb24udjAiLCJ3aGVuIjoiMjAyNi0xMC0wNVQwOTowMDowMFoifQ",
+     "signatures": [
+      {
+       "protected": "eyJ0eXAiOiJ2bmQucHJvdmFyZWQuY2FuY2VsbGF0aW9uLnYwK2pzb24iLCJhbGciOiJwcm92YS5yZWQvd2ViYXV0aG4vdjAifQ",
+       "header": {
+        "authenticatorData": "",
+        "clientDataJSON": ""
+       },
+       "signature": ""
+      }
+     ]
+    }
+   }
+  }
+ ]
+}

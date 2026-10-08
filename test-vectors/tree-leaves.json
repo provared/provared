@@ -1,0 +1,202 @@
+{
+ "about": "The fingerprint of one leaf of the tree (RFC 6962 section 2.1): SHA-256 of 0x00 and the leaf.",
+ "function": "leafHash",
+ "cases": [
+  {
+   "name": "leaf 0: ",
+   "leaf": "",
+   "expected": {
+    "ok": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+   }
+  },
+  {
+   "name": "leaf 1: 00",
+   "leaf": "00",
+   "expected": {
+    "ok": "96a296d224f285c67bee93c30f8a309157f0daa35dc5b87e410b78630a09cfc7"
+   }
+  },
+  {
+   "name": "leaf 2: 10",
+   "leaf": "10",
+   "expected": {
+    "ok": "0298d122906dcfc10892cb53a73992fc5b9f493ea4c9badb27b791b4127a7fe7"
+   }
+  },
+  {
+   "name": "leaf 3: 2021",
+   "leaf": "2021",
+   "expected": {
+    "ok": "07506a85fd9dd2f120eb694f86011e5bb4662e5c415a62917033d4a9624487e7"
+   }
+  },
+  {
+   "name": "leaf 4: 3031",
+   "leaf": "3031",
+   "expected": {
+    "ok": "bc1a0643b12e4d2d7c77918f44e0f4f79a838b6cf9ec5b5c283e1f4d88599e6b"
+   }
+  },
+  {
+   "name": "leaf 5: 40414243",
+   "leaf": "40414243",
+   "expected": {
+    "ok": "4271a26be0d8a84f0bd54c8c302e7cb3a3b5d1fa6780a40bcce2873477dab658"
+   }
+  },
+  {
+   "name": "leaf 6: 5051525354555657",
+   "leaf": "5051525354555657",
+   "expected": {
+    "ok": "b08693ec2e721597130641e8211e7eedccb4c26413963eee6c1e2ed16ffb1a5f"
+   }
+  },
+  {
+   "name": "leaf 7: 6061626364656667",
+   "leaf": "606162636465666768696a6b6c6d6e6f",
+   "expected": {
+    "ok": "46f6ffadd3d06a09ff3c5860d2755c8b9819db7df44251788c7d8e3180de8eb1"
+   }
+  },
+  {
+   "name": "leaf 8: 9627c4f995d99cbf",
+   "leaf": "9627c4f995d99cbf0f0a3123af7dc4e2d2e2e3e99350282c75",
+   "expected": {
+    "ok": "91fa30da2e95974528d5c208ecea0b718a7698f39a3e4c7bf2b29206f7919987"
+   }
+  },
+  {
+   "name": "leaf 9: b34de4f7efee56e1",
+   "leaf": "b34de4f7efee56e1ca31ad9969b53b7d101b7adeb4e3617a8328",
+   "expected": {
+    "ok": "bb4895c3a1143afcabe2eb6a01dddc3e6f27447bda092e95e38e05897379f7f6"
+   }
+  },
+  {
+   "name": "leaf 10: 9f4b85fa28873875",
+   "leaf": "9f4b85fa28873875498f4820bf1e3d33ef36ad300514c2590cb3629fab1da6a6f184d33356ddf81deb7be3b756e7142311eee01a11a5e61cc8db99fe2037606ef2fdb2b7103a1efed3cd1ebae58a3c139f78ce7e3de65fb0",
+   "expected": {
+    "ok": "405543c992aef0e3cf9df399f11c14b36f6bc43a9db123dc2ff0e72e33f3e41a"
+   }
+  },
+  {
+   "name": "leaf 11: c38ccc2c92e35bb9",
+   "leaf": "c38ccc2c92e35bb9da0c7bc6de4a51e41826a457a5c835a7b8483e4db51020847d0e30d22c462dc83c14ce16c7256fea6cf2cc45155358a18d689836adeb91a196bd30c0402d430f424d",
+   "expected": {
+    "ok": "7b7cac3c565e46f10dd3a0d43f4f3b52e5265c2d3b081e369f392fba74cfa747"
+   }
+  },
+  {
+   "name": "leaf 12: c7ac66cba2554664",
+   "leaf": "c7ac66cba2554664f1f108e674d295261524eb44841a02ad4f42c593e9048330ce02d0f5af",
+   "expected": {
+    "ok": "f3dbbf605e067e101baeffc8c0cdfdf8dd82710f5d38e9a7b24fa3f149a2098e"
+   }
+  },
+  {
+   "name": "leaf 13: b27d4c8e9ce66f5e",
+   "leaf": "b27d4c8e9ce66f5e81de352e1a97898e146485e5ccb31d97ceaa4dfb3097a6869201f17a50fa50052c120d998a03f9f5f4ee131588d3de0d948c8f83617a03520db62782f1614195e1703ff05e1e06cd70c056fecdbfcb",
+   "expected": {
+    "ok": "bc98c2a3872b3693f26e54f579274e250390d372ac0e3866ba82d0f877654888"
+   }
+  },
+  {
+   "name": "leaf 14: 85f10d424a8131bd",
+   "leaf": "85f10d424a8131bd1841e3add9f4d5da36029b79c098d210212b5a04fae0efd19f516c9edcab86be721fc33fed",
+   "expected": {
+    "ok": "37f1078b74d5837e6730afc1e3ee793cb0059d4647bf17c74310710fbbad79c4"
+   }
+  },
+  {
+   "name": "leaf 15: 0f9b0e2e1a37ea41",
+   "leaf": "0f9b0e2e1a37ea4168346f5bd2cafa3bc2",
+   "expected": {
+    "ok": "5354d2411cedcf7527425662fefd6b47c7935d2c21c140398451617f0a4e872e"
+   }
+  },
+  {
+   "name": "leaf 16: 29817db7161444ca",
+   "leaf": "29817db7161444caa8ab14b79f195c9c98b6",
+   "expected": {
+    "ok": "81154531ec667e25bf669626490aa3bf5fac4f2445adc8e464860ba017b5a094"
+   }
+  },
+  {
+   "name": "leaf 17: ea1f00c12c8a5a21",
+   "leaf": "ea1f00c12c8a5a212c446f268abab03b6a03f399d1101eccd2eb6b949b4fb7480bb0dcc165710c5446ddb96be3316ad04fb89c9f3fcf8991875c6cfc54faacc9d2faf637cbec34256c53f34c31bc9890bb587f5cfdd5dcb00a",
+   "expected": {
+    "ok": "e0af6a8696e2339587c0ed4b3e6d9aa076e09888b5e1ecfd6a4621eed7a66a20"
+   }
+  },
+  {
+   "name": "leaf 18: 0346",
+   "leaf": "0346",
+   "expected": {
+    "ok": "62bd51b9d5dae227143c475342b94723f3852e96192f15803095fffef15648b1"
+   }
+  },
+  {
+   "name": "leaf 19: ab6b1030658ce0c2",
+   "leaf": "ab6b1030658ce0c2936dfa30c18fef6bd37dfbc01226c36fdee126cb8bb18fccc226f4d664f6642ec730e35fd09fe8813b",
+   "expected": {
+    "ok": "829f58bf01ff2ab9e2a7c78ddbcc264d4cd51feb504edf8aacda558584e810e4"
+   }
+  },
+  {
+   "name": "leaf 20: bf291f39b2757040",
+   "leaf": "bf291f39b27570409a74189660eee86b762d79ab576db6d39f05b2cf36610648b480c77cf16be17b61ef676cae8e1623c75c303c3a5859879866276843f49083de095bcd392950f278",
+   "expected": {
+    "ok": "fe966e60b5da9e93dda5923b52edcdd59f48f4c0376a624cecd1635fcd9fa917"
+   }
+  },
+  {
+   "name": "leaf 21: bc89d9548e953f47",
+   "leaf": "bc89d9548e953f47215677477758e2037a4ee81e811c6fc43a2a2a04a9e08d22eae0b0e3de",
+   "expected": {
+    "ok": "ae63ae76bfb013f34214af5b01c222fb849e7911063b20ca7bc513ff2178a16d"
+   }
+  },
+  {
+   "name": "leaf 22: 668bf0c2680ba130",
+   "leaf": "668bf0c2680ba1303f9c820268c2cf25c270cea953cca45bf7d64d006cdbe389ef834e6850f2",
+   "expected": {
+    "ok": "06f0fafc54633d30d26f9e4bbfe0103e7bd997e26058973470a584fcd2244181"
+   }
+  },
+  {
+   "name": "leaf 23: d31e29a3a070bcbb",
+   "leaf": "d31e29a3a070bcbb0860838d7d2ecdc456b952d012",
+   "expected": {
+    "ok": "e7c3147c968793311d7230ae71227416e9a2d27dc376a11e774cf1a871f07e60"
+   }
+  },
+  {
+   "name": "leaf 24: d6c163b847f7475f",
+   "leaf": "d6c163b847f7475fc75ee297e1cce01de6d18ffe34faf622d05aa183a9e6dd8f6ceda7cca9b47db3d010db70347817f515eadd7d72a37f7f1881e6b02c93c4863025676137",
+   "expected": {
+    "ok": "8d01675ba39ed86d1c89d0c44896a165cb42ffb5edbece6a67b6584941c71913"
+   }
+  },
+  {
+   "name": "leaf 25: 4451cf0e161cd1af",
+   "leaf": "4451cf0e161cd1af35ec1a2b72e9eb23a1846621ad486562c57db17310da3cc5f130",
+   "expected": {
+    "ok": "5b5ca5ac865ee11c035e949d01e3a40e88efd8fafe2648886986e013cc5a6f62"
+   }
+  },
+  {
+   "name": "leaf 26: e5",
+   "leaf": "e5",
+   "expected": {
+    "ok": "ae8ccb6a9d27d7ccb1c5304d6cef9023a9f60a88712b00a247c1af87398bb825"
+   }
+  },
+  {
+   "name": "leaf 27: b6a105c861c20629",
+   "leaf": "b6a105c861c206297a0720fe5cf5ee57ff1e6d7bca7a306cc5c0e6f52e25f00309ca98f71ed6353c96ea4b551c7f682535595a1c2d13fda2dd84b4df196c54b38caf13865b1dc43dcc776583c738db",
+   "expected": {
+    "ok": "a4e31042b9b96c976f5d9617b6fa18d9acd8220713888faf1b9bfa0e9336f5f6"
+   }
+  }
+ ]
+}

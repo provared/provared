@@ -425,7 +425,8 @@ def check_slip(record, options=None, disclosures=_UNDEFINED):
         result['issuerKey'] = thumbprint(issuer['key'])
 
         result['signature']['state'] = 'invalid'
-        result['signature']['state'] = check_passkey_signature(parsed, issuer, options.get('withoutMethods') or ())
+        # As in JavaScript, the option is used as it was handed over; only its absence means "none".
+        result['signature']['state'] = check_passkey_signature(parsed, issuer, options['withoutMethods'] if 'withoutMethods' in options else ())
         if result['signature']['state'] == 'unavailable':
             result['notes'].append(f"This device cannot check the passkey's signing method ({issuer['key']['alg']}).")
 

@@ -1,0 +1,3735 @@
+{
+ "about": "Reading one DER element strictly (ITU-T X.690).",
+ "function": "readElement",
+ "cases": [
+  {
+   "name": "empty",
+   "bytes": "",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "one byte",
+   "bytes": "30",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "an empty sequence",
+   "bytes": "3000",
+   "at": 0,
+   "expected": {
+    "ok": {
+     "tag": 48,
+     "from": 0,
+     "start": 2,
+     "end": 2
+    }
+   }
+  },
+  {
+   "name": "a sequence of one byte",
+   "bytes": "300105",
+   "at": 0,
+   "expected": {
+    "ok": {
+     "tag": 48,
+     "from": 0,
+     "start": 2,
+     "end": 3
+    }
+   }
+  },
+  {
+   "name": "a sequence cut short",
+   "bytes": "3001",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "a tag of the long form",
+   "bytes": "1f8100",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a tag of a kind that is not used here."
+    }
+   }
+  },
+  {
+   "name": "a constructed tag of the long form",
+   "bytes": "3f00",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a tag of a kind that is not used here."
+    }
+   }
+  },
+  {
+   "name": "a context tag of the long form",
+   "bytes": "bf00",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a tag of a kind that is not used here."
+    }
+   }
+  },
+  {
+   "name": "the indefinite length",
+   "bytes": "30800000",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "a length in five bytes",
+   "bytes": "3085000000000100",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "a length in one byte, not needed",
+   "bytes": "30817f00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length that is not in its shortest form."
+    }
+   }
+  },
+  {
+   "name": "a length in one byte",
+   "bytes": "3081800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "at": 0,
+   "expected": {
+    "ok": {
+     "tag": 48,
+     "from": 0,
+     "start": 3,
+     "end": 131
+    }
+   }
+  },
+  {
+   "name": "a length in two bytes with a leading zero",
+   "bytes": "308200800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length that is not in its shortest form."
+    }
+   }
+  },
+  {
+   "name": "a length in two bytes",
+   "bytes": "3082010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "at": 0,
+   "expected": {
+    "ok": {
+     "tag": 48,
+     "from": 0,
+     "start": 4,
+     "end": 260
+    }
+   }
+  },
+  {
+   "name": "a length in two bytes that is short enough for one",
+   "bytes": "308200ff000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length that is not in its shortest form."
+    }
+   }
+  },
+  {
+   "name": "a length in four bytes",
+   "bytes": "30840000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length that is not in its shortest form."
+    }
+   }
+  },
+  {
+   "name": "a length in four bytes, far too long",
+   "bytes": "3084ffffffff",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "a length in three bytes, too long",
+   "bytes": "3083010000",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "a length byte cut short",
+   "bytes": "3082ff",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "the long form with no length bytes",
+   "bytes": "3081",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "an element with bytes after it",
+   "bytes": "30000000",
+   "at": 0,
+   "expected": {
+    "ok": {
+     "tag": 48,
+     "from": 0,
+     "start": 2,
+     "end": 2
+    }
+   }
+  },
+  {
+   "name": "an element read from the middle",
+   "bytes": "0000300100",
+   "at": 2,
+   "expected": {
+    "ok": {
+     "tag": 48,
+     "from": 2,
+     "start": 4,
+     "end": 5
+    }
+   }
+  },
+  {
+   "name": "an element read from the middle, cut by its end",
+   "bytes": "0000300100",
+   "at": 2,
+   "end": 4,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "an element that ends exactly at its end",
+   "bytes": "0000300100",
+   "at": 2,
+   "end": 5,
+   "expected": {
+    "ok": {
+     "tag": 48,
+     "from": 2,
+     "start": 4,
+     "end": 5
+    }
+   }
+  },
+  {
+   "name": "an element at the last byte",
+   "bytes": "000030",
+   "at": 2,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "an element at the end",
+   "bytes": "0000",
+   "at": 2,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "a primitive integer",
+   "bytes": "020105",
+   "at": 0,
+   "expected": {
+    "ok": {
+     "tag": 2,
+     "from": 0,
+     "start": 2,
+     "end": 3
+    }
+   }
+  },
+  {
+   "name": "an octet string",
+   "bytes": "0403616263",
+   "at": 0,
+   "expected": {
+    "ok": {
+     "tag": 4,
+     "from": 0,
+     "start": 2,
+     "end": 5
+    }
+   }
+  },
+  {
+   "name": "a context tag",
+   "bytes": "a0020500",
+   "at": 0,
+   "expected": {
+    "ok": {
+     "tag": 160,
+     "from": 0,
+     "start": 2,
+     "end": 4
+    }
+   }
+  },
+  {
+   "name": "tag 0xff",
+   "bytes": "ff00",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a tag of a kind that is not used here."
+    }
+   }
+  },
+  {
+   "name": "tag 0x00",
+   "bytes": "0000",
+   "at": 0,
+   "expected": {
+    "ok": {
+     "tag": 0,
+     "from": 0,
+     "start": 2,
+     "end": 2
+    }
+   }
+  },
+  {
+   "name": "random 0",
+   "bytes": "6e01",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 1",
+   "bytes": "9482bf9b8a03a4",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 2",
+   "bytes": "db84397fefcb",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 3",
+   "bytes": "965b",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 4",
+   "bytes": "f10086c1",
+   "at": 0,
+   "expected": {
+    "ok": {
+     "tag": 241,
+     "from": 0,
+     "start": 2,
+     "end": 2
+    }
+   }
+  },
+  {
+   "name": "random 5",
+   "bytes": "",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 6",
+   "bytes": "45ab",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 7",
+   "bytes": "dc049f7956af",
+   "at": 0,
+   "expected": {
+    "ok": {
+     "tag": 220,
+     "from": 0,
+     "start": 2,
+     "end": 6
+    }
+   }
+  },
+  {
+   "name": "random 8",
+   "bytes": "af853a14c4b5bcd2",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 9",
+   "bytes": "",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 10",
+   "bytes": "642616c3a58e1fe6",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 11",
+   "bytes": "530193",
+   "at": 0,
+   "expected": {
+    "ok": {
+     "tag": 83,
+     "from": 0,
+     "start": 2,
+     "end": 3
+    }
+   }
+  },
+  {
+   "name": "random 12",
+   "bytes": "",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 13",
+   "bytes": "cf010bb033b4",
+   "at": 0,
+   "expected": {
+    "ok": {
+     "tag": 207,
+     "from": 0,
+     "start": 2,
+     "end": 3
+    }
+   }
+  },
+  {
+   "name": "random 14",
+   "bytes": "25",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 15",
+   "bytes": "b681094f8dc972",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length that is not in its shortest form."
+    }
+   }
+  },
+  {
+   "name": "random 16",
+   "bytes": "",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 17",
+   "bytes": "8c68b8d082252ca2a4",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 18",
+   "bytes": "ec02",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 19",
+   "bytes": "89",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 20",
+   "bytes": "b5c7d210",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 21",
+   "bytes": "18",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 22",
+   "bytes": "e49bba2afe",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 23",
+   "bytes": "f802",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 24",
+   "bytes": "3c83df7d2dcb",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 25",
+   "bytes": "b27fe5de",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 26",
+   "bytes": "9a0b88",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 27",
+   "bytes": "f4e1361f",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 28",
+   "bytes": "2998",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 29",
+   "bytes": "c4",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 30",
+   "bytes": "9d81",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 31",
+   "bytes": "1181e8d9bcfa",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 32",
+   "bytes": "700049a8",
+   "at": 0,
+   "expected": {
+    "ok": {
+     "tag": 112,
+     "from": 0,
+     "start": 2,
+     "end": 2
+    }
+   }
+  },
+  {
+   "name": "random 33",
+   "bytes": "8c337b9f",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 34",
+   "bytes": "da84",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 35",
+   "bytes": "71817ed308bbd6",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length that is not in its shortest form."
+    }
+   }
+  },
+  {
+   "name": "random 36",
+   "bytes": "",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 37",
+   "bytes": "85",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 38",
+   "bytes": "7473d3402a98d0",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 39",
+   "bytes": "",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 40",
+   "bytes": "694cb15435c3",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 41",
+   "bytes": "0e0134df",
+   "at": 0,
+   "expected": {
+    "ok": {
+     "tag": 14,
+     "from": 0,
+     "start": 2,
+     "end": 3
+    }
+   }
+  },
+  {
+   "name": "random 42",
+   "bytes": "f4",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 43",
+   "bytes": "c4808f5c925f2429",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 44",
+   "bytes": "5201",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 45",
+   "bytes": "260017a02f",
+   "at": 0,
+   "expected": {
+    "ok": {
+     "tag": 38,
+     "from": 0,
+     "start": 2,
+     "end": 2
+    }
+   }
+  },
+  {
+   "name": "random 46",
+   "bytes": "1a27ef",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 47",
+   "bytes": "ad790a534b14",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 48",
+   "bytes": "39011c2d81a7ca3a",
+   "at": 0,
+   "expected": {
+    "ok": {
+     "tag": 57,
+     "from": 0,
+     "start": 2,
+     "end": 3
+    }
+   }
+  },
+  {
+   "name": "random 49",
+   "bytes": "b01a0d21bf321aa2",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 50",
+   "bytes": "4b80ffcf2416",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 51",
+   "bytes": "ca6aef",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 52",
+   "bytes": "36843cf79b5f38",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 53",
+   "bytes": "72c7367ee790",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 54",
+   "bytes": "cedf2ea7b4",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 55",
+   "bytes": "177f01",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 56",
+   "bytes": "031b9aba22450e",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 57",
+   "bytes": "a5823baf76a517b464",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 58",
+   "bytes": "",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 59",
+   "bytes": "b00286c0581a0c",
+   "at": 0,
+   "expected": {
+    "ok": {
+     "tag": 176,
+     "from": 0,
+     "start": 2,
+     "end": 4
+    }
+   }
+  },
+  {
+   "name": "random 60",
+   "bytes": "",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 61",
+   "bytes": "8b141520e1",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 62",
+   "bytes": "40e0",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 63",
+   "bytes": "02",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 64",
+   "bytes": "25856674",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 65",
+   "bytes": "fe",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 66",
+   "bytes": "610e537289dbda5e",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 67",
+   "bytes": "11007e51b1cd3758",
+   "at": 0,
+   "expected": {
+    "ok": {
+     "tag": 17,
+     "from": 0,
+     "start": 2,
+     "end": 2
+    }
+   }
+  },
+  {
+   "name": "random 68",
+   "bytes": "f38365b5c6",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 69",
+   "bytes": "8b85",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 70",
+   "bytes": "70007c66d843e9",
+   "at": 0,
+   "expected": {
+    "ok": {
+     "tag": 112,
+     "from": 0,
+     "start": 2,
+     "end": 2
+    }
+   }
+  },
+  {
+   "name": "random 71",
+   "bytes": "5fa5920401",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a tag of a kind that is not used here."
+    }
+   }
+  },
+  {
+   "name": "random 72",
+   "bytes": "6c9cc264ba",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 73",
+   "bytes": "13858d48281519",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 74",
+   "bytes": "",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 75",
+   "bytes": "b502",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 76",
+   "bytes": "d800619400ee",
+   "at": 0,
+   "expected": {
+    "ok": {
+     "tag": 216,
+     "from": 0,
+     "start": 2,
+     "end": 2
+    }
+   }
+  },
+  {
+   "name": "random 77",
+   "bytes": "",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 78",
+   "bytes": "4cbdca64f914",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 79",
+   "bytes": "",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 80",
+   "bytes": "d28e22a70798f1",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 81",
+   "bytes": "06835e1c7a6c6623",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 82",
+   "bytes": "5285d2373c048e07",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 83",
+   "bytes": "28057d1b362f2d",
+   "at": 0,
+   "expected": {
+    "ok": {
+     "tag": 40,
+     "from": 0,
+     "start": 2,
+     "end": 7
+    }
+   }
+  },
+  {
+   "name": "random 84",
+   "bytes": "91c27d3ef72f90e476",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 85",
+   "bytes": "ea823dbba39d",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 86",
+   "bytes": "5f8137023604",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a tag of a kind that is not used here."
+    }
+   }
+  },
+  {
+   "name": "random 87",
+   "bytes": "8b812c",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length that is not in its shortest form."
+    }
+   }
+  },
+  {
+   "name": "random 88",
+   "bytes": "83",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 89",
+   "bytes": "64",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 90",
+   "bytes": "f485",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 91",
+   "bytes": "0183f362",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 92",
+   "bytes": "4780b8a965934cd1",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 93",
+   "bytes": "9eb9c2e65430",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 94",
+   "bytes": "fafc1877e7b060bd",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 95",
+   "bytes": "9b9e34242e1075080f",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 96",
+   "bytes": "",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 97",
+   "bytes": "",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 98",
+   "bytes": "3485dd6c31a054",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 99",
+   "bytes": "32823e13f8bc",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 100",
+   "bytes": "9ff4baed1ac7cd29",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a tag of a kind that is not used here."
+    }
+   }
+  },
+  {
+   "name": "random 101",
+   "bytes": "c68461cdfae7516c",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 102",
+   "bytes": "b0",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 103",
+   "bytes": "57a8d1",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 104",
+   "bytes": "e882e2c8407bef",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 105",
+   "bytes": "",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 106",
+   "bytes": "8e",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 107",
+   "bytes": "060232",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 108",
+   "bytes": "31ba94113ba3093ab9",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 109",
+   "bytes": "1acc108aa53b92e8",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 110",
+   "bytes": "",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 111",
+   "bytes": "bf118b0f",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a tag of a kind that is not used here."
+    }
+   }
+  },
+  {
+   "name": "random 112",
+   "bytes": "6c9c877a210a",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 113",
+   "bytes": "1a825ff530ab",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 114",
+   "bytes": "bfc9",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a tag of a kind that is not used here."
+    }
+   }
+  },
+  {
+   "name": "random 115",
+   "bytes": "c7d9d6d9b1688dfee7",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 116",
+   "bytes": "4e84c6622ac04363a8",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 117",
+   "bytes": "2380",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 118",
+   "bytes": "db856694",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 119",
+   "bytes": "5a7f3db4545c36e09f",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 120",
+   "bytes": "ca0161",
+   "at": 0,
+   "expected": {
+    "ok": {
+     "tag": 202,
+     "from": 0,
+     "start": 2,
+     "end": 3
+    }
+   }
+  },
+  {
+   "name": "random 121",
+   "bytes": "2a228265abc509",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 122",
+   "bytes": "26f72d69aa47951f",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 123",
+   "bytes": "8eabe07519",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 124",
+   "bytes": "8bea9d49cace",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 125",
+   "bytes": "cbb6980515be2ddf",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 126",
+   "bytes": "e4821f",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 127",
+   "bytes": "1081297831e3",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length that is not in its shortest form."
+    }
+   }
+  },
+  {
+   "name": "random 128",
+   "bytes": "",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 129",
+   "bytes": "9285dac91cc007d99d",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 130",
+   "bytes": "ee",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 131",
+   "bytes": "392e",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 132",
+   "bytes": "2b7ff0fa09b5e92180",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 133",
+   "bytes": "d762c5358f20",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 134",
+   "bytes": "cb85eafdd917",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 135",
+   "bytes": "8dcecf81f6fdcb0a",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 136",
+   "bytes": "505ace8ba8",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 137",
+   "bytes": "a80026",
+   "at": 0,
+   "expected": {
+    "ok": {
+     "tag": 168,
+     "from": 0,
+     "start": 2,
+     "end": 2
+    }
+   }
+  },
+  {
+   "name": "random 138",
+   "bytes": "3a801d1e",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 139",
+   "bytes": "b47f44a2e002",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 140",
+   "bytes": "39853977",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 141",
+   "bytes": "e082",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 142",
+   "bytes": "a60152",
+   "at": 0,
+   "expected": {
+    "ok": {
+     "tag": 166,
+     "from": 0,
+     "start": 2,
+     "end": 3
+    }
+   }
+  },
+  {
+   "name": "random 143",
+   "bytes": "3f00",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a tag of a kind that is not used here."
+    }
+   }
+  },
+  {
+   "name": "random 144",
+   "bytes": "cf0148",
+   "at": 0,
+   "expected": {
+    "ok": {
+     "tag": 207,
+     "from": 0,
+     "start": 2,
+     "end": 3
+    }
+   }
+  },
+  {
+   "name": "random 145",
+   "bytes": "8f837b",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 146",
+   "bytes": "0210be",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 147",
+   "bytes": "7885e4",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 148",
+   "bytes": "6bc755be",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 149",
+   "bytes": "b87551ce72",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 150",
+   "bytes": "860da990",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 151",
+   "bytes": "16805b59",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 152",
+   "bytes": "fa00bda37ec2cc",
+   "at": 0,
+   "expected": {
+    "ok": {
+     "tag": 250,
+     "from": 0,
+     "start": 2,
+     "end": 2
+    }
+   }
+  },
+  {
+   "name": "random 153",
+   "bytes": "90",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 154",
+   "bytes": "7f00",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a tag of a kind that is not used here."
+    }
+   }
+  },
+  {
+   "name": "random 155",
+   "bytes": "9b004b",
+   "at": 0,
+   "expected": {
+    "ok": {
+     "tag": 155,
+     "from": 0,
+     "start": 2,
+     "end": 2
+    }
+   }
+  },
+  {
+   "name": "random 156",
+   "bytes": "00a02f2de709022ea9",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 157",
+   "bytes": "4602e272",
+   "at": 0,
+   "expected": {
+    "ok": {
+     "tag": 70,
+     "from": 0,
+     "start": 2,
+     "end": 4
+    }
+   }
+  },
+  {
+   "name": "random 158",
+   "bytes": "55f7ed0ede182e",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 159",
+   "bytes": "60aba14b3698bd05",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 160",
+   "bytes": "070120c74f979c8fc9",
+   "at": 0,
+   "expected": {
+    "ok": {
+     "tag": 7,
+     "from": 0,
+     "start": 2,
+     "end": 3
+    }
+   }
+  },
+  {
+   "name": "random 161",
+   "bytes": "69832d95202fed",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 162",
+   "bytes": "",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 163",
+   "bytes": "4681c8",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 164",
+   "bytes": "92846f",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 165",
+   "bytes": "42a892dd90c4",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 166",
+   "bytes": "b279",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 167",
+   "bytes": "ae801ac9",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 168",
+   "bytes": "1f",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 169",
+   "bytes": "b1829a2c8ab6a933",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 170",
+   "bytes": "d36aaa06313cec2da1",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 171",
+   "bytes": "21827591e1fb",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 172",
+   "bytes": "e37d",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 173",
+   "bytes": "f6076c9e4a706488dd",
+   "at": 0,
+   "expected": {
+    "ok": {
+     "tag": 246,
+     "from": 0,
+     "start": 2,
+     "end": 9
+    }
+   }
+  },
+  {
+   "name": "random 174",
+   "bytes": "",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 175",
+   "bytes": "f480",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 176",
+   "bytes": "a908e0e4",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 177",
+   "bytes": "b684a0620af915",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 178",
+   "bytes": "3c5e275ddf7d",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 179",
+   "bytes": "75da832d20c8",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 180",
+   "bytes": "2900",
+   "at": 0,
+   "expected": {
+    "ok": {
+     "tag": 41,
+     "from": 0,
+     "start": 2,
+     "end": 2
+    }
+   }
+  },
+  {
+   "name": "random 181",
+   "bytes": "6b838c9d",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 182",
+   "bytes": "5248423a3af5a889",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 183",
+   "bytes": "b4",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 184",
+   "bytes": "6a",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 185",
+   "bytes": "9da2b1685845",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 186",
+   "bytes": "1e",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 187",
+   "bytes": "307f6b37fd",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 188",
+   "bytes": "6100ab8a",
+   "at": 0,
+   "expected": {
+    "ok": {
+     "tag": 97,
+     "from": 0,
+     "start": 2,
+     "end": 2
+    }
+   }
+  },
+  {
+   "name": "random 189",
+   "bytes": "",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 190",
+   "bytes": "d97f",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 191",
+   "bytes": "c4078d4f9d8eeb6f31",
+   "at": 0,
+   "expected": {
+    "ok": {
+     "tag": 196,
+     "from": 0,
+     "start": 2,
+     "end": 9
+    }
+   }
+  },
+  {
+   "name": "random 192",
+   "bytes": "6aae",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 193",
+   "bytes": "3d85",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 194",
+   "bytes": "fa7fc5",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 195",
+   "bytes": "bb",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 196",
+   "bytes": "dd",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 197",
+   "bytes": "6582",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 198",
+   "bytes": "c404c5fe0d1b",
+   "at": 0,
+   "expected": {
+    "ok": {
+     "tag": 196,
+     "from": 0,
+     "start": 2,
+     "end": 6
+    }
+   }
+  },
+  {
+   "name": "random 199",
+   "bytes": "18845ceed62645f859",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 200",
+   "bytes": "367f",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 201",
+   "bytes": "6a0089012f",
+   "at": 0,
+   "expected": {
+    "ok": {
+     "tag": 106,
+     "from": 0,
+     "start": 2,
+     "end": 2
+    }
+   }
+  },
+  {
+   "name": "random 202",
+   "bytes": "13357bc9d568",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 203",
+   "bytes": "7f80b4",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a tag of a kind that is not used here."
+    }
+   }
+  },
+  {
+   "name": "random 204",
+   "bytes": "",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 205",
+   "bytes": "f2807b0d99024d",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 206",
+   "bytes": "aa841492118461",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 207",
+   "bytes": "6f80daf431",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 208",
+   "bytes": "7d5e67f1",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 209",
+   "bytes": "f4",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 210",
+   "bytes": "bedbdc7eec",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 211",
+   "bytes": "228148a5251c51f9c9",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length that is not in its shortest form."
+    }
+   }
+  },
+  {
+   "name": "random 212",
+   "bytes": "",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 213",
+   "bytes": "d0857b67cc8c63348f",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 214",
+   "bytes": "00a12695f07f",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 215",
+   "bytes": "471d6b9a",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 216",
+   "bytes": "187f55504b76e2",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 217",
+   "bytes": "0483e3aa",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 218",
+   "bytes": "4380a5ff97",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 219",
+   "bytes": "b102f98100",
+   "at": 0,
+   "expected": {
+    "ok": {
+     "tag": 177,
+     "from": 0,
+     "start": 2,
+     "end": 4
+    }
+   }
+  },
+  {
+   "name": "random 220",
+   "bytes": "",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 221",
+   "bytes": "e5c670",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 222",
+   "bytes": "28104b",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 223",
+   "bytes": "",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 224",
+   "bytes": "f19e9309bf06d4",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 225",
+   "bytes": "c2cdc989a7df",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 226",
+   "bytes": "33a455dffad8aafb52",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 227",
+   "bytes": "4f3f",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 228",
+   "bytes": "238329eb9d3c",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 229",
+   "bytes": "0b7e54048bdfee",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 230",
+   "bytes": "c98247971b",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 231",
+   "bytes": "6abc89a6e7035b",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 232",
+   "bytes": "bf909e746f71cd",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a tag of a kind that is not used here."
+    }
+   }
+  },
+  {
+   "name": "random 233",
+   "bytes": "a57f9763a46a4662c7",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 234",
+   "bytes": "4f80679a992cc1",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 235",
+   "bytes": "22",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 236",
+   "bytes": "f800c6c1",
+   "at": 0,
+   "expected": {
+    "ok": {
+     "tag": 248,
+     "from": 0,
+     "start": 2,
+     "end": 2
+    }
+   }
+  },
+  {
+   "name": "random 237",
+   "bytes": "e8",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 238",
+   "bytes": "c778",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 239",
+   "bytes": "8d828e6c73",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 240",
+   "bytes": "ea80",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 241",
+   "bytes": "bf805788",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a tag of a kind that is not used here."
+    }
+   }
+  },
+  {
+   "name": "random 242",
+   "bytes": "3fd607f504cbf0b9",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a tag of a kind that is not used here."
+    }
+   }
+  },
+  {
+   "name": "random 243",
+   "bytes": "f544",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 244",
+   "bytes": "3c798a2c1553",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 245",
+   "bytes": "b41ef1dcdc951d",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 246",
+   "bytes": "7883d23a",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 247",
+   "bytes": "0e82",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 248",
+   "bytes": "",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 249",
+   "bytes": "62cd7c",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 250",
+   "bytes": "a031d8d04780fc",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 251",
+   "bytes": "7f",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 252",
+   "bytes": "66812eed",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length that is not in its shortest form."
+    }
+   }
+  },
+  {
+   "name": "random 253",
+   "bytes": "572fafa5fa8170a252",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 254",
+   "bytes": "3a39afee93",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 255",
+   "bytes": "de02",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 256",
+   "bytes": "ad5d62945be6",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 257",
+   "bytes": "",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 258",
+   "bytes": "f2026d",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 259",
+   "bytes": "8f60c343",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 260",
+   "bytes": "cf18",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 261",
+   "bytes": "9d81d830",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 262",
+   "bytes": "fc6492f461",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 263",
+   "bytes": "608282e9",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 264",
+   "bytes": "cb",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 265",
+   "bytes": "340fc619229406da",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 266",
+   "bytes": "3a83cc1788e8",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 267",
+   "bytes": "24927f54d806143af7",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 268",
+   "bytes": "dc541e",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 269",
+   "bytes": "9e",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 270",
+   "bytes": "27bdb6da",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 271",
+   "bytes": "9f00fb",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a tag of a kind that is not used here."
+    }
+   }
+  },
+  {
+   "name": "random 272",
+   "bytes": "56828a1bdfd05dbd",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 273",
+   "bytes": "",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 274",
+   "bytes": "99",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 275",
+   "bytes": "ea387ccb187ed5",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 276",
+   "bytes": "dd81257c8a14e63e27",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length that is not in its shortest form."
+    }
+   }
+  },
+  {
+   "name": "random 277",
+   "bytes": "0400ca",
+   "at": 0,
+   "expected": {
+    "ok": {
+     "tag": 4,
+     "from": 0,
+     "start": 2,
+     "end": 2
+    }
+   }
+  },
+  {
+   "name": "random 278",
+   "bytes": "def989fc77",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 279",
+   "bytes": "0c7fe08495c173",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 280",
+   "bytes": "e18bb371",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 281",
+   "bytes": "",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 282",
+   "bytes": "1e0233b0",
+   "at": 0,
+   "expected": {
+    "ok": {
+     "tag": 30,
+     "from": 0,
+     "start": 2,
+     "end": 4
+    }
+   }
+  },
+  {
+   "name": "random 283",
+   "bytes": "",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 284",
+   "bytes": "2fab4d9f77",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 285",
+   "bytes": "598218950ac1daf247",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 286",
+   "bytes": "5843f98888a5eb69",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 287",
+   "bytes": "a2800a794a56d820",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 288",
+   "bytes": "61b19f85",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 289",
+   "bytes": "346b",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a part is longer than what holds it."
+    }
+   }
+  },
+  {
+   "name": "random 290",
+   "bytes": "36ad504afe66",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 291",
+   "bytes": "",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 292",
+   "bytes": "4c81",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 293",
+   "bytes": "",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 294",
+   "bytes": "508126831982",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length that is not in its shortest form."
+    }
+   }
+  },
+  {
+   "name": "random 295",
+   "bytes": "6e00c124",
+   "at": 0,
+   "expected": {
+    "ok": {
+     "tag": 110,
+     "from": 0,
+     "start": 2,
+     "end": 2
+    }
+   }
+  },
+  {
+   "name": "random 296",
+   "bytes": "bf78e688452bbaa9",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a tag of a kind that is not used here."
+    }
+   }
+  },
+  {
+   "name": "random 297",
+   "bytes": "398032",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  },
+  {
+   "name": "random 298",
+   "bytes": "c4",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+    }
+   }
+  },
+  {
+   "name": "random 299",
+   "bytes": "a3806de401",
+   "at": 0,
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: it holds a length in a form that is not allowed."
+    }
+   }
+  }
+ ]
+}

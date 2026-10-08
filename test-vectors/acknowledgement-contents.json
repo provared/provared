@@ -1,0 +1,1294 @@
+{
+ "about": "Confirming the members of an acknowledgement's content (format description, section 26).",
+ "function": "validateAcknowledgementContent",
+ "cases": [
+  {
+   "name": "an acknowledgement",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "an acknowledgement of a helper agent",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z",
+    "pass": "CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk"
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "a type of another kind, which this check does not read",
+   "content": {
+    "type": "provared.cancellation.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "an unknown member",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z",
+    "colour": "red"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "acknowledgement: holds a member that is not known."
+    }
+   }
+  },
+  {
+   "name": "a member named __proto__",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z",
+    "__proto__": 1
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "acknowledgement: holds a member that is not known."
+    }
+   }
+  },
+  {
+   "name": "a list",
+   "content": [
+    {}
+   ],
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "acknowledgement: must be an object."
+    }
+   }
+  },
+  {
+   "name": "null",
+   "content": null,
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "acknowledgement: must be an object."
+    }
+   }
+  },
+  {
+   "name": "text",
+   "content": "content",
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "acknowledgement: must be an object."
+    }
+   }
+  },
+  {
+   "name": "a number",
+   "content": 1,
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "acknowledgement: must be an object."
+    }
+   }
+  },
+  {
+   "name": "true",
+   "content": true,
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "acknowledgement: must be an object."
+    }
+   }
+  },
+  {
+   "name": "an empty object",
+   "content": {},
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "acknowledgement: \"cancellation\" is missing."
+    }
+   }
+  },
+  {
+   "name": "no cancellation",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "acknowledgement: \"cancellation\" is missing."
+    }
+   }
+  },
+  {
+   "name": "no id",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "acknowledgement: \"id\" is missing."
+    }
+   }
+  },
+  {
+   "name": "no slip",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "acknowledgement: \"slip\" is missing."
+    }
+   }
+  },
+  {
+   "name": "no type",
+   "content": {
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "acknowledgement: \"type\" is missing."
+    }
+   }
+  },
+  {
+   "name": "no when",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "acknowledgement: \"when\" is missing."
+    }
+   }
+  },
+  {
+   "name": "id: 16 bytes",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "id: 15 bytes",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgIC",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "id: must be a unique number of 16 bytes in base64url."
+    }
+   }
+  },
+  {
+   "name": "id: 17 bytes",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAgI",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "id: must be a unique number of 16 bytes in base64url."
+    }
+   }
+  },
+  {
+   "name": "id: 32 bytes",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "id: must be a unique number of 16 bytes in base64url."
+    }
+   }
+  },
+  {
+   "name": "id: padding",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg==",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "id: must be a unique number of 16 bytes in base64url."
+    }
+   }
+  },
+  {
+   "name": "id: a plus sign",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgIC+g",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "id: must be a unique number of 16 bytes in base64url."
+    }
+   }
+  },
+  {
+   "name": "id: stray bits",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAh",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "id: must be a unique number of 16 bytes in base64url."
+    }
+   }
+  },
+  {
+   "name": "id: an impossible length",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "A",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "id: must be a unique number of 16 bytes in base64url."
+    }
+   }
+  },
+  {
+   "name": "id: empty text",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "id: must be a unique number of 16 bytes in base64url."
+    }
+   }
+  },
+  {
+   "name": "id: a number",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": 1,
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "id: must be a unique number of 16 bytes in base64url."
+    }
+   }
+  },
+  {
+   "name": "id: null",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": null,
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "id: must be a unique number of 16 bytes in base64url."
+    }
+   }
+  },
+  {
+   "name": "id: a list",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": [
+     "AgICAgICAgICAgICAgICAg"
+    ],
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "id: must be a unique number of 16 bytes in base64url."
+    }
+   }
+  },
+  {
+   "name": "slip: 32 bytes",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "slip: 31 bytes",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "slip: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "slip: 33 bytes",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "slip: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "slip: 16 bytes",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AgICAgICAgICAgICAgICAg",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "slip: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "slip: padding",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "slip: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "slip: a slash",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBA/A",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "slip: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "slip: stray bits",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQF",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "slip: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "slip: empty text",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "slip: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "slip: a number",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": 1,
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "slip: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "slip: null",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": null,
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "slip: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "slip: true",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": true,
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "slip: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "cancellation: 32 bytes",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "cancellation: 31 bytes",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "cancellation: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "cancellation: 33 bytes",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "cancellation: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "cancellation: 16 bytes",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AgICAgICAgICAgICAgICAg",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "cancellation: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "cancellation: padding",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "cancellation: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "cancellation: a slash",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBA/A",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "cancellation: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "cancellation: stray bits",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQF",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "cancellation: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "cancellation: empty text",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "cancellation: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "cancellation: a number",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": 1,
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "cancellation: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "cancellation: null",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": null,
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "cancellation: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "cancellation: true",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": true,
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "cancellation: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "pass: 32 bytes",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z",
+    "pass": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "pass: 31 bytes",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z",
+    "pass": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "pass: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "pass: 33 bytes",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z",
+    "pass": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "pass: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "pass: 16 bytes",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z",
+    "pass": "AgICAgICAgICAgICAgICAg"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "pass: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "pass: padding",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z",
+    "pass": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE="
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "pass: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "pass: a slash",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z",
+    "pass": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBA/A"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "pass: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "pass: stray bits",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z",
+    "pass": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQF"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "pass: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "pass: empty text",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z",
+    "pass": ""
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "pass: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "pass: a number",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z",
+    "pass": 1
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "pass: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "pass: null",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z",
+    "pass": null
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "pass: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "pass: true",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z",
+    "pass": true
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "pass: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "when: a time",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "when: a leap day",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2024-02-29T00:00:00Z"
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "when: the year 0",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "0000-01-01T00:00:00Z"
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "when: the last second of the year 9999",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "9999-12-31T23:59:59Z"
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "when: before 1970",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "1969-12-31T23:59:59Z"
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "when: a fraction of a second",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00.000Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "when: an offset",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00+01:00"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "when: 30 February",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-02-30T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "when: 29 February in a year that is not a leap year",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-02-29T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "when: a leap second",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-12-31T23:59:60Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "when: hour 24",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T24:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "when: month 13",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-13-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "when: small letters",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05t09:00:00z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "when: a space in place of T",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05 09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "when: no seconds",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "when: a line break after it",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z\n"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "when: digits of another script",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "٢٠٢٦-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "when: milliseconds",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": 1791190800000
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "when: null",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": null
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "when: empty text",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": ""
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "a faulty slip, cancellation, pass and time: the slip is reported",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "x",
+    "cancellation": "x",
+    "when": "x",
+    "pass": "x"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "slip: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "a faulty cancellation, pass and time: the cancellation is reported",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "x",
+    "when": "x",
+    "pass": "x"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "cancellation: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "a faulty pass and time: the pass is reported",
+   "content": {
+    "type": "provared.acknowledgement.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "cancellation": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "x",
+    "pass": "x"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "pass: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  }
+ ]
+}

@@ -4,25 +4,24 @@
 
 import { checkSlip, assembleSlip, generateKeySet } from '../../src/index.js';
 import { coverMembers } from '../../src/cover.js';
-import { countCharacters, fromBase64url, parseCanonical, parseTime, problemFrom, sha256, toBase64url, utf8 } from '../../src/encoding.js';
+import { countCharacters, fromBase64url, parseCanonical, parseTime, sha256, toBase64url, utf8 } from '../../src/encoding.js';
 import { encodeContent, parseRecord, protectedHeaders, signingInput } from '../../src/jws.js';
 import { PASSKEY_METHODS, checkKey, thumbprint } from '../../src/keys.js';
 import { validateCountersignatureContent, validateStubContent } from '../../src/stub.js';
 import { ecdsaDerToRaw } from '../../src/webauthn.js';
 import { makePasskey } from './passkey.mjs';
+import { answer, finish } from './vector-tools.mjs';
+import * as book from './vectors-book.mjs';
+import * as records from './vectors-records.mjs';
+import * as stamps from './vectors-stamps.mjs';
 
 const hex = (bytes) => Buffer.from(bytes).toString('hex');
 
-async function answer(work) {
-  try {
-    return { ok: await work() };
-  } catch (e) {
-    return { refused: problemFrom(e) };
-  }
-}
-
 /** How each kind of case is answered. The same names are used in every implementation. */
 export const ANSWER = {
+  ...stamps.ANSWER,
+  ...records.ANSWER,
+  ...book.ANSWER,
   parseCanonical: (c) => answer(() => parseCanonical(c.text)),
   fromBase64url: (c) => answer(() => hex(fromBase64url(c.text))),
   parseTime: async (c) => ({ ok: Number.isNaN(parseTime(c.text)) ? null : parseTime(c.text) }),
@@ -60,10 +59,7 @@ export const ANSWER = {
   },
 };
 
-async function set(about, fn, cases) {
-  for (const c of cases) c.expected = await ANSWER[fn](c);
-  return { about, function: fn, cases };
-}
+const set = (about, fn, cases) => finish(about, fn, cases, ANSWER);
 
 // --- values ---
 
@@ -593,4 +589,7 @@ export const CASES = {
   'countersignature-contents': () => set("Confirming the members of a countersignature's content (format description, section 6).", 'validateCountersignatureContent', countersignatureContents()),
   origins: () => set('Whether a text is a page address in its plain form, as a slip\'s "issuer.origin" must be (format description, section 4.1).', 'plainOrigin', originCases()),
   slips: async () => set('Checking one slip (format description, section 4.4), with what the checker is told to trust.', 'checkSlip', await slipCases()),
+  ...stamps.CASES,
+  ...records.CASES,
+  ...book.CASES,
 };

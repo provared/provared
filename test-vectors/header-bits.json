@@ -1,0 +1,1186 @@
+{
+ "about": "The difficulty at the start of a run of blocks, from the run before it.",
+ "function": "nextBits",
+ "cases": [
+  {
+   "name": "the first change of difficulty, at block 32,256",
+   "bits": 486604799,
+   "firstTime": 1261130161,
+   "lastTime": 1262152739,
+   "expected": {
+    "ok": 486594666
+   }
+  },
+  {
+   "name": "a change at block 967,680",
+   "bits": 386020702,
+   "firstTime": 1788640367,
+   "lastTime": 1789801627,
+   "expected": {
+    "ok": 386014917
+   }
+  },
+  {
+   "name": "never easier than the limit",
+   "bits": 486604799,
+   "firstTime": 0,
+   "lastTime": 12096000,
+   "expected": {
+    "ok": 486604799
+   }
+  },
+  {
+   "name": "at most four times harder",
+   "bits": 386020702,
+   "firstTime": 0,
+   "lastTime": 1,
+   "expected": {
+    "ok": 385912151
+   }
+  },
+  {
+   "name": "exactly a quarter",
+   "bits": 386020702,
+   "firstTime": 0,
+   "lastTime": 302400,
+   "expected": {
+    "ok": 385912151
+   }
+  },
+  {
+   "name": "exactly four times",
+   "bits": 386020702,
+   "firstTime": 0,
+   "lastTime": 4838400,
+   "expected": {
+    "ok": 386454904
+   }
+  },
+  {
+   "name": "a run that went backwards",
+   "bits": 386020702,
+   "firstTime": 1000,
+   "lastTime": 0,
+   "expected": {
+    "ok": 385912151
+   }
+  },
+  {
+   "name": "a run of exactly two weeks",
+   "bits": 386020702,
+   "firstTime": 0,
+   "lastTime": 1209600,
+   "expected": {
+    "ok": 386020702
+   }
+  },
+  {
+   "name": "a negative target",
+   "bits": 494993407,
+   "firstTime": 0,
+   "lastTime": 1209600,
+   "expected": {
+    "ok": 50331392
+   }
+  },
+  {
+   "name": "a target of zero",
+   "bits": 486539264,
+   "firstTime": 0,
+   "lastTime": 1209600,
+   "expected": {
+    "ok": 16777216
+   }
+  },
+  {
+   "name": "a small exponent",
+   "bits": 51524694,
+   "firstTime": 0,
+   "lastTime": 1209600,
+   "expected": {
+    "ok": 51524694
+   }
+  },
+  {
+   "name": "a smaller exponent",
+   "bits": 34747478,
+   "firstTime": 0,
+   "lastTime": 1209600,
+   "expected": {
+    "ok": 34747392
+   }
+  },
+  {
+   "name": "an exponent of zero",
+   "bits": 1193046,
+   "firstTime": 0,
+   "lastTime": 1209600,
+   "expected": {
+    "ok": 16777216
+   }
+  },
+  {
+   "name": "an exponent of one, harder",
+   "bits": 17970262,
+   "firstTime": 0,
+   "lastTime": 1,
+   "expected": {
+    "ok": 17039360
+   }
+  },
+  {
+   "name": "a mantissa whose top bit would be set",
+   "bits": 478150655,
+   "firstTime": 0,
+   "lastTime": 2419200,
+   "expected": {
+    "ok": 486604799
+   }
+  },
+  {
+   "name": "a large exponent",
+   "bits": 553713663,
+   "firstTime": 0,
+   "lastTime": 1209600,
+   "expected": {
+    "ok": 486604799
+   }
+  },
+  {
+   "name": "the easiest bits with the rules of a made-up chain",
+   "bits": 545259519,
+   "firstTime": 0,
+   "lastTime": 1000,
+   "rules": {
+    "first": "00000020000000000000000000000000000000000000000000000000000000000000000007070707070707070707070707070707070707070707070707070707070707079033e268ffff7f2001000000",
+    "limit": "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "interval": 2016,
+    "timespan": 1209600,
+    "retarget": false,
+    "known": []
+   },
+   "expected": {
+    "ok": 538968063
+   }
+  },
+  {
+   "name": "a made-up chain that eases",
+   "bits": 522190848,
+   "firstTime": 0,
+   "lastTime": 4000,
+   "rules": {
+    "first": "00000020000000000000000000000000000000000000000000000000000000000000000007070707070707070707070707070707070707070707070707070707070707079033e268ffff7f2001000000",
+    "limit": "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "interval": 2016,
+    "timespan": 1000,
+    "retarget": false,
+    "known": []
+   },
+   "expected": {
+    "ok": 536903680
+   }
+  },
+  {
+   "name": "a made-up chain that hardens",
+   "bits": 522190848,
+   "firstTime": 0,
+   "lastTime": 100,
+   "rules": {
+    "first": "00000020000000000000000000000000000000000000000000000000000000000000000007070707070707070707070707070707070707070707070707070707070707079033e268ffff7f2001000000",
+    "limit": "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "interval": 2016,
+    "timespan": 1000,
+    "retarget": false,
+    "known": []
+   },
+   "expected": {
+    "ok": 520617984
+   }
+  },
+  {
+   "name": "a timespan that does not divide by four",
+   "bits": 522190848,
+   "firstTime": 0,
+   "lastTime": 3,
+   "rules": {
+    "first": "00000020000000000000000000000000000000000000000000000000000000000000000007070707070707070707070707070707070707070707070707070707070707079033e268ffff7f2001000000",
+    "limit": "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "interval": 2016,
+    "timespan": 7,
+    "retarget": false,
+    "known": []
+   },
+   "expected": {
+    "ok": 520992475
+   }
+  },
+  {
+   "name": "a timespan that does not divide by four, eased",
+   "bits": 522190848,
+   "firstTime": 0,
+   "lastTime": 1000000,
+   "rules": {
+    "first": "00000020000000000000000000000000000000000000000000000000000000000000000007070707070707070707070707070707070707070707070707070707070707079033e268ffff7f2001000000",
+    "limit": "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "interval": 2016,
+    "timespan": 7,
+    "retarget": false,
+    "known": []
+   },
+   "expected": {
+    "ok": 536903680
+   }
+  },
+  {
+   "name": "a fractional span",
+   "bits": 522190848,
+   "firstTime": 0,
+   "lastTime": 0.5,
+   "rules": {
+    "first": "00000020000000000000000000000000000000000000000000000000000000000000000007070707070707070707070707070707070707070707070707070707070707079033e268ffff7f2001000000",
+    "limit": "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "interval": 2016,
+    "timespan": 7,
+    "retarget": false,
+    "known": []
+   },
+   "expected": {
+    "ok": 520393289
+   }
+  },
+  {
+   "name": "times that are fractions",
+   "bits": 522190848,
+   "firstTime": 0.25,
+   "lastTime": 3.75,
+   "rules": {
+    "first": "00000020000000000000000000000000000000000000000000000000000000000000000007070707070707070707070707070707070707070707070707070707070707079033e268ffff7f2001000000",
+    "limit": "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "interval": 2016,
+    "timespan": 7,
+    "retarget": false,
+    "known": []
+   },
+   "expected": {
+    "ok": 520992475
+   }
+  },
+  {
+   "name": "a limit lower than the target",
+   "bits": 522190848,
+   "firstTime": 0,
+   "lastTime": 4000,
+   "rules": {
+    "first": "00000020000000000000000000000000000000000000000000000000000000000000000007070707070707070707070707070707070707070707070707070707070707079033e268ffff7f2001000000",
+    "limit": "100000000000000000000000000000000000000000000000000",
+    "interval": 2016,
+    "timespan": 1000,
+    "retarget": false,
+    "known": []
+   },
+   "expected": {
+    "ok": 436273152
+   }
+  },
+  {
+   "name": "random 0",
+   "bits": 541732360,
+   "firstTime": 1700000000,
+   "lastTime": 1703776111,
+   "expected": {
+    "ok": 486604799
+   }
+  },
+  {
+   "name": "random 1",
+   "bits": 189915579,
+   "firstTime": 1700000000,
+   "lastTime": 1701171640,
+   "expected": {
+    "ok": 189747175
+   }
+  },
+  {
+   "name": "random 2",
+   "bits": 308292985,
+   "firstTime": 1700000000,
+   "lastTime": 1703644880,
+   "expected": {
+    "ok": 318841295
+   }
+  },
+  {
+   "name": "random 3",
+   "bits": 101346312,
+   "firstTime": 1700000000,
+   "lastTime": 1707166378,
+   "expected": {
+    "ok": 103395360
+   }
+  },
+  {
+   "name": "random 4",
+   "bits": 511452123,
+   "firstTime": 1700000000,
+   "lastTime": 1706876927,
+   "expected": {
+    "ok": 486604799
+   }
+  },
+  {
+   "name": "random 5",
+   "bits": 105591494,
+   "firstTime": 1700000000,
+   "lastTime": 1704135285,
+   "expected": {
+    "ok": 117506325
+   }
+  },
+  {
+   "name": "random 6",
+   "bits": 70780387,
+   "firstTime": 1700000000,
+   "lastTime": 1706175191,
+   "expected": {
+    "ok": 83943447
+   }
+  },
+  {
+   "name": "random 7",
+   "bits": 438836144,
+   "firstTime": 1700000000,
+   "lastTime": 1703966900,
+   "expected": {
+    "ok": 453018505
+   }
+  },
+  {
+   "name": "random 8",
+   "bits": 457621672,
+   "firstTime": 1700000000,
+   "lastTime": 1704496322,
+   "expected": {
+    "ok": 469829376
+   }
+  },
+  {
+   "name": "random 9",
+   "bits": 118854817,
+   "firstTime": 1700000000,
+   "lastTime": 1700808150,
+   "expected": {
+    "ok": 118385428
+   }
+  },
+  {
+   "name": "random 10",
+   "bits": 121079419,
+   "firstTime": 1700000000,
+   "lastTime": 1706833738,
+   "expected": {
+    "ok": 134274585
+   }
+  },
+  {
+   "name": "random 11",
+   "bits": 309764769,
+   "firstTime": 1700000000,
+   "lastTime": 1706631597,
+   "expected": {
+    "ok": 318888586
+   }
+  },
+  {
+   "name": "random 12",
+   "bits": 440808752,
+   "firstTime": 1700000000,
+   "lastTime": 1702523697,
+   "expected": {
+    "ok": 453022331
+   }
+  },
+  {
+   "name": "random 13",
+   "bits": 422049911,
+   "firstTime": 1700000000,
+   "lastTime": 1700005952,
+   "expected": {
+    "ok": 420085277
+   }
+  },
+  {
+   "name": "random 14",
+   "bits": 403966451,
+   "firstTime": 1700000000,
+   "lastTime": 1705952256,
+   "expected": {
+    "ok": 407906252
+   }
+  },
+  {
+   "name": "random 15",
+   "bits": 271833270,
+   "firstTime": 1700000000,
+   "lastTime": 1703668936,
+   "expected": {
+    "ok": 285252930
+   }
+  },
+  {
+   "name": "random 16",
+   "bits": 120206997,
+   "firstTime": 1700000000,
+   "lastTime": 1705295602,
+   "expected": {
+    "ok": 134260954
+   }
+  },
+  {
+   "name": "random 17",
+   "bits": 542926674,
+   "firstTime": 1700000000,
+   "lastTime": 1706428867,
+   "expected": {
+    "ok": 486604799
+   }
+  },
+  {
+   "name": "random 18",
+   "bits": 125520990,
+   "firstTime": 1700000000,
+   "lastTime": 1706397564,
+   "expected": {
+    "ok": 134343985
+   }
+  },
+  {
+   "name": "random 19",
+   "bits": 152891050,
+   "firstTime": 1700000000,
+   "lastTime": 1706102459,
+   "expected": {
+    "ok": 158579368
+   }
+  },
+  {
+   "name": "random 20",
+   "bits": 139513946,
+   "firstTime": 1700000000,
+   "lastTime": 1706944106,
+   "expected": {
+    "ok": 151077697
+   }
+  },
+  {
+   "name": "random 21",
+   "bits": 220101660,
+   "firstTime": 1700000000,
+   "lastTime": 1705576234,
+   "expected": {
+    "ok": 226095216
+   }
+  },
+  {
+   "name": "random 22",
+   "bits": 168275245,
+   "firstTime": 1700000000,
+   "lastTime": 1700649724,
+   "expected": {
+    "ok": 168042386
+   }
+  },
+  {
+   "name": "random 23",
+   "bits": 303634453,
+   "firstTime": 1700000000,
+   "lastTime": 1703379889,
+   "expected": {
+    "ok": 306585165
+   }
+  },
+  {
+   "name": "random 24",
+   "bits": 289969760,
+   "firstTime": 1700000000,
+   "lastTime": 1701108894,
+   "expected": {
+    "ok": 289573705
+   }
+  },
+  {
+   "name": "random 25",
+   "bits": 456179102,
+   "firstTime": 1700000000,
+   "lastTime": 1706573209,
+   "expected": {
+    "ok": 469811958
+   }
+  },
+  {
+   "name": "random 26",
+   "bits": 258003250,
+   "firstTime": 1700000000,
+   "lastTime": 1703516608,
+   "expected": {
+    "ok": 268507512
+   }
+  },
+  {
+   "name": "random 27",
+   "bits": 541332849,
+   "firstTime": 1700000000,
+   "lastTime": 1700157703,
+   "expected": {
+    "ok": 486604799
+   }
+  },
+  {
+   "name": "random 28",
+   "bits": 471611113,
+   "firstTime": 1700000000,
+   "lastTime": 1705044064,
+   "expected": {
+    "ok": 477158308
+   }
+  },
+  {
+   "name": "random 29",
+   "bits": 206755972,
+   "firstTime": 1700000000,
+   "lastTime": 1705128396,
+   "expected": {
+    "ok": 218188642
+   }
+  },
+  {
+   "name": "random 30",
+   "bits": 425370784,
+   "firstTime": 1700000000,
+   "lastTime": 1705858284,
+   "expected": {
+    "ok": 436300434
+   }
+  },
+  {
+   "name": "random 31",
+   "bits": 508730906,
+   "firstTime": 1700000000,
+   "lastTime": 1702530557,
+   "expected": {
+    "ok": 486604799
+   }
+  },
+  {
+   "name": "random 32",
+   "bits": 522808472,
+   "firstTime": 1700000000,
+   "lastTime": 1705245043,
+   "expected": {
+    "ok": 486604799
+   }
+  },
+  {
+   "name": "random 33",
+   "bits": 192067926,
+   "firstTime": 1700000000,
+   "lastTime": 1702815831,
+   "expected": {
+    "ok": 201394960
+   }
+  },
+  {
+   "name": "random 34",
+   "bits": 390380809,
+   "firstTime": 1700000000,
+   "lastTime": 1705926612,
+   "expected": {
+    "ok": 402723572
+   }
+  },
+  {
+   "name": "random 35",
+   "bits": 187345481,
+   "firstTime": 1700000000,
+   "lastTime": 1701900581,
+   "expected": {
+    "ok": 188942749
+   }
+  },
+  {
+   "name": "random 36",
+   "bits": 321212526,
+   "firstTime": 1700000000,
+   "lastTime": 1705695417,
+   "expected": {
+    "ok": 335582529
+   }
+  },
+  {
+   "name": "random 37",
+   "bits": 494044800,
+   "firstTime": 1700000000,
+   "lastTime": 1706589931,
+   "expected": {
+    "ok": 486604799
+   }
+  },
+  {
+   "name": "random 38",
+   "bits": 92019549,
+   "firstTime": 1700000000,
+   "lastTime": 1704579853,
+   "expected": {
+    "ok": 100783590
+   }
+  },
+  {
+   "name": "random 39",
+   "bits": 476683543,
+   "firstTime": 1700000000,
+   "lastTime": 1702867136,
+   "expected": {
+    "ok": 486603350
+   }
+  },
+  {
+   "name": "random 40",
+   "bits": 491785166,
+   "firstTime": 1700000000,
+   "lastTime": 1702396668,
+   "expected": {
+    "ok": 486604799
+   }
+  },
+  {
+   "name": "random 41",
+   "bits": 359496266,
+   "firstTime": 1700000000,
+   "lastTime": 1703203606,
+   "expected": {
+    "ok": 369172979
+   }
+  },
+  {
+   "name": "random 42",
+   "bits": 103894512,
+   "firstTime": 1700000000,
+   "lastTime": 1701227289,
+   "expected": {
+    "ok": 103941764
+   }
+  },
+  {
+   "name": "random 43",
+   "bits": 259149440,
+   "firstTime": 1700000000,
+   "lastTime": 1701808829,
+   "expected": {
+    "ok": 268479214
+   }
+  },
+  {
+   "name": "random 44",
+   "bits": 171567737,
+   "firstTime": 1700000000,
+   "lastTime": 1703591027,
+   "expected": {
+    "ok": 184593392
+   }
+  },
+  {
+   "name": "random 45",
+   "bits": 289774815,
+   "firstTime": 1700000000,
+   "lastTime": 1702991736,
+   "expected": {
+    "ok": 302033964
+   }
+  },
+  {
+   "name": "random 46",
+   "bits": 104133236,
+   "firstTime": 1700000000,
+   "lastTime": 1703771657,
+   "expected": {
+    "ok": 117482776
+   }
+  },
+  {
+   "name": "random 47",
+   "bits": 125629788,
+   "firstTime": 1700000000,
+   "lastTime": 1702455196,
+   "expected": {
+    "ok": 134282658
+   }
+  },
+  {
+   "name": "random 48",
+   "bits": 408669329,
+   "firstTime": 1700000000,
+   "lastTime": 1702802839,
+   "expected": {
+    "ok": 419484854
+   }
+  },
+  {
+   "name": "random 49",
+   "bits": 220487241,
+   "firstTime": 1700000000,
+   "lastTime": 1706167001,
+   "expected": {
+    "ok": 234918265
+   }
+  },
+  {
+   "name": "random 50",
+   "bits": 343709689,
+   "firstTime": 1700000000,
+   "lastTime": 1705941996,
+   "expected": {
+    "ok": 352449119
+   }
+  },
+  {
+   "name": "random 51",
+   "bits": 235073894,
+   "firstTime": 1700000000,
+   "lastTime": 1700521444,
+   "expected": {
+    "ok": 234964167
+   }
+  },
+  {
+   "name": "random 52",
+   "bits": 237303961,
+   "firstTime": 1700000000,
+   "lastTime": 1705964642,
+   "expected": {
+    "ok": 251696098
+   }
+  },
+  {
+   "name": "random 53",
+   "bits": 494407794,
+   "firstTime": 1700000000,
+   "lastTime": 1704234288,
+   "expected": {
+    "ok": 486604799
+   }
+  },
+  {
+   "name": "random 54",
+   "bits": 393347315,
+   "firstTime": 1700000000,
+   "lastTime": 1706974304,
+   "expected": {
+    "ok": 402769923
+   }
+  },
+  {
+   "name": "random 55",
+   "bits": 88110392,
+   "firstTime": 1700000000,
+   "lastTime": 1705559655,
+   "expected": {
+    "ok": 100729300
+   }
+  },
+  {
+   "name": "random 56",
+   "bits": 251678066,
+   "firstTime": 1700000000,
+   "lastTime": 1701609353,
+   "expected": {
+    "ok": 241633835
+   }
+  },
+  {
+   "name": "random 57",
+   "bits": 492323108,
+   "firstTime": 1700000000,
+   "lastTime": 1703936246,
+   "expected": {
+    "ok": 486604799
+   }
+  },
+  {
+   "name": "random 58",
+   "bits": 58639668,
+   "firstTime": 1700000000,
+   "lastTime": 1701631010,
+   "expected": {
+    "ok": 67152623
+   }
+  },
+  {
+   "name": "random 59",
+   "bits": 224792652,
+   "firstTime": 1700000000,
+   "lastTime": 1706698256,
+   "expected": {
+    "ok": 234985537
+   }
+  },
+  {
+   "name": "random 60",
+   "bits": 405984350,
+   "firstTime": 1700000000,
+   "lastTime": 1700796374,
+   "expected": {
+    "ok": 404846350
+   }
+  },
+  {
+   "name": "random 61",
+   "bits": 404419592,
+   "firstTime": 1700000000,
+   "lastTime": 1701267416,
+   "expected": {
+    "ok": 404504022
+   }
+  },
+  {
+   "name": "random 62",
+   "bits": 405165037,
+   "firstTime": 1700000000,
+   "lastTime": 1704630258,
+   "expected": {
+    "ok": 419467959
+   }
+  },
+  {
+   "name": "random 63",
+   "bits": 74717436,
+   "firstTime": 1700000000,
+   "lastTime": 1704855151,
+   "expected": {
+    "ok": 84004963
+   }
+  },
+  {
+   "name": "random 64",
+   "bits": 206942976,
+   "firstTime": 1700000000,
+   "lastTime": 1703093806,
+   "expected": {
+    "ok": 218159921
+   }
+  },
+  {
+   "name": "random 65",
+   "bits": 172276906,
+   "firstTime": 1700000000,
+   "lastTime": 1705462314,
+   "expected": {
+    "ok": 184619762
+   }
+  },
+  {
+   "name": "random 66",
+   "bits": 375412144,
+   "firstTime": 1700000000,
+   "lastTime": 1704816802,
+   "expected": {
+    "ok": 385974174
+   }
+  },
+  {
+   "name": "random 67",
+   "bits": 505017986,
+   "firstTime": 1700000000,
+   "lastTime": 1707209908,
+   "expected": {
+    "ok": 486604799
+   }
+  },
+  {
+   "name": "random 68",
+   "bits": 403537242,
+   "firstTime": 1700000000,
+   "lastTime": 1704398174,
+   "expected": {
+    "ok": 405867668
+   }
+  },
+  {
+   "name": "random 69",
+   "bits": 123582578,
+   "firstTime": 1700000000,
+   "lastTime": 1700578080,
+   "expected": {
+    "ok": 120375867
+   }
+  },
+  {
+   "name": "random 70",
+   "bits": 71659120,
+   "firstTime": 1700000000,
+   "lastTime": 1703865517,
+   "expected": {
+    "ok": 83942881
+   }
+  },
+  {
+   "name": "random 71",
+   "bits": 391334647,
+   "firstTime": 1700000000,
+   "lastTime": 1701285222,
+   "expected": {
+    "ok": 391675913
+   }
+  },
+  {
+   "name": "random 72",
+   "bits": 184608716,
+   "firstTime": 1700000000,
+   "lastTime": 1700891471,
+   "expected": {
+    "ok": 184593109
+   }
+  },
+  {
+   "name": "random 73",
+   "bits": 118843563,
+   "firstTime": 1700000000,
+   "lastTime": 1706266693,
+   "expected": {
+    "ok": 123052716
+   }
+  },
+  {
+   "name": "random 74",
+   "bits": 83910526,
+   "firstTime": 1700000000,
+   "lastTime": 1702190114,
+   "expected": {
+    "ok": 83930342
+   }
+  },
+  {
+   "name": "random 75",
+   "bits": 459078999,
+   "firstTime": 1700000000,
+   "lastTime": 1704007026,
+   "expected": {
+    "ok": 469840907
+   }
+  },
+  {
+   "name": "random 76",
+   "bits": 175167770,
+   "firstTime": 1700000000,
+   "lastTime": 1706939306,
+   "expected": {
+    "ok": 184664932
+   }
+  },
+  {
+   "name": "random 77",
+   "bits": 427781247,
+   "firstTime": 1700000000,
+   "lastTime": 1705606942,
+   "expected": {
+    "ok": 436338097
+   }
+  },
+  {
+   "name": "random 78",
+   "bits": 290818444,
+   "firstTime": 1700000000,
+   "lastTime": 1703385683,
+   "expected": {
+    "ok": 302051179
+   }
+  },
+  {
+   "name": "random 79",
+   "bits": 58467194,
+   "firstTime": 1700000000,
+   "lastTime": 1703509477,
+   "expected": {
+    "ok": 67201067
+   }
+  },
+  {
+   "name": "random 80",
+   "bits": 305388645,
+   "firstTime": 1700000000,
+   "lastTime": 1701313172,
+   "expected": {
+    "ok": 305679663
+   }
+  },
+  {
+   "name": "random 81",
+   "bits": 185801464,
+   "firstTime": 1700000000,
+   "lastTime": 1706826365,
+   "expected": {
+    "ok": 189557728
+   }
+  },
+  {
+   "name": "random 82",
+   "bits": 326291117,
+   "firstTime": 1700000000,
+   "lastTime": 1705112831,
+   "expected": {
+    "ok": 335661882
+   }
+  },
+  {
+   "name": "random 83",
+   "bits": 393268251,
+   "firstTime": 1700000000,
+   "lastTime": 1701546997,
+   "expected": {
+    "ok": 402690114
+   }
+  },
+  {
+   "name": "random 84",
+   "bits": 406254384,
+   "firstTime": 1700000000,
+   "lastTime": 1704609422,
+   "expected": {
+    "ok": 419484005
+   }
+  },
+  {
+   "name": "random 85",
+   "bits": 326630656,
+   "firstTime": 1700000000,
+   "lastTime": 1703154545,
+   "expected": {
+    "ok": 335624427
+   }
+  },
+  {
+   "name": "random 86",
+   "bits": 354014290,
+   "firstTime": 1700000000,
+   "lastTime": 1700577644,
+   "expected": {
+    "ok": 353129910
+   }
+  },
+  {
+   "name": "random 87",
+   "bits": 55486676,
+   "firstTime": 1700000000,
+   "lastTime": 1706938775,
+   "expected": {
+    "ok": 67189411
+   }
+  },
+  {
+   "name": "random 88",
+   "bits": 352700252,
+   "firstTime": 1700000000,
+   "lastTime": 1702663958,
+   "expected": {
+    "ok": 353155599
+   }
+  },
+  {
+   "name": "random 89",
+   "bits": 319367009,
+   "firstTime": 1700000000,
+   "lastTime": 1706917975,
+   "expected": {
+    "ok": 321166724
+   }
+  },
+  {
+   "name": "random 90",
+   "bits": 538355022,
+   "firstTime": 1700000000,
+   "lastTime": 1705689658,
+   "expected": {
+    "ok": 486604799
+   }
+  },
+  {
+   "name": "random 91",
+   "bits": 139827231,
+   "firstTime": 1700000000,
+   "lastTime": 1702839142,
+   "expected": {
+    "ok": 151046375
+   }
+  },
+  {
+   "name": "random 92",
+   "bits": 373046572,
+   "firstTime": 1700000000,
+   "lastTime": 1702297637,
+   "expected": {
+    "ok": 376597641
+   }
+  },
+  {
+   "name": "random 93",
+   "bits": 190411973,
+   "firstTime": 1700000000,
+   "lastTime": 1705580283,
+   "expected": {
+    "ok": 201418195
+   }
+  },
+  {
+   "name": "random 94",
+   "bits": 273986513,
+   "firstTime": 1700000000,
+   "lastTime": 1701786441,
+   "expected": {
+    "ok": 276633732
+   }
+  },
+  {
+   "name": "random 95",
+   "bits": 541331286,
+   "firstTime": 1700000000,
+   "lastTime": 1703161596,
+   "expected": {
+    "ok": 486604799
+   }
+  },
+  {
+   "name": "random 96",
+   "bits": 153314624,
+   "firstTime": 1700000000,
+   "lastTime": 1703138579,
+   "expected": {
+    "ok": 157013874
+   }
+  },
+  {
+   "name": "random 97",
+   "bits": 442671029,
+   "firstTime": 1700000000,
+   "lastTime": 1704951613,
+   "expected": {
+    "ok": 453085822
+   }
+  },
+  {
+   "name": "random 98",
+   "bits": 491010928,
+   "firstTime": 1700000000,
+   "lastTime": 1701333393,
+   "expected": {
+    "ok": 486604799
+   }
+  },
+  {
+   "name": "random 99",
+   "bits": 528311475,
+   "firstTime": 1700000000,
+   "lastTime": 1706850696,
+   "expected": {
+    "ok": 486604799
+   }
+  }
+ ]
+}

@@ -1,0 +1,852 @@
+{
+ "about": "Confirming the members of a withdrawal's content (format description, section 23).",
+ "function": "validateWithdrawalContent",
+ "cases": [
+  {
+   "name": "a withdrawal",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "a type of another kind, which this check does not read",
+   "content": {
+    "type": "provared.vouching.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "an unknown member",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": "2026-10-05T09:00:00Z",
+    "reason": "left the company"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "withdrawal: holds a member that is not known."
+    }
+   }
+  },
+  {
+   "name": "a slip, which a withdrawal does not hold",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": "2026-10-05T09:00:00Z",
+    "slip": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "withdrawal: holds a member that is not known."
+    }
+   }
+  },
+  {
+   "name": "a member named __proto__",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": "2026-10-05T09:00:00Z",
+    "__proto__": 1
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "withdrawal: holds a member that is not known."
+    }
+   }
+  },
+  {
+   "name": "a list",
+   "content": [
+    {}
+   ],
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "withdrawal: must be an object."
+    }
+   }
+  },
+  {
+   "name": "null",
+   "content": null,
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "withdrawal: must be an object."
+    }
+   }
+  },
+  {
+   "name": "text",
+   "content": "content",
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "withdrawal: must be an object."
+    }
+   }
+  },
+  {
+   "name": "a number",
+   "content": 1,
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "withdrawal: must be an object."
+    }
+   }
+  },
+  {
+   "name": "true",
+   "content": true,
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "withdrawal: must be an object."
+    }
+   }
+  },
+  {
+   "name": "an empty object",
+   "content": {},
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "withdrawal: \"id\" is missing."
+    }
+   }
+  },
+  {
+   "name": "no id",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "withdrawal: \"id\" is missing."
+    }
+   }
+  },
+  {
+   "name": "no type",
+   "content": {
+    "id": "AgICAgICAgICAgICAgICAg",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "withdrawal: \"type\" is missing."
+    }
+   }
+  },
+  {
+   "name": "no vouching",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "withdrawal: \"vouching\" is missing."
+    }
+   }
+  },
+  {
+   "name": "no when",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "withdrawal: \"when\" is missing."
+    }
+   }
+  },
+  {
+   "name": "id: 16 bytes",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "id: 15 bytes",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AgICAgICAgICAgICAgIC",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "id: must be a unique number of 16 bytes in base64url."
+    }
+   }
+  },
+  {
+   "name": "id: 17 bytes",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AgICAgICAgICAgICAgICAgI",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "id: must be a unique number of 16 bytes in base64url."
+    }
+   }
+  },
+  {
+   "name": "id: 32 bytes",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "id: must be a unique number of 16 bytes in base64url."
+    }
+   }
+  },
+  {
+   "name": "id: padding",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AgICAgICAgICAgICAgICAg==",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "id: must be a unique number of 16 bytes in base64url."
+    }
+   }
+  },
+  {
+   "name": "id: a plus sign",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AgICAgICAgICAgICAgIC+g",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "id: must be a unique number of 16 bytes in base64url."
+    }
+   }
+  },
+  {
+   "name": "id: stray bits",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AgICAgICAgICAgICAgICAh",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "id: must be a unique number of 16 bytes in base64url."
+    }
+   }
+  },
+  {
+   "name": "id: an impossible length",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "A",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "id: must be a unique number of 16 bytes in base64url."
+    }
+   }
+  },
+  {
+   "name": "id: empty text",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "id: must be a unique number of 16 bytes in base64url."
+    }
+   }
+  },
+  {
+   "name": "id: a number",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": 1,
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "id: must be a unique number of 16 bytes in base64url."
+    }
+   }
+  },
+  {
+   "name": "id: null",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": null,
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "id: must be a unique number of 16 bytes in base64url."
+    }
+   }
+  },
+  {
+   "name": "id: a list",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": [
+     "AgICAgICAgICAgICAgICAg"
+    ],
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "id: must be a unique number of 16 bytes in base64url."
+    }
+   }
+  },
+  {
+   "name": "vouching: 32 bytes",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "vouching: 31 bytes",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "vouching: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "vouching: 33 bytes",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "vouching: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "vouching: 16 bytes",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "vouching": "AgICAgICAgICAgICAgICAg",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "vouching: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "vouching: padding",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "vouching: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "vouching: a slash",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBA/A",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "vouching: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "vouching: stray bits",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQF",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "vouching: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "vouching: empty text",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "vouching": "",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "vouching: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "vouching: a number",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "vouching": 1,
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "vouching: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "vouching: null",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "vouching": null,
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "vouching: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "vouching: true",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "vouching": true,
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "vouching: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "when: a time",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "when: a leap day",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": "2024-02-29T00:00:00Z"
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "when: the year 0",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": "0000-01-01T00:00:00Z"
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "when: the last second of the year 9999",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": "9999-12-31T23:59:59Z"
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "when: before 1970",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": "1969-12-31T23:59:59Z"
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "when: a fraction of a second",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": "2026-10-05T09:00:00.000Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "when: an offset",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": "2026-10-05T09:00:00+01:00"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "when: 30 February",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": "2026-02-30T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "when: 29 February in a year that is not a leap year",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": "2026-02-29T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "when: a leap second",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": "2026-12-31T23:59:60Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "when: hour 24",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": "2026-10-05T24:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "when: month 13",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": "2026-13-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "when: small letters",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": "2026-10-05t09:00:00z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "when: a space in place of T",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": "2026-10-05 09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "when: no seconds",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": "2026-10-05T09:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "when: a line break after it",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": "2026-10-05T09:00:00Z\n"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "when: digits of another script",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": "٢٠٢٦-10-05T09:00:00Z"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "when: milliseconds",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": 1791190800000
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "when: null",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": null
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "when: empty text",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": ""
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "a faulty id, vouching record and time: the id is reported",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "x",
+    "vouching": "x",
+    "when": "x"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "id: must be a unique number of 16 bytes in base64url."
+    }
+   }
+  },
+  {
+   "name": "a faulty vouching record and time: the vouching record is reported",
+   "content": {
+    "type": "provared.withdrawal.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "vouching": "x",
+    "when": "x"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "vouching: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  }
+ ]
+}

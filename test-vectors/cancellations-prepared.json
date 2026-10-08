@@ -1,0 +1,127 @@
+{
+ "about": "Building a cancellation's content and the challenge a passkey must sign (format description, section 22).",
+ "function": "prepareCancellation",
+ "cases": [
+  {
+   "name": "a cancellation",
+   "fields": {
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": 1791190800000
+   },
+   "expected": {
+    "ok": {
+     "contentBytes": "7b226964223a2241674943416749434167494341674943416749434167222c22736c6970223a2241514542415145424151454241514542415145424151454241514542415145424151454241514542415145222c2274797065223a2270726f76617265642e63616e63656c6c6174696f6e2e7630222c227768656e223a22323032362d31302d30355430393a30303a30305a227d",
+     "payloadB64": "eyJpZCI6IkFnSUNBZ0lDQWdJQ0FnSUNBZ0lDQWciLCJzbGlwIjoiQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRSIsInR5cGUiOiJwcm92YXJlZC5jYW5jZWxsYXRpb24udjAiLCJ3aGVuIjoiMjAyNi0xMC0wNVQwOTowMDowMFoifQ",
+     "protectedB64": "eyJ0eXAiOiJ2bmQucHJvdmFyZWQuY2FuY2VsbGF0aW9uLnYwK2pzb24iLCJhbGciOiJwcm92YS5yZWQvd2ViYXV0aG4vdjAifQ",
+     "challenge": "8fbbb81cc23fd361081029c82f43239fac268e4761562204915a3baa8d8280b6",
+     "fingerprint": "fGNYSjPDHGrzZsvQjPEy_A9GG6azm14MK1pRKgenOPw"
+    }
+   }
+  },
+  {
+   "name": "an unknown field is left out",
+   "fields": {
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": 1791190800000,
+    "pass": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+   },
+   "expected": {
+    "ok": {
+     "contentBytes": "7b226964223a2241674943416749434167494341674943416749434167222c22736c6970223a2241514542415145424151454241514542415145424151454241514542415145424151454241514542415145222c2274797065223a2270726f76617265642e63616e63656c6c6174696f6e2e7630222c227768656e223a22323032362d31302d30355430393a30303a30305a227d",
+     "payloadB64": "eyJpZCI6IkFnSUNBZ0lDQWdJQ0FnSUNBZ0lDQWciLCJzbGlwIjoiQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRSIsInR5cGUiOiJwcm92YXJlZC5jYW5jZWxsYXRpb24udjAiLCJ3aGVuIjoiMjAyNi0xMC0wNVQwOTowMDowMFoifQ",
+     "protectedB64": "eyJ0eXAiOiJ2bmQucHJvdmFyZWQuY2FuY2VsbGF0aW9uLnYwK2pzb24iLCJhbGciOiJwcm92YS5yZWQvd2ViYXV0aG4vdjAifQ",
+     "challenge": "8fbbb81cc23fd361081029c82f43239fac268e4761562204915a3baa8d8280b6",
+     "fingerprint": "fGNYSjPDHGrzZsvQjPEy_A9GG6azm14MK1pRKgenOPw"
+    }
+   }
+  },
+  {
+   "name": "no slip",
+   "fields": {
+    "id": "AgICAgICAgICAgICAgICAg",
+    "when": 1791190800000
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "slip: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "a slip of 16 bytes",
+   "fields": {
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AgICAgICAgICAgICAgICAg",
+    "when": 1791190800000
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "slip: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "an id of 32 bytes",
+   "fields": {
+    "id": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": 1791190800000
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "id: must be a unique number of 16 bytes in base64url."
+    }
+   }
+  },
+  {
+   "name": "a time of 0",
+   "fields": {
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": 0
+   },
+   "expected": {
+    "ok": {
+     "contentBytes": "7b226964223a2241674943416749434167494341674943416749434167222c22736c6970223a2241514542415145424151454241514542415145424151454241514542415145424151454241514542415145222c2274797065223a2270726f76617265642e63616e63656c6c6174696f6e2e7630222c227768656e223a22313937302d30312d30315430303a30303a30305a227d",
+     "payloadB64": "eyJpZCI6IkFnSUNBZ0lDQWdJQ0FnSUNBZ0lDQWciLCJzbGlwIjoiQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRSIsInR5cGUiOiJwcm92YXJlZC5jYW5jZWxsYXRpb24udjAiLCJ3aGVuIjoiMTk3MC0wMS0wMVQwMDowMDowMFoifQ",
+     "protectedB64": "eyJ0eXAiOiJ2bmQucHJvdmFyZWQuY2FuY2VsbGF0aW9uLnYwK2pzb24iLCJhbGciOiJwcm92YS5yZWQvd2ViYXV0aG4vdjAifQ",
+     "challenge": "1b1038c51753a463bfa060ae1c5fe2312fd20e8ec53813652acb934e7885bf00",
+     "fingerprint": "JU2klBe6znBIwLrDCklkMa4imTOPtwcvZu8DXD0nJ8c"
+    }
+   }
+  },
+  {
+   "name": "the year 10000",
+   "fields": {
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": 253402300800000
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "a time beyond what a date can hold",
+   "fields": {
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": -8640000000000001
+   },
+   "expected": {
+    "refused": {
+     "code": "check-failed",
+     "message": "The checker met something it did not expect here. This is treated as not intact."
+    }
+   }
+  }
+ ]
+}

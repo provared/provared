@@ -1,0 +1,544 @@
+{
+ "about": "Reading a time in the two forms DER allows: milliseconds since 1970.",
+ "function": "timeOf",
+ "cases": [
+  {
+   "name": "GeneralizedTime \"20261005120000Z\"",
+   "bytes": "180f32303236313030353132303030305a",
+   "expected": {
+    "ok": 1791201600000
+   }
+  },
+  {
+   "name": "GeneralizedTime \"20261005120000.5Z\"",
+   "bytes": "181132303236313030353132303030302e355a",
+   "expected": {
+    "ok": 1791201600500
+   }
+  },
+  {
+   "name": "GeneralizedTime \"20261005120000.05Z\"",
+   "bytes": "181232303236313030353132303030302e30355a",
+   "expected": {
+    "ok": 1791201600050
+   }
+  },
+  {
+   "name": "GeneralizedTime \"20261005120000.999Z\"",
+   "bytes": "181332303236313030353132303030302e3939395a",
+   "expected": {
+    "ok": 1791201600999
+   }
+  },
+  {
+   "name": "GeneralizedTime \"20261005120000.123456789Z\"",
+   "bytes": "181932303236313030353132303030302e3132333435363738395a",
+   "expected": {
+    "ok": 1791201600123
+   }
+  },
+  {
+   "name": "GeneralizedTime \"20261005120000.1234567891Z\"",
+   "bytes": "181a32303236313030353132303030302e313233343536373839315a",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a time is not written in the form DER allows."
+    }
+   }
+  },
+  {
+   "name": "GeneralizedTime \"20261005120000.50Z\"",
+   "bytes": "181232303236313030353132303030302e35305a",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a time is not written in the form DER allows."
+    }
+   }
+  },
+  {
+   "name": "GeneralizedTime \"20261005120000.Z\"",
+   "bytes": "181032303236313030353132303030302e5a",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a time is not written in the form DER allows."
+    }
+   }
+  },
+  {
+   "name": "GeneralizedTime \"20261005120000.0Z\"",
+   "bytes": "181132303236313030353132303030302e305a",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a time is not written in the form DER allows."
+    }
+   }
+  },
+  {
+   "name": "GeneralizedTime \"20261005120000.29Z\"",
+   "bytes": "181232303236313030353132303030302e32395a",
+   "expected": {
+    "ok": 1791201600290
+   }
+  },
+  {
+   "name": "GeneralizedTime \"20261005120000.57Z\"",
+   "bytes": "181232303236313030353132303030302e35375a",
+   "expected": {
+    "ok": 1791201600570
+   }
+  },
+  {
+   "name": "GeneralizedTime \"20261005120000.001Z\"",
+   "bytes": "181332303236313030353132303030302e3030315a",
+   "expected": {
+    "ok": 1791201600001
+   }
+  },
+  {
+   "name": "GeneralizedTime \"20261005120000\"",
+   "bytes": "180e3230323631303035313230303030",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a time is not written in the form DER allows."
+    }
+   }
+  },
+  {
+   "name": "GeneralizedTime \"20261005120000+0100\"",
+   "bytes": "181332303236313030353132303030302b30313030",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a time is not written in the form DER allows."
+    }
+   }
+  },
+  {
+   "name": "GeneralizedTime \"20261005120000z\"",
+   "bytes": "180f32303236313030353132303030307a",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a time is not written in the form DER allows."
+    }
+   }
+  },
+  {
+   "name": "GeneralizedTime \"2026100512000Z\"",
+   "bytes": "180e323032363130303531323030305a",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a time is not written in the form DER allows."
+    }
+   }
+  },
+  {
+   "name": "GeneralizedTime \"202610051200000Z\"",
+   "bytes": "18103230323631303035313230303030305a",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a time is not written in the form DER allows."
+    }
+   }
+  },
+  {
+   "name": "GeneralizedTime \"20261305120000Z\"",
+   "bytes": "180f32303236313330353132303030305a",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a time names a moment that does not exist."
+    }
+   }
+  },
+  {
+   "name": "GeneralizedTime \"20260005120000Z\"",
+   "bytes": "180f32303236303030353132303030305a",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a time names a moment that does not exist."
+    }
+   }
+  },
+  {
+   "name": "GeneralizedTime \"20260230120000Z\"",
+   "bytes": "180f32303236303233303132303030305a",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a time names a moment that does not exist."
+    }
+   }
+  },
+  {
+   "name": "GeneralizedTime \"20240229120000Z\"",
+   "bytes": "180f32303234303232393132303030305a",
+   "expected": {
+    "ok": 1709208000000
+   }
+  },
+  {
+   "name": "GeneralizedTime \"20230229120000Z\"",
+   "bytes": "180f32303233303232393132303030305a",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a time names a moment that does not exist."
+    }
+   }
+  },
+  {
+   "name": "GeneralizedTime \"21000229120000Z\"",
+   "bytes": "180f32313030303232393132303030305a",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a time names a moment that does not exist."
+    }
+   }
+  },
+  {
+   "name": "GeneralizedTime \"20000229120000Z\"",
+   "bytes": "180f32303030303232393132303030305a",
+   "expected": {
+    "ok": 951825600000
+   }
+  },
+  {
+   "name": "GeneralizedTime \"20260431120000Z\"",
+   "bytes": "180f32303236303433313132303030305a",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a time names a moment that does not exist."
+    }
+   }
+  },
+  {
+   "name": "GeneralizedTime \"20261000120000Z\"",
+   "bytes": "180f32303236313030303132303030305a",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a time names a moment that does not exist."
+    }
+   }
+  },
+  {
+   "name": "GeneralizedTime \"20261005240000Z\"",
+   "bytes": "180f32303236313030353234303030305a",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a time names a moment that does not exist."
+    }
+   }
+  },
+  {
+   "name": "GeneralizedTime \"20261005236000Z\"",
+   "bytes": "180f32303236313030353233363030305a",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a time names a moment that does not exist."
+    }
+   }
+  },
+  {
+   "name": "GeneralizedTime \"20261005235960Z\"",
+   "bytes": "180f32303236313030353233353936305a",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a time names a moment that does not exist."
+    }
+   }
+  },
+  {
+   "name": "GeneralizedTime \"20261005235959Z\"",
+   "bytes": "180f32303236313030353233353935395a",
+   "expected": {
+    "ok": 1791244799000
+   }
+  },
+  {
+   "name": "GeneralizedTime \"00000101000000Z\"",
+   "bytes": "180f30303030303130313030303030305a",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a time names a moment that does not exist."
+    }
+   }
+  },
+  {
+   "name": "GeneralizedTime \"00500101000000Z\"",
+   "bytes": "180f30303530303130313030303030305a",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a time names a moment that does not exist."
+    }
+   }
+  },
+  {
+   "name": "GeneralizedTime \"00990101000000Z\"",
+   "bytes": "180f30303939303130313030303030305a",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a time names a moment that does not exist."
+    }
+   }
+  },
+  {
+   "name": "GeneralizedTime \"00991231235959Z\"",
+   "bytes": "180f30303939313233313233353935395a",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a time names a moment that does not exist."
+    }
+   }
+  },
+  {
+   "name": "GeneralizedTime \"01000101000000Z\"",
+   "bytes": "180f30313030303130313030303030305a",
+   "expected": {
+    "ok": -59011459200000
+   }
+  },
+  {
+   "name": "GeneralizedTime \"09991231235959Z\"",
+   "bytes": "180f30393939313233313233353935395a",
+   "expected": {
+    "ok": -30610224001000
+   }
+  },
+  {
+   "name": "GeneralizedTime \"19700101000000Z\"",
+   "bytes": "180f31393730303130313030303030305a",
+   "expected": {
+    "ok": 0
+   }
+  },
+  {
+   "name": "GeneralizedTime \"19691231235959Z\"",
+   "bytes": "180f31393639313233313233353935395a",
+   "expected": {
+    "ok": -1000
+   }
+  },
+  {
+   "name": "GeneralizedTime \"99991231235959Z\"",
+   "bytes": "180f39393939313233313233353935395a",
+   "expected": {
+    "ok": 253402300799000
+   }
+  },
+  {
+   "name": "GeneralizedTime \"99991231235959.999999999Z\"",
+   "bytes": "181939393939313233313233353935392e3939393939393939395a",
+   "expected": {
+    "ok": 253402300799999
+   }
+  },
+  {
+   "name": "GeneralizedTime \"1970010100000²Z\"",
+   "bytes": "180f31393730303130313030303030b25a",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a time is not written in the form DER allows."
+    }
+   }
+  },
+  {
+   "name": "GeneralizedTime \"٢٠٢٦1005120000Z\"",
+   "bytes": "180f62606266313030353132303030305a",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a time is not written in the form DER allows."
+    }
+   }
+  },
+  {
+   "name": "GeneralizedTime \"20261005120000Z\\n\"",
+   "bytes": "181032303236313030353132303030305a0a",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a time is not written in the form DER allows."
+    }
+   }
+  },
+  {
+   "name": "GeneralizedTime \" 20261005120000Z\"",
+   "bytes": "18102032303236313030353132303030305a",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a time is not written in the form DER allows."
+    }
+   }
+  },
+  {
+   "name": "GeneralizedTime \"\"",
+   "bytes": "1800",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a time is not written in the form DER allows."
+    }
+   }
+  },
+  {
+   "name": "UTCTime \"261005120000Z\"",
+   "bytes": "170d3236313030353132303030305a",
+   "expected": {
+    "ok": 1791201600000
+   }
+  },
+  {
+   "name": "UTCTime \"991231235959Z\"",
+   "bytes": "170d3939313233313233353935395a",
+   "expected": {
+    "ok": 946684799000
+   }
+  },
+  {
+   "name": "UTCTime \"500101000000Z\"",
+   "bytes": "170d3530303130313030303030305a",
+   "expected": {
+    "ok": -631152000000
+   }
+  },
+  {
+   "name": "UTCTime \"491231235959Z\"",
+   "bytes": "170d3439313233313233353935395a",
+   "expected": {
+    "ok": 2524607999000
+   }
+  },
+  {
+   "name": "UTCTime \"000101000000Z\"",
+   "bytes": "170d3030303130313030303030305a",
+   "expected": {
+    "ok": 946684800000
+   }
+  },
+  {
+   "name": "UTCTime \"2610051200Z\"",
+   "bytes": "170b323631303035313230305a",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a time is not written in the form DER allows."
+    }
+   }
+  },
+  {
+   "name": "UTCTime \"261005120000.5Z\"",
+   "bytes": "170f3236313030353132303030302e355a",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a time is not written in the form DER allows."
+    }
+   }
+  },
+  {
+   "name": "UTCTime \"261305120000Z\"",
+   "bytes": "170d3236313330353132303030305a",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a time names a moment that does not exist."
+    }
+   }
+  },
+  {
+   "name": "UTCTime \"260230120000Z\"",
+   "bytes": "170d3236303233303132303030305a",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a time names a moment that does not exist."
+    }
+   }
+  },
+  {
+   "name": "UTCTime \"240229000000Z\"",
+   "bytes": "170d3234303232393030303030305a",
+   "expected": {
+    "ok": 1709164800000
+   }
+  },
+  {
+   "name": "UTCTime \"000229000000Z\"",
+   "bytes": "170d3030303232393030303030305a",
+   "expected": {
+    "ok": 951782400000
+   }
+  },
+  {
+   "name": "UTCTime \"261005120000\"",
+   "bytes": "170c323631303035313230303030",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a time is not written in the form DER allows."
+    }
+   }
+  },
+  {
+   "name": "UTCTime \"261005120060Z\"",
+   "bytes": "170d3236313030353132303036305a",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a time names a moment that does not exist."
+    }
+   }
+  },
+  {
+   "name": "UTCTime \"20261005120000Z\"",
+   "bytes": "170f32303236313030353132303030305a",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a time is not written in the form DER allows."
+    }
+   }
+  },
+  {
+   "name": "an octet string",
+   "bytes": "040f32303236313030353132303030305a",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a time is not written in the form DER allows."
+    }
+   }
+  },
+  {
+   "name": "a sequence",
+   "bytes": "300f32303236313030353132303030305a",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a time is not written in the form DER allows."
+    }
+   }
+  }
+ ]
+}

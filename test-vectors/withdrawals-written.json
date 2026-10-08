@@ -1,0 +1,72 @@
+{
+ "about": "Writing and signing a withdrawal (format description, section 23).",
+ "function": "writeWithdrawal",
+ "cases": [
+  {
+   "name": "a withdrawal",
+   "seed": "0707070707070707070707070707070707070707070707070707070707070707",
+   "fields": {
+    "id": "AgICAgICAgICAgICAgICAg",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": 1791190800000
+   },
+   "expected": {
+    "ok": {
+     "fingerprint": "MKwj6BFSVi5tzjpaAbn2Vor5yrgJsTFYzmjWPPJPi9o",
+     "payload": "eyJpZCI6IkFnSUNBZ0lDQWdJQ0FnSUNBZ0lDQWciLCJ0eXBlIjoicHJvdmFyZWQud2l0aGRyYXdhbC52MCIsInZvdWNoaW5nIjoiQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRSIsIndoZW4iOiIyMDI2LTEwLTA1VDA5OjAwOjAwWiJ9",
+     "signatures": [
+      {
+       "protected": "eyJ0eXAiOiJ2bmQucHJvdmFyZWQud2l0aGRyYXdhbC52MCtqc29uIiwiYWxnIjoiRWQyNTUxOSJ9",
+       "signature": "gz2l_nKCUjrwxN1dADyVq9FsCKmBS0frkgr_7ouDoHXmqYDrc-i-yKIYGLbDRpxx-TvdpRDKbMQ-COlOfPWyCg"
+      },
+      {
+       "protected": "eyJ0eXAiOiJ2bmQucHJvdmFyZWQud2l0aGRyYXdhbC52MCtqc29uIiwiYWxnIjoiTUwtRFNBLTg3In0",
+       "check": "valid"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "a faulty vouching record",
+   "seed": "0707070707070707070707070707070707070707070707070707070707070707",
+   "fields": {
+    "id": "AgICAgICAgICAgICAgICAg",
+    "vouching": "x",
+    "when": 1791190800000
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "vouching: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "an unknown field is left out",
+   "seed": "0707070707070707070707070707070707070707070707070707070707070707",
+   "fields": {
+    "id": "AgICAgICAgICAgICAgICAg",
+    "vouching": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "when": 1791190800000,
+    "slip": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+   },
+   "expected": {
+    "ok": {
+     "fingerprint": "MKwj6BFSVi5tzjpaAbn2Vor5yrgJsTFYzmjWPPJPi9o",
+     "payload": "eyJpZCI6IkFnSUNBZ0lDQWdJQ0FnSUNBZ0lDQWciLCJ0eXBlIjoicHJvdmFyZWQud2l0aGRyYXdhbC52MCIsInZvdWNoaW5nIjoiQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRSIsIndoZW4iOiIyMDI2LTEwLTA1VDA5OjAwOjAwWiJ9",
+     "signatures": [
+      {
+       "protected": "eyJ0eXAiOiJ2bmQucHJvdmFyZWQud2l0aGRyYXdhbC52MCtqc29uIiwiYWxnIjoiRWQyNTUxOSJ9",
+       "signature": "gz2l_nKCUjrwxN1dADyVq9FsCKmBS0frkgr_7ouDoHXmqYDrc-i-yKIYGLbDRpxx-TvdpRDKbMQ-COlOfPWyCg"
+      },
+      {
+       "protected": "eyJ0eXAiOiJ2bmQucHJvdmFyZWQud2l0aGRyYXdhbC52MCtqc29uIiwiYWxnIjoiTUwtRFNBLTg3In0",
+       "check": "valid"
+      }
+     ]
+    }
+   }
+  }
+ ]
+}

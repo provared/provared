@@ -1,0 +1,452 @@
+{
+ "about": "What an approval and a stub must agree on, as text in the canonical form (format description, section 17).",
+ "function": "requestOf",
+ "cases": [
+  {
+   "name": "an approval with only its action",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "ok": "{\"action\":\"supplies.order\"}"
+   }
+  },
+  {
+   "name": "an approval with every member",
+   "content": {
+    "type": "provared.approval.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "amount": {
+     "unit": "GBP",
+     "value": 150
+    },
+    "with": "supplier",
+    "details": [
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     }
+    ]
+   },
+   "expected": {
+    "ok": "{\"action\":\"supplies.order\",\"amount\":{\"unit\":\"GBP\",\"value\":150},\"details\":[{\"name\":\"order.pdf\",\"sha256\":\"AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM\"}],\"with\":\"supplier\"}"
+   }
+  },
+  {
+   "name": "a stub with every member",
+   "content": {
+    "type": "provared.stub.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "seq": 1,
+    "previous": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "action": "supplies.order",
+    "amount": {
+     "unit": "GBP",
+     "value": 150
+    },
+    "with": "supplier",
+    "details": [
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     }
+    ],
+    "approval": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "terms": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "pass": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "when": "2026-10-05T09:00:00Z"
+   },
+   "expected": {
+    "ok": "{\"action\":\"supplies.order\",\"amount\":{\"unit\":\"GBP\",\"value\":150},\"details\":[{\"name\":\"order.pdf\",\"sha256\":\"AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM\"}],\"with\":\"supplier\"}"
+   }
+  },
+  {
+   "name": "the members in another order",
+   "content": {
+    "details": [
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     }
+    ],
+    "with": "supplier",
+    "amount": {
+     "value": 150,
+     "unit": "GBP"
+    },
+    "action": "supplies.order"
+   },
+   "expected": {
+    "ok": "{\"action\":\"supplies.order\",\"amount\":{\"unit\":\"GBP\",\"value\":150},\"details\":[{\"name\":\"order.pdf\",\"sha256\":\"AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM\"}],\"with\":\"supplier\"}"
+   }
+  },
+  {
+   "name": "an amount with members of every sort",
+   "content": {
+    "action": "x",
+    "amount": {
+     "b": [
+      1,
+      "x",
+      {
+       "d": []
+      }
+     ],
+     "a": {
+      "c": "d"
+     }
+    }
+   },
+   "expected": {
+    "ok": "{\"action\":\"x\",\"amount\":{\"a\":{\"c\":\"d\"},\"b\":[1,\"x\",{\"d\":[]}]}}"
+   }
+  },
+  {
+   "name": "names sorted by UTF-16, not by code point",
+   "content": {
+    "action": "x",
+    "amount": {
+     "😀": 1,
+     "￿": 2
+    }
+   },
+   "expected": {
+    "ok": "{\"action\":\"x\",\"amount\":{\"😀\":1,\"￿\":2}}"
+   }
+  },
+  {
+   "name": "names that are numbers",
+   "content": {
+    "action": "x",
+    "amount": {
+     "2": 2,
+     "10": 1,
+     "a": 3
+    }
+   },
+   "expected": {
+    "ok": "{\"action\":\"x\",\"amount\":{\"10\":1,\"2\":2,\"a\":3}}"
+   }
+  },
+  {
+   "name": "text that must be escaped",
+   "content": {
+    "action": "a\"b\\c\n\u0001\u001f é😀/"
+   },
+   "expected": {
+    "ok": "{\"action\":\"a\\\"b\\\\c\\n\\u0001\\u001f é😀/\"}"
+   }
+  },
+  {
+   "name": "a lone surrogate",
+   "content": {
+    "action": "a\ud800"
+   },
+   "expected": {
+    "refused": {
+     "code": "payload-not-canonical",
+     "message": "A string is not well-formed Unicode."
+    }
+   }
+  },
+  {
+   "name": "a lone surrogate in a document",
+   "content": {
+    "action": "x",
+    "details": [
+     {
+      "name": "\udc00"
+     }
+    ]
+   },
+   "expected": {
+    "refused": {
+     "code": "payload-not-canonical",
+     "message": "A string is not well-formed Unicode."
+    }
+   }
+  },
+  {
+   "name": "an action that is a number",
+   "content": {
+    "action": 7
+   },
+   "expected": {
+    "ok": "{\"action\":7}"
+   }
+  },
+  {
+   "name": "an action of 0",
+   "content": {
+    "action": 0
+   },
+   "expected": {
+    "ok": "{\"action\":0}"
+   }
+  },
+  {
+   "name": "the largest number",
+   "content": {
+    "action": 9007199254740991
+   },
+   "expected": {
+    "ok": "{\"action\":9007199254740991}"
+   }
+  },
+  {
+   "name": "one more than the largest number",
+   "content": {
+    "action": 9007199254740992
+   },
+   "expected": {
+    "refused": {
+     "code": "payload-not-canonical",
+     "message": "A number must be a whole number from 0 to 9,007,199,254,740,991."
+    }
+   }
+  },
+  {
+   "name": "a negative number",
+   "content": {
+    "action": -1
+   },
+   "expected": {
+    "refused": {
+     "code": "payload-not-canonical",
+     "message": "A number must be a whole number from 0 to 9,007,199,254,740,991."
+    }
+   }
+  },
+  {
+   "name": "a fraction",
+   "content": {
+    "action": 1.5
+   },
+   "expected": {
+    "refused": {
+     "code": "payload-not-canonical",
+     "message": "A number must be a whole number from 0 to 9,007,199,254,740,991."
+    }
+   }
+  },
+  {
+   "name": "an action that is true",
+   "content": {
+    "action": true
+   },
+   "expected": {
+    "refused": {
+     "code": "payload-not-canonical",
+     "message": "Only objects, lists, strings and whole numbers are allowed."
+    }
+   }
+  },
+  {
+   "name": "an action that is null",
+   "content": {
+    "action": null
+   },
+   "expected": {
+    "refused": {
+     "code": "payload-not-canonical",
+     "message": "Only objects, lists, strings and whole numbers are allowed."
+    }
+   }
+  },
+  {
+   "name": "an action that is a list",
+   "content": {
+    "action": [
+     "a",
+     1
+    ]
+   },
+   "expected": {
+    "ok": "{\"action\":[\"a\",1]}"
+   }
+  },
+  {
+   "name": "no action",
+   "content": {
+    "amount": {
+     "unit": "GBP",
+     "value": 1
+    }
+   },
+   "expected": {
+    "refused": {
+     "code": "payload-not-canonical",
+     "message": "Only objects, lists, strings and whole numbers are allowed."
+    }
+   }
+  },
+  {
+   "name": "an empty object",
+   "content": {},
+   "expected": {
+    "refused": {
+     "code": "payload-not-canonical",
+     "message": "Only objects, lists, strings and whole numbers are allowed."
+    }
+   }
+  },
+  {
+   "name": "a service that is null",
+   "content": {
+    "action": "x",
+    "with": null
+   },
+   "expected": {
+    "refused": {
+     "code": "payload-not-canonical",
+     "message": "Only objects, lists, strings and whole numbers are allowed."
+    }
+   }
+  },
+  {
+   "name": "documents that are false",
+   "content": {
+    "action": "x",
+    "details": false
+   },
+   "expected": {
+    "refused": {
+     "code": "payload-not-canonical",
+     "message": "Only objects, lists, strings and whole numbers are allowed."
+    }
+   }
+  },
+  {
+   "name": "documents nested 7 deep",
+   "content": {
+    "action": "x",
+    "details": [
+     [
+      [
+       [
+        [
+         [
+          [
+           1
+          ]
+         ]
+        ]
+       ]
+      ]
+     ]
+    ]
+   },
+   "expected": {
+    "ok": "{\"action\":\"x\",\"details\":[[[[[[[1]]]]]]]}"
+   }
+  },
+  {
+   "name": "documents nested 8 deep",
+   "content": {
+    "action": "x",
+    "details": [
+     [
+      [
+       [
+        [
+         [
+          [
+           [
+            1
+           ]
+          ]
+         ]
+        ]
+       ]
+      ]
+     ]
+    ]
+   },
+   "expected": {
+    "refused": {
+     "code": "payload-not-canonical",
+     "message": "The content nests too deeply."
+    }
+   }
+  },
+  {
+   "name": "a member named __proto__ beside the action",
+   "content": {
+    "action": "x",
+    "__proto__": 1
+   },
+   "expected": {
+    "ok": "{\"action\":\"x\"}"
+   }
+  },
+  {
+   "name": "an amount with a member named __proto__",
+   "content": {
+    "action": "x",
+    "amount": {
+     "unit": "GBP",
+     "__proto__": 1
+    }
+   },
+   "expected": {
+    "ok": "{\"action\":\"x\",\"amount\":{\"__proto__\":1,\"unit\":\"GBP\"}}"
+   }
+  },
+  {
+   "name": "a list",
+   "content": [
+    {
+     "type": "provared.approval.v0",
+     "id": "AgICAgICAgICAgICAgICAg",
+     "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+     "action": "supplies.order",
+     "when": "2026-10-05T09:00:00Z"
+    }
+   ],
+   "expected": {
+    "refused": {
+     "code": "payload-not-canonical",
+     "message": "Only objects, lists, strings and whole numbers are allowed."
+    }
+   }
+  },
+  {
+   "name": "text",
+   "content": "supplies.order",
+   "expected": {
+    "refused": {
+     "code": "payload-not-canonical",
+     "message": "Only objects, lists, strings and whole numbers are allowed."
+    }
+   }
+  },
+  {
+   "name": "a number",
+   "content": 5,
+   "expected": {
+    "refused": {
+     "code": "payload-not-canonical",
+     "message": "Only objects, lists, strings and whole numbers are allowed."
+    }
+   }
+  },
+  {
+   "name": "null",
+   "content": null,
+   "expected": {
+    "refused": {
+     "code": "check-failed",
+     "message": "The checker met something it did not expect here. This is treated as not intact."
+    }
+   }
+  }
+ ]
+}

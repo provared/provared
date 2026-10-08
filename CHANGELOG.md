@@ -11,8 +11,19 @@
     `test/vectors.test.mjs` checks that this library still gives every
     answer. Any other implementation of the format can be tested against
     them.
-  - `python/` holds the start of a Python version, built in stages
-    against the same files. It is not yet published.
+  - `python/` holds a Python version, built in stages against the same
+    files. It is not yet published. It now checks everything the
+    JavaScript library checks: slips, stubs, countersignatures, limits,
+    approvals, refusals and terms, passes, cancellations and
+    acknowledgements, vouching records, seals and their time-stamps,
+    block time-stamps, the tree and its proofs, Shows, the chain of
+    block headers, and the check before acting. It gives the same answer
+    in every one of the 63 shared files, and in 6,091 random books
+    compared on this computer. One difference is stated: "cryptography",
+    the one package it needs, has no SLH-DSA yet, so a seal's third
+    signature is reported as not checked on this device and never as a
+    pass. The stub writer and the connector for an agent's tools are
+    still to come.
   - A slip whose page address cannot be read, and one whose address is
     not in its plain form, are now refused with the same words. The code
     (`bad-field`) is unchanged.

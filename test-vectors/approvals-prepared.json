@@ -1,0 +1,895 @@
+{
+ "about": "Building an approval's content and the challenge a passkey must sign (format description, section 17).",
+ "function": "prepareApproval",
+ "cases": [
+  {
+   "name": "the least an approval holds",
+   "fields": {
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "when": 1791190800000
+   },
+   "expected": {
+    "ok": {
+     "contentBytes": "7b22616374696f6e223a22737570706c6965732e6f72646572222c226964223a2241674943416749434167494341674943416749434167222c22736c6970223a2241514542415145424151454241514542415145424151454241514542415145424151454241514542415145222c2274797065223a2270726f76617265642e617070726f76616c2e7630222c227768656e223a22323032362d31302d30355430393a30303a30305a227d",
+     "payloadB64": "eyJhY3Rpb24iOiJzdXBwbGllcy5vcmRlciIsImlkIjoiQWdJQ0FnSUNBZ0lDQWdJQ0FnSUNBZyIsInNsaXAiOiJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFIiwidHlwZSI6InByb3ZhcmVkLmFwcHJvdmFsLnYwIiwid2hlbiI6IjIwMjYtMTAtMDVUMDk6MDA6MDBaIn0",
+     "protectedB64": "eyJ0eXAiOiJ2bmQucHJvdmFyZWQuYXBwcm92YWwudjAranNvbiIsImFsZyI6InByb3ZhLnJlZC93ZWJhdXRobi92MCJ9",
+     "challenge": "d6dee4f8314e2ad23012275a433fdb0ebd4be25eb8c206fd31fae8777eafb509",
+     "fingerprint": "LusFviHJImIIHz6UEIVmDYTS5ZOHZInuUgTr7xQ6mvg"
+    }
+   }
+  },
+  {
+   "name": "every member",
+   "fields": {
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "when": 1791190800000,
+    "amount": {
+     "unit": "GBP",
+     "value": 150
+    },
+    "with": "supplier",
+    "details": [
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     }
+    ]
+   },
+   "expected": {
+    "ok": {
+     "contentBytes": "7b22616374696f6e223a22737570706c6965732e6f72646572222c22616d6f756e74223a7b22756e6974223a22474250222c2276616c7565223a3135307d2c2264657461696c73223a5b7b226e616d65223a226f726465722e706466222c22736861323536223a2241774d4441774d4441774d4441774d4441774d4441774d4441774d4441774d4441774d4441774d4441774d227d5d2c226964223a2241674943416749434167494341674943416749434167222c22736c6970223a2241514542415145424151454241514542415145424151454241514542415145424151454241514542415145222c2274797065223a2270726f76617265642e617070726f76616c2e7630222c227768656e223a22323032362d31302d30355430393a30303a30305a222c2277697468223a22737570706c696572227d",
+     "payloadB64": "eyJhY3Rpb24iOiJzdXBwbGllcy5vcmRlciIsImFtb3VudCI6eyJ1bml0IjoiR0JQIiwidmFsdWUiOjE1MH0sImRldGFpbHMiOlt7Im5hbWUiOiJvcmRlci5wZGYiLCJzaGEyNTYiOiJBd01EQXdNREF3TURBd01EQXdNREF3TURBd01EQXdNREF3TURBd01EQXdNIn1dLCJpZCI6IkFnSUNBZ0lDQWdJQ0FnSUNBZ0lDQWciLCJzbGlwIjoiQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRSIsInR5cGUiOiJwcm92YXJlZC5hcHByb3ZhbC52MCIsIndoZW4iOiIyMDI2LTEwLTA1VDA5OjAwOjAwWiIsIndpdGgiOiJzdXBwbGllciJ9",
+     "protectedB64": "eyJ0eXAiOiJ2bmQucHJvdmFyZWQuYXBwcm92YWwudjAranNvbiIsImFsZyI6InByb3ZhLnJlZC93ZWJhdXRobi92MCJ9",
+     "challenge": "09bc50d872de16c98fe37a884437243cf164b4594da3a7536332068d92234b5a",
+     "fingerprint": "Yun1YW-LVetgLIuE2tK8royOO0ft6Sq4GC_h4DFjY9g"
+    }
+   }
+  },
+  {
+   "name": "an unknown field is left out",
+   "fields": {
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "when": 1791190800000,
+    "colour": "red"
+   },
+   "expected": {
+    "ok": {
+     "contentBytes": "7b22616374696f6e223a22737570706c6965732e6f72646572222c226964223a2241674943416749434167494341674943416749434167222c22736c6970223a2241514542415145424151454241514542415145424151454241514542415145424151454241514542415145222c2274797065223a2270726f76617265642e617070726f76616c2e7630222c227768656e223a22323032362d31302d30355430393a30303a30305a227d",
+     "payloadB64": "eyJhY3Rpb24iOiJzdXBwbGllcy5vcmRlciIsImlkIjoiQWdJQ0FnSUNBZ0lDQWdJQ0FnSUNBZyIsInNsaXAiOiJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFIiwidHlwZSI6InByb3ZhcmVkLmFwcHJvdmFsLnYwIiwid2hlbiI6IjIwMjYtMTAtMDVUMDk6MDA6MDBaIn0",
+     "protectedB64": "eyJ0eXAiOiJ2bmQucHJvdmFyZWQuYXBwcm92YWwudjAranNvbiIsImFsZyI6InByb3ZhLnJlZC93ZWJhdXRobi92MCJ9",
+     "challenge": "d6dee4f8314e2ad23012275a433fdb0ebd4be25eb8c206fd31fae8777eafb509",
+     "fingerprint": "LusFviHJImIIHz6UEIVmDYTS5ZOHZInuUgTr7xQ6mvg"
+    }
+   }
+  },
+  {
+   "name": "a type given is not used",
+   "fields": {
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "when": 1791190800000,
+    "type": "provared.stub.v0"
+   },
+   "expected": {
+    "ok": {
+     "contentBytes": "7b22616374696f6e223a22737570706c6965732e6f72646572222c226964223a2241674943416749434167494341674943416749434167222c22736c6970223a2241514542415145424151454241514542415145424151454241514542415145424151454241514542415145222c2274797065223a2270726f76617265642e617070726f76616c2e7630222c227768656e223a22323032362d31302d30355430393a30303a30305a227d",
+     "payloadB64": "eyJhY3Rpb24iOiJzdXBwbGllcy5vcmRlciIsImlkIjoiQWdJQ0FnSUNBZ0lDQWdJQ0FnSUNBZyIsInNsaXAiOiJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFIiwidHlwZSI6InByb3ZhcmVkLmFwcHJvdmFsLnYwIiwid2hlbiI6IjIwMjYtMTAtMDVUMDk6MDA6MDBaIn0",
+     "protectedB64": "eyJ0eXAiOiJ2bmQucHJvdmFyZWQuYXBwcm92YWwudjAranNvbiIsImFsZyI6InByb3ZhLnJlZC93ZWJhdXRobi92MCJ9",
+     "challenge": "d6dee4f8314e2ad23012275a433fdb0ebd4be25eb8c206fd31fae8777eafb509",
+     "fingerprint": "LusFviHJImIIHz6UEIVmDYTS5ZOHZInuUgTr7xQ6mvg"
+    }
+   }
+  },
+  {
+   "name": "an amount of 0 is left out",
+   "fields": {
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "when": 1791190800000,
+    "amount": 0
+   },
+   "expected": {
+    "ok": {
+     "contentBytes": "7b22616374696f6e223a22737570706c6965732e6f72646572222c226964223a2241674943416749434167494341674943416749434167222c22736c6970223a2241514542415145424151454241514542415145424151454241514542415145424151454241514542415145222c2274797065223a2270726f76617265642e617070726f76616c2e7630222c227768656e223a22323032362d31302d30355430393a30303a30305a227d",
+     "payloadB64": "eyJhY3Rpb24iOiJzdXBwbGllcy5vcmRlciIsImlkIjoiQWdJQ0FnSUNBZ0lDQWdJQ0FnSUNBZyIsInNsaXAiOiJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFIiwidHlwZSI6InByb3ZhcmVkLmFwcHJvdmFsLnYwIiwid2hlbiI6IjIwMjYtMTAtMDVUMDk6MDA6MDBaIn0",
+     "protectedB64": "eyJ0eXAiOiJ2bmQucHJvdmFyZWQuYXBwcm92YWwudjAranNvbiIsImFsZyI6InByb3ZhLnJlZC93ZWJhdXRobi92MCJ9",
+     "challenge": "d6dee4f8314e2ad23012275a433fdb0ebd4be25eb8c206fd31fae8777eafb509",
+     "fingerprint": "LusFviHJImIIHz6UEIVmDYTS5ZOHZInuUgTr7xQ6mvg"
+    }
+   }
+  },
+  {
+   "name": "an amount that is false is left out",
+   "fields": {
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "when": 1791190800000,
+    "amount": false
+   },
+   "expected": {
+    "ok": {
+     "contentBytes": "7b22616374696f6e223a22737570706c6965732e6f72646572222c226964223a2241674943416749434167494341674943416749434167222c22736c6970223a2241514542415145424151454241514542415145424151454241514542415145424151454241514542415145222c2274797065223a2270726f76617265642e617070726f76616c2e7630222c227768656e223a22323032362d31302d30355430393a30303a30305a227d",
+     "payloadB64": "eyJhY3Rpb24iOiJzdXBwbGllcy5vcmRlciIsImlkIjoiQWdJQ0FnSUNBZ0lDQWdJQ0FnSUNBZyIsInNsaXAiOiJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFIiwidHlwZSI6InByb3ZhcmVkLmFwcHJvdmFsLnYwIiwid2hlbiI6IjIwMjYtMTAtMDVUMDk6MDA6MDBaIn0",
+     "protectedB64": "eyJ0eXAiOiJ2bmQucHJvdmFyZWQuYXBwcm92YWwudjAranNvbiIsImFsZyI6InByb3ZhLnJlZC93ZWJhdXRobi92MCJ9",
+     "challenge": "d6dee4f8314e2ad23012275a433fdb0ebd4be25eb8c206fd31fae8777eafb509",
+     "fingerprint": "LusFviHJImIIHz6UEIVmDYTS5ZOHZInuUgTr7xQ6mvg"
+    }
+   }
+  },
+  {
+   "name": "an amount that is empty text is left out",
+   "fields": {
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "when": 1791190800000,
+    "amount": ""
+   },
+   "expected": {
+    "ok": {
+     "contentBytes": "7b22616374696f6e223a22737570706c6965732e6f72646572222c226964223a2241674943416749434167494341674943416749434167222c22736c6970223a2241514542415145424151454241514542415145424151454241514542415145424151454241514542415145222c2274797065223a2270726f76617265642e617070726f76616c2e7630222c227768656e223a22323032362d31302d30355430393a30303a30305a227d",
+     "payloadB64": "eyJhY3Rpb24iOiJzdXBwbGllcy5vcmRlciIsImlkIjoiQWdJQ0FnSUNBZ0lDQWdJQ0FnSUNBZyIsInNsaXAiOiJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFIiwidHlwZSI6InByb3ZhcmVkLmFwcHJvdmFsLnYwIiwid2hlbiI6IjIwMjYtMTAtMDVUMDk6MDA6MDBaIn0",
+     "protectedB64": "eyJ0eXAiOiJ2bmQucHJvdmFyZWQuYXBwcm92YWwudjAranNvbiIsImFsZyI6InByb3ZhLnJlZC93ZWJhdXRobi92MCJ9",
+     "challenge": "d6dee4f8314e2ad23012275a433fdb0ebd4be25eb8c206fd31fae8777eafb509",
+     "fingerprint": "LusFviHJImIIHz6UEIVmDYTS5ZOHZInuUgTr7xQ6mvg"
+    }
+   }
+  },
+  {
+   "name": "an amount that is null is left out",
+   "fields": {
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "when": 1791190800000,
+    "amount": null
+   },
+   "expected": {
+    "ok": {
+     "contentBytes": "7b22616374696f6e223a22737570706c6965732e6f72646572222c226964223a2241674943416749434167494341674943416749434167222c22736c6970223a2241514542415145424151454241514542415145424151454241514542415145424151454241514542415145222c2274797065223a2270726f76617265642e617070726f76616c2e7630222c227768656e223a22323032362d31302d30355430393a30303a30305a227d",
+     "payloadB64": "eyJhY3Rpb24iOiJzdXBwbGllcy5vcmRlciIsImlkIjoiQWdJQ0FnSUNBZ0lDQWdJQ0FnSUNBZyIsInNsaXAiOiJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFIiwidHlwZSI6InByb3ZhcmVkLmFwcHJvdmFsLnYwIiwid2hlbiI6IjIwMjYtMTAtMDVUMDk6MDA6MDBaIn0",
+     "protectedB64": "eyJ0eXAiOiJ2bmQucHJvdmFyZWQuYXBwcm92YWwudjAranNvbiIsImFsZyI6InByb3ZhLnJlZC93ZWJhdXRobi92MCJ9",
+     "challenge": "d6dee4f8314e2ad23012275a433fdb0ebd4be25eb8c206fd31fae8777eafb509",
+     "fingerprint": "LusFviHJImIIHz6UEIVmDYTS5ZOHZInuUgTr7xQ6mvg"
+    }
+   }
+  },
+  {
+   "name": "an empty amount",
+   "fields": {
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "when": 1791190800000,
+    "amount": {}
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "amount: \"unit\" is missing."
+    }
+   }
+  },
+  {
+   "name": "an amount that is an empty list",
+   "fields": {
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "when": 1791190800000,
+    "amount": []
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "amount: must be an object."
+    }
+   }
+  },
+  {
+   "name": "an amount that is text",
+   "fields": {
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "when": 1791190800000,
+    "amount": "GBP 5"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "amount: must be an object."
+    }
+   }
+  },
+  {
+   "name": "an amount that is true",
+   "fields": {
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "when": 1791190800000,
+    "amount": true
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "amount: must be an object."
+    }
+   }
+  },
+  {
+   "name": "a negative amount",
+   "fields": {
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "when": 1791190800000,
+    "amount": {
+     "unit": "GBP",
+     "value": -1
+    }
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "amount.value: must be a whole number, 0 or more."
+    }
+   }
+  },
+  {
+   "name": "a service that is empty text is left out",
+   "fields": {
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "when": 1791190800000,
+    "with": ""
+   },
+   "expected": {
+    "ok": {
+     "contentBytes": "7b22616374696f6e223a22737570706c6965732e6f72646572222c226964223a2241674943416749434167494341674943416749434167222c22736c6970223a2241514542415145424151454241514542415145424151454241514542415145424151454241514542415145222c2274797065223a2270726f76617265642e617070726f76616c2e7630222c227768656e223a22323032362d31302d30355430393a30303a30305a227d",
+     "payloadB64": "eyJhY3Rpb24iOiJzdXBwbGllcy5vcmRlciIsImlkIjoiQWdJQ0FnSUNBZ0lDQWdJQ0FnSUNBZyIsInNsaXAiOiJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFIiwidHlwZSI6InByb3ZhcmVkLmFwcHJvdmFsLnYwIiwid2hlbiI6IjIwMjYtMTAtMDVUMDk6MDA6MDBaIn0",
+     "protectedB64": "eyJ0eXAiOiJ2bmQucHJvdmFyZWQuYXBwcm92YWwudjAranNvbiIsImFsZyI6InByb3ZhLnJlZC93ZWJhdXRobi92MCJ9",
+     "challenge": "d6dee4f8314e2ad23012275a433fdb0ebd4be25eb8c206fd31fae8777eafb509",
+     "fingerprint": "LusFviHJImIIHz6UEIVmDYTS5ZOHZInuUgTr7xQ6mvg"
+    }
+   }
+  },
+  {
+   "name": "a service of 0 is left out",
+   "fields": {
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "when": 1791190800000,
+    "with": 0
+   },
+   "expected": {
+    "ok": {
+     "contentBytes": "7b22616374696f6e223a22737570706c6965732e6f72646572222c226964223a2241674943416749434167494341674943416749434167222c22736c6970223a2241514542415145424151454241514542415145424151454241514542415145424151454241514542415145222c2274797065223a2270726f76617265642e617070726f76616c2e7630222c227768656e223a22323032362d31302d30355430393a30303a30305a227d",
+     "payloadB64": "eyJhY3Rpb24iOiJzdXBwbGllcy5vcmRlciIsImlkIjoiQWdJQ0FnSUNBZ0lDQWdJQ0FnSUNBZyIsInNsaXAiOiJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFIiwidHlwZSI6InByb3ZhcmVkLmFwcHJvdmFsLnYwIiwid2hlbiI6IjIwMjYtMTAtMDVUMDk6MDA6MDBaIn0",
+     "protectedB64": "eyJ0eXAiOiJ2bmQucHJvdmFyZWQuYXBwcm92YWwudjAranNvbiIsImFsZyI6InByb3ZhLnJlZC93ZWJhdXRobi92MCJ9",
+     "challenge": "d6dee4f8314e2ad23012275a433fdb0ebd4be25eb8c206fd31fae8777eafb509",
+     "fingerprint": "LusFviHJImIIHz6UEIVmDYTS5ZOHZInuUgTr7xQ6mvg"
+    }
+   }
+  },
+  {
+   "name": "a service that is an empty list",
+   "fields": {
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "when": 1791190800000,
+    "with": []
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "with: must be 1 to 64 lower-case letters, digits, full stops, hyphens or underscores."
+    }
+   }
+  },
+  {
+   "name": "a service with a capital letter",
+   "fields": {
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "when": 1791190800000,
+    "with": "Supplier"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "with: must be 1 to 64 lower-case letters, digits, full stops, hyphens or underscores."
+    }
+   }
+  },
+  {
+   "name": "no documents are left out",
+   "fields": {
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "when": 1791190800000,
+    "details": []
+   },
+   "expected": {
+    "ok": {
+     "contentBytes": "7b22616374696f6e223a22737570706c6965732e6f72646572222c226964223a2241674943416749434167494341674943416749434167222c22736c6970223a2241514542415145424151454241514542415145424151454241514542415145424151454241514542415145222c2274797065223a2270726f76617265642e617070726f76616c2e7630222c227768656e223a22323032362d31302d30355430393a30303a30305a227d",
+     "payloadB64": "eyJhY3Rpb24iOiJzdXBwbGllcy5vcmRlciIsImlkIjoiQWdJQ0FnSUNBZ0lDQWdJQ0FnSUNBZyIsInNsaXAiOiJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFIiwidHlwZSI6InByb3ZhcmVkLmFwcHJvdmFsLnYwIiwid2hlbiI6IjIwMjYtMTAtMDVUMDk6MDA6MDBaIn0",
+     "protectedB64": "eyJ0eXAiOiJ2bmQucHJvdmFyZWQuYXBwcm92YWwudjAranNvbiIsImFsZyI6InByb3ZhLnJlZC93ZWJhdXRobi92MCJ9",
+     "challenge": "d6dee4f8314e2ad23012275a433fdb0ebd4be25eb8c206fd31fae8777eafb509",
+     "fingerprint": "LusFviHJImIIHz6UEIVmDYTS5ZOHZInuUgTr7xQ6mvg"
+    }
+   }
+  },
+  {
+   "name": "documents that are an empty object are left out",
+   "fields": {
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "when": 1791190800000,
+    "details": {}
+   },
+   "expected": {
+    "ok": {
+     "contentBytes": "7b22616374696f6e223a22737570706c6965732e6f72646572222c226964223a2241674943416749434167494341674943416749434167222c22736c6970223a2241514542415145424151454241514542415145424151454241514542415145424151454241514542415145222c2274797065223a2270726f76617265642e617070726f76616c2e7630222c227768656e223a22323032362d31302d30355430393a30303a30305a227d",
+     "payloadB64": "eyJhY3Rpb24iOiJzdXBwbGllcy5vcmRlciIsImlkIjoiQWdJQ0FnSUNBZ0lDQWdJQ0FnSUNBZyIsInNsaXAiOiJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFIiwidHlwZSI6InByb3ZhcmVkLmFwcHJvdmFsLnYwIiwid2hlbiI6IjIwMjYtMTAtMDVUMDk6MDA6MDBaIn0",
+     "protectedB64": "eyJ0eXAiOiJ2bmQucHJvdmFyZWQuYXBwcm92YWwudjAranNvbiIsImFsZyI6InByb3ZhLnJlZC93ZWJhdXRobi92MCJ9",
+     "challenge": "d6dee4f8314e2ad23012275a433fdb0ebd4be25eb8c206fd31fae8777eafb509",
+     "fingerprint": "LusFviHJImIIHz6UEIVmDYTS5ZOHZInuUgTr7xQ6mvg"
+    }
+   }
+  },
+  {
+   "name": "documents that are a number are left out",
+   "fields": {
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "when": 1791190800000,
+    "details": 5
+   },
+   "expected": {
+    "ok": {
+     "contentBytes": "7b22616374696f6e223a22737570706c6965732e6f72646572222c226964223a2241674943416749434167494341674943416749434167222c22736c6970223a2241514542415145424151454241514542415145424151454241514542415145424151454241514542415145222c2274797065223a2270726f76617265642e617070726f76616c2e7630222c227768656e223a22323032362d31302d30355430393a30303a30305a227d",
+     "payloadB64": "eyJhY3Rpb24iOiJzdXBwbGllcy5vcmRlciIsImlkIjoiQWdJQ0FnSUNBZ0lDQWdJQ0FnSUNBZyIsInNsaXAiOiJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFIiwidHlwZSI6InByb3ZhcmVkLmFwcHJvdmFsLnYwIiwid2hlbiI6IjIwMjYtMTAtMDVUMDk6MDA6MDBaIn0",
+     "protectedB64": "eyJ0eXAiOiJ2bmQucHJvdmFyZWQuYXBwcm92YWwudjAranNvbiIsImFsZyI6InByb3ZhLnJlZC93ZWJhdXRobi92MCJ9",
+     "challenge": "d6dee4f8314e2ad23012275a433fdb0ebd4be25eb8c206fd31fae8777eafb509",
+     "fingerprint": "LusFviHJImIIHz6UEIVmDYTS5ZOHZInuUgTr7xQ6mvg"
+    }
+   }
+  },
+  {
+   "name": "documents that are true are left out",
+   "fields": {
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "when": 1791190800000,
+    "details": true
+   },
+   "expected": {
+    "ok": {
+     "contentBytes": "7b22616374696f6e223a22737570706c6965732e6f72646572222c226964223a2241674943416749434167494341674943416749434167222c22736c6970223a2241514542415145424151454241514542415145424151454241514542415145424151454241514542415145222c2274797065223a2270726f76617265642e617070726f76616c2e7630222c227768656e223a22323032362d31302d30355430393a30303a30305a227d",
+     "payloadB64": "eyJhY3Rpb24iOiJzdXBwbGllcy5vcmRlciIsImlkIjoiQWdJQ0FnSUNBZ0lDQWdJQ0FnSUNBZyIsInNsaXAiOiJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFIiwidHlwZSI6InByb3ZhcmVkLmFwcHJvdmFsLnYwIiwid2hlbiI6IjIwMjYtMTAtMDVUMDk6MDA6MDBaIn0",
+     "protectedB64": "eyJ0eXAiOiJ2bmQucHJvdmFyZWQuYXBwcm92YWwudjAranNvbiIsImFsZyI6InByb3ZhLnJlZC93ZWJhdXRobi92MCJ9",
+     "challenge": "d6dee4f8314e2ad23012275a433fdb0ebd4be25eb8c206fd31fae8777eafb509",
+     "fingerprint": "LusFviHJImIIHz6UEIVmDYTS5ZOHZInuUgTr7xQ6mvg"
+    }
+   }
+  },
+  {
+   "name": "documents that are an object with a length of 0 are left out",
+   "fields": {
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "when": 1791190800000,
+    "details": {
+     "length": 0
+    }
+   },
+   "expected": {
+    "ok": {
+     "contentBytes": "7b22616374696f6e223a22737570706c6965732e6f72646572222c226964223a2241674943416749434167494341674943416749434167222c22736c6970223a2241514542415145424151454241514542415145424151454241514542415145424151454241514542415145222c2274797065223a2270726f76617265642e617070726f76616c2e7630222c227768656e223a22323032362d31302d30355430393a30303a30305a227d",
+     "payloadB64": "eyJhY3Rpb24iOiJzdXBwbGllcy5vcmRlciIsImlkIjoiQWdJQ0FnSUNBZ0lDQWdJQ0FnSUNBZyIsInNsaXAiOiJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFIiwidHlwZSI6InByb3ZhcmVkLmFwcHJvdmFsLnYwIiwid2hlbiI6IjIwMjYtMTAtMDVUMDk6MDA6MDBaIn0",
+     "protectedB64": "eyJ0eXAiOiJ2bmQucHJvdmFyZWQuYXBwcm92YWwudjAranNvbiIsImFsZyI6InByb3ZhLnJlZC93ZWJhdXRobi92MCJ9",
+     "challenge": "d6dee4f8314e2ad23012275a433fdb0ebd4be25eb8c206fd31fae8777eafb509",
+     "fingerprint": "LusFviHJImIIHz6UEIVmDYTS5ZOHZInuUgTr7xQ6mvg"
+    }
+   }
+  },
+  {
+   "name": "documents that are an object with a length",
+   "fields": {
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "when": 1791190800000,
+    "details": {
+     "length": 1
+    }
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "details: must be a list of 1 to 32 items."
+    }
+   }
+  },
+  {
+   "name": "documents that are text",
+   "fields": {
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "when": 1791190800000,
+    "details": "order.pdf"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "details: must be a list of 1 to 32 items."
+    }
+   }
+  },
+  {
+   "name": "33 documents",
+   "fields": {
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "when": 1791190800000,
+    "details": [
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     }
+    ]
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "details: must be a list of 1 to 32 items."
+    }
+   }
+  },
+  {
+   "name": "a document name with a lone surrogate",
+   "fields": {
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "when": 1791190800000,
+    "details": [
+     {
+      "name": "a\ud800",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     }
+    ]
+   },
+   "expected": {
+    "refused": {
+     "code": "payload-not-canonical",
+     "message": "A string is not well-formed Unicode."
+    }
+   }
+  },
+  {
+   "name": "an action with a lone surrogate",
+   "fields": {
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "a\ud800",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "when": 1791190800000
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "action: must be 1 to 64 lower-case letters, digits, full stops, hyphens or underscores."
+    }
+   }
+  },
+  {
+   "name": "an empty id",
+   "fields": {
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "id": "",
+    "when": 1791190800000
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "id: must be a unique number of 16 bytes in base64url."
+    }
+   }
+  },
+  {
+   "name": "an id that is a number",
+   "fields": {
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "id": 1,
+    "when": 1791190800000
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "id: must be a unique number of 16 bytes in base64url."
+    }
+   }
+  },
+  {
+   "name": "no slip",
+   "fields": {
+    "action": "supplies.order",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "when": 1791190800000
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "slip: must be a SHA-256 fingerprint in base64url."
+    }
+   }
+  },
+  {
+   "name": "no action",
+   "fields": {
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "when": 1791190800000
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "action: must be 1 to 64 lower-case letters, digits, full stops, hyphens or underscores."
+    }
+   }
+  },
+  {
+   "name": "an unknown reserved action",
+   "fields": {
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "provared.money.send",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "when": 1791190800000
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "action: names that begin \"provared.\" are reserved, and this one is not on the shared list."
+    }
+   }
+  },
+  {
+   "name": "a shared action",
+   "fields": {
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "provared.order.place",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "when": 1791190800000
+   },
+   "expected": {
+    "ok": {
+     "contentBytes": "7b22616374696f6e223a2270726f76617265642e6f726465722e706c616365222c226964223a2241674943416749434167494341674943416749434167222c22736c6970223a2241514542415145424151454241514542415145424151454241514542415145424151454241514542415145222c2274797065223a2270726f76617265642e617070726f76616c2e7630222c227768656e223a22323032362d31302d30355430393a30303a30305a227d",
+     "payloadB64": "eyJhY3Rpb24iOiJwcm92YXJlZC5vcmRlci5wbGFjZSIsImlkIjoiQWdJQ0FnSUNBZ0lDQWdJQ0FnSUNBZyIsInNsaXAiOiJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFIiwidHlwZSI6InByb3ZhcmVkLmFwcHJvdmFsLnYwIiwid2hlbiI6IjIwMjYtMTAtMDVUMDk6MDA6MDBaIn0",
+     "protectedB64": "eyJ0eXAiOiJ2bmQucHJvdmFyZWQuYXBwcm92YWwudjAranNvbiIsImFsZyI6InByb3ZhLnJlZC93ZWJhdXRobi92MCJ9",
+     "challenge": "7104e874b026ae5de65694c1d391bf175f38acf7633a1c679cce921e797b25d7",
+     "fingerprint": "zKvZBQlGbq5SPeSVEi4st7XfB9y9acE3g5Lk6f2sd0g"
+    }
+   }
+  },
+  {
+   "name": "a time of 0",
+   "fields": {
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "when": 0
+   },
+   "expected": {
+    "ok": {
+     "contentBytes": "7b22616374696f6e223a22737570706c6965732e6f72646572222c226964223a2241674943416749434167494341674943416749434167222c22736c6970223a2241514542415145424151454241514542415145424151454241514542415145424151454241514542415145222c2274797065223a2270726f76617265642e617070726f76616c2e7630222c227768656e223a22313937302d30312d30315430303a30303a30305a227d",
+     "payloadB64": "eyJhY3Rpb24iOiJzdXBwbGllcy5vcmRlciIsImlkIjoiQWdJQ0FnSUNBZ0lDQWdJQ0FnSUNBZyIsInNsaXAiOiJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFIiwidHlwZSI6InByb3ZhcmVkLmFwcHJvdmFsLnYwIiwid2hlbiI6IjE5NzAtMDEtMDFUMDA6MDA6MDBaIn0",
+     "protectedB64": "eyJ0eXAiOiJ2bmQucHJvdmFyZWQuYXBwcm92YWwudjAranNvbiIsImFsZyI6InByb3ZhLnJlZC93ZWJhdXRobi92MCJ9",
+     "challenge": "1463c68c7e8fb50f95ac04ded8c45a813b954a2f973f19db3610ee22f9f80f89",
+     "fingerprint": "qVB7ZwsmLdPUU7xEdwqnEw3tb3hX042Q7FUdZ1gFlCE"
+    }
+   }
+  },
+  {
+   "name": "a time before 1970",
+   "fields": {
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "when": -1
+   },
+   "expected": {
+    "ok": {
+     "contentBytes": "7b22616374696f6e223a22737570706c6965732e6f72646572222c226964223a2241674943416749434167494341674943416749434167222c22736c6970223a2241514542415145424151454241514542415145424151454241514542415145424151454241514542415145222c2274797065223a2270726f76617265642e617070726f76616c2e7630222c227768656e223a22313936392d31322d33315432333a35393a35395a227d",
+     "payloadB64": "eyJhY3Rpb24iOiJzdXBwbGllcy5vcmRlciIsImlkIjoiQWdJQ0FnSUNBZ0lDQWdJQ0FnSUNBZyIsInNsaXAiOiJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFIiwidHlwZSI6InByb3ZhcmVkLmFwcHJvdmFsLnYwIiwid2hlbiI6IjE5NjktMTItMzFUMjM6NTk6NTlaIn0",
+     "protectedB64": "eyJ0eXAiOiJ2bmQucHJvdmFyZWQuYXBwcm92YWwudjAranNvbiIsImFsZyI6InByb3ZhLnJlZC93ZWJhdXRobi92MCJ9",
+     "challenge": "fc1d839995ce603e3480992026c51cea591e2dc487864fe35202e40514cf1d8e",
+     "fingerprint": "HR9MCQurGSy5c0dryfs8I7cJdMfjJuVt3YXvDBzcQIY"
+    }
+   }
+  },
+  {
+   "name": "a time with a fraction of a millisecond",
+   "fields": {
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "when": 1791190800999.9
+   },
+   "expected": {
+    "ok": {
+     "contentBytes": "7b22616374696f6e223a22737570706c6965732e6f72646572222c226964223a2241674943416749434167494341674943416749434167222c22736c6970223a2241514542415145424151454241514542415145424151454241514542415145424151454241514542415145222c2274797065223a2270726f76617265642e617070726f76616c2e7630222c227768656e223a22323032362d31302d30355430393a30303a30305a227d",
+     "payloadB64": "eyJhY3Rpb24iOiJzdXBwbGllcy5vcmRlciIsImlkIjoiQWdJQ0FnSUNBZ0lDQWdJQ0FnSUNBZyIsInNsaXAiOiJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFIiwidHlwZSI6InByb3ZhcmVkLmFwcHJvdmFsLnYwIiwid2hlbiI6IjIwMjYtMTAtMDVUMDk6MDA6MDBaIn0",
+     "protectedB64": "eyJ0eXAiOiJ2bmQucHJvdmFyZWQuYXBwcm92YWwudjAranNvbiIsImFsZyI6InByb3ZhLnJlZC93ZWJhdXRobi92MCJ9",
+     "challenge": "d6dee4f8314e2ad23012275a433fdb0ebd4be25eb8c206fd31fae8777eafb509",
+     "fingerprint": "LusFviHJImIIHz6UEIVmDYTS5ZOHZInuUgTr7xQ6mvg"
+    }
+   }
+  },
+  {
+   "name": "a negative time with a fraction",
+   "fields": {
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "when": -1.5
+   },
+   "expected": {
+    "ok": {
+     "contentBytes": "7b22616374696f6e223a22737570706c6965732e6f72646572222c226964223a2241674943416749434167494341674943416749434167222c22736c6970223a2241514542415145424151454241514542415145424151454241514542415145424151454241514542415145222c2274797065223a2270726f76617265642e617070726f76616c2e7630222c227768656e223a22313936392d31322d33315432333a35393a35395a227d",
+     "payloadB64": "eyJhY3Rpb24iOiJzdXBwbGllcy5vcmRlciIsImlkIjoiQWdJQ0FnSUNBZ0lDQWdJQ0FnSUNBZyIsInNsaXAiOiJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFIiwidHlwZSI6InByb3ZhcmVkLmFwcHJvdmFsLnYwIiwid2hlbiI6IjE5NjktMTItMzFUMjM6NTk6NTlaIn0",
+     "protectedB64": "eyJ0eXAiOiJ2bmQucHJvdmFyZWQuYXBwcm92YWwudjAranNvbiIsImFsZyI6InByb3ZhLnJlZC93ZWJhdXRobi92MCJ9",
+     "challenge": "fc1d839995ce603e3480992026c51cea591e2dc487864fe35202e40514cf1d8e",
+     "fingerprint": "HR9MCQurGSy5c0dryfs8I7cJdMfjJuVt3YXvDBzcQIY"
+    }
+   }
+  },
+  {
+   "name": "the year 0",
+   "fields": {
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "when": -62167219200000
+   },
+   "expected": {
+    "ok": {
+     "contentBytes": "7b22616374696f6e223a22737570706c6965732e6f72646572222c226964223a2241674943416749434167494341674943416749434167222c22736c6970223a2241514542415145424151454241514542415145424151454241514542415145424151454241514542415145222c2274797065223a2270726f76617265642e617070726f76616c2e7630222c227768656e223a22303030302d30312d30315430303a30303a30305a227d",
+     "payloadB64": "eyJhY3Rpb24iOiJzdXBwbGllcy5vcmRlciIsImlkIjoiQWdJQ0FnSUNBZ0lDQWdJQ0FnSUNBZyIsInNsaXAiOiJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFIiwidHlwZSI6InByb3ZhcmVkLmFwcHJvdmFsLnYwIiwid2hlbiI6IjAwMDAtMDEtMDFUMDA6MDA6MDBaIn0",
+     "protectedB64": "eyJ0eXAiOiJ2bmQucHJvdmFyZWQuYXBwcm92YWwudjAranNvbiIsImFsZyI6InByb3ZhLnJlZC93ZWJhdXRobi92MCJ9",
+     "challenge": "719261ea0300604849f76881f89410e586bcbcc31366dee4cc11ff84b585ca1c",
+     "fingerprint": "d6f9F1FT8MEsSjy72KTkJUmEp7DlX_wm07DhIYUPHUM"
+    }
+   }
+  },
+  {
+   "name": "the year before 0",
+   "fields": {
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "when": -62167219200001
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "the last second of the year 9999",
+   "fields": {
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "when": 253402300799999
+   },
+   "expected": {
+    "ok": {
+     "contentBytes": "7b22616374696f6e223a22737570706c6965732e6f72646572222c226964223a2241674943416749434167494341674943416749434167222c22736c6970223a2241514542415145424151454241514542415145424151454241514542415145424151454241514542415145222c2274797065223a2270726f76617265642e617070726f76616c2e7630222c227768656e223a22393939392d31322d33315432333a35393a35395a227d",
+     "payloadB64": "eyJhY3Rpb24iOiJzdXBwbGllcy5vcmRlciIsImlkIjoiQWdJQ0FnSUNBZ0lDQWdJQ0FnSUNBZyIsInNsaXAiOiJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFIiwidHlwZSI6InByb3ZhcmVkLmFwcHJvdmFsLnYwIiwid2hlbiI6Ijk5OTktMTItMzFUMjM6NTk6NTlaIn0",
+     "protectedB64": "eyJ0eXAiOiJ2bmQucHJvdmFyZWQuYXBwcm92YWwudjAranNvbiIsImFsZyI6InByb3ZhLnJlZC93ZWJhdXRobi92MCJ9",
+     "challenge": "ef1738fb3b56098f3bdfe4d99e39c4852d934774878b101cd9293a079bf9db96",
+     "fingerprint": "99ILMPXGPUuTdCuMlVO9bn54PPIkyw3tPpxJxZvSlZ4"
+    }
+   }
+  },
+  {
+   "name": "the year 10000",
+   "fields": {
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "when": 253402300800000
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "the last time a date can hold",
+   "fields": {
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "when": 8640000000000000
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "when: must be a time written as YYYY-MM-DDTHH:MM:SSZ."
+    }
+   }
+  },
+  {
+   "name": "a time beyond what a date can hold",
+   "fields": {
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "when": 8640000000000001
+   },
+   "expected": {
+    "refused": {
+     "code": "check-failed",
+     "message": "The checker met something it did not expect here. This is treated as not intact."
+    }
+   }
+  }
+ ]
+}

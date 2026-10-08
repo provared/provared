@@ -251,6 +251,64 @@ def is_safe_integer(value):
     return False
 
 
+def truthy(value):
+    """Whether JavaScript counts a value as true: everything but undefined,
+    null, false, 0, NaN and the empty text. An empty list or object counts."""
+    if value is None or value is False:
+        return False
+    if is_number(value):
+        return value == value and value != 0
+    if isinstance(value, str):
+        return value != ''
+    return True
+
+
+def strict_equal(a, b):
+    """a === b for values read from JSON: true and 1 are not the same, nor are
+    a number and a text."""
+    if isinstance(a, bool) or isinstance(b, bool):
+        return isinstance(a, bool) and isinstance(b, bool) and a == b
+    if is_number(a) and is_number(b):
+        return a == b
+    if a is None or b is None:
+        return a is b
+    if isinstance(a, str) and isinstance(b, str):
+        return a == b
+    return a is b
+
+
+def includes(items, value):
+    """Array.prototype.includes, which compares as === does (and finds NaN)."""
+    if isinstance(value, float) and value != value:
+        return any(isinstance(x, float) and x != x for x in items)
+    return any(strict_equal(x, value) for x in items)
+
+
+class IdentityMap:
+    """A JavaScript Map whose keys are objects: found by identity, not by value."""
+
+    __slots__ = ('_items',)
+
+    def __init__(self, items=None):
+        self._items = dict(items._items) if isinstance(items, IdentityMap) else {}
+
+    def get(self, key, default=None):
+        found = self._items.get(id(key))
+        return default if found is None else found[1]
+
+    def set(self, key, value):
+        self._items[id(key)] = (key, value)
+
+    def has(self, key):
+        return id(key) in self._items
+
+    def values(self):
+        return [v for _, v in self._items.values()]
+
+    def __len__(self):
+        return len(self._items)
+
+
 def number_text(value):
     """String(value) for a whole number."""
     if isinstance(value, float):

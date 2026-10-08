@@ -1,0 +1,564 @@
+{
+ "about": "The blocks a check's block time-stamps lead to that a chain of headers holds with six blocks after them.",
+ "function": "blocksInChain",
+ "cases": [
+  {
+   "name": "no entries",
+   "result": {},
+   "chain": {
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": {
+     "height": 20,
+     "after": 6
+    },
+    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": {
+     "height": 30,
+     "after": 5
+    },
+    "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc": {
+     "height": 0,
+     "after": 100
+    }
+   },
+   "expected": {
+    "ok": {
+     "blocks": [],
+     "found": []
+    }
+   }
+  },
+  {
+   "name": "an empty list of entries",
+   "result": {
+    "entries": []
+   },
+   "chain": {
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": {
+     "height": 20,
+     "after": 6
+    },
+    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": {
+     "height": 30,
+     "after": 5
+    },
+    "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc": {
+     "height": 0,
+     "after": 100
+    }
+   },
+   "expected": {
+    "ok": {
+     "blocks": [],
+     "found": []
+    }
+   }
+  },
+  {
+   "name": "entries with no stamps",
+   "result": {
+    "entries": [
+     {},
+     {
+      "stamps": []
+     }
+    ]
+   },
+   "chain": {
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": {
+     "height": 20,
+     "after": 6
+    },
+    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": {
+     "height": 30,
+     "after": 5
+    },
+    "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc": {
+     "height": 0,
+     "after": 100
+    }
+   },
+   "expected": {
+    "ok": {
+     "blocks": [],
+     "found": []
+    }
+   }
+  },
+  {
+   "name": "a block in the chain with six after it",
+   "result": {
+    "entries": [
+     {
+      "stamps": [
+       {
+        "kind": "block",
+        "authority": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "height": 912345
+       }
+      ]
+     }
+    ]
+   },
+   "chain": {
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": {
+     "height": 20,
+     "after": 6
+    },
+    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": {
+     "height": 30,
+     "after": 5
+    },
+    "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc": {
+     "height": 0,
+     "after": 100
+    }
+   },
+   "expected": {
+    "ok": {
+     "blocks": [
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+     ],
+     "found": [
+      {
+       "block": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+       "stated": 912345,
+       "height": 20,
+       "after": 6,
+       "counted": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "a block in the chain with five after it",
+   "result": {
+    "entries": [
+     {
+      "stamps": [
+       {
+        "kind": "block",
+        "authority": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "height": 912345
+       }
+      ]
+     }
+    ]
+   },
+   "chain": {
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": {
+     "height": 20,
+     "after": 6
+    },
+    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": {
+     "height": 30,
+     "after": 5
+    },
+    "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc": {
+     "height": 0,
+     "after": 100
+    }
+   },
+   "expected": {
+    "ok": {
+     "blocks": [],
+     "found": [
+      {
+       "block": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+       "stated": 912345,
+       "height": 30,
+       "after": 5,
+       "counted": false
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "a block not in the chain",
+   "result": {
+    "entries": [
+     {
+      "stamps": [
+       {
+        "kind": "block",
+        "authority": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "height": 912345
+       }
+      ]
+     }
+    ]
+   },
+   "chain": {
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": {
+     "height": 20,
+     "after": 6
+    },
+    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": {
+     "height": 30,
+     "after": 5
+    },
+    "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc": {
+     "height": 0,
+     "after": 100
+    }
+   },
+   "expected": {
+    "ok": {
+     "blocks": [],
+     "found": [
+      {
+       "block": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+       "stated": 912345,
+       "height": null,
+       "after": null,
+       "counted": false
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "a time-stamp from a service",
+   "result": {
+    "entries": [
+     {
+      "stamps": [
+       {
+        "kind": "service",
+        "authority": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+       }
+      ]
+     }
+    ]
+   },
+   "chain": {
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": {
+     "height": 20,
+     "after": 6
+    },
+    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": {
+     "height": 30,
+     "after": 5
+    },
+    "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc": {
+     "height": 0,
+     "after": 100
+    }
+   },
+   "expected": {
+    "ok": {
+     "blocks": [],
+     "found": []
+    }
+   }
+  },
+  {
+   "name": "a block named twice",
+   "result": {
+    "entries": [
+     {
+      "stamps": [
+       {
+        "kind": "block",
+        "authority": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "height": 912345
+       },
+       {
+        "kind": "block",
+        "authority": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "height": 1
+       }
+      ]
+     },
+     {
+      "stamps": [
+       {
+        "kind": "block",
+        "authority": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "height": 912345
+       }
+      ]
+     }
+    ]
+   },
+   "chain": {
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": {
+     "height": 20,
+     "after": 6
+    },
+    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": {
+     "height": 30,
+     "after": 5
+    },
+    "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc": {
+     "height": 0,
+     "after": 100
+    }
+   },
+   "expected": {
+    "ok": {
+     "blocks": [
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+     ],
+     "found": [
+      {
+       "block": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+       "stated": 912345,
+       "height": 20,
+       "after": 6,
+       "counted": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "a block with no authority",
+   "result": {
+    "entries": [
+     {
+      "stamps": [
+       {
+        "kind": "block",
+        "authority": null,
+        "height": 1
+       }
+      ]
+     }
+    ]
+   },
+   "chain": {
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": {
+     "height": 20,
+     "after": 6
+    },
+    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": {
+     "height": 30,
+     "after": 5
+    },
+    "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc": {
+     "height": 0,
+     "after": 100
+    }
+   },
+   "expected": {
+    "ok": {
+     "blocks": [],
+     "found": []
+    }
+   }
+  },
+  {
+   "name": "a block with no number",
+   "result": {
+    "entries": [
+     {
+      "stamps": [
+       {
+        "kind": "block",
+        "authority": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+       }
+      ]
+     }
+    ]
+   },
+   "chain": {
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": {
+     "height": 20,
+     "after": 6
+    },
+    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": {
+     "height": 30,
+     "after": 5
+    },
+    "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc": {
+     "height": 0,
+     "after": 100
+    }
+   },
+   "expected": {
+    "ok": {
+     "blocks": [
+      "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+     ],
+     "found": [
+      {
+       "block": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+       "height": 0,
+       "after": 100,
+       "counted": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "blocks beside the book",
+   "result": {
+    "entries": [
+     {
+      "stamps": [
+       {
+        "kind": "block",
+        "authority": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "height": 912345
+       }
+      ]
+     }
+    ],
+    "held": [
+     {
+      "stamps": [
+       {
+        "kind": "block",
+        "authority": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "height": 912345
+       },
+       {
+        "kind": "block",
+        "authority": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "height": 912345
+       }
+      ]
+     },
+     {}
+    ]
+   },
+   "chain": {
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": {
+     "height": 20,
+     "after": 6
+    },
+    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": {
+     "height": 30,
+     "after": 5
+    },
+    "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc": {
+     "height": 0,
+     "after": 100
+    }
+   },
+   "expected": {
+    "ok": {
+     "blocks": [
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+     ],
+     "found": [
+      {
+       "block": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+       "stated": 912345,
+       "height": 30,
+       "after": 5,
+       "counted": false
+      },
+      {
+       "block": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+       "stated": 912345,
+       "height": 20,
+       "after": 6,
+       "counted": true
+      },
+      {
+       "block": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+       "stated": 912345,
+       "height": 0,
+       "after": 100,
+       "counted": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "many",
+   "result": {
+    "entries": [
+     {
+      "stamps": [
+       {
+        "kind": "block",
+        "authority": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "height": 912345
+       },
+       {
+        "kind": "block",
+        "authority": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "height": 912345
+       }
+      ]
+     },
+     {
+      "stamps": [
+       {
+        "kind": "block",
+        "authority": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "height": 912345
+       },
+       {
+        "kind": "service",
+        "authority": "x"
+       }
+      ]
+     }
+    ],
+    "held": [
+     {
+      "stamps": [
+       {
+        "kind": "block",
+        "authority": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "height": 912345
+       }
+      ]
+     }
+    ]
+   },
+   "chain": {
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": {
+     "height": 20,
+     "after": 6
+    },
+    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": {
+     "height": 30,
+     "after": 5
+    },
+    "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc": {
+     "height": 0,
+     "after": 100
+    }
+   },
+   "expected": {
+    "ok": {
+     "blocks": [
+      "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+     ],
+     "found": [
+      {
+       "block": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+       "stated": 912345,
+       "height": 0,
+       "after": 100,
+       "counted": true
+      },
+      {
+       "block": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+       "stated": 912345,
+       "height": 30,
+       "after": 5,
+       "counted": false
+      },
+      {
+       "block": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+       "stated": 912345,
+       "height": 20,
+       "after": 6,
+       "counted": true
+      }
+     ]
+    }
+   }
+  }
+ ]
+}

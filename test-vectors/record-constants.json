@@ -1,0 +1,29 @@
+{
+ "about": "The reasons a service may give for a refusal, the kinds a vouching record may vouch for, and the most passes in a row.",
+ "function": "recordConstants",
+ "cases": [
+  {
+   "name": "the constants",
+   "expected": {
+    "ok": {
+     "REFUSAL_REASONS": {
+      "not-in-slip": "The slip does not cover the action, or does not name this service.",
+      "over-limit": "The action would pass a limit of the slip.",
+      "outside-valid-time": "The slip was not in force at that time.",
+      "slip-not-sound": "The slip did not pass its check.",
+      "needs-approval": "The slip asks for the person's approval, and none was shown.",
+      "against-terms": "The service's terms for agents do not accept the action.",
+      "other": "Another reason."
+     },
+     "VOUCHED_KINDS": {
+      "person": "A person, known by the public key of their passkey.",
+      "agent": "An agent, known by its two keys.",
+      "service": "A service, known by its two keys.",
+      "recorder": "A recorder, known by its three keys."
+     },
+     "MAX_PASSES": 10
+    }
+   }
+  }
+ ]
+}

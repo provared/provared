@@ -195,7 +195,8 @@ _TIME = re.compile(r'([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-
 
 def _days_from_civil(y, m, d):
     y -= m <= 2
-    era = (y if y >= 0 else y - 399) // 400
+    # Python's // rounds down, so no correction for years before 0 is needed.
+    era = y // 400
     yoe = y - era * 400
     doy = (153 * (m + (-3 if m > 2 else 9)) + 2) // 5 + d - 1
     doe = yoe * 365 + yoe // 4 - yoe // 100 + doy
@@ -204,7 +205,7 @@ def _days_from_civil(y, m, d):
 
 def _civil_from_days(z):
     z += 719468
-    era = (z if z >= 0 else z - 146096) // 146097
+    era = z // 146097
     doe = z - era * 146097
     yoe = (doe - doe // 1460 + doe // 36524 - doe // 146096) // 365
     y = yoe + era * 400
@@ -235,6 +236,13 @@ def parse_time(text):
     return ((_days_from_civil(y, mo, d) * 24 + h) * 60 + mi) * 60000 + s * 1000
 
 
+def nan_time(text):
+    """parseTime as JavaScript gives it: NaN, not None, for a text that is not
+    a time, so that every comparison with it is false, as in JavaScript."""
+    ms = parse_time(text)
+    return float('nan') if ms is None else ms
+
+
 MAX_TIME_MS = 8.64e15
 
 
@@ -250,7 +258,10 @@ def format_time(when):
     h, secs = divmod(secs, 3600)
     mi, s = divmod(secs, 60)
     year = '%04d' % y if 0 <= y <= 9999 else ('+' if y > 0 else '-') + '%06d' % abs(y)
-    return '%s-%02d-%02dT%02d:%02d:%02dZ' % (year, mo, d, h, mi, s)
+    # As JavaScript does it: the first 19 characters of toISOString(), and
+    # "Z". For a year outside 0 to 9999 that cuts off the seconds.
+    iso = '%s-%02d-%02dT%02d:%02d:%02d.000Z' % (year, mo, d, h, mi, s)
+    return iso[:19] + 'Z'
 
 
 def now_ms():
