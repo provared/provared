@@ -2,6 +2,64 @@
 
 ## Unreleased
 
+- 2026-10-08: faults found by an independent review of the Python
+  version, which also changed the JavaScript library.
+  - **Weak Ed25519 keys are refused.** Under one of the eight Ed25519
+    keys of small order, anyone can make a signature that checks.
+    Node.js refused such signatures; the OpenSSL beneath the Python
+    version accepted them, so with such a key trusted, a slip made by
+    someone holding no private key read as sound there. RFC 8032 does
+    not say to refuse these keys and libraries differ, so now the
+    checker refuses them itself, with any key written in more than one
+    way (y not below p): `bad-key` for a key in a record,
+    `stamp-invalid` for a time-stamp service's key.
+  - **The page address in a slip follows an exact rule.** The checker
+    used the URL Standard's own reader of addresses, which for a name
+    beginning `xn--` rests on tables of Unicode that differ from one
+    version of Node.js to the next, so two checkers could disagree. Now
+    `issuer.origin` must be written as a browser writes it, by a rule
+    that needs no such tables: `https://` (or `http://localhost`), a
+    host of lower-case letters, digits and hyphens in labels, a port
+    only where it is not the scheme's own, and nothing more (format
+    description, section 4.1). Some addresses the URL Standard allows
+    are now refused: underscores and other signs in a host, port 0,
+    addresses of numbers.
+  - A time-stamp service's key of another kind, or on another curve, is
+    refused in words that say so, not as a signature that "does not
+    fit".
+  - A time is read only from a number of milliseconds or a Date. Text,
+    true or a list were read by rules that differ from one device to
+    another (text with no time zone was taken as local time).
+  - `withoutMethods` that is not a list is set aside when a slip is
+    checked, as everywhere else. Before, it made the slip's check fail.
+- 2026-10-08: the Python version gains the stub writer beside an agent
+  (`open_recorder`) and the connector for an agent's tools
+  (`record_tools`, `arguments_fingerprint`, `NotTaken`). So it now does
+  everything the JavaScript library does.
+  - They are ported one to one and give the same answers: two new
+    shared files, `test-vectors/recorder-scenarios.json` (32 scenarios,
+    about 1,000 steps) and `test-vectors/tool-scenarios.json` (8
+    scenarios), each a world of records made beforehand and a list of
+    steps (actions, records, cancellations in every form the writer
+    takes, time-stamps, acknowledgements, a clock that fails, writers
+    opened again, tools called), with the transcript of what happened.
+    The two libraries play each scenario (`test/helpers/scenarios.mjs`
+    and `python/tests/scenarios.py`) and must write the same transcript,
+    down to the words of every message and how many times the clock was
+    read.
+  - In Python every call is an ordinary function. The writer's calls
+    wait for one another across threads. A call to the writer from
+    inside an action it is taking, or from the other side while it
+    countersigns, is refused at once, as in Node.js. The other side is
+    asked in a thread of its own and given 30 seconds, as before. A
+    function handed over that gives a coroutine is refused.
+  - `key_set_from_seeds` and `key_set_seeds`: an agent's keys kept
+    between runs as their two 32-byte seeds.
+  - The Python reading of base64url and the copy of a check's options
+    are faster; they give the same answers (a value shared many times in
+    the options is now copied once, as the JavaScript library copies it).
+  - `test/helpers/world.mjs` can be given the agent's and the service's
+    key sets, so that a scenario can hand the same keys to Python.
 - 2026-10-08: two faults in the check of a time-stamp from a service,
   found while writing the Python version.
   - An RSA key with the public number 1 in a service's certificate was

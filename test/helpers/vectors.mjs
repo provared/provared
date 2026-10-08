@@ -7,11 +7,13 @@ import { coverMembers } from '../../src/cover.js';
 import { countCharacters, fromBase64url, parseCanonical, parseTime, sha256, toBase64url, utf8 } from '../../src/encoding.js';
 import { encodeContent, parseRecord, protectedHeaders, signingInput } from '../../src/jws.js';
 import { PASSKEY_METHODS, checkKey, thumbprint } from '../../src/keys.js';
+import { checkOriginForTests } from '../../src/slip.js';
 import { validateCountersignatureContent, validateStubContent } from '../../src/stub.js';
 import { ecdsaDerToRaw } from '../../src/webauthn.js';
 import { makePasskey } from './passkey.mjs';
 import { answer, finish } from './vector-tools.mjs';
 import * as book from './vectors-book.mjs';
+import * as recorder from './vectors-recorder.mjs';
 import * as records from './vectors-records.mjs';
 import * as stamps from './vectors-stamps.mjs';
 
@@ -22,6 +24,7 @@ export const ANSWER = {
   ...stamps.ANSWER,
   ...records.ANSWER,
   ...book.ANSWER,
+  ...recorder.ANSWER,
   parseCanonical: (c) => answer(() => parseCanonical(c.text)),
   fromBase64url: (c) => answer(() => hex(fromBase64url(c.text))),
   parseTime: async (c) => ({ ok: Number.isNaN(parseTime(c.text)) ? null : parseTime(c.text) }),
@@ -50,13 +53,12 @@ export const ANSWER = {
   checkSlip: async (c) => ({ ok: await checkSlip(c.record, c.options, c.disclosures) }),
   // Whether a text is a page address in its plain form: the address the URL
   // Standard gives back for it, with nothing after the host and the port.
-  plainOrigin: async (c) => {
-    try {
-      return { ok: new URL(c.text).origin === c.text };
-    } catch {
-      return { ok: false };
-    }
-  },
+  // A slip's issuer.origin and issuer.rpId, by the slip's own rule.
+  checkOrigin: (c) =>
+    answer(() => {
+      checkOriginForTests(c.text, c.rpId);
+      return true;
+    }),
 };
 
 const set = (about, fn, cases) => finish(about, fn, cases, ANSWER);
@@ -159,6 +161,23 @@ function countCases() {
 
 // --- keys ---
 
+// The Ed25519 public keys under which anyone can sign (the points of small
+// order), and keys written in more than one way (y not below p).
+const WEAK_ED25519 = [
+  ['the neutral point', '0100000000000000000000000000000000000000000000000000000000000000'],
+  ['the neutral point, with the sign bit', '0100000000000000000000000000000000000000000000000000000000000080'],
+  ['a point of order 2', 'ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f'],
+  ['a point of order 4', '0000000000000000000000000000000000000000000000000000000000000000'],
+  ['the other point of order 4', '0000000000000000000000000000000000000000000000000000000000000080'],
+  ['a point of order 8', 'c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a'],
+  ['another point of order 8', 'c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa'],
+  ['a third point of order 8', '26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc05'],
+  ['a fourth point of order 8', '26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc85'],
+  ['y equal to p', 'edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f'],
+  ['y of p + 1, the neutral point written again', 'eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f'],
+  ['y of 2^255 - 1', 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f'],
+];
+
 async function keyCases() {
   const agent = await generateKeySet();
   const es = (await makePasskey('ES256')).key;
@@ -196,6 +215,8 @@ async function keyCases() {
     ['an RSA key with a leading zero', { ...rs, n: toBase64url(new Uint8Array([0, ...fromBase64url(rs.n)])) }, all],
     ['an RSA key of 8,193 bits', { ...rs, n: toBase64url(new Uint8Array([1, ...new Uint8Array(1024).fill(255)])) }, all],
     ['an RSA key of 8,192 bits', { ...rs, n: toBase64url(new Uint8Array(1024).fill(255)) }, all],
+    ...WEAK_ED25519.map(([name, h]) => [`a weak Ed25519 key: ${name}`, { ...edAgent, x: toBase64url(Buffer.from(h, 'hex')) }, all]),
+    ...WEAK_ED25519.map(([name, h]) => [`a weak Ed25519 passkey: ${name}`, { ...ed, x: toBase64url(Buffer.from(h, 'hex')) }, PASSKEY_METHODS]),
   ];
   return cases.map(([name, key, allowed]) => ({ name, key, allowed }));
 }
@@ -553,7 +574,14 @@ function originCases() {
   const characters = 'abcz019-._!"$&\'()*+,;=`{}~ABZ%@#/:?[]\\ ^|<>éßİK。．\u0000\t';
   const labels = ['example', 'org', 'sign', 'a', 'xn--bcher-kva', 'xn--zca', 'xn--ss-', 'xn--a', 'xn--', 'xn--ls8h', 'xn--55qx5d', 'xn--1ch', '0', '09', '255', '256', '0x1f', '0x', '1e3', 'localhost', ''];
   const ipv6 = ['[::1]', '[::]', '[0:0:0:0:0:0:0:1]', '[2001:db8::1]', '[2001:DB8::1]', '[2001:db8:0:0:1:0:0:1]', '[2001:db8::1:0:0:1]', '[1:0:0:2:0:0:0:3]', '[1::2:0:0:0:3]', '[::ffff:192.0.2.1]', '[::ffff:c000:201]', '[1:2:3:4:5:6:7:8]', '[1:2:3:4:5:6:7::]', '[1:2:3:4:5:6::8]', '[::1%25eth0]', '[0001::1]', '[1::0:1]'];
-  const cases = new Set();
+  const cases = new Set([
+    'https://example.org', 'https://sign.example.org', 'https://sign.example.org:8443', 'http://localhost', 'http://localhost:8787',
+    'http://localhost:80', 'https://example.org:443', 'https://xn--bcher-kva.example', 'https://sign.xn--bcher-kva.example',
+    'https://-a.example.org', 'https://a-.example.org', 'https://a--b.example.org', 'https://' + 'a'.repeat(63) + '.example.org',
+    'https://' + 'a'.repeat(64) + '.example.org', 'https://example.123', 'https://123.example.org', 'https://192.0.2.1',
+    'https://example.org.', 'https://.example.org', 'https://a..example.org', 'https://example.org:0', 'https://example.org:65535',
+    'https://example.org:65536', 'https://example.org:080', 'https://Example.org', 'https://a_b.example.org',
+  ]);
   for (let i = 0; i < 4000; i++) {
     let host;
     const shape = next();
@@ -573,7 +601,15 @@ function originCases() {
     let user = next() < 0.04 ? pick(['u@', 'u:p@', '@']) : '';
     cases.add(`${pick(schemes)}://${user}${host}${port}${tail}`);
   }
-  return [...cases].map((text) => ({ name: JSON.stringify(text), text }));
+  // The website name: mostly the end of the address's own host, so that the
+  // rule's other parts are reached; sometimes one that does not fit.
+  const rpIdFor = (text, i) => {
+    const host = /^[A-Za-z]+:\/\/([^:/?#]*)/.exec(text);
+    const labels = host ? host[1].split('.').filter(Boolean) : [];
+    if (i % 5 === 4 || labels.length === 0) return 'example.org';
+    return labels.slice(-(1 + (i % 2))).join('.');
+  };
+  return [...cases].map((text, i) => ({ name: JSON.stringify(text), text, rpId: rpIdFor(text, i) }));
 }
 
 /** Each set of cases, by the name of its file. */
@@ -587,9 +623,10 @@ export const CASES = {
   records: async () => set('Reading the envelope of a record as a given kind (format description, sections 3.1 to 3.5).', 'parseRecord', await recordCases()),
   'stub-contents': () => set("Confirming the members of a stub's content (format description, section 5.1).", 'validateStubContent', stubContents()),
   'countersignature-contents': () => set("Confirming the members of a countersignature's content (format description, section 6).", 'validateCountersignatureContent', countersignatureContents()),
-  origins: () => set('Whether a text is a page address in its plain form, as a slip\'s "issuer.origin" must be (format description, section 4.1).', 'plainOrigin', originCases()),
+  origins: () => set('Whether a slip\'s "issuer.origin" is a page address as the format allows, on the website its "issuer.rpId" names (format description, section 4.1).', 'checkOrigin', originCases()),
   slips: async () => set('Checking one slip (format description, section 4.4), with what the checker is told to trust.', 'checkSlip', await slipCases()),
   ...stamps.CASES,
   ...records.CASES,
   ...book.CASES,
+  ...recorder.CASES,
 };

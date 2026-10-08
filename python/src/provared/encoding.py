@@ -3,6 +3,7 @@
 # Nothing here is specific to a kind of record. Each function does exactly
 # what its namesake in the JavaScript library's src/encoding.js does.
 
+import base64
 import hashlib
 import os
 import re
@@ -82,6 +83,9 @@ def to_base64url(data):
     return ''.join(out)
 
 
+_BASE64URL = re.compile(r'[A-Za-z0-9_-]*')
+
+
 def from_base64url(text):
     """Strict decoding: refuses any character outside the alphabet, padding, an
     impossible length, and stray bits in the last character. So one value has
@@ -90,22 +94,14 @@ def from_base64url(text):
         raise Refusal('bad-base64url', 'A base64url value must be text.')
     if _js.utf16_length(text) % 4 == 1:
         raise Refusal('bad-base64url', 'A base64url value has an impossible length.')
-    out = bytearray()
-    acc = 0
-    bits = 0
-    for c in text:
-        v = _LOOKUP.get(c, -1)
-        if v < 0:
-            raise Refusal('bad-base64url', 'A base64url value holds a character that is not allowed.')
-        acc = (acc << 6) | v
-        bits += 6
-        if bits >= 8:
-            bits -= 8
-            out.append((acc >> bits) & 0xFF)
-            acc &= (1 << bits) - 1
-    if acc != 0:
+    if not _BASE64URL.fullmatch(text):
+        raise Refusal('bad-base64url', 'A base64url value holds a character that is not allowed.')
+    # The bits of the last character that hold no byte must be zero: four of
+    # them after two characters, two after three.
+    rest = len(text) % 4
+    if rest and _LOOKUP[text[-1]] & (0x0F if rest == 2 else 0x03):
         raise Refusal('bad-base64url', 'A base64url value has stray bits in its last character.')
-    return bytes(out)
+    return base64.urlsafe_b64decode(text + '=' * (-len(text) % 4))
 
 
 # --- the canonical form (RFC 8785, narrowed as the format description says) ---

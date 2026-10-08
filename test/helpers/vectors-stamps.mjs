@@ -685,7 +685,7 @@ const NAME = seq(set(seq(oid(OID.commonName), der(0x0c, utf8('Made-up time-stamp
 
 function makeKey(kind) {
   let pair;
-  if (kind === 'P-256' || kind === 'P-384') pair = generateKeyPairSync('ec', { namedCurve: kind });
+  if (kind.startsWith('P-')) pair = generateKeyPairSync('ec', { namedCurve: kind });
   else if (kind === 'Ed25519') pair = generateKeyPairSync('ed25519');
   else {
     const [, bits, e] = /^RSA-(\d+)(?:-e(\d+))?$/.exec(kind);
@@ -1975,9 +1975,24 @@ function strictKeyCases() {
     add(`ECDSA ${curve}, a point cut short`, ec, spkiOf(algorithm, bitString(concatBytes(H('04'), x, y.subarray(1)))));
     add(`ECDSA ${curve}, an unused bit`, ec, spkiOf(algorithm, bitString(concatBytes(H('04'), x, y), 1)));
   }
+  // Honest keys of other sizes and public numbers, and keys that are not accepted.
+  for (const kind of ['RSA-3072', 'RSA-4096', 'RSA-2048-e3', 'RSA-2049']) {
+    const key = makeKey(kind);
+    add(`${kind}, written as its standard sets out`, key, key.spki);
+  }
+  const short = makeKey('RSA-2047');
+  add('RSA of 2,047 bits', short, short.spki);
+  const p521 = makeKey('P-521');
+  add('ECDSA P-521, a curve that is not accepted', p521, p521.spki);
   const ed = makeKey('Ed25519');
   const edKey = fromBase64url(ed.jwk.x);
   add('Ed25519, written as its standard sets out', ed, ed.spki);
+  // Under a key of small order, the neutral point with S = 0 is a signature
+  // that checks for any message, whoever makes it.
+  const neutral = H('0100000000000000000000000000000000000000000000000000000000000000');
+  const anyone = () => concatBytes(neutral, new Uint8Array(32));
+  add('Ed25519 of small order, and a signature anyone could make', ed, spkiOf(seq(oid('2b6570')), bitString(neutral)), { sign: anyone });
+  add('Ed25519 written with y not below p', ed, spkiOf(seq(oid('2b6570')), bitString(H('edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f'))), { sign: anyone });
   add('Ed25519 with parameters', ed, spkiOf(seq(oid('2b6570'), NULL), bitString(edKey)));
   add('Ed25519 of 33 bytes', ed, spkiOf(seq(oid('2b6570')), bitString(concatBytes(edKey, H('00')))));
   add('Ed25519 with an unused bit', ed, spkiOf(seq(oid('2b6570')), bitString(edKey, 1)));

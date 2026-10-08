@@ -231,7 +231,7 @@ def _read_line(reader, index, line, disclosures=_UNDEFINED):
             raise RuntimeError('only a stub may be tried')
         if names == 'slip':
             entry['kind'] = 'slip'
-            check = check_slip(value['slip'], options, disclosures)
+            check = check_slip(value.get('slip'), options, disclosures)
             # (Disclosures on a page of a Show and disclosures handed over beside it are used together: see check_slip.)
             for p in check['disclosureProblems']:
                 reader.handed_problems.append({
@@ -279,9 +279,9 @@ def _read_line(reader, index, line, disclosures=_UNDEFINED):
                     'issuer': _vouch_for(vouchings, 'person', s['issuer']['key'], s['issuer'].get('name'), span),
                     'agent': _vouch_for(vouchings, 'agent', s['agent']['keys'], s['agent'].get('name'), span),
                     # Every service has a place here, so that looking one up by its id finds only what was put there.
-                    'services': {
+                    'services': _js.in_key_order({
                         w['id']: _vouch_for(vouchings, 'service', w['keys'], w.get('name'), span) if keys_of(w) else None for w in s['with']
-                    },
+                    }),
                 }
                 # A name that an organisation the checker trusts vouches for is no longer only a label.
                 if entry['vouched']['issuer'] and entry['vouched']['issuer']['counted']:
@@ -518,16 +518,51 @@ _SNAKE = {
 
 
 class _Fixed(dict):
-    pass
+    """The options of a check, fixed. "unreadable" names any that nest too deeply to be read."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.unreadable = []
 
 
-def _plain(value):
-    """A deep copy of an option, with tuples as lists, as JSON would hold it."""
-    if isinstance(value, Mapping):
-        return {k: _plain(v) for k, v in value.items()}
+class _Unreadable:
+    """What stands, in a fixed copy of the options, for a value more than 16
+    levels down. In the JavaScript library such a value cannot be read: a
+    check that reads it fails there, and the stub writer refuses it as not
+    plain data. Here it stands as a value of no kind a check accepts, so a
+    check that reads it refuses it there, and the stub writer refuses it as
+    anything that is not plain data. No option nests so deep."""
+
+    __slots__ = ()
+
+    def __repr__(self):
+        return '<a value more than 16 levels down, which cannot be read>'
+
+
+_UNREADABLE = _Unreadable()
+
+
+def _plain(value, memo=None, depth=0, deep=None):
+    """A deep copy of an option, with tuples as lists, as JSON would hold it.
+    A value met twice is copied once, so that the copy holds the same
+    sharing, and costs no more to make than what was handed over holds."""
+    if not isinstance(value, (dict, list, tuple)) and not isinstance(value, Mapping):
+        return copy.deepcopy(value)
+    if depth > 16:
+        if deep is not None:
+            deep.append(True)
+        return _UNREADABLE
+    if memo is None:
+        memo = {}
+    found = memo.get(id(value))
+    if found is not None:
+        return found[1]
     if isinstance(value, (list, tuple)):
-        return [_plain(v) for v in value]
-    return copy.deepcopy(value)
+        made = [_plain(v, memo, depth + 1, deep) for v in value]
+    else:
+        made = {k: _plain(v, memo, depth + 1, deep) for k, v in value.items()}
+    memo[id(value)] = (value, made)
+    return made
 
 
 def fixed_options(options=None, **named):
@@ -542,12 +577,19 @@ def fixed_options(options=None, **named):
     if isinstance(options, Mapping):
         for name in OPTION_NAMES:
             if name in options:
-                fixed[name] = _plain(options[name])
+                deep = []
+                fixed[name] = _plain(options[name], deep=deep)
+                if deep:
+                    # No option nests so deep. The check that reads it fails.
+                    fixed.unreadable.append(name)
     for name, value in named.items():
         if name not in _SNAKE:
             raise TypeError(f'unknown option "{name}"')
         if value is not None:
-            fixed[_SNAKE[name]] = _plain(value)
+            deep = []
+            fixed[_SNAKE[name]] = _plain(value, deep=deep)
+            if deep:
+                fixed.unreadable.append(_SNAKE[name])
     return fixed
 
 
@@ -610,7 +652,7 @@ def _check_pass_entry(entry, value, slips, passes, ids, without, whole):
     # Whether this pass was compared with what its writer holds. It is not,
     # if the pass or the slip could not be confirmed.
     entry['compared'] = False
-    parsed = parse_record(value['pass'], 'pass')
+    parsed = parse_record(value.get('pass'), 'pass')
     entry['fingerprint'] = parsed.fingerprint
     validate_pass_content(parsed.content)
     c = parsed.content
@@ -679,7 +721,7 @@ def _check_vouching_entry(entry, value, vouchings, ids, options):
     """A vouching record: an organisation states that a key belongs to a name."""
     without = _without(options)
     entry['signatures'] = []
-    parsed = parse_record(value['vouching'], 'vouching')
+    parsed = parse_record(value.get('vouching'), 'vouching')
     entry['fingerprint'] = parsed.fingerprint
     validate_vouching_content(parsed.content)
     c = parsed.content
@@ -718,7 +760,7 @@ def _check_withdrawal_entry(entry, value, vouchings, ids, options, whole):
     this place in the book onwards that record vouches for nothing."""
     without = _without(options)
     entry['signatures'] = []
-    parsed = parse_record(value['withdrawal'], 'withdrawal')
+    parsed = parse_record(value.get('withdrawal'), 'withdrawal')
     entry['fingerprint'] = parsed.fingerprint
     validate_withdrawal_content(parsed.content)
     c = parsed.content
@@ -744,7 +786,7 @@ def _check_cancellation_entry(entry, value, slips, ids, options, whole):
     """A cancellation: the person ends a slip early, with the passkey that signed it."""
     without = _without(options)
     entry['stamps'] = []
-    parsed = parse_record(value['cancellation'], 'cancellation')
+    parsed = parse_record(value.get('cancellation'), 'cancellation')
     entry['fingerprint'] = parsed.fingerprint
     validate_cancellation_content(parsed.content)
     c = parsed.content
@@ -802,7 +844,7 @@ def _check_acknowledgement_entry(entry, value, slips, passes, ids, entries, with
     the agent the slip names or, where it names a pass, of the helper agent
     that pass names. In a book it comes after the cancellation it names."""
     entry['signatures'] = []
-    parsed = parse_record(value['acknowledgement'], 'acknowledgement')
+    parsed = parse_record(value.get('acknowledgement'), 'acknowledgement')
     entry['fingerprint'] = parsed.fingerprint
     validate_acknowledgement_content(parsed.content)
     c = parsed.content
@@ -1282,7 +1324,7 @@ def _check_seal_entry(entry, value, seals, ids, options, before, entries, as_pag
     without = _without(options)
     entry['signatures'] = []
     entry['stamps'] = []
-    parsed = parse_record(value['seal'], 'seal')
+    parsed = parse_record(value.get('seal'), 'seal')
     entry['fingerprint'] = parsed.fingerprint
     validate_seal_content(parsed.content)
     c = parsed.content
@@ -1475,7 +1517,7 @@ def _check_refusal_entry(entry, value, slips, ids, without, whole):
     """A refusal: what a service says it refused. It is the service's own
     statement, signed with the keys the refusal itself gives."""
     entry['signatures'] = []
-    parsed = parse_record(value['refusal'], 'refusal')
+    parsed = parse_record(value.get('refusal'), 'refusal')
     entry['fingerprint'] = parsed.fingerprint
     validate_refusal_content(parsed.content)
     c = parsed.content
@@ -1498,7 +1540,7 @@ def _check_refusal_entry(entry, value, slips, ids, without, whole):
 def _check_terms_entry(entry, value, terms, ids, without):
     """A service's terms for agents, signed with the keys the terms themselves give."""
     entry['signatures'] = []
-    parsed = parse_record(value['terms'], 'terms')
+    parsed = parse_record(value.get('terms'), 'terms')
     entry['fingerprint'] = parsed.fingerprint
     try:
         validate_terms_content(parsed.content)
@@ -1533,7 +1575,7 @@ def _check_stub_entry(entry, value, slips, terms, passes, ids, without, whole):
     # the slip could not be confirmed.
     entry['compared'] = False
 
-    parsed = parse_record(value['stub'], 'stub')
+    parsed = parse_record(value.get('stub'), 'stub')
     entry['fingerprint'] = parsed.fingerprint
     validate_stub_content(parsed.content)
     c = parsed.content
@@ -1808,7 +1850,7 @@ def _check_held(result, reader, options, late, beside):
         result['held'].append(held)
         try:
             f.members(value, ['cancellation'], ['acknowledgements', 'stamps'], f'cancellations[{i}]')
-            parsed = parse_record(value['cancellation'], 'cancellation')
+            parsed = parse_record(value.get('cancellation'), 'cancellation')
             held['fingerprint'] = parsed.fingerprint
             validate_cancellation_content(parsed.content)
             c = parsed.content
@@ -2094,6 +2136,20 @@ def open_checker(text='', options=None, **named):
     return Checker(text, options, **named)
 
 
+def _disclosures_for(disclosures, index):
+    """The disclosures handed over for one page, found as JavaScript finds a
+    member by number: in an object by the number written as text, or in a
+    list by its place."""
+    if isinstance(disclosures, Mapping):
+        for key in (index, str(index)):
+            if key in disclosures:
+                return disclosures[key]
+        return None
+    if isinstance(disclosures, list) and isinstance(index, int) and 0 <= index < len(disclosures):
+        return disclosures[index]
+    return None
+
+
 def make_show(text, indexes, seal=None, disclosures=None):
     """Make a Show: some entries of a book, each with the proof that it is in the
     book (format description, section 11).
@@ -2105,6 +2161,7 @@ def make_show(text, indexes, seal=None, disclosures=None):
     page, by the page's index."""
     lines = _split_lines(text)
     seal_entry = None
+    seal = _js.whole(seal)
     if seal is not None:
         if not isinstance(seal, int) or isinstance(seal, bool) or seal < 1 or seal >= len(lines):
             raise ValueError('there is no such entry')
@@ -2113,15 +2170,15 @@ def make_show(text, indexes, seal=None, disclosures=None):
             raise ValueError('that entry is not a seal')
         lines = lines[:seal]
     leaves = [utf8(line) for line in lines]
-    wanted = sorted(set(indexes))
+    wanted = sorted({_js.whole(i) for i in indexes})
     if len(wanted) < 1 or len(wanted) > MAX_PAGES:
         raise ValueError('a Show holds 1 to 64 pages')
     pages = []
     for index in wanted:
         path = inclusion_path(leaves, index)
         page = {'index': index, 'entry': lines[index], 'path': [to_base64url(p) for p in path]}
-        reveal = disclosures.get(index) if isinstance(disclosures, Mapping) else None
-        if reveal:
+        reveal = _disclosures_for(disclosures, index)
+        if _js.truthy(reveal):
             page['disclosures'] = reveal
         pages.append(page)
     show = {'type': 'provared.show.v0', 'size': len(lines), 'root': to_base64url(tree_root(leaves)), 'pages': pages}

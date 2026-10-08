@@ -7,13 +7,14 @@ import pathlib
 import unittest
 
 import answers_book
+import answers_recorder
 import answers_records
 import answers_stamps
 from provared import _js
 from provared.encoding import count_characters, from_base64url, parse_canonical, parse_time, problem_from
 from provared.jws import parse_record
 from provared.keys import check_key, thumbprint
-from provared.slip import _UNDEFINED, _plain_origin, check_slip
+from provared.slip import _UNDEFINED, _check_origin, check_slip
 from provared.stub import validate_countersignature_content, validate_stub_content
 from provared.webauthn import ecdsa_der_to_raw
 
@@ -55,11 +56,12 @@ ANSWER = {
     'parseRecord': lambda c: _answer(lambda: _record(c)),
     'validateStubContent': lambda c: _answer(lambda: _true(validate_stub_content)(c['content'])),
     'validateCountersignatureContent': lambda c: _answer(lambda: _true(validate_countersignature_content)(c['content'])),
-    'plainOrigin': lambda c: {'ok': _plain_origin(c['text']) is not None},
+    'checkOrigin': lambda c: _answer(lambda: _true(lambda _: _check_origin(c['text'], c['rpId']))(None)),
     'checkSlip': lambda c: {'ok': check_slip(c['record'], c.get('options'), c['disclosures'] if 'disclosures' in c else _UNDEFINED)},
     **answers_stamps.ANSWER,
     **answers_records.ANSWER,
     **answers_book.ANSWER,
+    **answers_recorder.ANSWER,
 }
 
 

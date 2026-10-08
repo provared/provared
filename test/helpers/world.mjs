@@ -38,11 +38,13 @@ export const START = Date.parse('2026-10-05T09:00:00Z');
  * @param {object} [o.fields] members of the slip to override
  * @param {object} [o.assertion] changes to the passkey's answer (see makePasskey)
  * @param {string[]} [o.cover] fields of the slip to cover; the disclosures are in "prepared.disclosures"
+ * @param {{keys: object[], privateKeys: any[]}} [o.agent] the agent's key set; a new one by default
+ * @param {{keys: object[], privateKeys: any[]}} [o.service] the service's key set; a new one by default
  */
 export async function makeWorld(o = {}) {
   const passkey = await makePasskey(o.passkeyAlg ?? 'ES256');
-  const agent = await generateKeySet();
-  const service = await generateKeySet();
+  const agent = o.agent ?? (await generateKeySet());
+  const service = o.service ?? (await generateKeySet());
   const fields = {
     issuer: { name: 'Sam Example', key: passkey.key, rpId: passkey.rpId, origin: passkey.origin },
     agent: { name: 'Office supplies agent', keys: agent.keys },

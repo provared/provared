@@ -105,8 +105,10 @@ def generate_key_set():
     same order. The private keys stay in the memory of this process."""
     if _mldsa is None:
         raise RuntimeError('ML-DSA is not built into this device: "cryptography" 48 or later is needed.')
-    ed = ed25519.Ed25519PrivateKey.generate()
-    ml = _mldsa.MLDSA87PrivateKey.generate()
+    return _key_set(ed25519.Ed25519PrivateKey.generate(), _mldsa.MLDSA87PrivateKey.generate())
+
+
+def _key_set(ed, ml):
     ed_x = ed.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
     ml_pub = ml.public_key().public_bytes_raw()
     keys = [
@@ -114,3 +116,28 @@ def generate_key_set():
         {'alg': 'ML-DSA-87', 'kty': 'AKP', 'pub': to_base64url(ml_pub)},
     ]
     return keys, [ed, ml]
+
+
+def key_set_from_seeds(ed25519_seed, ml_dsa_seed):
+    """Load an agent's or a service's key set from its two 32-byte seeds: the
+    Ed25519 private key (RFC 8032) and the ML-DSA-87 seed (FIPS 204), as
+    key_set_seeds gives them. Returns the public key set and the private
+    keys, in the same order, as generate_key_set does. So an agent can keep
+    its keys between runs. The seeds are secrets: whoever holds them can
+    sign as the agent."""
+    if _mldsa is None:
+        raise RuntimeError('ML-DSA is not built into this device: "cryptography" 48 or later is needed.')
+    ed25519_seed = bytes(ed25519_seed)
+    ml_dsa_seed = bytes(ml_dsa_seed)
+    if len(ed25519_seed) != 32 or len(ml_dsa_seed) != 32:
+        raise ValueError('Each seed must be 32 bytes.')
+    return _key_set(ed25519.Ed25519PrivateKey.from_private_bytes(ed25519_seed), _mldsa.MLDSA87PrivateKey.from_seed_bytes(ml_dsa_seed))
+
+
+def key_set_seeds(private_keys):
+    """The two 32-byte seeds of a key set's private keys (Ed25519, then
+    ML-DSA-87), as generate_key_set or key_set_from_seeds gives them, for
+    key_set_from_seeds. They are secrets: keep them as carefully as the
+    keys themselves."""
+    ed, ml = private_keys
+    return ed.private_bytes_raw(), ml.private_bytes_raw()

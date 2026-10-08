@@ -14,31 +14,39 @@ const LIMIT_KINDS = ['count', 'each', 'max'];
 /** The longest period a limit may name: 366 days. */
 const MAX_PERIOD_SECONDS = 366 * 86400;
 
+// The address of the page a slip was signed on, by an exact rule that any
+// checker can follow without a reader of web addresses or tables of
+// Unicode: "https://" (or "http://" for localhost), a host, a port only if
+// it is not the scheme's own, and nothing more. A host is labels of
+// lower-case letters, digits and hyphens, separated by full stops; no label
+// begins or ends with a hyphen, and the last is not all digits. A browser
+// writes a page's address in exactly this form, with a name in another
+// script written in its "xn--" form, which the rule takes as it is.
+const ORIGIN = /^(https|http):\/\/([a-z0-9.-]{1,253})(?::([1-9][0-9]{0,4}))?$/;
+const LABEL = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
+
 function checkOrigin(origin, rpId) {
   f.text(origin, 1, 300, 'issuer.origin');
   if (typeof rpId !== 'string' || !/^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$/.test(rpId)) {
     throw f.fail('issuer.rpId', 'must be a website name in lower case, such as example.org.');
   }
-  // url.origin has no path and no default port, so this also refuses
-  // anything after the host. An address that cannot be read and one that is
-  // not in its plain form get the same words, so that a checker written
-  // without a full reader of addresses can give the same answer.
-  let url = null;
-  try {
-    url = new URL(origin);
-  } catch {
-    url = null;
+  const m = ORIGIN.exec(origin);
+  const labels = m ? m[2].split('.') : [];
+  const port = m && m[3] !== undefined ? Number(m[3]) : null;
+  if (!m || !labels.every((l) => LABEL.test(l)) || /^[0-9]+$/.test(labels[labels.length - 1]) || (port !== null && (port > 65535 || port === (m[1] === 'https' ? 443 : 80)))) {
+    throw f.fail('issuer.origin', 'must be the address of a page: https://, a website name in lower case, a port only if it is needed, and nothing more, such as https://sign.example.org.');
   }
-  if (url === null || url.origin !== origin) {
-    throw f.fail('issuer.origin', 'must be the address of a page, with nothing after the host and the port, such as https://sign.example.org.');
-  }
-  if (!(url.protocol === 'https:' || (url.protocol === 'http:' && url.hostname === 'localhost'))) {
+  const [, scheme, host] = m;
+  if (!(scheme === 'https' || (scheme === 'http' && host === 'localhost'))) {
     throw f.fail('issuer.origin', 'must begin https://, or http://localhost.');
   }
-  if (!(url.hostname === rpId || url.hostname.endsWith('.' + rpId))) {
+  if (!(host === rpId || host.endsWith('.' + rpId))) {
     throw f.fail('issuer.origin', 'must be on the website that issuer.rpId names.');
   }
 }
+
+/** Not part of the public interface: for the shared test files. */
+export const checkOriginForTests = checkOrigin;
 
 /**
  * Confirm a list of limits against the actions it may name (format
@@ -328,7 +336,8 @@ export async function checkSlip(record, options = {}, disclosures) {
     result.issuerKey = await thumbprint(issuer.key);
 
     result.signature.state = 'invalid';
-    result.signature.state = await checkPasskeySignature(parsed, issuer, options.withoutMethods);
+    // As everywhere else, only a list counts as a list of methods to treat as not built in.
+    result.signature.state = await checkPasskeySignature(parsed, issuer, Array.isArray(options.withoutMethods) ? options.withoutMethods : []);
     if (result.signature.state === 'unavailable') {
       result.notes.push(`This device cannot check the passkey's signing method (${issuer.key.alg}).`);
     }

@@ -19,3 +19,5 @@ Thumbs.db
 python/.venv/
 __pycache__/
 *.egg-info/
+python/build/
+python/dist/

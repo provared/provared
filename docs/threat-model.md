@@ -571,9 +571,12 @@ person checking gives.
 - **A key under which anyone can sign.** An RSA key with the public
   number 1 lets anyone make a signature that checks. Such a key, and one
   with an even public number, is refused, even in a certificate the
-  person named as trusted. The key in a certificate must be written
-  exactly as its standard sets out, so that two checkers cannot disagree
-  about whether it can be read.
+  person named as trusted. So is an Ed25519 key of small order, there and
+  in every record (a passkey, an agent, a service, a recorder, an
+  organisation): libraries differ in whether they accept signatures under
+  such a key, so the checker refuses the key itself. The key in a
+  certificate must be written exactly as its standard sets out, so that
+  two checkers cannot disagree about whether it can be read.
 
 **Knowing that a block is part of the chain.** The person checking can
 name the blocks they trust, or hand the checker a chain of block headers

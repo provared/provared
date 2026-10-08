@@ -30,6 +30,16 @@ def _number_int(text):
     return int(text)
 
 
+def _number_float(text):
+    """A number written with a point or an exponent. JavaScript has one kind
+    of number, so one that is whole (and no larger than 2^53 - 1) is held
+    as a whole number, as it is written back in JavaScript. -0 stays -0."""
+    value = float(text)
+    if value.is_integer() and abs(value) <= MAX_SAFE_INTEGER and not (value == 0 and text.lstrip().startswith('-')):
+        return int(value)
+    return value
+
+
 def parse(text):
     """JSON.parse: the value, with numbers as JavaScript reads them.
 
@@ -38,7 +48,7 @@ def parse(text):
     if not isinstance(text, str):
         raise _NotJson('not text')
     try:
-        return json.loads(text, parse_int=_number_int, parse_constant=_no_constant)
+        return json.loads(text, parse_int=_number_int, parse_float=_number_float, parse_constant=_no_constant)
     except RecursionError:
         # Python's reader gives up on deep nesting, where JSON.parse does not.
         return _parse_deep(text)
@@ -73,7 +83,7 @@ def _parse_deep(text):
             c = text[i]
             if c == '"':
                 out.append(text[start:i])
-                return ''.join(out), i + 1
+                return ''.join(out).encode('utf-16-le', 'surrogatepass').decode('utf-16-le', 'surrogatepass'), i + 1
             if c == '\\':
                 out.append(text[start:i])
                 if i + 1 >= n:
@@ -132,7 +142,7 @@ def _parse_deep(text):
             if not m:
                 raise _NotJson('bad number')
             t = m.group(0)
-            value = _number_int(t) if re.fullmatch(r'-?[0-9]+', t) else float(t)
+            value = _number_int(t) if re.fullmatch(r'-?[0-9]+', t) else _number_float(t)
             i = m.end()
         elif text.startswith('true', i):
             value, i = True, i + 4
@@ -205,7 +215,9 @@ def utf16_key(text):
 
 def utf16_length(text):
     """A string's "length" in JavaScript: its UTF-16 code units."""
-    return len(text) + sum(1 for c in text if ord(c) > 0xFFFF)
+    if text.isascii():
+        return len(text)
+    return len(text.encode('utf-16-le', 'surrogatepass')) // 2
 
 
 def sort_strings(names):
@@ -249,6 +261,19 @@ def is_safe_integer(value):
     if isinstance(value, float):
         return value == value and value not in (float('inf'), float('-inf')) and value.is_integer() and abs(value) <= MAX_SAFE_INTEGER
     return False
+
+
+def whole(value):
+    """A number that JavaScript holds as a whole number, as an int: so 2.0 is 2.
+    Anything else is given back as it is."""
+    if isinstance(value, float) and value.is_integer() and abs(value) <= MAX_SAFE_INTEGER:
+        return int(value)
+    return value
+
+
+def in_key_order(obj):
+    """An object with its members in the order Object.keys gives them."""
+    return {k: obj[k] for k in keys(obj)}
 
 
 def truthy(value):
@@ -314,3 +339,80 @@ def number_text(value):
     if isinstance(value, float):
         return str(int(value))
     return str(value)
+
+
+def number_value(value):
+    """The number JavaScript would hold for a Python number: a float, or an
+    int that a float holds exactly. A whole number beyond 2^53 - 1 becomes
+    the nearest float, as JSON.parse would read it. Raises OverflowError for
+    a whole number too large for a float."""
+    if isinstance(value, int) and not isinstance(value, bool):
+        if -MAX_SAFE_INTEGER <= value <= MAX_SAFE_INTEGER:
+            return value
+        return float(value)
+    return value
+
+
+def number_string(value):
+    """Number.prototype.toString() in base 10, which JSON.stringify also
+    uses for a finite number: the fewest digits that read back as the same
+    number, written as ECMAScript sets out (section 6.1.6.1.20). So 1e21 is
+    "1e+21", 1.5e-7 is "1.5e-7", 1e-6 is "0.000001" and 0.1 + 0.2 is
+    "0.30000000000000004". Raises OverflowError for a whole number too large
+    for a float."""
+    value = number_value(value)
+    if isinstance(value, int):
+        return str(value)
+    if value != value:
+        return 'NaN'
+    if value in (float('inf'), float('-inf')):
+        return 'Infinity' if value > 0 else '-Infinity'
+    if value == 0:
+        # Both 0 and -0 are written "0".
+        return '0'
+    sign = '-' if value < 0 else ''
+    # Python's repr gives the same fewest digits, closest to the value.
+    mantissa, _, exponent = repr(abs(value)).partition('e')
+    whole, _, fraction = mantissa.partition('.')
+    digits = whole + fraction
+    # The value is 0.digits times 10 to the power "point".
+    point = len(whole) + (int(exponent) if exponent else 0)
+    stripped = digits.lstrip('0')
+    point -= len(digits) - len(stripped)
+    digits = stripped.rstrip('0')
+    k = len(digits)
+    n = point
+    if k <= n <= 21:
+        out = digits + '0' * (n - k)
+    elif 0 < n <= 21:
+        out = digits[:n] + '.' + digits[n:]
+    elif -6 < n <= 0:
+        out = '0.' + '0' * (-n) + digits
+    else:
+        e = n - 1
+        mark = '+' if e >= 0 else '-'
+        out = (digits if k == 1 else digits[0] + '.' + digits[1:]) + 'e' + mark + str(abs(e))
+    return sign + out
+
+
+def stringify(value):
+    """JSON.stringify for plain data (objects, lists, text, numbers, true,
+    false and null): NaN and the infinities are written null, -0 as 0, and
+    members in the order Object.keys gives them."""
+    if value is None:
+        return 'null'
+    if value is True:
+        return 'true'
+    if value is False:
+        return 'false'
+    if isinstance(value, str):
+        return string(value)
+    if is_number(value):
+        if isinstance(value, float) and (value != value or value in (float('inf'), float('-inf'))):
+            return 'null'
+        return number_string(value)
+    if isinstance(value, list):
+        return '[' + ','.join(stringify(v) for v in value) + ']'
+    if isinstance(value, dict):
+        return '{' + ','.join(string(k) + ':' + stringify(value[k]) for k in keys(value)) + '}'
+    raise TypeError('not plain data')

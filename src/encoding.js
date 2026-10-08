@@ -275,8 +275,16 @@ export function parseTime(text) {
   return formatTime(ms) === text ? ms : NaN;
 }
 
-/** @param {number|Date} when @returns {string} */
+/**
+ * A time, written in the one accepted form. Only a number of milliseconds
+ * or a Date is read: text, true or a list would be read by rules that
+ * differ from one device to another (text with no time zone is taken as
+ * local time), so they are refused.
+ * @param {number|Date} when
+ * @returns {string}
+ */
 export function formatTime(when) {
+  if (typeof when !== 'number' && !(when instanceof Date)) throw new RangeError('Invalid time value');
   return new Date(when).toISOString().slice(0, 19) + 'Z';
 }
 

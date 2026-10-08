@@ -25,6 +25,23 @@ _SHAPES = {
 }
 
 
+# The Ed25519 public keys under which anyone can make a signature that
+# checks: the eight points of small order. RFC 8032 does not say to refuse
+# them, and libraries differ, so a checker refuses them itself, with any
+# key whose number y is not below p (written in more than one way), so
+# that two checkers cannot disagree.
+_P = 2**255 - 19
+_ORDER_8_Y = 0x7A03AC9277FDC74EC6CC392CFA53202A0F67100D760B3CBA4FD84D3D706A17C7
+_SMALL_ORDER_Y = frozenset((0, 1, _P - 1, _ORDER_8_Y, _P - _ORDER_8_Y))
+
+
+def weak_ed25519(data):
+    """Whether 32 bytes are an Ed25519 public key under which anyone can sign,
+    or one written in more than one way."""
+    y = int.from_bytes(bytes(data), 'little') & ((1 << 255) - 1)
+    return y >= _P or y in _SMALL_ORDER_Y
+
+
 def _bad(where, why):
     return Refusal('bad-key', f'{where}: {why}')
 
@@ -53,8 +70,11 @@ def check_key(jwk, allowed, where):
     if alg == 'Ed25519':
         if jwk['kty'] != 'OKP' or jwk['crv'] != 'Ed25519':
             raise _bad(where, 'an Ed25519 key has kty OKP and crv Ed25519.')
-        if len(_bytes_of(jwk, 'x', where)) != 32:
+        x = _bytes_of(jwk, 'x', where)
+        if len(x) != 32:
             raise _bad(where, 'an Ed25519 public key is 32 bytes.')
+        if weak_ed25519(x):
+            raise _bad(where, 'this Ed25519 public key is one under which anyone can sign, and is not accepted.')
     elif alg == 'ML-DSA-87':
         if jwk['kty'] != 'AKP':
             raise _bad(where, 'an ML-DSA-87 key has kty AKP.')

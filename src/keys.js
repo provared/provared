@@ -25,6 +25,27 @@ const SHAPES = {
   RS256: ['alg', 'e', 'kty', 'n'],
 };
 
+// The Ed25519 public keys under which anyone can make a signature that
+// checks: the eight points of small order. RFC 8032 does not say to refuse
+// them, and libraries differ, so a checker refuses them itself, with any
+// key whose number y is not below p (written in more than one way), so
+// that two checkers cannot disagree.
+const P = 2n ** 255n - 19n;
+const ORDER_8_Y = 0x7a03ac9277fdc74ec6cc392cfa53202a0f67100d760b3cba4fd84d3d706a17c7n;
+const SMALL_ORDER_Y = new Set([0n, 1n, P - 1n, ORDER_8_Y, P - ORDER_8_Y]);
+
+/**
+ * Whether 32 bytes are an Ed25519 public key under which anyone can sign,
+ * or one written in more than one way.
+ * @param {Uint8Array} bytes
+ * @returns {boolean}
+ */
+export function weakEd25519(bytes) {
+  let y = 0n;
+  for (let i = 31; i >= 0; i--) y = (y << 8n) | BigInt(i === 31 ? bytes[i] & 0x7f : bytes[i]);
+  return y >= P || SMALL_ORDER_Y.has(y);
+}
+
 function bad(where, why) {
   return new Refusal('bad-key', `${where}: ${why}`);
 }
@@ -60,7 +81,9 @@ export function checkKey(jwk, allowed, where) {
   }
   if (alg === 'Ed25519') {
     if (jwk.kty !== 'OKP' || jwk.crv !== 'Ed25519') throw bad(where, 'an Ed25519 key has kty OKP and crv Ed25519.');
-    if (bytesOf(jwk, 'x', where).length !== 32) throw bad(where, 'an Ed25519 public key is 32 bytes.');
+    const x = bytesOf(jwk, 'x', where);
+    if (x.length !== 32) throw bad(where, 'an Ed25519 public key is 32 bytes.');
+    if (weakEd25519(x)) throw bad(where, 'this Ed25519 public key is one under which anyone can sign, and is not accepted.');
   } else if (alg === 'ML-DSA-87') {
     if (jwk.kty !== 'AKP') throw bad(where, 'an ML-DSA-87 key has kty AKP.');
     // FIPS 204, table 2: an ML-DSA-87 public key is 2,592 bytes.

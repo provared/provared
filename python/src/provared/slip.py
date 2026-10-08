@@ -1,10 +1,9 @@
 # The Slip: the permission a person signs with a passkey.
 # Format description, section 4.
 
-import ipaddress
 import re
-import unicodedata
 
+from . import _js
 from . import fields as f
 from .actions import action_kind, is_never_name
 from .cover import cover_members, uncover
@@ -20,114 +19,18 @@ _MAX_PERIOD_SECONDS = 366 * 86400
 
 # --- the address of the page a slip was signed on ---
 #
-# The JavaScript library asks the browser's own reader of addresses (the URL
-# Standard) whether the address is already in its plain form. The same
-# answer is given here without a full reader: an address is in its plain
-# form exactly when it is a scheme the URL Standard treats as special, "://",
-# a host that the standard leaves as it is, and a port that is not the
-# scheme's own.
+# By an exact rule that any checker can follow without a reader of web
+# addresses or tables of Unicode: "https://" (or "http://" for localhost),
+# a host, a port only if it is not the scheme's own, and nothing more. A
+# host is labels of lower-case letters, digits and hyphens, separated by
+# full stops; no label begins or ends with a hyphen, and the last is not
+# all digits. A browser writes a page's address in exactly this form, with
+# a name in another script written in its "xn--" form, which the rule takes
+# as it is.
 
-_ORIGIN = re.compile(r'(https|http|wss|ws|ftp)://([a-z0-9!"$&\'()*+,\-.;=_`{}~]+)(?::(0|[1-9][0-9]{0,4}))?')
-_DEFAULT_PORTS = {'https': 443, 'http': 80, 'wss': 443, 'ws': 80, 'ftp': 21}
-_OCTET = r'(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])'
-_IPV4 = re.compile(rf'{_OCTET}\.{_OCTET}\.{_OCTET}\.{_OCTET}')
-_HEX_NUMBER = re.compile(r'0[xX][0-9a-fA-F]*')
-# The kinds of character that the international names standard (UTS 46)
-# never allows in a name.
-_DISALLOWED_CATEGORIES = ('Cc', 'Cf', 'Cs', 'Co', 'Cn', 'Zs', 'Zl', 'Zp')
-# Characters that UTS 46 keeps as they are in a name written "xn--", though
-# folding would change them.
-_DEVIATIONS = 'ßς‌‍'
-
-
-def _ends_in_number(host):
-    labels = host.split('.')
-    if labels[-1] == '':
-        if len(labels) == 1:
-            return False
-        labels.pop()
-    last = labels[-1]
-    return (last != '' and last.isascii() and last.isdigit()) or bool(_HEX_NUMBER.fullmatch(last))
-
-
-def _encoded_label_unchanged(label):
-    """A label written "xn--": whether the URL Standard keeps it as it is.
-
-    This follows UTS 46 as far as Python's own Unicode tables allow: the
-    label must decode, must hold a character outside ASCII, must encode back
-    to itself, must be in its composed form and must hold only characters
-    that are neither refused nor changed by folding.
-    """
-    try:
-        decoded = label[4:].encode('ascii').decode('punycode')
-        again = decoded.encode('punycode').decode('ascii')
-    except (UnicodeError, ValueError):
-        return False
-    if decoded == '' or decoded.isascii() or again != label[4:]:
-        return False
-    if unicodedata.normalize('NFC', decoded) != decoded:
-        return False
-    for c in decoded:
-        if c in _DEVIATIONS:
-            continue
-        if unicodedata.category(c) in _DISALLOWED_CATEGORIES or c == '.':
-            return False
-        if unicodedata.normalize('NFKC', c.casefold()) != c:
-            return False
-    return True
-
-
-_IPV6_ORIGIN = re.compile(r'(https|http|wss|ws|ftp)://(\[[0-9a-f:]+\])(?::(0|[1-9][0-9]{0,4}))?')
-
-
-def _ipv6_plain(host):
-    """Whether a bracketed IPv6 address is written as the URL Standard writes
-    it: eight groups in lower-case hexadecimal without leading zeros, with
-    the first longest run of two or more zero groups written as "::"."""
-    try:
-        pieces = [int.from_bytes(ipaddress.IPv6Address(host[1:-1]).packed[i:i + 2], 'big') for i in range(0, 16, 2)]
-    except ValueError:
-        return False
-    best, best_length, i = -1, 1, 0
-    while i < 8:
-        if pieces[i] == 0:
-            j = i
-            while j < 8 and pieces[j] == 0:
-                j += 1
-            if j - i > best_length:
-                best, best_length = i, j - i
-            i = j
-        else:
-            i += 1
-    if best < 0:
-        text = ':'.join('%x' % p for p in pieces)
-    else:
-        text = ':'.join('%x' % p for p in pieces[:best]) + '::' + ':'.join('%x' % p for p in pieces[best + best_length:])
-    return host == f'[{text}]'
-
-
-def _plain_origin(text):
-    """(scheme, host) if the text is an address in its plain form, else None."""
-    m = _IPV6_ORIGIN.fullmatch(text)
-    if m:
-        scheme, host, port = m.groups()
-        if port is not None and (int(port) > 65535 or int(port) == _DEFAULT_PORTS[scheme]):
-            return None
-        return (scheme, host) if _ipv6_plain(host) else None
-    m = _ORIGIN.fullmatch(text)
-    if not m:
-        return None
-    scheme, host, port = m.groups()
-    if port is not None and (int(port) > 65535 or int(port) == _DEFAULT_PORTS[scheme]):
-        return None
-    if _ends_in_number(host):
-        return (scheme, host) if _IPV4.fullmatch(host) else None
-    for label in host.split('.'):
-        if label.startswith('xn--') and not _encoded_label_unchanged(label):
-            return None
-    return scheme, host
-
-
+_ORIGIN = re.compile(r'(https|http)://([a-z0-9.-]{1,253})(?::([1-9][0-9]{0,4}))?')
+_LABEL = re.compile(r'[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?')
+_DIGITS = re.compile(r'[0-9]+')
 _RP_ID = re.compile(r'[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?')
 
 
@@ -135,10 +38,20 @@ def _check_origin(origin, rp_id):
     f.text(origin, 1, 300, 'issuer.origin')
     if not isinstance(rp_id, str) or not _RP_ID.fullmatch(rp_id):
         raise f.fail('issuer.rpId', 'must be a website name in lower case, such as example.org.')
-    plain = _plain_origin(origin)
-    if plain is None:
-        raise f.fail('issuer.origin', 'must be the address of a page, with nothing after the host and the port, such as https://sign.example.org.')
-    scheme, host = plain
+    m = _ORIGIN.fullmatch(origin)
+    labels = m.group(2).split('.') if m else []
+    port = int(m.group(3)) if m and m.group(3) is not None else None
+    if (
+        not m
+        or not all(_LABEL.fullmatch(label) for label in labels)
+        or _DIGITS.fullmatch(labels[-1])
+        or (port is not None and (port > 65535 or port == (443 if m.group(1) == 'https' else 80)))
+    ):
+        raise f.fail(
+            'issuer.origin',
+            'must be the address of a page: https://, a website name in lower case, a port only if it is needed, and nothing more, such as https://sign.example.org.',
+        )
+    scheme, host = m.group(1), m.group(2)
     if not (scheme == 'https' or (scheme == 'http' and host == 'localhost')):
         raise f.fail('issuer.origin', 'must begin https://, or http://localhost.')
     if not (host == rp_id or host.endswith('.' + rp_id)):
@@ -399,7 +312,7 @@ def check_slip(record, options=None, disclosures=_UNDEFINED):
         # over beside it are used together; one given both ways counts once.
         for_this = beside if disclosures is _UNDEFINED or disclosures is None else disclosures
         if disclosures is not _UNDEFINED and isinstance(disclosures, list) and (not isinstance(beside, list) or len(beside) > 0):
-            for_this = [*disclosures, *(d for d in beside if d not in disclosures)] if isinstance(beside, list) else beside
+            for_this = [*disclosures, *(d for d in beside if not _js.includes(disclosures, d))] if isinstance(beside, list) else beside
 
         # A slip narrows the standard: no covered item of a list, and every
         # disclosure in the canonical form.
@@ -425,8 +338,9 @@ def check_slip(record, options=None, disclosures=_UNDEFINED):
         result['issuerKey'] = thumbprint(issuer['key'])
 
         result['signature']['state'] = 'invalid'
-        # As in JavaScript, the option is used as it was handed over; only its absence means "none".
-        result['signature']['state'] = check_passkey_signature(parsed, issuer, options['withoutMethods'] if 'withoutMethods' in options else ())
+        # As everywhere else, only a list counts as a list of methods to treat as not built in.
+        without = options.get('withoutMethods')
+        result['signature']['state'] = check_passkey_signature(parsed, issuer, without if isinstance(without, list) else [])
         if result['signature']['state'] == 'unavailable':
             result['notes'].append(f"This device cannot check the passkey's signing method ({issuer['key']['alg']}).")
 

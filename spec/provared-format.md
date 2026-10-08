@@ -197,6 +197,13 @@ one of these shapes, with no other member:
 | Issuer's passkey | `{"alg":"RS256","e":"AQAB","kty":"RSA","n":"…"}` (RFC 7518, section 6.3; `n` is 2,048 to 8,192 bits) |
 | Issuer's passkey | `{"alg":"Ed25519","crv":"Ed25519","kty":"OKP","x":"…"}` |
 
+An Ed25519 key, wherever it stands, MUST NOT be one of the eight points
+of small order, under which anyone can make a signature that checks, and
+the number y it holds MUST be less than p = 2^255 - 19, so that it is
+written in only one way. RFC 8032 does not say to refuse such keys, and
+libraries differ in whether they do; a checker refuses them itself
+(`bad-key`), so that two checkers cannot disagree.
+
 A key is named for people by its **thumbprint**: the JSON Web Key
 Thumbprint with SHA-256 (RFC 7638; for ML-DSA keys, RFC 9964 section 6).
 
@@ -262,7 +269,15 @@ is the address of the page the slip was signed on, for example
 `https://sign.example.org`. The host in `origin` MUST be `rpId` or end
 with a full stop and `rpId`. `origin` MUST use `https`, or be
 `http://localhost` with or without a port number. It holds nothing after
-the host and the port.
+the host and the port. It is written exactly as a browser writes a
+page's address, so that a checker needs no reader of web addresses and
+no tables of Unicode: the scheme, `://`, the host, and a port only where
+it is not the scheme's own (443 for `https`, 80 for `http`), written in
+digits with no leading zero, from 1 to 65535. The host is one or more
+labels, separated by full stops, each of 1 to 63 lower-case letters,
+digits and hyphens, neither beginning nor ending with a hyphen; the last
+label is not all digits. A name in another script stands in its `xn--`
+form, which the rule takes as it is.
 
 A **name** is text of 1 to 200 characters. It is a label chosen by
 whoever wrote the slip. It is not checked against anything, unless a
@@ -1004,10 +1019,11 @@ otherwise report a problem:
    part the standards do not allow in that place, is refused. The signed
    data is of version 3, with exactly one signer. The public key in the
    certificate that signed is written exactly as its own standard sets
-   out, with no unused bits: RSA as RFC 3279, section 2.3.1 (empty
-   parameters, two positive whole numbers in strict DER and nothing
-   after them), ECDSA as RFC 5480, section 2.2 (an uncompressed point),
-   Ed25519 as RFC 8410, section 4 (no parameters, 32 bytes).
+   out, with no unused bits: RSA as RFC 3279, section 2.3.1 (the
+   parameters present and NULL, two positive whole numbers in strict DER
+   and nothing after them), ECDSA as RFC 5480, section 2.2 (an
+   uncompressed point), Ed25519 as RFC 8410, section 4 (no parameters,
+   32 bytes).
 2. What it stamps is this seal's fingerprint (`stamp-wrong-data`).
 3. Its signed attributes name a time-stamp statement, hold the
    fingerprint of the statement, and name the certificate that signed, by
@@ -1022,7 +1038,12 @@ otherwise report a problem:
    The signing methods are RSA (PKCS #1 version 1.5; keys of 2,048 to
    8,192 bits, with an odd public number from 3 to 2^32 - 1: never 1,
    under which anyone can make a signature that checks), ECDSA on the
-   curves P-256 and P-384, and Ed25519.
+   curves P-256 and P-384, and Ed25519 (not a key of small order, as
+   section 3.8 sets out). A key of any other kind, or on another curve,
+   is refused (`stamp-invalid`). The checker does not try to find out
+   whether an RSA modulus can be factored: a service's key is the
+   service's business, and a checker trusts a service only by the
+   fingerprint of its certificate.
 5. The time it states lies within the time that certificate is in force
    (`stamp-invalid`).
 6. It does not say that its time is exact to no better than more than 300

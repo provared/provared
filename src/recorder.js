@@ -68,6 +68,15 @@ function within(promise, ms) {
 
 const notWritten = (why) => new Refusal('record-not-sound', why);
 
+// A time handed in: a number of milliseconds, or a Date. Text, true or a
+// list would be read by rules that differ from one device to another (text
+// with no time zone is taken as local time), so they are refused.
+function timeOf(when) {
+  if (typeof when === 'number') return new Date(when).getTime();
+  if (when instanceof Date) return when.getTime();
+  throw new Refusal('bad-field', 'when: must be a number of milliseconds, or a Date.');
+}
+
 // A copy that nothing else holds.
 function plain(value, what) {
   try {
@@ -373,7 +382,7 @@ export async function openRecorder({ book, slip, privateKeys, issuerKeys, pass, 
     if (more === null || typeof more !== 'object') more = {};
     const call = {
       request: plain(request, 'The request'),
-      when: more.when === undefined || more.when === null ? undefined : new Date(more.when).getTime(),
+      when: more.when === undefined || more.when === null ? undefined : timeOf(more.when),
       terms: more.terms,
       countersign: more.countersign,
       hasApproval: more.approval !== undefined && more.approval !== null,

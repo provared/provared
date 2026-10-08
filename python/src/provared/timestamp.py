@@ -20,6 +20,7 @@ from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
 
 from .der import TAG, bad_stamp, children, content_of, ecdsa_to_raw, expect, hex_of, item, read_element, time_of, validate_der, whole_of
 from .encoding import Refusal, format_time, sha256, to_base64url
+from .keys import weak_ed25519
 
 MAX_STAMP_BYTES = 12288
 """The largest time-stamp, in bytes."""
@@ -152,6 +153,8 @@ def _check_key_encoding(data, certificate, method, size=None):
     if method == 'Ed25519':
         if parameters is not None or len(inner) != 32:
             raise bad_stamp(why)
+        if weak_ed25519(inner):
+            raise _invalid('A time-stamp was signed with an Ed25519 key under which anyone can sign, which is not accepted.')
         return
     if parameters is None or parameters.tag != TAG.NULL:
         raise bad_stamp(why)
@@ -242,6 +245,9 @@ def _public_key(certificate):
     return serialization.load_der_public_key(bytes(certificate['spki']))
 
 
+_KIND_NOT_ACCEPTED = 'A time-stamp was signed with a kind of key that is not accepted: RSA, ECDSA on the curves P-256 and P-384, and Ed25519 are.'
+
+
 def _verify_with(certificate, data, signature_oid, digest_name, signature, signed, without):
     """Check the service's signature with the public key of its certificate.
     Returns "valid", "invalid", or "unavailable" where this device has no
@@ -260,7 +266,9 @@ def _verify_with(certificate, data, signature_oid, digest_name, signature, signe
             curve = (ec.SECP256R1, 32)
         elif certificate['curveOid'] == OID['p384']:
             curve = (ec.SECP384R1, 48)
-        if ECDSA_WITH.get(signature_oid) != digest_name or curve is None:
+        if curve is None:
+            raise _invalid(_KIND_NOT_ACCEPTED)
+        if ECDSA_WITH.get(signature_oid) != digest_name:
             return 'invalid'
         _check_key_encoding(data, certificate, 'ECDSA', curve[1])
         method = 'ECDSA'
@@ -268,11 +276,13 @@ def _verify_with(certificate, data, signature_oid, digest_name, signature, signe
             raw = ecdsa_to_raw(signature, curve[1])
         except Exception:
             return 'invalid'
-    elif certificate['keyOid'] == OID['ed25519'] and signature_oid == OID['ed25519']:
+    elif certificate['keyOid'] == OID['ed25519']:
+        if signature_oid != OID['ed25519']:
+            return 'invalid'
         _check_key_encoding(data, certificate, 'Ed25519')
         method = 'Ed25519'
     else:
-        return 'invalid'
+        raise _invalid(_KIND_NOT_ACCEPTED)
     if any(isinstance(w, str) and w == method for w in without):
         return 'unavailable'
     try:

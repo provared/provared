@@ -11,6 +11,7 @@
 
 import { TAG, badStamp, children, contentOf, ecdsaToRaw, expect, hexOf, readElement, timeOf, validateDer, wholeOf } from './der.js';
 import { Refusal, equalBytes, formatTime, sha256, toBase64url } from './encoding.js';
+import { weakEd25519 } from './keys.js';
 
 /** The largest time-stamp, in bytes. */
 export const MAX_STAMP_BYTES = 12288;
@@ -130,6 +131,7 @@ function checkKeyEncoding(bytes, certificate, method, size) {
   }
   if (method === 'Ed25519') {
     if (parameters !== null || inner.length !== 32) throw badStamp(why);
+    if (weakEd25519(inner)) throw invalid('A time-stamp was signed with an Ed25519 key under which anyone can sign, which is not accepted.');
     return;
   }
   if (parameters === null || parameters.tag !== TAG.NULL) throw badStamp(why);
@@ -201,11 +203,14 @@ function signingCertificateOf(bytes, value, v2) {
   return { hash, value: contentOf(bytes, expect(first[at], TAG.OCTET_STRING, 'the signing certificate attribute')) };
 }
 
+const KIND_NOT_ACCEPTED = 'A time-stamp was signed with a kind of key that is not accepted: RSA, ECDSA on the curves P-256 and P-384, and Ed25519 are.';
+
 // Check the service's signature with the public key of its certificate.
 // Returns "valid", "invalid", or "unavailable" where this device has no
 // built-in support for the method. The fingerprint method is the one the
 // signer names (RFC 5652 section 5.4); a signing method that names another
-// is refused.
+// is refused; a key of a kind that is not accepted is refused in words that
+// say so.
 async function verifyWith(certificate, bytes, signatureOid, digestName, signature, signed, without) {
   const subtle = globalThis.crypto.subtle;
   let importParams;
@@ -220,7 +225,8 @@ async function verifyWith(certificate, bytes, signatureOid, digestName, signatur
     verifyParams = { name: 'RSASSA-PKCS1-v1_5' };
   } else if (certificate.keyOid === OID.ecPublicKey) {
     const curve = certificate.curveOid === OID.p256 ? ['P-256', 32] : certificate.curveOid === OID.p384 ? ['P-384', 48] : null;
-    if (ECDSA_WITH[signatureOid] !== digestName || !curve) return 'invalid';
+    if (!curve) throw invalid(KIND_NOT_ACCEPTED);
+    if (ECDSA_WITH[signatureOid] !== digestName) return 'invalid';
     checkKeyEncoding(bytes, certificate, 'ECDSA', curve[1]);
     method = 'ECDSA';
     importParams = { name: 'ECDSA', namedCurve: curve[0] };
@@ -230,13 +236,14 @@ async function verifyWith(certificate, bytes, signatureOid, digestName, signatur
     } catch {
       return 'invalid';
     }
-  } else if (certificate.keyOid === OID.ed25519 && signatureOid === OID.ed25519) {
+  } else if (certificate.keyOid === OID.ed25519) {
+    if (signatureOid !== OID.ed25519) return 'invalid';
     checkKeyEncoding(bytes, certificate, 'Ed25519');
     method = 'Ed25519';
     importParams = { name: 'Ed25519' };
     verifyParams = { name: 'Ed25519' };
   } else {
-    return 'invalid';
+    throw invalid(KIND_NOT_ACCEPTED);
   }
   if (without.includes(method)) return 'unavailable';
   let key;
