@@ -7,7 +7,7 @@
 # the agent is handed the model itself, so the SDK makes no client for a
 # service and needs no API key (none is set); tracing is switched off
 # below; and the run is made inside _world.offline(), which refuses any
-# connection.
+# connection outside this program.
 #
 # Run it from this folder: python openai_agents_example.py
 

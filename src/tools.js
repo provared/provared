@@ -18,6 +18,11 @@ import * as f from './fields.js';
 /** How deep the arguments of a call may nest. */
 const MAX_ARGUMENT_DEPTH = 64;
 
+// Calling a generator function does not run its body, so its stub would be
+// written for an action not yet taken.
+const GENERATORS = new Set(['[object GeneratorFunction]', '[object AsyncGeneratorFunction]']);
+const NOT_A_GENERATOR = 'must not be a generator function: calling one does not run its body, so its stub would be written for an action not yet taken.';
+
 /**
  * A call through a recorded tool that was not run: the check before acting
  * did not allow it, or the record so far has a problem. "answer" is what
@@ -108,7 +113,7 @@ const needsOnlyApproval = (answer) => answer.problems.length === 0 && answer.bre
  * @param {object} recorder the stub writer (openRecorder)
  * @param {Record<string, object>} tools by name. For each tool:
  *   - "action": the action name the slip uses for what this tool does;
- *   - "run": the tool itself, a function of the arguments. It must not call the stub writer;
+ *   - "run": the tool itself, a function of the arguments, not a generator function. It must not call the stub writer;
  *   Each function is called by itself, without "this". "amount" and "with" must give their value at once, not a promise.
  *   - "with" (optional): the id of the service the tool deals with, as the slip names it, or a function of the arguments that gives it;
  *   - "amount" (optional): {unit, value}, or a function of the arguments that gives it;
@@ -143,6 +148,7 @@ export function recordTools(recorder, tools, options = {}) {
     // Each member is read once: what is checked is what is fixed.
     const fixed = { action: spec.action, run: spec.run, details: spec.details, countersign: spec.countersign, approve: spec.approve, amount: spec.amount, with: spec.with };
     if (typeof fixed.run !== 'function') throw f.fail(`tools.${name}.run`, 'must be a function.');
+    if (GENERATORS.has(Object.prototype.toString.call(fixed.run))) throw f.fail(`tools.${name}.run`, NOT_A_GENERATOR);
     f.actionName(fixed.action, `tools.${name}.action`);
     for (const member of ['countersign', 'approve']) {
       if (fixed[member] !== undefined && typeof fixed[member] !== 'function') throw f.fail(`tools.${name}.${member}`, 'must be a function.');

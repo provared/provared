@@ -203,7 +203,7 @@ def compare_with_slip(s, tally, c, facts, commit=True):
         if c.get('amount') and c['amount']['unit'] == unit:
             return True
         if not missing:
-            breaches.append({'code': 'amount-missing', 'message': f'{W} sets a limit or a condition in "{unit}" for this action, and the stub gives no amount in that unit.'})
+            breaches.append({'code': 'amount-missing', 'message': f'{W} sets a limit or a condition in "{unit}" for this action, and the {"stub" if commit else "action"} gives no amount in that unit.'})
             missing = True
         return False
 

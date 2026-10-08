@@ -2,11 +2,49 @@
 
 ## Unreleased
 
+- 2026-10-08: fixes from an independent review of `record_function`, the
+  examples and the wording for a proposed action. None made a book read
+  as intact, or within its slip, when it was not.
+  - Python: a whole number in a tool's arguments that JavaScript cannot
+    hold exactly (beyond 2^53 - 1, unless a float holds it exactly) is
+    refused. Before, `2**60 + 1` and `2**60` left the same fingerprint in
+    their stubs, though the tool was handed the exact number. JSON is now
+    read as JavaScript reads it here too: a whole number beyond 2^53 - 1
+    is the nearest float.
+  - Python: a number of a class built on int or float (an Enum of whole
+    numbers, say) is written as its value, so its fingerprint is that of
+    the same arguments kept as JSON. Before, it was written as its name,
+    which is not JSON.
+  - A generator function is refused as a tool (`recordTools` and
+    `record_tools`) and by `record_function`: calling one does not run
+    its body, so its stub was written for an action not yet taken.
+  - Python: a dict in a tool's arguments whose names are not all text is
+    refused. Before, `{101: 2, "101": 5}` reached the tool as `{"101": 5}`.
+  - Python: `record_function` refuses, when it is handed the function, a
+    parameter whose type can never be plain data (a class of its own,
+    such as a model or a date, a tuple or a set), an object whose
+    `__call__` is defined with `async def`, and a function whose name is
+    not text, each in words of its own. A call whose arguments are not
+    plain data names the argument.
+  - Python: the README and the docstring say that the function is run
+    with a copy of its arguments, and what the record leaves out (an
+    argument bound into a `functools.partial` in place).
+  - The check before acting says "the action gives no amount", not "the
+    stub gives no amount". The shared file `check-before.json` now holds
+    a case for each of the words for a proposed action.
+  - Examples: `offline()` also refuses the other kinds of name look-up,
+    messages sent without a connection, starting another program, a
+    connection made by Python's event loop on Windows (which raises no
+    audit event), and a connection to a port on this computer that the
+    same program does not hold, such as a proxy's. The tests check that
+    nothing was refused while each example ran. Its README says exactly
+    what it refuses.
 - 2026-10-08: examples for three Python agent frameworks, in
   `python/examples/`: LangChain, the OpenAI Agents SDK and Pydantic AI.
   Each records an agent's tools with `record_function`, runs the agent
   with the framework's own stand-in model (no AI service is called;
-  tracing is switched off; any connection is refused while it runs), and
+  tracing is switched off; any connection outside the program is refused
+  while it runs), and
   checks the book. Each is tested (`python/examples/test_examples.py`).
   The library itself still names no product.
 - 2026-10-08: the check before acting speaks of an action that is only

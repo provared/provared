@@ -50,6 +50,13 @@ from the model:
 - Pydantic AI: a `Hooks` capability with `tool_execute_error`, which
   hands the message back as `ToolFailed`.
 
+A recorded tool takes plain data only: text, numbers, lists, dicts,
+True, False and None. So a tool that takes the framework's own context
+object (Pydantic AI's `RunContext`, LangChain's `ToolRuntime`), or a
+model class as a parameter, cannot be recorded with `record_function`:
+it refuses such a function when it is handed it, and names the
+parameter.
+
 Each framework runs an ordinary function in a thread of its own. That
 matters because the stub writer may wait: it signs each stub, takes one
 call at a time, and gives the other side up to 30 seconds to
@@ -68,8 +75,15 @@ countersign where it is asked to.
   orders and the money.
 - **Nothing is sent anywhere.** No API key is set. Each framework's
   tracing or instrumentation is switched off in the code. Each example
-  runs inside `offline()` (in `_world.py`), which refuses any look-up of
-  a name on the network and any connection outside this computer.
+  runs inside `offline()` (in `_world.py`). While it is open, it refuses
+  any look-up of a name other than this computer's, any connection or
+  message to anything but a socket of the same program (so not to a
+  proxy on this computer either), and starting another program. It
+  works through Python's audit events, and on Windows also checks the
+  event loop's connections, which raise none. The tests check that
+  nothing was refused while each example ran, so an attempt that a
+  framework caught and set aside would still show. It guards a
+  demonstration; it is not a sandbox for code you do not trust.
 
 ## How to run them
 

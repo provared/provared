@@ -5,7 +5,7 @@
 # ask for one order inside the slip, then one over its limit, and then to
 # answer. No AI service is called and nothing is sent anywhere: LangSmith
 # tracing is switched off below, no API key is set, and the run is made
-# inside _world.offline(), which refuses any connection.
+# inside _world.offline(), which refuses any connection outside this program.
 #
 # Run it from this folder: python langchain_example.py
 

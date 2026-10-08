@@ -15,6 +15,7 @@ import contextlib
 import ipaddress
 import json
 import sys
+import weakref
 
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
@@ -118,45 +119,114 @@ def summary(check):
 
 _offline = [False]
 
+refused = []
+"""What offline() refused while it was open. The tests check that it stays
+empty while an example runs, so that a refusal which a framework caught and
+set aside still shows."""
 
-def _refuse_the_network(event, args):
-    if not _offline[0]:
-        return
-    if event == 'socket.getaddrinfo':
-        host = args[0]
-        if isinstance(host, bytes):
-            host = host.decode('ascii', 'replace')
-        if host is None or host == 'localhost' or _loopback(host):
-            return
-        raise ConnectionRefusedError(f'This example sends nothing to the network: a look-up of "{host}" was refused.')
-    if event == 'socket.connect':
-        address = args[1]
-        host = address[0] if isinstance(address, tuple) and address else address
-        if isinstance(host, str) and (host == 'localhost' or _loopback(host)):
-            return
-        raise ConnectionRefusedError(f'This example sends nothing to the network: a connection to {address!r} was refused.')
+# Sockets of this program that were given an address: a connection to this
+# computer is allowed only to one of them. (Python's own event loop on
+# Windows connects one of its sockets to another.) So nothing reaches a
+# program on this computer that could pass it on, such as a proxy.
+_bound = weakref.WeakSet()
+
+_LOOK_UPS = ('socket.getaddrinfo', 'socket.gethostbyname', 'socket.gethostbyname_ex', 'socket.gethostbyaddr', 'socket.getnameinfo')
+_SENDS = ('socket.connect', 'socket.sendto', 'socket.sendmsg')
+_PROCESSES = ('subprocess.Popen', 'os.system', 'os.exec', 'os.spawn', 'os.posix_spawn', 'os.startfile')
+
+
+def _refuse(what):
+    refused.append(what)
+    raise ConnectionRefusedError(f'This example sends nothing to the network: {what} was refused.')
+
+
+def _host(value):
+    if isinstance(value, tuple) and value:
+        value = value[0]
+    if isinstance(value, bytes):
+        value = value.decode('ascii', 'replace')
+    return value
 
 
 def _loopback(host):
+    if host == 'localhost':
+        return True
     try:
-        return ipaddress.ip_address(host.split('%')[0]).is_loopback
+        return isinstance(host, str) and ipaddress.ip_address(host.split('%')[0]).is_loopback
     except ValueError:
         return False
 
 
-_hooked = [False]
+def _to_this_program(address):
+    """Whether an address is that of a socket of this program."""
+    if not (isinstance(address, tuple) and len(address) >= 2 and _loopback(_host(address))):
+        return False
+    for s in list(_bound):
+        try:
+            if s.fileno() != -1 and s.getsockname()[1] == address[1]:
+                return True
+        except OSError:
+            pass
+    return False
+
+
+def _check(what, address):
+    if _offline[0] and not _to_this_program(address):
+        _refuse(f'{what} {address!r}')
+
+
+def _refuse_the_network(event, args):
+    if event == 'socket.bind':
+        _bound.add(args[0])
+        return
+    if not _offline[0]:
+        return
+    if event in _LOOK_UPS:
+        host = _host(args[0])
+        if host is None or _loopback(host):
+            return
+        _refuse(f'a look-up of {host!r}')
+    if event in _SENDS:
+        address = args[1]
+        if event == 'socket.sendmsg' and address is None:
+            return  # on a socket already connected, which was checked then
+        _check('a connection or a message to', address)
+    if event in _PROCESSES:
+        _refuse(f'starting a program ({event})')
+
+
+def _guard_the_event_loop():
+    """Python's event loop on Windows connects and sends through calls that
+    raise no audit event. They are checked here instead."""
+    if sys.platform != 'win32':
+        return
+    from asyncio import windows_events
+    proactor = windows_events.IocpProactor
+    connect, sendto = proactor.connect, proactor.sendto
+
+    def checked_connect(self, conn, address):
+        _check('a connection to', address)
+        return connect(self, conn, address)
+
+    def checked_sendto(self, conn, buf, flags=0, addr=None):
+        if addr is not None:
+            _check('a message to', addr)
+        return sendto(self, conn, buf, flags, addr)
+
+    proactor.connect, proactor.sendto = checked_connect, checked_sendto
+
+
+# From the start, so that every socket of this program that is given an address is known.
+sys.addaudithook(_refuse_the_network)
+_guard_the_event_loop()
 
 
 @contextlib.contextmanager
 def offline():
-    """While it is open, any look-up of a name on the network, and any
-    connection that Python's sockets make to anything but this computer,
-    is refused. (Python's own event loop on Windows connects to this
-    computer, so that is allowed.) The examples run inside it, to show that
-    nothing is sent."""
-    if not _hooked[0]:
-        sys.addaudithook(_refuse_the_network)
-        _hooked[0] = True
+    """While it is open, these are refused: any look-up of a name other than
+    this computer's; any connection, or message, to anything but a socket
+    of this same program; and starting another program. The examples run
+    inside it, to show that nothing is sent."""
     _offline[0] = True
     try:
         yield

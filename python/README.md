@@ -108,7 +108,20 @@ place_order = record_function(writer, place_order, 'supplies.order', with_='supp
 ```
 
 A call that the slip does not allow raises `NotTaken`, and the function
-is not run. The folder
+is not run. The arguments must be plain data (text, numbers, lists,
+dicts with text for names, True, False, None). A function with a
+parameter whose type can never be plain data (a class of its own, such
+as a model or a date, a tuple or a set) is refused when it is recorded,
+and so is a generator function. A whole number that JavaScript cannot
+hold exactly (beyond 2^53 - 1, unless a float holds it exactly) is
+refused, since two such numbers could share one fingerprint. The
+function is run with a copy of the arguments: a change it makes to a
+list or a dict it was handed does not reach the caller, and a default
+that is a list or a dict is a fresh copy at each call. The record holds the
+arguments the recorded function is called with: an argument bound in
+place into a `functools.partial` is no longer a parameter, so it is not
+in the record, and nor is any change that a decorator inside makes. The
+folder
 [`examples/`](https://github.com/provared/provared/tree/main/python/examples)
 shows this with three agent frameworks: LangChain, the OpenAI Agents SDK
 and Pydantic AI. `key_set_from_seeds` and `key_set_seeds` keep an

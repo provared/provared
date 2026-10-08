@@ -212,7 +212,7 @@ export function compareWithSlip(s, tally, c, facts, commit = true) {
   const amountIn = (unit) => {
     if (c.amount && c.amount.unit === unit) return true;
     if (!missing) {
-      breaches.push({ code: 'amount-missing', message: `${W} sets a limit or a condition in "${unit}" for this action, and the stub gives no amount in that unit.` });
+      breaches.push({ code: 'amount-missing', message: `${W} sets a limit or a condition in "${unit}" for this action, and the ${commit ? 'stub' : 'action'} gives no amount in that unit.` });
       missing = true;
     }
     return false;

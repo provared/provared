@@ -249,8 +249,15 @@ async function beforeCases() {
   add('an action that needs an approval, without it', { ...base, amount: { unit: 'GBP', value: 60 } });
   add('an approval for something else', { ...base, amount: { unit: 'GBP', value: 61 }, approval });
   add('an action dated before the last stub', { ...base, when: START - 1000 });
-  add('a third action within the hour', { ...base, when: START + 60000 });
+  add('a second action within the hour', { ...base, when: START + 60000 });
+  add('an action with no amount', { ...base, amount: undefined });
   add('an action with no service', { ...base, with: undefined, when: START + 7200 * 1000 });
+  // Limits on the number of actions, in all and in any hour: the words for an action that is only proposed.
+  const n = await makeWorld({ fields: { limits: [{ action: 'supplies.order', count: 2 }, { action: 'supplies.order', count: 2, per: 3600 }], requires: [] } });
+  await n.add({ when: START });
+  await n.add({ when: START + 60000 });
+  add('a third action, within the hour and in all', { ...base, slip: n.slipFingerprint, when: START + 120000 },
+    { issuerKeys: [await thumbprint(n.passkey.key)] }, n.book());
   add('another slip', { ...base, slip: toBase64url(new Uint8Array(32)) });
   add('an unknown member', { ...base, colour: 'red' });
   add('a book with a problem', base, trusted, text.replace('"stub"', '"stub "'));

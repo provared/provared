@@ -139,13 +139,14 @@ def _scalar(value):
     return value is None or isinstance(value, (bool, int, float, str))
 
 
-def _clone(value, most=_MAX_COPY_DEPTH):
+def _clone(value, most=_MAX_COPY_DEPTH, text_names=False):
     """A copy that nothing else holds, as structuredClone makes one, for plain
     data: objects (dicts, with text for names), lists, text, numbers, true,
     false and null. A value met twice is copied once. Raises TypeError for
     anything else (a function, an object of a class, bytes), and for a
     value that holds itself. It walks the value without recursion, so a
-    deep value costs no stack."""
+    deep value costs no stack. A name of a dict that is not text is taken
+    as JavaScript would write it, or, with text_names, refused."""
     if _scalar(value) or value is _ABSENT:
         return value
     if not isinstance(value, (Mapping, list)):
@@ -153,6 +154,8 @@ def _clone(value, most=_MAX_COPY_DEPTH):
 
     def fresh(v):
         if isinstance(v, Mapping):
+            if text_names and not all(isinstance(k, str) for k in v):
+                raise TypeError('a name that is not text')
             return {}, iter([(_js.property_key(k), item) for k, item in v.items()])
         return [], iter(list(v))
 

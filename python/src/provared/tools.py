@@ -19,6 +19,8 @@
 import functools
 import inspect
 import math
+import types
+import typing
 from collections.abc import Mapping
 
 from . import _js
@@ -28,8 +30,25 @@ from .recorder import _ABSENT, _clone, _refuse_awaitable
 
 
 def _clone_any(value):
-    """structuredClone, with no limit on depth, as the JavaScript connector copies."""
-    return _clone(value, most=None)
+    """structuredClone, with no limit on depth, as the JavaScript connector
+    copies. A dict whose names are not all text is refused: JavaScript would
+    write {1: 'a', '1': 'b'} as one member, and the tool would be handed
+    something other than what it was called with."""
+    return _clone(value, most=None, text_names=True)
+
+
+def _callee(run):
+    """The function whose body a call of run runs: run itself, or, for an
+    object that can be called, its class's __call__."""
+    return run if inspect.isroutine(run) or isinstance(run, functools.partial) else getattr(type(run), '__call__', None)
+
+
+def _generator(run):
+    """Whether calling run gives a generator, which does not run its body."""
+    return any(inspect.isgeneratorfunction(c) or inspect.isasyncgenfunction(c) for c in (run, _callee(run)))
+
+
+_NOT_A_GENERATOR = 'must not be a generator function: calling one does not run its body, so its stub would be written for an action not yet taken.'
 
 _MAX_ARGUMENT_DEPTH = 64
 """How deep the arguments of a call may nest."""
@@ -66,6 +85,12 @@ def _one_form(value, depth=0):
         if not _well_formed(value):
             raise Refusal('bad-field', 'The arguments hold text that is not well-formed Unicode.')
         return _js.string(value)
+    if isinstance(value, int) and not isinstance(value, bool):
+        # A whole number that JavaScript cannot hold exactly would share its
+        # fingerprint with its neighbours, though the tool is handed it exactly.
+        whole = int.__int__(value)
+        if _js.MAX_SAFE_INTEGER < abs(whole) < 2**1024 and float(whole) != whole:
+            raise Refusal('bad-field', 'The arguments hold a whole number too large to be written exactly in JSON.')
     if isinstance(value, (int, float)):
         try:
             number = _js.number_value(value)
@@ -87,8 +112,9 @@ def arguments_fingerprint(args):
     tool puts into its stub, as the document "arguments".
 
     args: JSON: dicts, lists, text, numbers, True, False and None. A whole
-    number is taken as JavaScript holds it: one beyond 2^53 - 1 as the
-    nearest float.
+    number must be one that JavaScript holds exactly: beyond 2^53 - 1, only
+    one that a float holds exactly. A number of a class built on int or
+    float (an Enum of whole numbers, say) is written as its plain value.
     Raises a Refusal, "bad-field", if the arguments are not JSON."""
     return fingerprint(utf8(_one_form(args)))
 
@@ -154,8 +180,8 @@ def record_tools(recorder, tools, options=None, on_stub=None):
     tools: a dict of the tools by name. For each tool, a dict (or an object
     with these attributes):
       - "action": the action name the slip uses for what this tool does;
-      - "run": the tool itself, a function of the arguments. It must not
-        call the stub writer.
+      - "run": the tool itself, a function of the arguments, not a
+        generator function. It must not call the stub writer.
       Each function is called by itself, and must give its answer at once:
       a function that gives a coroutine is refused.
       - "with" (optional): the id of the service the tool deals with, as the
@@ -206,6 +232,8 @@ def record_tools(recorder, tools, options=None, on_stub=None):
         fixed = {member: _read(spec, member) for member in _MEMBERS}
         if not callable(fixed['run']):
             raise f.fail(f'tools.{name}.run', 'must be a function.')
+        if _generator(fixed['run']):
+            raise f.fail(f'tools.{name}.run', _NOT_A_GENERATOR)
         f.action_name(None if fixed['action'] is _ABSENT else fixed['action'], f'tools.{name}.action')
         for member in ('countersign', 'approve'):
             if fixed[member] is not _ABSENT and not callable(fixed[member]):
@@ -282,6 +310,32 @@ def _call(act, on_stub, name, spec, args):
 # --- one ordinary function behind the stub writer (Python only) ---
 
 _KEYWORD_KINDS = (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+_PLAIN_TYPES = (str, int, float, bool, list, dict, type(None))
+_PLAIN_WORDS = 'text, numbers, lists, dicts with text for names, True, False and None'
+
+
+def _never_plain(hint):
+    """Whether no plain data can be of the type a parameter is given: a class
+    of its own (a model, a date), a tuple or a set, or a choice among such.
+    Where it cannot be told (a name not yet defined, a type of an unusual
+    kind), the answer is no."""
+    origin = typing.get_origin(hint)
+    if origin is typing.Annotated:
+        return _never_plain(typing.get_args(hint)[0])
+    if origin is typing.Union or origin is types.UnionType:
+        return all(_never_plain(a) for a in typing.get_args(hint))
+    if origin is not None:
+        hint = origin
+    if hint is None or hint is typing.Any or hint is object or not isinstance(hint, type):
+        return False
+    try:
+        return not (issubclass(hint, _PLAIN_TYPES) or any(issubclass(t, hint) for t in _PLAIN_TYPES))
+    except TypeError:
+        return False
+
+
+def _type_words(hint):
+    return hint.__qualname__ if isinstance(hint, type) else repr(hint)
 
 
 def record_function(recorder, run, action, with_=None, amount=None, details=None, countersign=None, approve=None, on_stub=None):
@@ -294,26 +348,49 @@ def record_function(recorder, run, action, with_=None, amount=None, details=None
 
     run: the function. Its parameters must each be given by name or in
     place: no "*args", no "**kwargs", none that can only be given in place.
+    It must not be defined with "async def", nor be a generator function.
     The arguments of a call, for the stub and for the functions below, are
     its parameters by name, as a dict, with the defaults filled in. They
-    must be plain data (text, numbers, lists, dicts, True, False, None).
+    must be plain data (text, numbers, lists, dicts with text for names,
+    True, False, None): a parameter whose type can never be plain data (a
+    class of its own, such as a model or a date, a tuple or a set) is
+    refused when the function is recorded. The function is run with a copy
+    of the arguments: a change it makes to a list or a dict it was handed
+    does not reach the caller, and a default that is a list or a dict is a
+    fresh copy at each call. An argument bound in place into a
+    functools.partial is no longer one of the function's parameters, so it
+    is not in the record.
     action, with_, amount, details, countersign, approve, on_stub: as for a
     tool of record_tools ("with" is written with_ here).
 
     Returns the recorded function. A call that the slip does not allow
     raises NotTaken, and the function is not run. Raises a Refusal,
-    "bad-field", if the function cannot be recorded so."""
+    "bad-field", if the function cannot be recorded so, or if a call's
+    arguments are not plain data."""
     if not callable(run):
         raise f.fail('run', 'must be a function.')
-    if inspect.iscoroutinefunction(run):
+    callee = _callee(run)
+    if inspect.iscoroutinefunction(run) or inspect.iscoroutinefunction(callee):
         raise f.fail('run', 'must be an ordinary function: one defined with "async def" gives a coroutine, which the stub writer does not run.')
+    if _generator(run):
+        raise f.fail('run', _NOT_A_GENERATOR)
     try:
         signature = inspect.signature(run)
     except (TypeError, ValueError):
         raise f.fail('run', 'must be a function whose parameters can be read.') from None
     if any(p.kind not in _KEYWORD_KINDS for p in signature.parameters.values()):
         raise f.fail('run', 'must take its arguments by name: no "*args", no "**kwargs", none that can only be given in place.')
+    # The types as written, read where they can be (a type may be written as text).
+    try:
+        typed = inspect.signature(run, eval_str=True).parameters.values()
+    except Exception:
+        typed = signature.parameters.values()
+    for p in typed:
+        if p.annotation is not inspect.Parameter.empty and not isinstance(p.annotation, str) and _never_plain(p.annotation):
+            raise f.fail('run', f'must take only plain data ({_PLAIN_WORDS}). The parameter "{p.name}" is of the type {_type_words(p.annotation)}, so every call would be refused.')
     name = getattr(run, '__name__', 'tool')
+    if not isinstance(name, str) or not name:
+        raise f.fail('run', 'must have a name: its "__name__" must be text.')
     spec = {'action': action, 'run': lambda args: run(**args)}
     for key, value in (('with', with_), ('amount', amount), ('details', details), ('countersign', countersign), ('approve', approve)):
         if value is not None:
@@ -324,7 +401,15 @@ def record_function(recorder, run, action, with_=None, amount=None, details=None
     def recorded(*args, **kwargs):
         bound = signature.bind(*args, **kwargs)
         bound.apply_defaults()
-        return tool(dict(bound.arguments))
+        arguments = dict(bound.arguments)
+        # Each argument is looked at by itself, so that a refusal names it.
+        for key, value in arguments.items():
+            try:
+                _clone_any(value)
+            except Exception:
+                kind = '' if isinstance(value, (list, dict)) else f' (it is of the type {type(value).__qualname__})'
+                raise Refusal('bad-field', f'The arguments of the tool "{name}" must be plain data: {_PLAIN_WORDS}. "{key}" is not{kind}.') from None
+        return tool(arguments)
 
     recorded.__signature__ = signature
     return recorded

@@ -7,7 +7,7 @@
 # instrumentation is switched off, Logfire is not installed (the package
 # pydantic-ai-slim brings only "logfire-api", which does nothing by
 # itself), no API key is set, and the run is made inside _world.offline(),
-# which refuses any connection. Pydantic AI also prints a banner in a
+# which refuses any connection outside this program. Pydantic AI also prints a banner in a
 # terminal that invites the reader to set up an observability service; it
 # is switched off too (it sends nothing either way).
 #

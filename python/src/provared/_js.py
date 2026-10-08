@@ -26,9 +26,10 @@ def _number_int(text):
     # number. Python gives 0 and an exact whole number.
     if text == '-0':
         return -0.0
-    if len(text) > 16:
+    if len(text) > 17:
         return float(text)
-    return int(text)
+    number = int(text)
+    return number if abs(number) <= MAX_SAFE_INTEGER else float(text)
 
 
 def _number_float(text):
@@ -372,11 +373,15 @@ def number_value(value):
     """The number JavaScript would hold for a Python number: a float, or an
     int that a float holds exactly. A whole number beyond 2^53 - 1 becomes
     the nearest float, as JSON.parse would read it. Raises OverflowError for
-    a whole number too large for a float."""
+    a whole number too large for a float. A number of a class built on int
+    or float (an Enum of whole numbers, say) is taken as its plain value."""
     if isinstance(value, int) and not isinstance(value, bool):
+        value = int.__int__(value)
         if -MAX_SAFE_INTEGER <= value <= MAX_SAFE_INTEGER:
             return value
         return float(value)
+    if isinstance(value, float):
+        return float.__float__(value)
     return value
 
 

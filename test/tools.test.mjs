@@ -194,6 +194,10 @@ test('a tool that is not described as it must be is refused when the tools are p
     [{ a: { action: 'Not A Name', run } }, 'action'],
     [{ a: { action: 'provared.not.on.the.list', run } }, 'action'],
     [{ a: { action: LOOK } }, 'run'],
+    // Calling a generator function does not run its body: the stub would be written for an action not yet taken.
+    [{ a: { action: LOOK, run: function* () { yield 1; } } }, 'generator function'],
+    [{ a: { action: LOOK, run: async function* () { yield 1; } } }, 'generator function'],
+    [{ a: { action: LOOK, run: function* () { yield 1; }.bind(null) } }, 'generator function'],
     [{ a: { action: LOOK, run, countersign: 'yes' } }, 'countersign'],
     [{ a: { action: LOOK, run, approve: true } }, 'approve'],
     [{ a: { action: LOOK, run, details: 'none' } }, 'details'],

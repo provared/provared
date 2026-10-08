@@ -6,7 +6,11 @@
 #
 # Run from this folder: python -m unittest test_examples -v
 
+import asyncio
+import contextlib
 import socket
+import subprocess
+import sys
 import unittest
 
 import langchain_example
@@ -16,7 +20,7 @@ from langchain_core.tools import tool as langchain_tool
 
 from provared import arguments_fingerprint
 
-from _world import ORDER, SUPPLIER, World, offline
+from _world import ORDER, SUPPLIER, World, offline, refused
 
 PAPER = {'item': 'printer paper', 'quantity': 5, 'total_gbp': 30}
 REFUSED = 'The tool "order_supplies" was not run. With this action the total would be 280 GBP.'
@@ -40,7 +44,13 @@ class Example:
     @classmethod
     def setUpClass(cls):
         cls.shown = []
+        refused.clear()
         cls.outcome = cls.module.main(show=cls.shown.append)
+        cls.refused = list(refused)
+
+    def test_nothing_was_refused_while_it_ran(self):
+        # Not even an attempt that the framework caught and set aside.
+        self.assertEqual(self.refused, [])
 
     def parameters(self, description):
         return description.get('parameters') or description['function']['parameters']
@@ -138,19 +148,62 @@ class PydanticAI(Example, unittest.TestCase):
 
 
 class NothingIsSent(unittest.TestCase):
-    def test_a_look_up_or_a_connection_is_refused_while_an_example_runs(self):
+    # A documentation address (RFC 5737): each attempt is refused before any packet is sent.
+    OUTSIDE = ('192.0.2.1', 443)
+
+    def tearDown(self):
+        refused.clear()
+
+    @contextlib.contextmanager
+    def refuses(self):
+        """The guard itself refused what is inside: the operating system's own
+        refusal of a closed port is the same kind of error."""
+        before = len(refused)
+        with self.assertRaises(ConnectionRefusedError):
+            yield
+        self.assertGreater(len(refused), before)
+
+    def test_a_look_up_is_refused_while_an_example_runs(self):
         with offline():
-            with self.assertRaises(ConnectionRefusedError):
-                socket.getaddrinfo('api.example.com', 443)
-            # A documentation address (RFC 5737): refused before any packet is sent.
-            with self.assertRaises(ConnectionRefusedError):
-                socket.create_connection(('192.0.2.1', 443), timeout=1)
-            with socket.socket() as s, self.assertRaises(ConnectionRefusedError):
-                s.connect(('192.0.2.1', 443))
-            # This computer is allowed: Python's own event loop on Windows connects to it.
+            for look_up in (lambda: socket.getaddrinfo('api.example.com', 443), lambda: socket.gethostbyname('api.example.com'),
+                            lambda: socket.gethostbyaddr('192.0.2.1'), lambda: socket.getnameinfo(self.OUTSIDE, 0)):
+                with self.refuses():
+                    look_up()
+
+    def test_a_connection_or_a_message_is_refused(self):
+        with offline():
+            with self.refuses():
+                socket.create_connection(self.OUTSIDE, timeout=1)
+            with socket.socket() as s, self.refuses():
+                s.connect(self.OUTSIDE)
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s, self.refuses():
+                s.sendto(b'x', self.OUTSIDE)
+
+    def test_a_connection_through_the_event_loop_is_refused(self):
+        # On Windows the event loop's connections raise no audit event, and are checked apart.
+        async def connect():
+            await asyncio.open_connection(*self.OUTSIDE)
+
+        with offline(), self.refuses():
+            asyncio.run(connect())
+
+    def test_a_program_on_this_computer_is_not_reached_but_this_program_is(self):
+        with offline():
+            # A port on this computer that no socket of this program holds, as a proxy's would be.
+            with socket.socket() as s:
+                s.bind(('127.0.0.1', 0))
+                port = s.getsockname()[1]
+            with socket.socket() as s, self.refuses():
+                s.connect(('127.0.0.1', port))
+            # Python's own event loop on Windows connects one of its sockets to another.
             a, b = socket.socketpair()
             a.close()
             b.close()
+            asyncio.run(asyncio.sleep(0))
+
+    def test_starting_another_program_is_refused(self):
+        with offline(), self.refuses():
+            subprocess.run([sys.executable, '-c', 'pass'])
 
 
 if __name__ == '__main__':
