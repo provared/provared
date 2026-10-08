@@ -7,9 +7,16 @@
   framework. Each puts every tool call of an agent behind the stub
   writer with no change to the tools: the check before acting is asked,
   the tool runs only if the slip allows it, and a stub is written; a call
-  that is not allowed is not run, and the model is told why. Each works
-  with ordinary and asynchronous agents, and is tested with its
-  framework's own stand-in model, inside the examples' guard. They use
+  that is not allowed is not run, and the model is told why. Each checks
+  the call as the tool receives it: one must come last among the parts
+  that wrap tool calls, and refuses to run otherwise; the other wraps
+  each of the agent's own sets of tools, wherever it stands. Each works with ordinary
+  and asynchronous agents: the stub writer runs in a thread of its own
+  for each call, and cancelling a run cancels a tool that is waiting.
+  Each is tested with its framework's own stand-in model, inside the
+  examples' guard. An independent review found eight faults in the first
+  draft, among them a reviewer's change that got past the slip and
+  asynchronous agents that could hang; each is fixed and tested. They use
   only the public interface of the `provared` package, which itself still
   names no product. Not yet published.
 

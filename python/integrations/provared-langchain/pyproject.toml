@@ -11,8 +11,9 @@ authors = [{ name = "Pavel Izmaylov" }]
 license = "Apache-2.0 AND CC-BY-4.0"
 license-files = ["LICENSE", "LICENSE-CC-BY-4.0.txt"]
 requires-python = ">=3.11"
-# Provared itself, and LangChain's agents with middleware, as tested.
-dependencies = ["provared>=0.2.0", "langchain>=1.4,<2"]
+# Provared itself, LangChain's agents with middleware, as tested, and the
+# two packages beneath LangChain that this one imports directly.
+dependencies = ["provared>=0.2.0", "langchain>=1.4,<2", "langchain-core>=1.6,<2", "pydantic>=2"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Programming Language :: Python :: 3",

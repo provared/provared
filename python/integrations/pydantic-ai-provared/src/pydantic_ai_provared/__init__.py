@@ -7,10 +7,12 @@
 # is not run, and the model is told why, as a failed tool answer.
 #
 # It uses only the public interface of the "provared" package (record_tools,
-# NotTaken, Refusal) and Pydantic AI's own capability hooks.
+# NotTaken, Refusal) and Pydantic AI's own capabilities and toolsets.
 
 import asyncio
 import contextvars
+import threading
+import warnings
 from collections.abc import Mapping
 from dataclasses import KW_ONLY, dataclass
 from typing import Any
@@ -18,11 +20,13 @@ from typing import Any
 from provared import NotTaken, Refusal, record_tools
 from pydantic_ai import ToolFailed
 from pydantic_ai.capabilities import AbstractCapability
+from pydantic_ai.toolsets import WrapperToolset
 
 __all__ = ['ProvaredCapability']
 __version__ = '0.1.0'
 
 _UNLISTED = ('refuse', 'run')
+_MEMBERS = ('action', 'with', 'amount', 'details', 'countersign', 'approve')
 
 
 @dataclass
@@ -31,26 +35,28 @@ class ProvaredCapability(AbstractCapability[Any]):
 
     writer: the stub writer (provared.open_recorder), for the slip the
     person signed for this agent.
-    tools: a dict of the agent's tools by name. For each tool, the action
+    tools: a dict of the agent's tools by name, as the tools themselves are
+    named (before any prefix a toolset adds). For each tool, the action
     name the slip uses for what it does, or a dict as for a tool of
     provared.record_tools, without "run": "action", and where they apply
-    "with", "amount", "details", "countersign" and "approve". A function
-    among them is handed the arguments after Pydantic AI has checked them
-    against the tool's schema, as the tool is handed them.
+    "with", "amount", "details", "countersign" and "approve".
     unlisted: what to do with a call of a tool that is not in "tools":
-    "refuse" (the default: the tool is not run, and the model is told so)
-    or "run" (the tool is run, and no stub is written). Pydantic AI's own
-    tools for the agent's final output are not tool calls here, and always
-    run.
+    "refuse" (the default: the tool is not run, the model is told so, and
+    a RuntimeWarning is given) or "run" (the tool is run, and no stub is
+    written). Pydantic AI's own tools for the agent's final output are not
+    tool calls here, and always run.
     on_stub: a function of the stub and the tool's name, called after each
     stub is written, for example to keep the book.
 
-    A call that the slip does not allow, or that cannot be recorded, is not
-    run: it raises ToolFailed, which Pydantic AI hands to the model as a
-    failed tool answer that says why. A tool's own exception, and a call
-    that is deferred or sent back to the model to try again, leave no stub.
-    Raises provared.Refusal, "bad-field", if a tool is not described as set
-    out above."""
+    It wraps each of the agent's own sets of tools, so it checks and
+    records each call with the arguments the tool is handed, after every
+    other capability's hooks, wherever it stands in the list. The
+    arguments must be plain data. A call that the slip does not allow, or
+    that cannot be recorded, is not run: it raises ToolFailed, which
+    Pydantic AI hands to the model as a failed tool answer that says why.
+    A tool that raises, asks the model to try again or reports a failure
+    leaves no stub. Raises provared.Refusal, "bad-field", if a tool is not
+    described as set out above."""
 
     writer: Any
     tools: Mapping[str, Any]
@@ -59,58 +65,135 @@ class ProvaredCapability(AbstractCapability[Any]):
     on_stub: Any = None
 
     def __post_init__(self):
-        if not isinstance(self.tools, Mapping):
-            raise Refusal('bad-field', 'tools: must be a dict of the tools by name.')
-        if self.unlisted not in _UNLISTED:
-            raise Refusal('bad-field', 'unlisted: must be "refuse" or "run".')
-        # Which tool is being run, for this call: each call sets it in its own context.
-        self._handler = contextvars.ContextVar(f'pydantic_ai_provared_{id(self)}')
-        described = {}
-        for name, spec in self.tools.items():
-            if isinstance(spec, str):
-                spec = {'action': spec}
-            if not isinstance(spec, Mapping):
-                raise Refusal('bad-field', f'tools.{name}: must be an action name, or a dict that describes the tool.')
-            if 'run' in spec:
-                raise Refusal('bad-field', f'tools.{name}.run: is not given here. The capability runs the tool that Pydantic AI calls.')
-            described[name] = {**spec, 'run': self._run}
-        # Each description is checked, and fixed, here: a mistake shows when the agent is built.
-        self._recorded = record_tools(self.writer, described, on_stub=self.on_stub)
+        self._recorded, self._handler = _described(self.writer, self.tools, self.unlisted, self.on_stub, 'capability')
 
     @classmethod
     def get_serialization_name(cls):
         # It holds a stub writer, which cannot be written in an agent's spec.
         return None
 
-    def _run(self, args):
-        return self._handler.get()(args)
+    def get_wrapper_toolset(self, toolset):
+        # Each set of tools is wrapped where it stands, inside every other wrapper.
+        return toolset.visit_and_replace(lambda leaf: _RecordedToolset(leaf, self))
 
-    async def wrap_tool_execute(self, ctx, *, call, tool_def, args, handler):
-        name = call.tool_name
-        tool = self._recorded.get(name)
-        if tool is None:
-            if self.unlisted == 'run':
-                return await handler(args)
+
+@dataclass
+class _RecordedToolset(WrapperToolset[Any]):
+    capability: Any = None
+
+    async def call_tool(self, name, tool_args, ctx, tool):
+        capability = self.capability
+        recorded = capability._recorded.get(name)
+        if recorded is None:
+            if capability.unlisted == 'run':
+                return await self.wrapped.call_tool(name, tool_args, ctx, tool)
+            warnings.warn(f'ProvaredCapability: the agent called the tool "{name}", which is not described to it, so it was not run.',
+                          RuntimeWarning, stacklevel=2)
             raise ToolFailed(f'The tool "{name}" was not run. Provared records no tool of that name.')
-        loop = asyncio.get_running_loop()
+        call = _OnTheLoop(asyncio.get_running_loop())
 
-        # The stub writer is an ordinary function, and may wait: it is run in
-        # a thread of its own. The tool itself runs on this event loop, in
-        # the context of that thread, which carries the writer's mark, so a
-        # tool that calls the writer is refused at once.
         def run(copy):
-            return asyncio.run_coroutine_threadsafe(handler(copy), loop).result()
+            return call.run_tool(lambda: self.wrapped.call_tool(name, copy, ctx, tool))
+
+        def work():
+            token = capability._handler.set(run)
+            try:
+                return recorded(tool_args)
+            finally:
+                capability._handler.reset(token)
 
         try:
-            return await asyncio.to_thread(self._recorded_call, tool, args, run)
-        except NotTaken as e:
-            raise ToolFailed(e.message) from None
-        except Refusal as e:
-            raise ToolFailed(f'The tool "{name}" was not run. {e.message}') from None
+            return await call.run_writer(work)
+        except (NotTaken, Refusal) as e:
+            # Raised by the tool itself, once it was run: passed on, as any error of the tool.
+            if call.ran:
+                raise
+            raise ToolFailed(e.message if isinstance(e, NotTaken) else f'The tool "{name}" was not run. {e.message}') from None
 
-    def _recorded_call(self, tool, args, run):
-        token = self._handler.set(run)
+
+class _OnTheLoop:
+    """One recorded call. The stub writer is an ordinary function that may
+    wait, so it is run in a thread of its own, not one of the event loop's
+    shared threads, which the tool itself may need. The tool is run on the
+    event loop, in the context of that thread, which carries the writer's
+    mark, so a tool that calls the writer is refused at once. Cancelling
+    the call cancels the tool, as it would without the writer: no stub is
+    written, and the writer goes on."""
+
+    def __init__(self, loop):
+        self._loop = loop
+        self._guard = threading.Lock()
+        self._tool = None
+        self._cancelled = False
+        self.ran = []
+
+    def run_tool(self, start):
+        with self._guard:
+            if self._cancelled:
+                raise RuntimeError('The call was cancelled before the tool ran.')
+            coroutine = start()
+            try:
+                self._tool = asyncio.run_coroutine_threadsafe(coroutine, self._loop)
+            except BaseException:
+                coroutine.close()
+                raise
+            self.ran.append(True)
+        return self._tool.result()
+
+    async def run_writer(self, work):
+        future = self._loop.create_future()
+        context = contextvars.copy_context()
+
+        def settle(value, error):
+            if future.done():
+                return
+            if error is None:
+                future.set_result(value)
+            else:
+                future.set_exception(error)
+
+        def job():
+            value, error = None, None
+            try:
+                value = context.run(work)
+            except Exception as e:
+                error = e
+            except BaseException as e:  # noqa: BLE001
+                error = RuntimeError(f'The stub writer stopped with {type(e).__name__}.')
+            try:
+                self._loop.call_soon_threadsafe(settle, value, error)
+            except RuntimeError:
+                pass  # the event loop has closed
+
+        threading.Thread(target=job, daemon=True, name='provared-writer').start()
         try:
-            return tool(args)
-        finally:
-            self._handler.reset(token)
+            return await future
+        except asyncio.CancelledError:
+            with self._guard:
+                self._cancelled = True
+                if self._tool is not None:
+                    self._tool.cancel()
+            raise
+
+
+def _described(writer, tools, unlisted, on_stub, what):
+    """Each tool's description, checked and fixed: a mistake shows when the agent is built."""
+    if not isinstance(tools, Mapping):
+        raise Refusal('bad-field', 'tools: must be a dict of the tools by name.')
+    if unlisted not in _UNLISTED:
+        raise Refusal('bad-field', 'unlisted: must be "refuse" or "run".')
+    handler = contextvars.ContextVar(f'provared_{what}_{id(tools)}')
+    described = {}
+    for name, spec in tools.items():
+        if isinstance(spec, str):
+            spec = {'action': spec}
+        if not isinstance(spec, Mapping):
+            raise Refusal('bad-field', f'tools.{name}: must be an action name, or a dict that describes the tool.')
+        for member in spec:
+            if member == 'run':
+                raise Refusal('bad-field', f'tools.{name}.run: is not given here. The {what} runs the tool that the framework calls.')
+            if member not in _MEMBERS:
+                hint = ' (write "with", not "with_")' if member == 'with_' else ''
+                raise Refusal('bad-field', f'tools.{name}.{member}: is not a member of a tool\'s description{hint}. They are: {", ".join(_MEMBERS)}.')
+        described[name] = {**spec, 'run': lambda args: handler.get()(args)}
+    return record_tools(writer, described, on_stub=on_stub), handler
