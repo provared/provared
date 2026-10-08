@@ -16,6 +16,7 @@
 # ported one to one. Every function is an ordinary one: a function handed
 # in that gives a coroutine is refused.
 
+import functools
 import inspect
 import math
 from collections.abc import Mapping
@@ -276,3 +277,54 @@ def _call(act, on_stub, name, spec, args):
     if on_stub:
         _at_once(on_stub(outcome['stub'], name), 'onStub')
     return outcome['result']
+
+
+# --- one ordinary function behind the stub writer (Python only) ---
+
+_KEYWORD_KINDS = (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+
+
+def record_function(recorder, run, action, with_=None, amount=None, details=None, countersign=None, approve=None, on_stub=None):
+    """Put one ordinary Python function behind the stub writer, keeping its
+    name, its parameters and its description. An agent framework that
+    describes a tool to its model from the function itself (its name, its
+    parameters, their types and its docstring) then describes the recorded
+    function exactly as it would the function. Python only: a JavaScript
+    tool takes its arguments as one object, and record_tools is enough.
+
+    run: the function. Its parameters must each be given by name or in
+    place: no "*args", no "**kwargs", none that can only be given in place.
+    The arguments of a call, for the stub and for the functions below, are
+    its parameters by name, as a dict, with the defaults filled in. They
+    must be plain data (text, numbers, lists, dicts, True, False, None).
+    action, with_, amount, details, countersign, approve, on_stub: as for a
+    tool of record_tools ("with" is written with_ here).
+
+    Returns the recorded function. A call that the slip does not allow
+    raises NotTaken, and the function is not run. Raises a Refusal,
+    "bad-field", if the function cannot be recorded so."""
+    if not callable(run):
+        raise f.fail('run', 'must be a function.')
+    if inspect.iscoroutinefunction(run):
+        raise f.fail('run', 'must be an ordinary function: one defined with "async def" gives a coroutine, which the stub writer does not run.')
+    try:
+        signature = inspect.signature(run)
+    except (TypeError, ValueError):
+        raise f.fail('run', 'must be a function whose parameters can be read.') from None
+    if any(p.kind not in _KEYWORD_KINDS for p in signature.parameters.values()):
+        raise f.fail('run', 'must take its arguments by name: no "*args", no "**kwargs", none that can only be given in place.')
+    name = getattr(run, '__name__', 'tool')
+    spec = {'action': action, 'run': lambda args: run(**args)}
+    for key, value in (('with', with_), ('amount', amount), ('details', details), ('countersign', countersign), ('approve', approve)):
+        if value is not None:
+            spec[key] = value
+    tool = record_tools(recorder, {name: spec}, on_stub=on_stub)[name]
+
+    @functools.wraps(run)
+    def recorded(*args, **kwargs):
+        bound = signature.bind(*args, **kwargs)
+        bound.apply_defaults()
+        return tool(dict(bound.arguments))
+
+    recorded.__signature__ = signature
+    return recorded

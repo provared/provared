@@ -21,3 +21,6 @@ __pycache__/
 *.egg-info/
 python/build/
 python/dist/
+
+# The environment in which the examples for agent frameworks are run
+python/.venv-examples/

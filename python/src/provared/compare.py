@@ -66,11 +66,14 @@ def _allowed_in(limit):
     return int(limit['count'] if 'count' in limit else limit['max'])
 
 
-def _over_period(limit, total, W):
+def _over_period(limit, total, W, proposed=False):
+    """proposed: an action that is only proposed (a check before acting), of
+    which no stub exists yet."""
+    With, are, is_ = ('With this action', 'there would be', 'would be') if proposed else ('With this stub', 'there are', 'is')
     if 'count' in limit:
-        message = f"With this stub there are {total} such actions in {period_words(limit['per'])}. {W} allows {limit['count']}."
+        message = f"{With} {are} {total} such actions in {period_words(limit['per'])}. {W} allows {limit['count']}."
     else:
-        message = f"With this stub the total in {period_words(limit['per'])} is {total} {limit['unit']}. {W}'s limit is {limit['max']} {limit['unit']}."
+        message = f"{With} the total in {period_words(limit['per'])} {is_} {total} {limit['unit']}. {W}'s limit is {limit['max']} {limit['unit']}."
     return {'code': 'over-period-limit', 'message': message}
 
 
@@ -171,7 +174,7 @@ def compare_with_slip(s, tally, c, facts, commit=True):
             return
         worst = _period_with(items, when, limit['per'] * 1000, value)
         if worst > _allowed_in(limit):
-            breaches.append(_over_period(limit, worst, W))
+            breaches.append(_over_period(limit, worst, W, True))
 
     if c['action'] not in s['actions']:
         breaches.append({'code': 'action-not-allowed', 'message': f'{W} does not allow the action "{c["action"]}".'})
@@ -217,7 +220,7 @@ def compare_with_slip(s, tally, c, facts, commit=True):
                 if commit:
                     tally['counts'][i] = n
                 if n > limit['count']:
-                    breaches.append({'code': 'over-count-limit', 'message': f"This is action number {n} of this kind under {w}. {W} allows {limit['count']}."})
+                    breaches.append({'code': 'over-count-limit', 'message': f"{'This is' if commit else 'This would be'} action number {n} of this kind under {w}. {W} allows {limit['count']}."})
             else:
                 in_period(i, limit, 1)
             continue
@@ -236,7 +239,7 @@ def compare_with_slip(s, tally, c, facts, commit=True):
                 if total > int(limit['max']):
                     breaches.append({
                         'code': 'over-limit',
-                        'message': f"With this stub the total is {total} {limit['unit']}. {W}'s limit is {limit['max']} {limit['unit']}: over by {total - int(limit['max'])}.",
+                        'message': f"{'With this stub the total is' if commit else 'With this action the total would be'} {total} {limit['unit']}. {W}'s limit is {limit['max']} {limit['unit']}: over by {total - int(limit['max'])}.",
                     })
             elif value > int(limit['max']):
                 # A single page cannot show a running total, but it can show a stub

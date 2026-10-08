@@ -63,10 +63,13 @@ function periodWords(seconds) {
 
 const allowedIn = (limit) => BigInt(Object.hasOwn(limit, 'count') ? limit.count : limit.max);
 
-function overPeriod(limit, total, W) {
+// "proposed": an action that is only proposed (a check before acting), of
+// which no stub exists yet.
+function overPeriod(limit, total, W, proposed = false) {
+  const [With, are, is] = proposed ? ['With this action', 'there would be', 'would be'] : ['With this stub', 'there are', 'is'];
   const message = Object.hasOwn(limit, 'count')
-    ? `With this stub there are ${total} such actions in ${periodWords(limit.per)}. ${W} allows ${limit.count}.`
-    : `With this stub the total in ${periodWords(limit.per)} is ${total} ${limit.unit}. ${W}'s limit is ${limit.max} ${limit.unit}.`;
+    ? `${With} ${are} ${total} such actions in ${periodWords(limit.per)}. ${W} allows ${limit.count}.`
+    : `${With} the total in ${periodWords(limit.per)} ${is} ${total} ${limit.unit}. ${W}'s limit is ${limit.max} ${limit.unit}.`;
   return { code: 'over-period-limit', message };
 }
 
@@ -175,7 +178,7 @@ export function compareWithSlip(s, tally, c, facts, commit = true) {
       return;
     }
     const worst = periodWith(items, when, limit.per * 1000, value);
-    if (worst > allowedIn(limit)) breaches.push(overPeriod(limit, worst, W));
+    if (worst > allowedIn(limit)) breaches.push(overPeriod(limit, worst, W, true));
   };
 
   if (!s.actions.includes(c.action)) {
@@ -225,7 +228,7 @@ export function compareWithSlip(s, tally, c, facts, commit = true) {
         const n = (tally.counts.get(i) ?? 0) + 1;
         if (commit) tally.counts.set(i, n);
         if (n > limit.count) {
-          breaches.push({ code: 'over-count-limit', message: `This is action number ${n} of this kind under ${w}. ${W} allows ${limit.count}.` });
+          breaches.push({ code: 'over-count-limit', message: `${commit ? 'This is' : 'This would be'} action number ${n} of this kind under ${w}. ${W} allows ${limit.count}.` });
         }
       } else {
         inPeriod(i, limit, 1n);
@@ -246,7 +249,7 @@ export function compareWithSlip(s, tally, c, facts, commit = true) {
         if (total > BigInt(limit.max)) {
           breaches.push({
             code: 'over-limit',
-            message: `With this stub the total is ${total} ${limit.unit}. ${W}'s limit is ${limit.max} ${limit.unit}: over by ${total - BigInt(limit.max)}.`,
+            message: `${commit ? 'With this stub the total is' : 'With this action the total would be'} ${total} ${limit.unit}. ${W}'s limit is ${limit.max} ${limit.unit}: over by ${total - BigInt(limit.max)}.`,
           });
         }
       } else if (value > BigInt(limit.max)) {

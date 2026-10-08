@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+- 2026-10-08: examples for three Python agent frameworks, in
+  `python/examples/`: LangChain, the OpenAI Agents SDK and Pydantic AI.
+  Each records an agent's tools with `record_function`, runs the agent
+  with the framework's own stand-in model (no AI service is called;
+  tracing is switched off; any connection is refused while it runs), and
+  checks the book. Each is tested (`python/examples/test_examples.py`).
+  The library itself still names no product.
+- 2026-10-08: the check before acting speaks of an action that is only
+  proposed: "With this action the total would be 280 GBP", not "With this
+  stub the total is", since no stub exists for an action that is not
+  taken. Likewise for a count and a period. The codes are unchanged; the
+  checker's words for a stub are unchanged.
+- 2026-10-08: the Python version gains `record_function`, which puts one
+  ordinary function behind the stub writer and keeps its name, its
+  parameters and its description, so that an agent framework describes
+  the recorded function to its model as it would the function. Python
+  only: a JavaScript tool takes its arguments as one object. Tested
+  (`python/tests/test_record_function.py`).
+- 2026-10-08: `test-vectors/README.md` says what each shared file holds
+  and what must match: Provared's own libraries give every answer
+  exactly, words included; another implementation needs to match the
+  codes and the shape of each answer. The Python package is made ready
+  for the Python Package Index (version 0.1.0, both licence files); it is
+  not yet published there.
 - 2026-10-08: faults found by a second independent review, of the
   Python stub writer and of the changes above. In 1,183 random
   scenarios (about 79,500 steps) played in both languages, and 140 runs

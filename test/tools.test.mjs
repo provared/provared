@@ -65,7 +65,7 @@ test('a recorded tool runs only if the slip allows the action, and leaves a stub
   assert.ok(refused instanceof NotTaken);
   assert.equal(refused.tool, 'placeOrder');
   assert.deepEqual(refused.answer.breaches.map((b) => b.code), ['over-limit']);
-  assert.match(refused.message, /The tool "placeOrder" was not run\. With this stub the total is 545 GBP/);
+  assert.match(refused.message, /The tool "placeOrder" was not run\. With this action the total would be 545 GBP/);
   assert.equal(ran.length, 1);
   assert.equal(recorder.book(), before);
 });

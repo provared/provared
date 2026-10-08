@@ -44,12 +44,12 @@ from .signatures import generate_key_set, key_set_from_seeds, key_set_seeds, met
 from .slip import COVERABLE, assemble_slip, check_slip, prepare_slip
 from .standing import VOUCHED_KINDS, assemble_cancellation, prepare_cancellation, write_acknowledgement, write_vouching, write_withdrawal
 from .stub import countersign, write_stub
-from .tools import NotTaken, arguments_fingerprint, record_tools
+from .tools import NotTaken, arguments_fingerprint, record_function, record_tools
 
 __all__ = [
     'MIN_BLOCKS_AFTER', 'blocks_in_chain', 'check_header_chain',
     'COUNTERSIGN_WITHIN_MS', 'NotTaken', 'Recorder', 'arguments_fingerprint', 'key_set_from_seeds', 'key_set_seeds', 'open_recorder',
-    'record_tools',
+    'record_function', 'record_tools',
     'ACTION_KINDS', 'CONDUCT_RULES', 'COVERABLE', 'LIMITS', 'REFUSAL_REASONS', 'RESERVED_PREFIX', 'SHARED_ACTIONS', 'VOUCHED_KINDS',
     'Refusal', 'action_kind', 'assemble_approval', 'assemble_cancellation', 'assemble_slip', 'block_fingerprint', 'block_stamp_item',
     'check_before', 'check_book', 'check_show', 'check_slip', 'condition_words', 'countersign', 'entry_line', 'fingerprint',

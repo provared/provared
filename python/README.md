@@ -92,7 +92,26 @@ it is taking is refused at once, from the same thread or from a thread
 that carries the action's context; from a new thread that the action
 starts without it, the call waits until the action ends, so an action
 must not wait for such a call. `record_tools` puts an agent's tools
-behind the writer. `key_set_from_seeds` and `key_set_seeds` keep an
+behind the writer. `record_function` puts one ordinary function behind
+it and keeps the function's name, parameters and description, so that an
+agent framework describes it to its model as it would the function:
+
+```python
+from provared import record_function
+
+def place_order(item: str, value: int) -> str:
+    """Order supplies from the supplier."""
+    ...
+
+place_order = record_function(writer, place_order, 'supplies.order', with_='supplier',
+                              amount=lambda args: {'unit': 'GBP', 'value': args['value']})
+```
+
+A call that the slip does not allow raises `NotTaken`, and the function
+is not run. The folder
+[`examples/`](https://github.com/provared/provared/tree/main/python/examples)
+shows this with three agent frameworks: LangChain, the OpenAI Agents SDK
+and Pydantic AI. `key_set_from_seeds` and `key_set_seeds` keep an
 agent's keys between runs as two 32-byte seeds.
 
 Names follow Python's way (`check_book`, `write_stub`). Options may be

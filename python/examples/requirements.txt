@@ -1,0 +1,11 @@
+# What the examples need, each pinned to an exact version: the latest on
+# the Python Package Index on 8 October 2026. The three agent frameworks,
+# and the two parts of LangChain that the LangChain example imports by
+# name. Install the library itself beside them, from this folder:
+#   pip install -r requirements.txt
+#   pip install -e ..
+langchain==1.4.3
+langchain-core==1.6.8
+langsmith==0.14.4
+openai-agents==0.23.1
+pydantic-ai-slim==2.54.0
