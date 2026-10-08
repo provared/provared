@@ -131,11 +131,15 @@ def _refuse_awaitable(value, why):
 # --- copies ---
 
 
+# Stands in the list of an entry's members for a name that is not plain data.
+_STRANGE = object()
+
+
 def _scalar(value):
     return value is None or isinstance(value, (bool, int, float, str))
 
 
-def _clone(value):
+def _clone(value, most=_MAX_COPY_DEPTH):
     """A copy that nothing else holds, as structuredClone makes one, for plain
     data: objects (dicts, with text for names), lists, text, numbers, true,
     false and null. A value met twice is copied once. Raises TypeError for
@@ -144,14 +148,12 @@ def _clone(value):
     deep value costs no stack."""
     if _scalar(value) or value is _ABSENT:
         return value
-    if not isinstance(value, (dict, list)):
+    if not isinstance(value, (Mapping, list)):
         raise TypeError('not plain data')
 
     def fresh(v):
-        if isinstance(v, dict):
-            if not all(isinstance(k, str) for k in v):
-                raise TypeError('not plain data')
-            return {}, iter(list(v.items()))
+        if isinstance(v, Mapping):
+            return {}, iter([(_js.property_key(k), item) for k, item in v.items()])
         return [], iter(list(v))
 
     memo = {}
@@ -160,9 +162,9 @@ def _clone(value):
     root, items = fresh(value)
     memo[id(value)] = root
     active.add(id(value))
-    stack = [(value, root, items)]
+    stack = [(value, root, items, 0)]
     while stack:
-        source, made, items = stack[-1]
+        source, made, items, depth = stack[-1]
         try:
             item = next(items)
         except StopIteration:
@@ -172,16 +174,21 @@ def _clone(value):
         name, v = item if isinstance(made, dict) else (None, item)
         if _scalar(v):
             c = v
-        elif isinstance(v, (dict, list)):
+        elif isinstance(v, (Mapping, list)):
             if id(v) in active:
                 raise TypeError('the value holds itself')
             c = memo.get(id(v))
             if c is None:
+                # As deep as a copy may go: far more than a record holds. (The
+                # connector for tools copies without a limit, as the JavaScript
+                # one does, and refuses what nests too deeply itself.)
+                if most is not None and depth + 1 > most:
+                    raise TypeError('the value nests too deeply')
                 c, inner = fresh(v)
                 memo[id(v)] = c
                 active.add(id(v))
                 keep.append(v)
-                stack.append((v, c, inner))
+                stack.append((v, c, inner, depth + 1))
         else:
             raise TypeError('not plain data')
         if isinstance(made, dict):
@@ -226,7 +233,7 @@ def _copier():
             return v, _js.utf16_length(v) + 2
         if v is None or isinstance(v, (bool, int, float)):
             return v, 1
-        if not isinstance(v, (dict, list)):
+        if not isinstance(v, (Mapping, list)):
             raise _TooMuch('not plain data')
         found = copies.get(id(v))
         if found is not None:
@@ -234,8 +241,11 @@ def _copier():
         if depth > _MAX_COPY_DEPTH:
             raise _TooMuch('the value nests too deeply, or holds itself')
         is_list = isinstance(v, list)
-        if not is_list and not all(isinstance(k, str) for k in v):
-            raise _TooMuch('not plain data')
+        if not is_list:
+            try:
+                v = {_js.property_key(k): item for k, item in v.items()}
+            except TypeError:
+                raise _TooMuch('not plain data') from None
         made = [] if is_list else {}
         size = 2
         members = 0
@@ -294,7 +304,7 @@ _MAX_TIME_MS = 8.64e15
 
 
 def _time_clip(value):
-    if not math.isfinite(value) or abs(value) > _MAX_TIME_MS:
+    if not _js.finite(value) or abs(value) > _MAX_TIME_MS:
         return float('nan')
     # Towards zero, and never -0.
     return int(value) + 0
@@ -356,12 +366,12 @@ class Recorder:
 
         def clock():
             time = device()
-            if not (_js.is_number(time) and math.isfinite(time)):
+            if not _js.finite(time):
                 raise Refusal('bad-field', 'now: the clock did not give a time in milliseconds.')
             return time
 
         self._now = clock
-        if not (_js.is_number(countersign_within) and math.isfinite(countersign_within) and 1 <= countersign_within <= _MAX_WAIT_MS):
+        if not (_js.finite(countersign_within) and 1 <= countersign_within <= _MAX_WAIT_MS):
             raise Refusal('bad-field', 'countersignWithin: must be a number of milliseconds from 1 to 2,147,483,647.')
         self._within = countersign_within
         self._slip = slip
@@ -587,8 +597,13 @@ class Recorder:
                 if inspect.isawaitable(value):
                     _refuse_awaitable(value, 'countersign: must be an ordinary function that gives the countersignature, or None. It gave a coroutine, which was not run.')
                 answer.set_result(value)
-            except BaseException as e:  # noqa: BLE001 (handed on to the writer, which decides)
+            except Exception as e:  # handed on to the writer, which decides
                 answer.set_exception(e)
+            except BaseException as e:  # noqa: BLE001
+                # SystemExit, KeyboardInterrupt and the like, raised by the other side's
+                # function in its own thread, are a failure like any other: the stub
+                # stands one-sided.
+                answer.set_exception(RuntimeError(f'the countersign function raised {type(e).__name__}'))
 
         threading.Thread(target=context.run, args=(job,), daemon=True, name='provared-countersign').start()
         try:
@@ -1083,8 +1098,25 @@ class Recorder:
         return self._calling(request, more, work)
 
     def book(self):
-        """The book as it now stands."""
+        """The book as it now stands. To keep the book and the cancellations the
+        writer holds beside it together, read both with snapshot()."""
         return self._text
+
+    def snapshot(self):
+        """The book and the cancellations the writer holds beside it, read
+        together, so that nothing another thread does falls between the two:
+        (book, cancellations). From another thread it waits for a call in
+        progress; from inside an action the writer is taking, it reads at once."""
+        return self._quietly(lambda: (self._text, copy.deepcopy(self._beside())))
+
+    def _quietly(self, read):
+        """Read the writer's state: at once from inside its own call, where
+        nothing else can change it; otherwise once no call is in progress."""
+        mark = _INSIDE.get()
+        if (mark is not None and mark.writer is self and mark.running) or self._owner == threading.get_ident():
+            return read()
+        with self._lock:
+            return read()
 
     def check(self):
         """What the record shows as it stands: the answer that a whole check
@@ -1102,8 +1134,9 @@ class Recorder:
         book, and hand them in again (options "cancellations") when a writer
         is opened again from the book: a writer opened without them knows
         nothing of them. Copies, each as it is handed to a check:
-        {"cancellation", "stamps"?, "acknowledgements"?}."""
-        return copy.deepcopy(self._beside())
+        {"cancellation", "stamps"?, "acknowledgements"?}. To keep them together
+        with the book, read both with snapshot()."""
+        return self._quietly(lambda: copy.deepcopy(self._beside()))
 
     def add(self, entry):
         """Add an entry that someone else made (a seal, a cancellation, a
@@ -1152,15 +1185,29 @@ class Recorder:
         # written out.
         read = {}
         listed = None
-        if isinstance(entry, dict):
+        if isinstance(entry, Mapping):
             try:
-                if not all(isinstance(name, str) for name in entry):
-                    raise TypeError('not plain data')
+                # A name that is a number (or True, False, None) is the text JavaScript
+                # would give it; any other name makes the entry not plain data, but the
+                # three members of a cancellation are still read.
+                named = {}
+                strange = False
+                for name, item in entry.items():
+                    try:
+                        named[_js.property_key(name)] = item
+                    except TypeError:
+                        strange = True
+                entry = named
                 listed = _js.keys(entry)
                 known = [name for name in ('cancellation', 'stamps', 'acknowledgements') if name in entry]
                 rest = _copier()
                 whole = True
-                for name in known + [name for name in listed if name not in known]:
+                members = known + [name for name in listed if name not in known]
+                if strange:
+                    # A name that is not plain data: the entry cannot be a line, though
+                    # its other members are read.
+                    listed = listed + [_STRANGE]
+                for name in members:
                     own = name in known
                     if not own and not whole:
                         read[name] = None

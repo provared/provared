@@ -25,6 +25,11 @@ from . import fields as f
 from .encoding import Refusal, _well_formed, fingerprint, utf8
 from .recorder import _ABSENT, _clone, _refuse_awaitable
 
+
+def _clone_any(value):
+    """structuredClone, with no limit on depth, as the JavaScript connector copies."""
+    return _clone(value, most=None)
+
 _MAX_ARGUMENT_DEPTH = 64
 """How deep the arguments of a call may nest."""
 
@@ -90,7 +95,7 @@ def arguments_fingerprint(args):
 # A copy that nothing else holds. "No arguments" stays as it is.
 def _copied(value, what):
     try:
-        return _clone(value)
+        return _clone_any(value)
     except Exception:
         raise Refusal('bad-field', f'{what} must be plain data.') from None
 
@@ -98,7 +103,7 @@ def _copied(value, what):
 # What a tool's own function is handed: a copy of its own, and None where
 # the tool was called with no arguments.
 def _given(args):
-    return None if args is _ABSENT else _clone(args)
+    return None if args is _ABSENT else _clone_any(args)
 
 
 def _at_once(value, what):
@@ -263,7 +268,7 @@ def _call(act, on_stub, name, spec, args):
     # that is the one thing missing, the person is asked, once.
     approve = spec['approve']
     if not outcome['done'] and callable(approve) and _needs_only_approval(outcome['answer']):
-        approval = _at_once(approve(_clone(request), _given(given)), f'tools.{name}.approve')
+        approval = _at_once(approve(_clone_any(request), _given(given)), f'tools.{name}.approve')
         if _js.truthy(approval):
             outcome = act(request, perform, {**more, 'approval': approval})
     if not outcome['done']:

@@ -253,6 +253,8 @@ async function verifyWith(certificate, bytes, signatureOid, digestName, signatur
     // A device with no Ed25519 says so when the key is loaded.
     return method === 'Ed25519' && e && e.name === 'NotSupportedError' ? 'unavailable' : 'invalid';
   }
+  // An Ed25519 signature whose first half is a point of small order is refused, as everywhere (format description, section 3.8).
+  if (method === 'Ed25519' && (raw.length !== 64 || weakEd25519(raw.subarray(0, 32)))) return 'invalid';
   try {
     return (await subtle.verify(verifyParams, key, raw, signed)) ? 'valid' : 'invalid';
   } catch {

@@ -13,7 +13,7 @@
 // this file still loads in a browser. In a browser the method is reported as
 // not built in, which is never a pass.
 
-import { importPublicKey } from './keys.js';
+import { importPublicKey, weakEd25519 } from './keys.js';
 
 const SLH = 'SLH-DSA-SHA2-256s';
 const nodeCrypto = globalThis.process && typeof globalThis.process.getBuiltinModule === 'function' ? globalThis.process.getBuiltinModule('node:crypto') : null;
@@ -91,6 +91,10 @@ export async function verifySignature(jwk, signature, data, without = []) {
   if (!Object.hasOwn(VERIFY_PARAMS, jwk.alg)) return 'invalid';
   const params = VERIFY_PARAMS[jwk.alg];
   if (without.includes(jwk.alg) || !(await methodAvailable(jwk.alg))) return 'unavailable';
+  // An Ed25519 signature whose first half is a point of small order is
+  // refused here, whatever the device's own library would say: libraries
+  // differ on it (format description, section 3.8).
+  if (jwk.alg === 'Ed25519' && (signature.length !== 64 || weakEd25519(signature.subarray(0, 32)))) return 'invalid';
   try {
     const key = await importPublicKey(jwk);
     return (await globalThis.crypto.subtle.verify(params, key, signature, data)) ? 'valid' : 'invalid';

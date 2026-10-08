@@ -17,6 +17,7 @@ from cryptography.hazmat.primitives.asymmetric import ec, ed25519, padding, rsa
 from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
 
 from .encoding import from_base64url, to_base64url
+from .keys import weak_ed25519
 
 try:
     from cryptography.hazmat.primitives.asymmetric import mldsa as _mldsa
@@ -73,6 +74,11 @@ def verify_signature(jwk, signature, data, without=()):
         return 'unavailable'
     signature = bytes(signature)
     data = bytes(data)
+    # An Ed25519 signature whose first half is a point of small order is
+    # refused here, whatever the library beneath would say: libraries
+    # differ on it (format description, section 3.8).
+    if alg == 'Ed25519' and (len(signature) != 64 or weak_ed25519(signature[:32])):
+        return 'invalid'
     try:
         key = _load(jwk)
         if alg == 'ES256':

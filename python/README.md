@@ -69,6 +69,32 @@ if not answer['allowed']:
     print(answer['problems'], answer['breaches'])
 ```
 
+Beside an agent, the stub writer asks the check before acting, takes the
+action only if the answer is yes, and writes the stub (see "Beside an
+agent" in the repository's README):
+
+```python
+from provared import open_recorder
+
+writer = open_recorder(book_text, slip_fingerprint, private_keys, issuer_keys=[passkey_thumbprint])
+result = writer.act(
+    {'action': 'supplies.order', 'amount': {'unit': 'GBP', 'value': 20}, 'with': 'supplier'},
+    lambda: place_the_order(),
+)
+book_text, held = writer.snapshot()   # keep both together, with the book
+```
+
+Every call is an ordinary function. A writer's calls wait for one
+another, also across threads. The other side is asked in a thread of
+its own and given 30 seconds. An asynchronous agent calls the writer
+through `asyncio.to_thread`. A call to the writer from inside an action
+it is taking is refused at once, from the same thread or from a thread
+that carries the action's context; from a new thread that the action
+starts without it, the call waits until the action ends, so an action
+must not wait for such a call. `record_tools` puts an agent's tools
+behind the writer. `key_set_from_seeds` and `key_set_seeds` keep an
+agent's keys between runs as two 32-byte seeds.
+
 Names follow Python's way (`check_book`, `write_stub`). Options may be
 given as keyword arguments (`issuer_keys`, `expected_root`,
 `stamp_services`, `seal_keys`, `vouchers`, `disclosures`,

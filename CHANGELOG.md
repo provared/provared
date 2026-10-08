@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+- 2026-10-08: faults found by a second independent review, of the
+  Python stub writer and of the changes above. In 1,183 random
+  scenarios (about 79,500 steps) played in both languages, and 140 runs
+  with several threads at once, no action was taken after the person's
+  cancellation was handed over, and the writer's view of its book always
+  equalled a whole check. Each fault is fixed and each is now a test
+  (`python/tests/test_review2.py`).
+  - **An Ed25519 signature whose first half (R) is a point of small
+    order is refused**, in both languages, whatever the key. The holder
+    of an honest key could make one for any message; Node.js refused it
+    and the OpenSSL beneath the Python version accepted it, so one
+    record had two answers (format description, section 3.8).
+  - A copy of what the stub writer is handed is refused if it nests more
+    than 64 levels deep, in both languages. Before, the JavaScript
+    library's limit depended on how much of the stack was in use. The
+    depth is measured on the copy, so the caller's value is still read
+    once.
+  - Python: a cancellation handed to `add` beside a member whose name is
+    a number, None or something stranger, or in a read-only mapping, is
+    read, and stops the writer, as in JavaScript. An error from the other
+    side that is not an `Exception` (such as `SystemExit`) leaves a
+    one-sided stub, as any other failure does. `snapshot()` hands back
+    the book and the cancellations the writer holds, read together, so
+    that another thread's call cannot fall between the two. A number too
+    large for a float is no time; options holding objects that cannot be
+    copied are kept as they are, as the JavaScript library keeps them;
+    the record writers take a datetime with a time zone, as the
+    JavaScript ones take a Date.
 - 2026-10-08: faults found by an independent review of the Python
   version, which also changed the JavaScript library.
   - **Weak Ed25519 keys are refused.** Under one of the eight Ed25519

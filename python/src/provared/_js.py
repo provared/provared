@@ -6,6 +6,7 @@
 # does otherwise, the functions here do as JavaScript does.
 
 import json
+import math
 import re
 
 MAX_SAFE_INTEGER = 2**53 - 1
@@ -274,6 +275,32 @@ def whole(value):
 def in_key_order(obj):
     """An object with its members in the order Object.keys gives them."""
     return {k: obj[k] for k in keys(obj)}
+
+
+def property_key(name):
+    """The name of a member as JavaScript holds it: always text. A dict key that
+    is a number, True, False or None becomes the text JavaScript would give
+    it; any other key is not plain data (TypeError)."""
+    if isinstance(name, str):
+        return name
+    if name is None:
+        return 'null'
+    if isinstance(name, bool):
+        return 'true' if name else 'false'
+    if is_number(name):
+        return number_string(name)
+    raise TypeError('not plain data')
+
+
+def finite(value):
+    """Number.isFinite, for a Python number: a whole number too large for a
+    floating-point number is Infinity in JavaScript."""
+    if not is_number(value):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
 
 
 def truthy(value):

@@ -285,6 +285,9 @@ def _verify_with(certificate, data, signature_oid, digest_name, signature, signe
         raise _invalid(_KIND_NOT_ACCEPTED)
     if any(isinstance(w, str) and w == method for w in without):
         return 'unavailable'
+    # An Ed25519 signature whose first half is a point of small order is refused, as everywhere (format description, section 3.8).
+    if method == 'Ed25519' and (len(raw) != 64 or weak_ed25519(raw[:32])):
+        return 'invalid'
     try:
         key = _public_key(certificate)
     except Exception:

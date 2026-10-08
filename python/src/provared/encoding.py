@@ -7,6 +7,7 @@ import base64
 import hashlib
 import os
 import re
+import datetime as _datetime
 import time as _time
 
 from . import _js
@@ -240,11 +241,18 @@ def nan_time(text):
 
 
 MAX_TIME_MS = 8.64e15
+_EPOCH = _datetime.datetime(1970, 1, 1, tzinfo=_datetime.timezone.utc)
 
 
 def format_time(when):
-    """A time in milliseconds since 1970, written as YYYY-MM-DDTHH:MM:SSZ."""
-    if not _js.is_number(when) or when != when or abs(when) > MAX_TIME_MS:
+    """A time, written as YYYY-MM-DDTHH:MM:SSZ. Only a number of milliseconds
+    since 1970, or a datetime with a time zone (as a JavaScript Date), is
+    read: text, True or a datetime with no time zone would be read by rules
+    that differ from one device to another (as local time), so they are
+    refused."""
+    if isinstance(when, _datetime.datetime) and when.tzinfo is not None:
+        when = (when - _EPOCH) // _datetime.timedelta(milliseconds=1)
+    if not _js.finite(when) or abs(when) > MAX_TIME_MS:
         raise ValueError('Invalid time value')
     # new Date() cuts a fraction of a millisecond off towards zero.
     ms = int(when)

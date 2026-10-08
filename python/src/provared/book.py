@@ -547,7 +547,11 @@ def _plain(value, memo=None, depth=0, deep=None):
     A value met twice is copied once, so that the copy holds the same
     sharing, and costs no more to make than what was handed over holds."""
     if not isinstance(value, (dict, list, tuple)) and not isinstance(value, Mapping):
-        return copy.deepcopy(value)
+        # Text, numbers, True, False and None need no copy. Anything else (an
+        # object of a class, a generator, a lock) is kept as it was handed over,
+        # as the JavaScript library keeps an object of a class: a check refuses
+        # or sets it aside where it reads it.
+        return value
     if depth > 16:
         if deep is not None:
             deep.append(True)

@@ -202,7 +202,9 @@ of small order, under which anyone can make a signature that checks, and
 the number y it holds MUST be less than p = 2^255 - 19, so that it is
 written in only one way. RFC 8032 does not say to refuse such keys, and
 libraries differ in whether they do; a checker refuses them itself
-(`bad-key`), so that two checkers cannot disagree.
+(`bad-key`), so that two checkers cannot disagree. For the same reason,
+an Ed25519 signature whose first 32 bytes (the point R) are such a point,
+or hold a y not less than p, is invalid, whatever the key.
 
 A key is named for people by its **thumbprint**: the JSON Web Key
 Thumbprint with SHA-256 (RFC 7638; for ML-DSA keys, RFC 9964 section 6).

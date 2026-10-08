@@ -77,10 +77,29 @@ function timeOf(when) {
   throw new Refusal('bad-field', 'when: must be a number of milliseconds, or a Date.');
 }
 
+// A copy that nothing else holds, as structuredClone makes one, refused if
+// it nests more than MAX_COPY_DEPTH levels deep: far more than a record
+// holds. structuredClone's own limit depends on how much of the stack is in
+// use, so without this two runs could give two answers. The depth is
+// measured on the copy, so the caller's value is read once.
+function clone(value) {
+  const copy = structuredClone(value);
+  const seen = new Set();
+  const stack = [[copy, 0]];
+  while (stack.length) {
+    const [v, depth] = stack.pop();
+    if (v === null || typeof v !== 'object' || seen.has(v)) continue;
+    seen.add(v);
+    if (depth > MAX_COPY_DEPTH) throw new TypeError('the value nests too deeply');
+    for (const item of Object.values(v)) stack.push([item, depth + 1]);
+  }
+  return copy;
+}
+
 // A copy that nothing else holds.
 function plain(value, what) {
   try {
-    return structuredClone(value);
+    return clone(value);
   } catch {
     throw new Refusal('bad-field', `${what} must be plain data: text, numbers, lists and objects.`);
   }
@@ -390,7 +409,7 @@ export async function openRecorder({ book, slip, privateKeys, issuerKeys, pass, 
     };
     if (call.hasApproval) {
       try {
-        call.approval = structuredClone(more.approval.record);
+        call.approval = clone(more.approval.record);
       } catch {
         call.approval = undefined; // not a record: refused when the stub is written
       }
@@ -488,7 +507,7 @@ export async function openRecorder({ book, slip, privateKeys, issuerKeys, pass, 
         // What it hands back is copied at once. The copy is what is checked, and what joins the stub.
         let kept;
         try {
-          kept = structuredClone(given);
+          kept = clone(given);
         } catch {
           throw new Refusal('countersignature-invalid', 'What the other side handed back is not a signed record.');
         }

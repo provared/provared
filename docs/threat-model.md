@@ -574,7 +574,10 @@ person checking gives.
   person named as trusted. So is an Ed25519 key of small order, there and
   in every record (a passkey, an agent, a service, a recorder, an
   organisation): libraries differ in whether they accept signatures under
-  such a key, so the checker refuses the key itself. The key in a
+  such a key, so the checker refuses the key itself. For the same reason
+  it refuses an Ed25519 signature whose point R is of small order, under
+  any key: the key's own holder could make one for any message, which one
+  library accepts and another refuses. The key in a
   certificate must be written exactly as its standard sets out, so that
   two checkers cannot disagree about whether it can be read.
 
