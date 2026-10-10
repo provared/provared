@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- 2026-10-10: the pages for prova.red, in `site/`: what a record
+  proves, the command-line checker's own answer for the sample record
+  (run on Node.js 24.19), how to try it, what is only here, how it is
+  built, where it is, and a worked example ("An agent goes over its
+  limit, and the record shows where"). No script, no font, no image, no
+  form: each page loads nothing from anywhere and keeps nothing about a
+  reader, and says so. A workflow, `.github/workflows/pages.yml`,
+  publishes them with GitHub Pages from the main branch, with the
+  checking page at `/check/` (with the library and the sample it loads,
+  copied as they are) and built as one file at `/provared-check.html`.
+  The four actions it uses are GitHub's own, each pinned to the commit
+  of a released version. The site is not published until the domain
+  points at it. Nothing in the library, the checker or the package
+  changes.
 - 2026-10-08: two small Python packages for agent frameworks, in
   `python/integrations/`, each in a folder of its own, which names its
   framework. Each puts every tool call of an agent behind the stub

@@ -1,0 +1,73 @@
+# Publishes prova.red from the main branch with GitHub Pages.
+#
+# What is published: the pages in site/, the checking page at /check/ with
+# the library and the sample it loads, and the checking page built as one
+# file at /provared-check.html. Nothing is changed on the way: the files
+# are copied as they are, and the one-file page is built by the
+# repository's own tool. The site makes no request to anywhere and keeps
+# nothing about its readers.
+#
+# The four actions are GitHub's own, each pinned to the exact commit of a
+# released version (the comment gives the version), so that a later change
+# to a tag cannot change what runs here.
+
+name: Publish prova.red
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'site/**'
+      - 'page/index.html'
+      - 'page/check-page.js'
+      - 'page/render.js'
+      - 'page/style.css'
+      - 'src/**'
+      - 'samples/**'
+      - 'tools/make-single-page.mjs'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: Build the checking page as one file
+        run: node tools/make-single-page.mjs
+      - name: Gather the site
+        run: |
+          mkdir -p _site/check _site/src _site/samples
+          cp site/*.html site/*.css site/CNAME _site/
+          cp page/index.html page/check-page.js page/render.js page/style.css _site/check/
+          cp src/*.js _site/src/
+          cp samples/office-supplies.jsonl samples/office-supplies.expected.json _site/samples/
+          cp provared-check.html _site/
+          touch _site/.nojekyll
+          sha256sum _site/provared-check.html
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

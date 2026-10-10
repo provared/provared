@@ -41,6 +41,7 @@ An Internet-Draft is a working document, not a standard.
 | `test/` | The tests |
 | `test-vectors/` | Shared test files: records and values, each with the answer this library gives. Another implementation of the format can be tested against them |
 | `python/` | The Python version, `pip install provared`, which gives the same answers. See its own [README](python/README.md), and its examples with three agent frameworks in `python/examples/`, and small packages for two of them in `python/integrations/` |
+| `site/` | The pages at [prova.red](https://prova.red/): what a record proves, with the checker's answer for the sample record, and a worked example. Published with GitHub Pages by `.github/workflows/pages.yml`, which also serves the checking page at `prova.red/check/` and as one file. The pages load nothing from anywhere and keep nothing about a reader |
 
 The npm package holds `src/`, `bin/`, `net/`, `spec/`, `docs/`,
 `samples/` and the checking page. The tests, the shared test files, the

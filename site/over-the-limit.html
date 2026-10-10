@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; form-action 'none'; base-uri 'none'">
+<meta name="description" content="A worked example: an office agent works under a signed permission, goes over its limit, and the signed record shows where. How the record is made and what the free checker says.">
+<title>Over the limit</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <p class="small"><a href="./">Provared</a></p>
+  <h1>An agent goes over its limit, and the record shows where</h1>
+  <p class="motto">A worked example. 10 October 2026.</p>
+</header>
+<main>
+
+<p>Suppose an office agent is allowed to order stationery. Its owner wants three things: a limit on what it spends, a say on anything expensive, and a record that still stands up if the agent, the supplier or the owner later disagree about what happened.</p>
+
+<p>Logs do not give the third. A log is a file, and whoever runs the agent can edit it. Provared is a free, open format for signed records that a stranger can check later, with a free checker that reads them. This is what it shows on a small invented example: the sample record that ships with the library.</p>
+
+<h2>The permission</h2>
+
+<p>The owner, "Sam Example", signs a permission with a passkey. Provared calls it a <strong>slip</strong>. It says:</p>
+<ul>
+  <li>the agent may place orders and send messages;</li>
+  <li>no more than 200 GBP of orders in total; no single order above 100 GBP; no more than 2 messages in any hour;</li>
+  <li>every order needs the supplier's countersignature, and an order above 60 GBP needs the owner's own approval;</li>
+  <li>never destroy data, never claim to be a human being, never go around an access control, a block or a refusal;</li>
+  <li>from 5 October 2026 until 12 October 2026, to keep the office stocked.</li>
+</ul>
+<p>The passkey signature binds the owner to exactly these words: the slip's bytes are written in one canonical form, and their fingerprint is what the passkey signed. The slip also names the agent's two public keys (one of today's kind, one quantum-safe) and the supplier's, so that a checker needs nothing else to tell who signed what.</p>
+
+<h2>The receipts</h2>
+
+<p>For each action the agent signs a receipt, a <strong>stub</strong>, that points back to the slip and to the receipt before it. The supplier countersigns it where it takes part. The record is a text file with one entry to a line. Here is what the agent did on 5 October, in seven steps:</p>
+<ol>
+  <li>Orders printer paper, 45 GBP. The supplier countersigns.</li>
+  <li>Tells the office that the paper is ordered.</li>
+  <li>Orders a toner cartridge, 80 GBP, after asking the owner, who approves with the passkey. The supplier countersigns.</li>
+  <li>Orders envelopes, 25 GBP. The supplier never confirms.</li>
+  <li>Orders a second toner cartridge, 80 GBP, without asking. The supplier countersigns.</li>
+  <li>Asks for 500 GBP of goods. The supplier refuses, and signs the refusal.</li>
+  <li>Deletes the old order files.</li>
+</ol>
+<p>Then whoever keeps the record <strong>seals</strong> it: one fingerprint over everything so far, signed with three keys, and time-stamped by an outside service.</p>
+
+<h2>What the checker says</h2>
+
+<p>The checker reads the file, checks every signature, and holds every receipt against the slip. Its answer for steps 4, 5 and 7, in its own words:</p>
+
+<pre>Entry 5: STUB qo5yVfgZsvuKi3jpXYnLIRQpPOG5zKmmAv91dWzuU-E
+  Number 3 under slip PJ92TUWhvOsXdGOYN-Ihg7n8_t0PjHe_yVL-X2_4lXI
+  2026-10-05T09:30:00Z: provared.order.place, 25 GBP, with [supplier]
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  ONE-SIDED: no countersignature. This shows what the agent's side said.
+  Running total: 150 of 200 GBP
+  OUTSIDE THE SLIP [countersignature-missing] The slip asks for the other side to countersign this action, and there is no countersignature.
+
+Entry 6: STUB YXEbfSjx9O923skjuFj3xe33-2_jtdUbxqIlZOCn0tU
+  Number 4 under slip PJ92TUWhvOsXdGOYN-Ihg7n8_t0PjHe_yVL-X2_4lXI
+  2026-10-05T09:40:00Z: provared.order.place, 80 GBP, with [supplier]
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  Countersignature: Ed25519 valid; ML-DSA-87 valid
+  Running total: 230 of 200 GBP
+  OUTSIDE THE SLIP [over-limit] With this stub the total is 230 GBP. The slip's limit is 200 GBP: over by 30.
+  OUTSIDE THE SLIP [approval-missing] The slip asks for the person's own approval of this action, and there is none.
+
+Entry 8: STUB GgqxEq7aSnEOANaRyxNaK048_7dUavxh4ClBn8RX3xY
+  Number 5 under slip PJ92TUWhvOsXdGOYN-Ihg7n8_t0PjHe_yVL-X2_4lXI
+  2026-10-05T10:00:00Z: provared.data.delete
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+  OUTSIDE THE SLIP [action-not-allowed] The slip does not allow the action "provared.data.delete".
+  OUTSIDE THE SLIP [prohibited] The slip says the agent must never do an action of the kind "destroys", and "provared.data.delete" is of that kind.</pre>
+
+<p>And its summary:</p>
+
+<pre>Summary
+  Is the record intact?                 yes
+  Was every signature checked?          yes
+  Did the agent stay within its slip?   NO: first at entry 5
+  Time-stamped in a way you trust?      yes: the first 9 entries existed by 2026-10-05T10:16:00Z
+  Checked against keys you named?       yes: the passkey you trust, and the recorder you expect</pre>
+
+<p>Two questions are kept apart on purpose. "Is the record intact" asks whether every signature checks and the chain is unbroken. "Did the agent stay within its slip" asks what the record shows. Going over a limit is not a fault in the record. It is what a sound record shows.</p>
+
+<p>Step 6 is in the record too, as the supplier's signed <strong>refusal</strong>: "The action would pass a limit of the slip." It is shown as the supplier's statement and is not counted against the agent, because the agent placed no such order. Step 4 is one-sided: the agent says it ordered envelopes, and nobody confirms it. The checker does not guess which side is right. It says that the slip asked for a countersignature and there is none.</p>
+
+<h2>Before the action, not only after</h2>
+
+<p>The same rules run before an action. The library's stub writer asks "would this action be within the slip?" and takes the action only if the answer is yes. In the example, the second toner cartridge would have been stopped at step 5: with it the total passes 200 GBP, and the owner had not approved it. The sample was written with that check switched off, so that the record shows what going outside looks like. The check before acting is a help to the agent's software. The record afterwards is the evidence.</p>
+
+<h2>What it does not show</h2>
+
+<p>The checker says this itself, at the end of every answer. It shows what was recorded, not what was left out: an agent that acts and writes no stub leaves no trace. A one-sided stub shows what the agent's side said. A refusal shows what the service's side said. It does not show that an action was wise, lawful or wanted. A rule of conduct, such as "never claim to be a human being", is the owner's signed instruction, and no check can show that the agent kept it. It does not show who was holding the device when the passkey signed. A name in a record is a label; only keys are checked. What a record does not prove is stated beside what it does.</p>
+
+<h2>Try it</h2>
+
+<pre>npm install provared
+npx provared-check node_modules/provared/samples/office-supplies.jsonl \
+  --issuer ihy9Ars_PYFEEa48Nz8VOp4d2DHjC03vpEffGvOkPOM \
+  --sealer DOg-0-l1OXO-AJ2z1vI-l5yXjuqNh5yOasQr8vyhdfc \
+  --stamp-service l3_bEVZ-I9DONwBvZqLwnBwOXYlOSs_nhUeH9XPWdYQ</pre>
+
+<p>The three values are the fingerprints of the passkey, the recorder and the time-stamp service the sample was made with. A checker trusts nothing it is not told to trust. The Python version (<code>pip install provared</code>) gives the same answers, and <code>provared-langchain</code> puts every tool call of a LangChain agent behind the stub writer. The <a href="check/">checking page</a> does the same in a browser, loading nothing from anywhere.</p>
+
+<h2>How it is built</h2>
+
+<p>From published standards only: JSON Web Signature (RFC 7515) for the envelope; one canonical form of JSON (RFC 8785); Ed25519 (RFC 8032) and ML-DSA-87 (FIPS 204) side by side on every receipt, with SLH-DSA (FIPS 205) as a third signature on a seal; W3C Web Authentication for the passkey; RFC 3161 time-stamps; the tree of RFC 9162 for proofs that one entry is in a book. The format is described exactly in <a href="https://github.com/provared/provared/blob/main/spec/provared-format.md">one document</a>, and its core is an <a href="https://datatracker.ietf.org/doc/draft-izmaylov-agent-permission-receipts/">individual Internet-Draft</a> at the Internet Engineering Task Force. An Internet-Draft is a working document, not a standard.</p>
+
+<p>Version 0.2.0 is a draft, published as it is by one author in their own time. The code is at <a href="https://github.com/provared/provared">github.com/provared/provared</a> under the Apache License 2.0. Faults and suggestions are welcome as issues there, or by email to <a href="mailto:hello@prova.red?subject=Provared">hello@prova.red</a>.</p>
+
+</main>
+<footer>
+  <p>Written by Pavel Izmaylov. This page loads nothing from anywhere and keeps nothing about you.</p>
+</footer>
+</body>
+</html>

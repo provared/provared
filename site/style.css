@@ -1,0 +1,153 @@
+/* The style of prova.red. The same colours as the checking page: blue for
+   the Slip, green for the Stub, orange for the Seal, violet for the Show.
+   Colour is never the only sign: every state is also written in words.
+   The page loads nothing from anywhere: no font, no script, no image. */
+
+:root {
+  --slip: #1d5fbf;
+  --stub: #1f7a3f;
+  --seal: #b85c00;
+  --show: #6b3fa0;
+  --bad: #b3261e;
+  --text: #1c1b1f;
+  --quiet: #5c5c66;
+  --line: #d0d0d7;
+  --page: #ffffff;
+  --card: #f6f6f8;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --slip: #8ab4f8;
+    --stub: #81c995;
+    --seal: #fdba74;
+    --show: #c4a7f5;
+    --bad: #f28b82;
+    --text: #e6e1e5;
+    --quiet: #a8a8b3;
+    --line: #44444d;
+    --page: #121214;
+    --card: #1d1d21;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 1rem;
+  background: var(--page);
+  color: var(--text);
+  font: 1rem/1.55 system-ui, sans-serif;
+}
+
+main, header, footer { max-width: 46rem; margin: 0 auto; }
+
+h1 { font-size: 1.75rem; margin: 0 0 0.25rem; }
+h2 { font-size: 1.2rem; margin: 2.25rem 0 0.5rem; }
+h3 { font-size: 1rem; margin: 1.25rem 0 0.25rem; }
+p { margin: 0.6rem 0; }
+p, li, dd, td, th { overflow-wrap: anywhere; }
+.lead { font-size: 1.15rem; margin: 0.25rem 0; }
+.motto { color: var(--quiet); font-style: italic; margin-top: 0; }
+.quiet { color: var(--quiet); }
+.small { font-size: 0.9rem; }
+
+a { color: var(--slip); }
+
+nav a { margin-right: 1rem; }
+
+.button {
+  display: inline-block;
+  min-height: 2.75rem;
+  padding: 0.6rem 1rem;
+  margin: 0.5rem 0.5rem 0.25rem 0;
+  border: 1px solid var(--slip);
+  border-radius: 0.5rem;
+  background: var(--slip);
+  color: var(--page);
+  text-decoration: none;
+}
+.button.second { background: transparent; color: var(--slip); }
+.button:focus-visible { outline: 3px solid var(--seal); outline-offset: 2px; }
+
+.parts { list-style: none; padding: 0; margin: 1rem 0; }
+.parts li {
+  padding: 0.6rem 0.75rem;
+  margin: 0.4rem 0;
+  border: 1px solid var(--line);
+  border-left: 0.4rem solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--card);
+}
+.parts li.slip { border-left-color: var(--slip); }
+.parts li.stub { border-left-color: var(--stub); }
+.parts li.seal { border-left-color: var(--seal); }
+.parts li.show { border-left-color: var(--show); }
+.parts strong { display: block; }
+.slip .kind { color: var(--slip); }
+.stub .kind { color: var(--stub); }
+.seal .kind { color: var(--seal); }
+.show .kind { color: var(--show); }
+
+.card {
+  padding: 0.75rem;
+  margin: 0.6rem 0;
+  border: 1px solid var(--line);
+  border-left: 0.4rem solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--card);
+}
+.card.slip { border-left-color: var(--slip); }
+.card.seal { border-left-color: var(--seal); }
+
+dl { display: grid; grid-template-columns: minmax(7rem, 10rem) 1fr; gap: 0.15rem 0.75rem; margin: 0.4rem 0 0; }
+dt { color: var(--quiet); }
+dd { margin: 0; }
+@media (max-width: 30rem) {
+  dl { grid-template-columns: 1fr; }
+  dd { margin-bottom: 0.3rem; }
+}
+
+/* The steps of the sample record: one row to a step, stacked on a phone. */
+.steps { list-style: none; padding: 0; margin: 0.5rem 0; counter-reset: step; }
+.steps li {
+  padding: 0.6rem 0.75rem;
+  margin: 0.4rem 0;
+  border: 1px solid var(--line);
+  border-left: 0.4rem solid var(--stub);
+  border-radius: 0.5rem;
+  background: var(--card);
+}
+.steps li.outside { border-left-color: var(--bad); }
+.steps li.other { border-left-color: var(--line); }
+.steps .did { display: block; }
+.steps .found { display: block; margin-top: 0.25rem; }
+.steps .outside .found { color: var(--bad); }
+
+/* The checker's own words, exactly as printed. */
+pre {
+  margin: 0.5rem 0;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--card);
+  font: 0.85rem/1.45 ui-monospace, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+code { font-family: ui-monospace, monospace; font-size: 0.9em; }
+
+.answers { list-style: none; padding: 0; margin: 0.5rem 0; }
+.answers li {
+  padding: 0.5rem 0.75rem;
+  margin: 0.3rem 0;
+  border: 1px solid var(--line);
+  border-left: 0.4rem solid var(--stub);
+  border-radius: 0.5rem;
+  background: var(--card);
+}
+.answers li.no { border-left-color: var(--bad); }
+.answers strong { display: block; }
+
+footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line); color: var(--quiet); font-size: 0.9rem; }
