@@ -5,10 +5,15 @@
 - 2026-10-10: the pages for prova.red, in `site/`: what a record
   proves, the command-line checker's own answer for the sample record
   (run on Node.js 24.19), how to try it, what is only here, how it is
-  built, where it is, and a worked example ("An agent goes over its
-  limit, and the record shows where"). No script, no font, no image, no
-  form: each page loads nothing from anywhere and keeps nothing about a
-  reader, and says so. A workflow, `.github/workflows/pages.yml`,
+  built, where it is, a worked example for developers ("An agent goes
+  over its limit, and the record shows where") and "Provared in plain
+  words", three minutes for a reader who does not write code, with two
+  drawings that follow the sample record. No script, no font, no image,
+  no form: each page loads nothing from anywhere and keeps nothing about
+  a reader, and says so. The drawings carry their colours as plain SVG
+  attributes as well as through the style sheet, and the pages load the
+  style sheet under a versioned address, so a browser that kept an
+  earlier copy still draws them right. A workflow, `.github/workflows/pages.yml`,
   publishes them with GitHub Pages from the main branch, with the
   checking page at `/check/` (with the library and the sample it loads,
   copied as they are) and built as one file at `/provared-check.html`.
