@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 (10 October 2026)
 
 - 2026-10-10: **a development stand-in for a passkey**, `provared/dev`
   in JavaScript and `provared.dev` in Python, so that a first record can
