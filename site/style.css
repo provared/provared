@@ -184,3 +184,6 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line);
 table { width: 100%; border-collapse: collapse; margin: 0.6rem 0; font-size: 0.95rem; }
 th, td { text-align: left; vertical-align: top; padding: 0.3rem 0.6rem 0.3rem 0; border-bottom: 1px solid var(--line); }
 th { color: var(--quiet); font-weight: normal; white-space: nowrap; overflow-wrap: normal; }
+
+/* The mark: a permission slip with a signature, beside a heading or the site's name. */
+.mark { vertical-align: -0.2em; margin-right: 0.4em; }

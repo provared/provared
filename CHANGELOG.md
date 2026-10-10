@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- 2026-10-11: **one mark everywhere**: a permission slip with a
+  signature, white on red (#8f000f), as `site/favicon.svg`, in the
+  social preview `site/preview.png` beside the word, as inline SVG in the
+  header of every page at prova.red, of the checking page and of the
+  signing page (no page makes a request for it), and at the top of the
+  README. The four colours of the parts stay as they are inside the
+  pages. The style sheet gains one rule for the mark and a new version
+  number. No code changes.
 - 2026-10-10: **a real record on prova.red**, `tools/make-record-page.mjs`:
   writes `site/records/` from the book that the recorder beside Claude
   Code keeps. It copies the book and its slip beside the page, runs the

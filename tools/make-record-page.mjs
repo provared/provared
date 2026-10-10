@@ -131,11 +131,11 @@ const html = `<!doctype html>
 <meta name="twitter:title" content="A real record: the coding agent that builds Provared">
 <meta name="twitter:description" content="Kept day by day under a permission the author signed with a passkey. The checker's answer, and the files to check it yourself.">
 <meta name="twitter:image" content="https://prova.red/preview.png">
-<link rel="stylesheet" href="../style.css?v=3">
+<link rel="stylesheet" href="../style.css?v=4">
 </head>
 <body>
 <header>
-  <p class="small"><a href="../">Provared</a></p>
+  <p class="small"><a href="../"><svg class="mark" viewBox="0 0 64 64" width="20" height="20" aria-hidden="true"><circle cx="32" cy="32" r="32" fill="#8f000f"/><path d="M20 15 H37 L45 23 V49 H20 Z" fill="#ffffff"/><path d="M37 15 V23 H45" fill="none" stroke="#8f000f" stroke-width="2.5" stroke-linejoin="round"/><path d="M25 29 H40 M25 35 H36" stroke="#8f000f" stroke-width="2.5" stroke-linecap="round"/><path d="M24.5 43 C27 39, 29 46, 31.5 42.5 C34 39, 36 46, 40.5 41.5" fill="none" stroke="#8f000f" stroke-width="3" stroke-linecap="round"/></svg>Provared</a></p>
   <h1>A real record: the coding agent that builds Provared</h1>
   <p class="motto">A real record, for anyone who wants to see one. Evidence, not a verdict.</p>
 </header>

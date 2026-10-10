@@ -1,4 +1,4 @@
-# Provared
+# <img src="https://prova.red/favicon.svg" alt="" width="36"> Provared
 
 Proof of what an AI agent was allowed to do, and what it then did.
 

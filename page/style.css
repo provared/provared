@@ -148,3 +148,6 @@ details.more summary { cursor: pointer; font-weight: 600; }
 details.more label { display: block; margin-top: 0.7rem; }
 details.more input[type="file"] { display: block; max-width: 100%; margin-top: 0.3rem; color: var(--text); }
 details.more textarea { width: 100%; box-sizing: border-box; font-family: ui-monospace, monospace; font-size: 0.85rem; color: var(--text); background: var(--page); border: 1px solid var(--line); border-radius: 0.3rem; }
+
+/* The mark: a permission slip with a signature, beside a heading or the site's name. */
+.mark { vertical-align: -0.2em; margin-right: 0.4em; }
