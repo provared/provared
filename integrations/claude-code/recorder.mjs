@@ -298,10 +298,13 @@ async function main(argv) {
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   process.removeAllListeners('warning');
+  // The process is left to end by itself once its connections have closed:
+  // ending it at once, after a request to the service, made Node.js on
+  // Windows fail an internal check on the way out (seen on 10 October 2026).
   main(process.argv.slice(2)).then((code) => {
-    if (code !== null) process.exit(code);
+    if (code !== null) process.exitCode = code;
   }, (e) => {
     console.error(e.message);
-    process.exit(1);
+    process.exitCode = 1;
   });
 }
