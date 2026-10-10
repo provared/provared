@@ -4,8 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "provared"
-version = "0.2.0"
-description = "Proof of what an AI agent was allowed to do, and what it then did. Evidence, not a verdict."
+version = "0.3.0"
+description = "Proof of what an AI agent was allowed to do, and what it then did. A passkey-signed permission with limits a machine can check, a signed receipt for each action, and a checker. Evidence, not a verdict."
+keywords = ["ai-agent", "agent", "audit-trail", "permission", "authorization", "receipt", "tamper-evident", "passkey", "webauthn", "jws", "ed25519", "ml-dsa", "post-quantum", "evidence", "langchain"]
 readme = "README.md"
 authors = [{ name = "Pavel Izmaylov" }]
 license = "Apache-2.0 AND CC-BY-4.0"
@@ -21,6 +22,7 @@ classifiers = [
 ]
 
 [project.urls]
+Homepage = "https://prova.red"
 Source = "https://github.com/provared/provared"
 Documentation = "https://github.com/provared/provared/tree/main/python"
 Issues = "https://github.com/provared/provared/issues"

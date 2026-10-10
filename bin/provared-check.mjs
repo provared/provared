@@ -19,6 +19,7 @@
 // It reads one file and writes to the terminal. It makes no network request.
 
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { MIN_BLOCKS_AFTER, REFUSAL_REASONS, blocksInChain, checkBook, checkHeaderChain, checkShow, conditionWords, limitWords, neverWords } from '../src/check.js';
 
 // Node.js marks its ML-DSA and SLH-DSA as experimental and says so on every
@@ -31,8 +32,11 @@ process.on('warning', (w) => {
 const USAGE = `Usage: provared-check <file> [--issuer <thumbprint>]... [--sealer <fingerprint>]... [--stamp-service <fingerprint>]...
                       [--block <fingerprint>]... [--voucher <fingerprint>]... [--disclosures <file>] [--cancellation <file>]...
                       [--root <top fingerprint>] [--size <entries>] [--headers <file>] [--json]
+       provared-check --sample [--json]
 
   <file>           a book (one entry to a line) or a Show (one JSON object)
+  --sample         check the sample record that comes with the library, naming the passkey, the recorder and the
+                   time-stamp service it was made with as trusted (they are stand-ins, and the people are invented)
   --issuer         the thumbprint of an issuer key you already trust; may be repeated
   --sealer         the fingerprint of the key set of a recorder you expect to have sealed the book; may be repeated
   --stamp-service  the fingerprint of the certificate of a time-stamp service you trust; may be repeated
@@ -64,13 +68,16 @@ const ONCE = { '--disclosures': 'disclosures', '--root': 'expectedRoot', '--size
 // fingerprint is refused, never set aside: a typing error must not quietly
 // leave a time-stamp or a name uncounted.
 function parseArguments(argv) {
-  const out = { file: null, issuerKeys: [], sealKeys: [], stampServices: [], blocks: [], vouchers: [], cancellations: [], disclosures: undefined, expectedRoot: undefined, expectedSize: undefined, json: false };
+  const out = { file: null, sample: false, issuerKeys: [], sealKeys: [], stampServices: [], blocks: [], vouchers: [], cancellations: [], disclosures: undefined, expectedRoot: undefined, expectedSize: undefined, json: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--help' || a === '-h') return { help: true };
     if (a === '--json') {
       if (out.json) return { error: '--json may be given once.' };
       out.json = true;
+    } else if (a === '--sample') {
+      if (out.sample) return { error: '--sample may be given once.' };
+      out.sample = true;
     } else if (Object.hasOwn(LISTS, a) || Object.hasOwn(ONCE, a)) {
       if (i + 1 >= argv.length) return { error: `${a} needs a value.` };
       const value = argv[++i];
@@ -84,6 +91,28 @@ function parseArguments(argv) {
       else out[ONCE[a]] = a === '--size' ? Number(value) : value;
     } else if (!a.startsWith('-') && out.file === null) out.file = a;
     else return { error: `${a.startsWith('-') ? 'Unknown option' : 'More than one file'}: ${safe(a)}` };
+  }
+  if (out.sample) {
+    if (out.file !== null) return { error: '--sample names the sample record itself: give no file with it.' };
+    for (const name of ['issuerKeys', 'sealKeys', 'stampServices', 'blocks', 'vouchers', 'cancellations']) {
+      if (out[name].length) return { error: '--sample names what to trust itself: give no other option with it but --json.' };
+    }
+    if (out.disclosures !== undefined || out.expectedRoot !== undefined || out.expectedSize !== undefined || out.headers !== undefined) {
+      return { error: '--sample names what to trust itself: give no other option with it but --json.' };
+    }
+    // The sample, and the fingerprints of the stand-ins it was made with,
+    // come with the library (samples/office-supplies.expected.json).
+    let expected;
+    try {
+      expected = JSON.parse(readFileSync(new URL('../samples/office-supplies.expected.json', import.meta.url), 'utf8'));
+    } catch {
+      return { error: 'The sample record that comes with the library could not be read.' };
+    }
+    out.file = fileURLToPath(new URL('../samples/office-supplies.jsonl', import.meta.url));
+    out.issuerKeys = [expected.issuerKey];
+    out.sealKeys = [...expected.sealKeys];
+    out.stampServices = [...expected.stampServices];
+    return out;
   }
   return out.file === null ? { error: 'No file was named.' } : out;
 }
@@ -467,6 +496,12 @@ if (args.help) {
 if (args.error) {
   console.error(`${args.error}\n\n${USAGE}`);
   process.exit(2);
+}
+
+if (args.sample && !args.json) {
+  console.log('The sample record that comes with the library: an invented office agent, under a permission signed with a stand-in for a passkey.');
+  console.log('Trusted for this check, as the sample was made with them: the stand-in passkey, the recorder and the time-stamp service.');
+  console.log(`  --issuer ${args.issuerKeys[0]} --sealer ${args.sealKeys[0]} --stamp-service ${args.stampServices[0]}\n`);
 }
 
 let text;

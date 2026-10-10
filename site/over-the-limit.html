@@ -3,9 +3,21 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; form-action 'none'; base-uri 'none'">
-<meta name="description" content="A worked example: an office agent works under a signed permission, goes over its limit, and the signed record shows where. How the record is made and what the free checker says.">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; img-src 'self'; form-action 'none'; base-uri 'none'">
+<meta name="description" content="A worked example for developers: an office agent works under a signed permission, goes over its limit, and the signed record shows where. The code that made the record, what the free checker says, and a first record of your own in three commands.">
 <title>Over the limit</title>
+<link rel="canonical" href="https://prova.red/over-the-limit.html">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Provared">
+<meta property="og:title" content="An agent goes over its limit, and the record shows where">
+<meta property="og:description" content="A worked example for developers: the code that made a signed record, what the free checker says, and a first record of your own in three commands.">
+<meta property="og:url" content="https://prova.red/over-the-limit.html">
+<meta property="og:image" content="https://prova.red/preview.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://prova.red/preview.png">
 <link rel="stylesheet" href="style.css?v=2">
 </head>
 <body>
@@ -92,29 +104,77 @@ Entry 8: STUB GgqxEq7aSnEOANaRyxNaK048_7dUavxh4ClBn8RX3xY
 
 <p>The same rules run before an action. The library's stub writer asks "would this action be within the slip?" and takes the action only if the answer is yes. In the example, the second toner cartridge would have been stopped at step 5: with it the total passes 200 GBP, and the owner had not approved it. The sample was written with that check switched off, so that the record shows what going outside looks like. The check before acting is a help to the agent's software. The record afterwards is the evidence.</p>
 
+<h2>The code that made the record</h2>
+
+<p>The sample is written by <a href="https://github.com/provared/provared/blob/main/tools/make-sample.mjs">one tool in the repository</a>, from the scenario the demonstration uses. The permission is these fields, handed to <code>prepareSlip</code> and signed by the person's passkey (in the sample, a software stand-in for one). The action names beginning <code>provared.</code> come from the format's shared list, so another organisation's checker knows what they mean; <code>destroys</code> is a kind of action, and <code>impersonate</code> and <code>bypass</code> are rules of conduct.</p>
+
+<pre>const fields = {
+  issuer: { name: 'Sam Example (invented)', key: passkey.key, rpId: passkey.rpId, origin: passkey.origin },
+  agent: { name: 'Office agent', keys: agent.keys },
+  actions: ['provared.order.place', 'provared.message.send'],
+  limits: [
+    { action: 'provared.order.place', max: 200, unit: 'GBP' },
+    { action: 'provared.order.place', each: 100, unit: 'GBP' },
+    { action: 'provared.message.send', count: 2, per: 3600 },
+  ],
+  requires: [
+    { action: 'provared.order.place', need: 'countersignature' },
+    { action: 'provared.order.place', need: 'approval', above: 60, unit: 'GBP' },
+  ],
+  never: ['destroys', 'impersonate', 'bypass'],
+  with: [{ id: 'supplier', name: 'Example Stationery (invented)', keys: supplier.keys }],
+  validFrom: '2026-10-05T08:00:00Z',
+  validUntil: '2026-10-12T08:00:00Z',
+  purpose: 'Keep the office stocked with paper, pens and toner, and tell the office what was ordered.',
+};
+
+const prepared = await prepareSlip(fields);
+const slip = assembleSlip(prepared, await passkey.sign(prepared.challenge));   // in a browser: signSlipWithPasskey</pre>
+
+<p>An agent's own software then opens the stub writer on a book that holds the slip, and asks it before each action. The writer asks the check before acting, takes the action only if the answer is yes, and writes the receipt, with the supplier's countersignature where the supplier gives one:</p>
+
+<pre>const recorder = await openRecorder({ book, slip: slipFingerprint, privateKeys: agent.privateKeys, issuerKeys: [passkeyThumbprint] });
+
+const outcome = await recorder.act(
+  { action: 'provared.order.place', amount: { unit: 'GBP', value: 45 }, with: 'supplier' },
+  async () =&gt; placeTheOrder(),                       // taken only if the answer is yes
+  { countersign: askTheSupplierToCountersign },
+);
+outcome.done;        // true: the order was placed and its receipt is in the book
+recorder.book();     // the book, one entry to a line</pre>
+
+<p>The sample's receipts were written with that check switched off, so that the record shows what going outside looks like; the writer would have refused the fifth order. The seal is one more entry, signed with the recorder's three keys and time-stamped by an outside service.</p>
+
 <h2>What it does not show</h2>
 
 <p>The checker says this itself, at the end of every answer. It shows what was recorded, not what was left out: an agent that acts and writes no stub leaves no trace. A one-sided stub shows what the agent's side said. A refusal shows what the service's side said. It does not show that an action was wise, lawful or wanted. A rule of conduct, such as "never claim to be a human being", is the owner's signed instruction, and no check can show that the agent kept it. It does not show who was holding the device when the passkey signed. A name in a record is a label; only keys are checked. What a record does not prove is stated beside what it does.</p>
 
 <h2>Try it</h2>
 
-<pre>npm install provared
-npx provared-check node_modules/provared/samples/office-supplies.jsonl \
-  --issuer ihy9Ars_PYFEEa48Nz8VOp4d2DHjC03vpEffGvOkPOM \
-  --sealer DOg-0-l1OXO-AJ2z1vI-l5yXjuqNh5yOasQr8vyhdfc \
-  --stamp-service l3_bEVZ-I9DONwBvZqLwnBwOXYlOSs_nhUeH9XPWdYQ</pre>
+<p>The sample record, with the checker naming the stand-in passkey, the recorder and the time-stamp service the sample was made with as trusted (a checker trusts nothing it is not told to trust):</p>
 
-<p>The three values are the fingerprints of the passkey, the recorder and the time-stamp service the sample was made with. A checker trusts nothing it is not told to trust. The Python version (<code>pip install provared</code>) gives the same answers, and <code>provared-langchain</code> puts every tool call of a LangChain agent behind the stub writer. The <a href="check/">checking page</a> does the same in a browser, loading nothing from anywhere.</p>
+<pre>npm install provared
+npx provared-check --sample</pre>
+
+<p>A first record of your own, in three commands. The permission is signed with a development stand-in for a passkey; every permission it signs says so in its issuer's name, and the checker prints that name. The file <code>first-record.mjs</code> is <a href="https://github.com/provared/provared/blob/main/examples/first-record.mjs">in the repository</a> and on the <a href="./#first">home page</a>: it opens the stub writer under a permission that allows two messages, asks for three, and writes the book.</p>
+
+<pre>npm install provared
+node first-record.mjs
+npx provared-check book.jsonl --issuer &lt;the thumbprint it prints&gt;</pre>
+
+<p>The Python version (<code>pip install provared</code>) gives the same answers, with <code>provared.dev</code> for the stand-in, and <code>provared-langchain</code> puts every tool call of a LangChain agent behind the stub writer. The <a href="check/">checking page</a> checks a record in a browser, loading nothing from anywhere.</p>
 
 <h2>How it is built</h2>
 
 <p>From published standards only: JSON Web Signature (RFC 7515) for the envelope; one canonical form of JSON (RFC 8785); Ed25519 (RFC 8032) and ML-DSA-87 (FIPS 204) side by side on every receipt, with SLH-DSA (FIPS 205) as a third signature on a seal; W3C Web Authentication for the passkey; RFC 3161 time-stamps; the tree of RFC 9162 for proofs that one entry is in a book. The format is described exactly in <a href="https://github.com/provared/provared/blob/main/spec/provared-format.md">one document</a>, and its core is an <a href="https://datatracker.ietf.org/doc/draft-izmaylov-agent-permission-receipts/">individual Internet-Draft</a> at the Internet Engineering Task Force. An Internet-Draft is a working document, not a standard.</p>
 
-<p>Version 0.2.0 is a draft, published as it is by one author in their own time. The code is at <a href="https://github.com/provared/provared">github.com/provared/provared</a> under the Apache License 2.0. Faults and suggestions are welcome as issues there, or by email to <a href="mailto:hello@prova.red?subject=Provared">hello@prova.red</a>.</p>
+<p>Other open projects give signed, chained and time-stamped receipts for an agent's actions, some with quantum-safe signatures. What the author has found nowhere else, in October 2026, is the permission the person signed with limits a machine can check, the checker's answer "did the agent stay within it", passing a permission on so that it can only narrow, and cancelling with the agent's signed acknowledgement. If you know a project that does one of these, say so: the <a href="./#only">list on the home page</a> is kept honest.</p>
+
+<p>Version 0.3.0 is a draft, published as it is by one author in their own time, and built with AI tools since 3 October 2026. The code has been through 25 rounds of review by AI reviewers, each a fresh session given only the code and the documents; every fault was fixed and kept as a test. No person other than the author has reviewed it yet. I would like that to change: if you have thirty minutes and a record you can break, I will fix what you find in public and say who found it. The code is at <a href="https://github.com/provared/provared">github.com/provared/provared</a> under the Apache License 2.0. Faults and suggestions are welcome as issues there, or by email to <a href="mailto:hello@prova.red?subject=Provared">hello@prova.red</a>.</p>
 
 </main>
 <footer>
-  <p>Written by Pavel Izmaylov. This page loads nothing from anywhere and keeps nothing about you.</p>
+  <p>Written by Pavel Izmaylov. This page loads nothing from anywhere but its own style sheet and icon, and keeps nothing about you.</p>
 </footer>
 </body>
 </html>

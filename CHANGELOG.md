@@ -2,6 +2,52 @@
 
 ## Unreleased
 
+- 2026-10-10: **a development stand-in for a passkey**, `provared/dev`
+  in JavaScript and `provared.dev` in Python, so that a first record can
+  be made without a browser: `developmentPasskey` (an ES256 key made in
+  memory that returns the three values a passkey returns, for the page
+  address `http://localhost`), `developmentSlip` (a slip it signed, with
+  new keys for the agent, a book holding the slip, and the stand-in's
+  thumbprint for a checker) and `developmentRecorder` (the stub writer
+  opened under such a slip, in one call). It is not a passkey and no
+  person confirms anything through it, so the issuer's name in every
+  slip it signs is made to end with " (development)", whatever name is
+  given, and the checker prints that name. The library itself (`provared`)
+  does not export it, and the checker does not use it. A first record in
+  one file: `examples/first-record.mjs` and
+  `python/examples/first_record.py`, each run by a test.
+- 2026-10-10: `provared-check --sample` checks the sample record that
+  comes with the library, naming the stand-in passkey, the recorder and
+  the time-stamp service it was made with as trusted, and prints their
+  fingerprints; with `--json` the result alone. A file or another option
+  given with it is refused.
+- 2026-10-10: the README is now a short landing page (install, a first
+  record, the four parts, what is only here, what a record does not
+  prove, where everything else is), and its former body is
+  `docs/guide.md`, unchanged but for the additions above. New:
+  `SECURITY.md` (how to report a fault in the security of a record) and
+  `CONTRIBUTING.md` (fault reports and other implementations welcome;
+  code only under a contributor agreement, whose text is not ready yet).
+  `package.json` and `python/pyproject.toml` gain a homepage, keywords
+  and a longer description. Version 0.3.0 in both, not yet published.
+- 2026-10-10: the pages at prova.red: the home page's first screen now
+  shows the checker's summary and the install lines before the four
+  parts, with the plain word first and the short name after ("the
+  permission (a Slip)"); a first record of your own, in three commands,
+  with the file above and the LangChain package; "what the author found
+  nowhere else (October 2026)"; the status promises that every published
+  version stays on npm and the Python Package Index. The plain-words page
+  says that the 25 rounds of review were by AI reviewers and that no
+  person other than the author has reviewed the code yet, gives the date
+  from which the EU AI Act's logging duty applies (2 December 2027),
+  marks its charity example as invented, and uses "flight recorder" only
+  as a description. The developer page shows the code that made the
+  sample record and says the same about the reviews. All three pages
+  gain preview tags, an icon (`favicon.svg`, four coloured squares) and
+  a preview image (`preview.png`, drawn from a small page in a headless
+  browser), with the content security policy widened by `img-src 'self'`
+  only; `robots.txt` and `sitemap.xml` are added, and the workflow copies
+  everything in `site/`. Nothing in the library changes for this.
 - 2026-10-10: the pages for prova.red, in `site/`: what a record
   proves, the command-line checker's own answer for the sample record
   (run on Node.js 24.19), how to try it, what is only here, how it is

@@ -50,7 +50,7 @@ jobs:
       - name: Gather the site
         run: |
           mkdir -p _site/check _site/src _site/samples
-          cp site/*.html site/*.css site/CNAME _site/
+          cp -r site/. _site/
           cp page/index.html page/check-page.js page/render.js page/style.css _site/check/
           cp src/*.js _site/src/
           cp samples/office-supplies.jsonl samples/office-supplies.expected.json _site/samples/

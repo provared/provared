@@ -3,8 +3,20 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; form-action 'none'; base-uri 'none'">
-<meta name="description" content="Provared in plain words, three minutes for a reader who does not write code: what an AI agent flight recorder is, the four parts, how a record is made and checked, why it is different, and what a record does not prove.">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; img-src 'self'; form-action 'none'; base-uri 'none'">
+<meta name="description" content="Provared in plain words, three minutes for a reader who does not write code: how to prove what an AI agent was allowed to do and what it then did, the four parts, how a record is made and checked, why it is different, and what a record does not prove.">
+<link rel="canonical" href="https://prova.red/three-minutes.html">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Provared">
+<meta property="og:title" content="Provared in plain words">
+<meta property="og:description" content="Three minutes, for a reader who does not write code: how to prove what an AI agent was allowed to do, and what it then did.">
+<meta property="og:url" content="https://prova.red/three-minutes.html">
+<meta property="og:image" content="https://prova.red/preview.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://prova.red/preview.png">
 <title>Provared in plain words</title>
 <link rel="stylesheet" href="style.css?v=2">
 </head>
@@ -26,9 +38,9 @@
   <symbol id="i-glass" viewBox="0 0 24 24"><circle cx="10" cy="10" r="6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="m14.5 14.5 5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
 </svg>
 
-<p>Provared is a flight recorder for AI agents. It proves what an agent was allowed to do, and what it then did.</p>
+<p>Provared proves what an AI agent was allowed to do, and what it then did. It is for anyone who runs an agent for other people, or has to check one.</p>
 
-<p>Companies are starting to let AI agents act for them: order, pay, send, change records. When one goes wrong, nobody can prove what it was allowed to do. Provared is the recorder that proves it.</p>
+<p>Companies are starting to let AI agents act for them: order, pay, send, change records. When one goes wrong, nobody can prove what it was allowed to do. Provared is the record that proves it: a flight recorder for AI agents.</p>
 
 <h2>The problem</h2>
 
@@ -38,9 +50,9 @@
 
 <p>Think of a new hire with the company card, who works at machine speed, never sleeps and keeps no receipts.</p>
 
-<p>Suppose a charity tells an agent: reorder office supplies, up to £500 a month. In June the agent pays a supplier £4,800. In December the auditor asks: who allowed that?</p>
+<p>Suppose, in an invented example, a charity tells an agent: reorder office supplies, up to £500 a month. In June the agent pays a supplier £4,800. In December the auditor asks: who allowed that?</p>
 
-<p>The rules are arriving. Europe's AI law requires high-risk AI systems to keep records of what they do.</p>
+<p>The rules are arriving. From 2 December 2027, Europe's AI law requires high-risk AI systems to keep records of what they do.</p>
 
 <h2>What Provared is</h2>
 
@@ -189,9 +201,9 @@
 
 <h2>Where it is today</h2>
 
-<p>Version 0.2.0 is published, for anyone to install, on <a href="https://www.npmjs.com/package/provared">npm</a> and on the <a href="https://pypi.org/project/provared/">Python Package Index</a>. The core of the format is an <a href="https://datatracker.ietf.org/doc/draft-izmaylov-agent-permission-receipts/">Internet-Draft at the IETF</a>; an Internet-Draft is a working document, not a standard. Every line of code and every test is public on <a href="https://github.com/provared/provared">GitHub</a>, and the <a href="check/">checking page</a>, which also works as <a href="provared-check.html" download>one file</a> with no connection, has a sample record to try.</p>
+<p>Version 0.3.0 is published, for anyone to install, on <a href="https://www.npmjs.com/package/provared">npm</a> and on the <a href="https://pypi.org/project/provared/">Python Package Index</a>. The core of the format is an <a href="https://datatracker.ietf.org/doc/draft-izmaylov-agent-permission-receipts/">Internet-Draft at the IETF</a>; an Internet-Draft is a working document, not a standard. Every line of code and every test is public on <a href="https://github.com/provared/provared">GitHub</a>, and the <a href="check/">checking page</a>, which also works as <a href="provared-check.html" download>one file</a> with no connection, has a sample record to try.</p>
 
-<p>The library has no outside dependencies, sends nothing home, holds no money and starts no payment. It is held to more than 750 automated tests, and to about 10,000 shared test cases that the JavaScript and Python versions must answer alike. It has been through 25 rounds of independent review by fresh reviewers given only the code; every fault was fixed and kept as a test. An add-on for <a href="https://pypi.org/project/provared-langchain/">LangChain</a>, one of the most-used toolkits for building agents, is published.</p>
+<p>The library has no outside dependencies, sends nothing home, holds no money and starts no payment. It is held to more than 750 automated tests, and to about 10,000 shared test cases that the JavaScript and Python versions must answer alike. It has been through 25 rounds of review by AI reviewers, each a fresh session given only the code and the documents; every fault was fixed and kept as a test. No person other than the author has reviewed it yet. That is an invitation. An add-on for <a href="https://pypi.org/project/provared-langchain/">LangChain</a>, one of the most-used toolkits for building agents, is published.</p>
 
 <p>It is one author, in their own time, on their own equipment. Building started on 3 October 2026, with AI tools.</p>
 
@@ -199,8 +211,8 @@
 
 <div class="qa">
   <p><b>A log file does this already.</b>A log is written by the one being questioned, and can be edited. This is signed by the person, the agent and the other side, and dated by an outside clock. An auditor would rather be handed the second.</p>
-  <p><b>One person, in spare time?</b>Yes. That is why it is open, held to 750 tests, reviewed 25 times, and published where anyone can check it. If the author vanishes, the records still check. The standard does not depend on one person.</p>
-  <p><b>How long did it take?</b>Building started on 3 October 2026. Published on 6 October. Built with AI tools, reviewed in 25 rounds, every fault turned into a test. Judge the code, not the calendar.</p>
+  <p><b>One person, in spare time?</b>Yes. That is why it is open, held to 750 tests, reviewed 25 times by AI reviewers and not yet by anyone else, and published where anyone can check it. If the author vanishes, the records still check. The standard does not depend on one person.</p>
+  <p><b>How long did it take?</b>Building started on 3 October 2026. Published on 6 October. Built with AI tools, reviewed in 25 rounds by AI reviewers, every fault turned into a test. Judge the code, not the calendar.</p>
   <p><b>Can it stop a bad agent?</b>Wired in before the action, it refuses anything outside the slip. It cannot judge right from wrong. Evidence, not a verdict.</p>
   <p><b>Does it hold my money or my data?</b>Never. It holds no money, starts no payment, issues no token, and sends nothing home. The checker asks nobody.</p>
   <p><b>Why bother with quantum computers?</b>A record must still check in ten years. Today's signatures may not. It costs the user nothing.</p>
@@ -242,7 +254,7 @@
 
 </main>
 <footer>
-  <p>Written by Pavel Izmaylov. This page loads nothing from anywhere and keeps nothing about you.</p>
+  <p>Written by Pavel Izmaylov. This page loads nothing from anywhere but its own style sheet and icon, and keeps nothing about you.</p>
 </footer>
 </body>
 </html>

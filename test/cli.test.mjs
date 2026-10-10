@@ -185,3 +185,23 @@ test('characters that cannot be seen are shown as a mark, in words and in --json
   assert.match(run(file).out, /Purpose:\s+"Buy\ufffdx\ufffd/);
   assert.equal(JSON.parse(run(file, '--json').out).entries[0].content.purpose, 'Buy' + hidden.join('x') + 'paper');
 });
+
+test('--sample checks the sample record that comes with the library, naming its stand-ins as trusted', () => {
+  const r = run('--sample');
+  assert.equal(r.code, 1, r.err);
+  assert.match(r.out, /The sample record that comes with the library/);
+  assert.match(r.out, new RegExp(`--issuer ${expected.issuerKey} --sealer ${expected.sealKeys[0]} --stamp-service ${expected.stampServices[0]}`));
+  assert.match(r.out, /Did the agent stay within its slip\?\s+NO: first at entry 5/);
+  assert.match(r.out, /Time-stamped in a way you trust\?\s+yes: the first 9 entries existed by 2026-10-05T10:16:00Z/);
+  assert.match(r.out, /Checked against keys you named\?\s+yes: the passkey you trust, and the recorder you expect/);
+  assert.equal(r.err, '');
+  // With --json the result alone is printed, so a script can read it.
+  const json = JSON.parse(run('--sample', '--json').out);
+  assert.equal(json.summary.firstBreach, 5);
+  assert.equal(json.size, expected.size);
+  // The sample names what to trust itself: a file or another option with it is refused.
+  assert.equal(run('--sample', sample).code, 2);
+  assert.equal(run('--sample', '--issuer', expected.issuerKey).code, 2);
+  assert.equal(run('--sample', '--sample').code, 2);
+  assert.match(run('--help').out, /--sample/);
+});

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <title>Provared</title>
+  <rect x="2" y="2" width="60" height="60" rx="12" fill="#ffffff" stroke="#1c1b1f" stroke-width="2"/>
+  <rect x="8" y="8" width="23" height="23" rx="4" fill="#1d5fbf"/>
+  <rect x="33" y="8" width="23" height="23" rx="4" fill="#1f7a3f"/>
+  <rect x="8" y="33" width="23" height="23" rx="4" fill="#b85c00"/>
+  <rect x="33" y="33" width="23" height="23" rx="4" fill="#6b3fa0"/>
+</svg>

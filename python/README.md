@@ -13,7 +13,7 @@ particular to Python.
 
 ## Status
 
-**Version 0.2.0, a draft**, the same version as the JavaScript library.
+**Version 0.3.0, a draft**, the same version as the JavaScript library.
 Published as it is, by one author in their own time; fixes as time
 allows. It gives the same answer, case for case, as the shared test
 files in [`test-vectors/`](https://github.com/provared/provared/tree/main/test-vectors) show: the same result, the
@@ -38,6 +38,44 @@ Or, from a copy of the repository, `pip install ./python`.
 You need Python 3.11 or later. The one dependency is `cryptography`,
 version 48 or later: Python has no signatures built in, and version 48
 is the first whose ready-built packages hold ML-DSA (FIPS 204).
+
+## A first record
+
+The permission is signed with a **development stand-in for a passkey**
+(`provared.dev`): a key made in memory, which no person confirmed. Every
+permission it signs says so in its issuer's name, and a checker shows
+that name. A real permission is signed by a person, in a browser, with a
+real passkey (the browser part of the JavaScript library, and the
+checking page).
+
+```python
+from provared import check_book
+from provared.dev import development_recorder
+
+SEND = 'provared.message.send'
+
+# A permission: the agent may send messages, at most two.
+made = development_recorder({'actions': [SEND], 'limits': [{'action': SEND, 'count': 2}]})
+
+# Each action is asked for first, taken only if the permission allows it,
+# and receipted after. The third message is outside it, so it is not sent.
+for i in range(1, 4):
+    outcome = made.writer.act({'action': SEND}, lambda i=i: print(f'message {i} sent'))
+    if not outcome['done']:
+        print(f"message {i} not sent: {outcome['answer']['breaches'][0]['message']}")
+
+book = made.writer.book()                                    # the record, one entry to a line
+summary = check_book(book, issuer_keys=made.issuer_keys)['summary']
+print(summary['intact'], summary['withinSlips'])             # True True
+```
+
+The whole file is [`examples/first_record.py`](https://github.com/provared/provared/blob/main/python/examples/first_record.py).
+`development_slip(fields)` gives the signed slip, its fingerprint, a
+book holding it, the stand-in's thumbprint (`issuer_keys`) and the
+agent's keys without opening the writer; `development_passkey()` gives
+the stand-in alone, whose `sign(challenge)` signs a prepared slip,
+approval or cancellation. The issuer's name always ends with
+" (development)", whatever name is given.
 
 ## Use
 
