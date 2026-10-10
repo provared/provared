@@ -22,6 +22,8 @@ on:
       - 'page/check-page.js'
       - 'page/render.js'
       - 'page/style.css'
+      - 'page/sign.html'
+      - 'page/sign-page.js'
       - 'src/**'
       - 'samples/**'
       - 'tools/make-single-page.mjs'
@@ -49,9 +51,11 @@ jobs:
         run: node tools/make-single-page.mjs
       - name: Gather the site
         run: |
-          mkdir -p _site/check _site/src _site/samples
+          mkdir -p _site/check _site/sign _site/src _site/samples
           cp -r site/. _site/
           cp page/index.html page/check-page.js page/render.js page/style.css _site/check/
+          cp page/sign.html _site/sign/index.html
+          cp page/sign-page.js page/render.js page/style.css _site/sign/
           cp src/*.js _site/src/
           cp samples/office-supplies.jsonl samples/office-supplies.expected.json _site/samples/
           cp provared-check.html _site/

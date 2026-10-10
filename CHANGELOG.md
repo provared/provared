@@ -1,5 +1,34 @@
 # Changelog
 
+## Unreleased
+
+- 2026-10-10: **a signing page**, `page/sign.html`, served at
+  prova.red/sign/: a person writes a permission as JSON (the agent's
+  name and two public keys, the actions, limits, conditions, stated
+  rules, with whom, from when until when, and why), sees it in words,
+  signs it with a passkey made for the website, and saves the signed
+  file; the page shows the passkey's thumbprint and the permission's
+  fingerprint. It can also sign a cancellation of a permission signed
+  with the same passkey. It uses the library's browser part and
+  `render.js`, loads nothing from anywhere else and sends nothing. The
+  workflow serves it beside the checking page.
+- 2026-10-10: **the recorder beside Claude Code**, `integrations/claude-code/`:
+  a hook that Claude Code runs before and after each tool call, and a
+  small service on 127.0.0.1 that holds the stub writer open on one book
+  under a slip the person signed. Before a call, the check before acting
+  refuses a call outside the slip and Claude Code is told why; after it,
+  a stub is written naming the tool and the SHA-256 fingerprint of its
+  arguments; the service seals the book on request with the recorder's
+  three keys. Tool calls are named from the shared list by the hook,
+  not by the agent (a command that removes something is
+  `provared.data.delete`; one that publishes is `provared.code.release`);
+  tools that only talk to the person are not recorded. The agent's two
+  keys and the recorder's three are kept as JSON Web Keys in files the
+  person keeps. If the service is not running, a call is refused: no
+  record, no action. The folder names a product, as the framework
+  packages do; the library names none, and the npm package does not
+  hold it. Five tests run the hook as Claude Code runs it.
+
 ## 0.3.0 (10 October 2026)
 
 - 2026-10-10: **a development stand-in for a passkey**, `provared/dev`

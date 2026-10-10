@@ -1,0 +1,42 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["--disable-warning=ExperimentalWarning", "${CLAUDE_PROJECT_DIR}/integrations/claude-code/recorder.mjs", "ensure"],
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Read|Grep|Glob|LS|NotebookRead|Edit|Write|MultiEdit|NotebookEdit|WebFetch|WebSearch|Agent|Task|Workflow|Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["--disable-warning=ExperimentalWarning", "${CLAUDE_PROJECT_DIR}/integrations/claude-code/hook.mjs"],
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Read|Grep|Glob|LS|NotebookRead|Edit|Write|MultiEdit|NotebookEdit|WebFetch|WebSearch|Agent|Task|Workflow|Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["--disable-warning=ExperimentalWarning", "${CLAUDE_PROJECT_DIR}/integrations/claude-code/hook.mjs"],
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
