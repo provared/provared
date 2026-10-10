@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; form-action 'none'; base-uri 'none'">
+<meta name="description" content="Provared in three minutes, for a reader who does not write code: what an AI agent flight recorder is, the four parts, how a record is made and checked, why it is different, and what a record does not prove.">
+<title>Provared in three minutes</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <p class="small"><a href="./">Provared</a></p>
+  <h1>Provared in three minutes</h1>
+  <p class="motto">For a reader who does not write code. Evidence, not a verdict.</p>
+</header>
+<main>
+
+<svg width="0" height="0" aria-hidden="true" focusable="false">
+  <symbol id="i-seal" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M3 10.5h18" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8.5 6V4h7v2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="15.2" r="1.8" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+  <symbol id="i-person" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M5 20c0-4 3-6.5 7-6.5s7 2.5 7 6.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="i-agent" viewBox="0 0 24 24"><rect x="5" y="7" width="14" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="9.5" cy="12.5" r="1.3" fill="currentColor"/><circle cx="14.5" cy="12.5" r="1.3" fill="currentColor"/><path d="M12 4v3M9 18v2M15 18v2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="i-shop" viewBox="0 0 24 24"><path d="M4 10l1.5-5h13L20 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M5 10v10h14V10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M10 20v-5h4v5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 7v5l3 2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M5 4h12a2 2 0 0 1 2 2v14H7a2 2 0 0 1-2-2z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M5 18a2 2 0 0 1 2-2h12" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+  <symbol id="i-glass" viewBox="0 0 24 24"><circle cx="10" cy="10" r="6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="m14.5 14.5 5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+</svg>
+
+<p>Provared is a flight recorder for AI agents. It proves what an agent was allowed to do, and what it then did.</p>
+
+<p>Companies are starting to let AI agents act for them: order, pay, send, change records. When one goes wrong, nobody can prove what it was allowed to do. Provared is the recorder that proves it.</p>
+
+<h2>The problem</h2>
+
+<p>An AI agent does not just answer. It acts. It books, orders, pays, sends and changes records. A person sets it going and looks away. That is the point of it, and it is also the problem.</p>
+
+<p>When something goes wrong, the question is simple: who allowed that? Today the answer is a log file, written by the same software that is being questioned, which anyone could have edited.</p>
+
+<p>Think of a new hire with the company card, who works at machine speed, never sleeps and keeps no receipts.</p>
+
+<p>Suppose a charity tells an agent: reorder office supplies, up to £500 a month. In June the agent pays a supplier £4,800. In December the auditor asks: who allowed that?</p>
+
+<p>The rules are arriving. Europe's AI law requires high-risk AI systems to keep records of what they do.</p>
+
+<h2>What Provared is</h2>
+
+<p>Four parts, each with a short name.</p>
+
+<ul class="parts">
+  <li class="slip"><strong><span class="kind">Slip</span>, the permission</strong>A person signs it on their phone, with a fingerprint or face: what the agent may do, how much, with whom, until when. Like a signed school-trip form.</li>
+  <li class="stub"><strong><span class="kind">Stub</span>, the receipt</strong>One for every action, signed by the agent and by whoever it dealt with. Like a ticket stub.</li>
+  <li class="seal"><strong><span class="kind">Seal</span>, the sealed book</strong>The receipts chained in order and dated by an outside clock, so nothing can be changed or torn out unnoticed. Like a wax-sealed ledger.</li>
+  <li class="show"><strong><span class="kind">Show</span>, one page with proof</strong>The inspector sees the page they need, with proof that it belongs to the book, and the rest stays closed. Like a certified extract.</li>
+</ul>
+
+<p>And a free checker, which anyone can run on their own device. It answers one question in seconds: did the agent stay within what it was allowed? Yes, or no and where.</p>
+
+<p>Like an aircraft's black box: it records what happened, and it cannot be rewritten after the crash.</p>
+
+<h2>How it works</h2>
+
+<p>The drawing below follows the <a href="over-the-limit.html">sample record</a> that ships with the software: an invented office agent, allowed up to £200 of supplies, which goes over at its fifth order.</p>
+
+<figure>
+  <svg class="dr" viewBox="0 0 372 560" role="img" aria-label="A person signs the slip on their phone. The agent writes a stub for each action and the supplier countersigns it. The stubs are chained into a sealed book, dated by an outside clock. One page is cut from the book as a Show, and an inspector runs the free checker, which says whether the agent stayed within its slip and where it went outside.">
+    <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5 0 10z" fill="currentColor"/></marker></defs>
+    <g font-size="11">
+      <circle class="ring" cx="44" cy="62" r="20" stroke-width="1.4"/>
+      <use href="#i-person" x="33" y="51" width="22" height="22"/>
+      <text x="44" y="96" text-anchor="middle" font-weight="700">Person</text>
+      <text class="mute" x="44" y="108" text-anchor="middle" font-size="10">signs the slip</text>
+      <line x1="66" y1="62" x2="97" y2="62" stroke="currentColor" stroke-width="1.4" marker-end="url(#ah)"/>
+      <rect class="box-slip" x="100" y="34" width="240" height="58" rx="6" stroke-width="1.4"/>
+      <text class="ink-slip" x="110" y="52" font-size="12" font-weight="800">SLIP: the permission</text>
+      <text x="110" y="68">Up to £200 of supplies, from one</text>
+      <text x="110" y="82">supplier, for one week. Never delete.</text>
+
+      <line x1="185" y1="93" x2="185" y2="139" stroke="currentColor" stroke-width="1.4" marker-end="url(#ah)"/>
+      <text class="mute" x="193" y="120" font-size="10">each receipt names its slip</text>
+
+      <circle class="ring" cx="44" cy="172" r="20" stroke-width="1.4"/>
+      <use href="#i-agent" x="33" y="161" width="22" height="22"/>
+      <text x="44" y="206" text-anchor="middle" font-weight="700">Agent</text>
+      <text class="mute" x="44" y="218" text-anchor="middle" font-size="10">one per action</text>
+      <line x1="66" y1="172" x2="97" y2="172" stroke="currentColor" stroke-width="1.4" marker-end="url(#ah)"/>
+      <rect class="box-stub" x="100" y="142" width="180" height="58" rx="6" stroke-width="1.4"/>
+      <text class="ink-stub" x="110" y="160" font-size="12" font-weight="800">STUB: the receipt</text>
+      <text x="110" y="176">Order 1: £45 of paper.</text>
+      <text x="110" y="190">Signed, then countersigned.</text>
+      <circle class="ring" cx="322" cy="172" r="20" stroke-width="1.4"/>
+      <use href="#i-shop" x="311" y="161" width="22" height="22"/>
+      <text x="322" y="206" text-anchor="middle" font-weight="700">Supplier</text>
+      <text class="mute" x="322" y="218" text-anchor="middle" font-size="10">countersigns</text>
+      <line x1="300" y1="172" x2="283" y2="172" stroke="currentColor" stroke-width="1.4" marker-end="url(#ah)"/>
+
+      <line x1="185" y1="201" x2="185" y2="247" stroke="currentColor" stroke-width="1.4" marker-end="url(#ah)"/>
+      <text class="mute" x="193" y="228" font-size="10">chained, in order</text>
+
+      <circle class="ring" cx="44" cy="282" r="20" stroke-width="1.4"/>
+      <use href="#i-book" x="33" y="271" width="22" height="22"/>
+      <text x="44" y="316" text-anchor="middle" font-weight="700">Recorder</text>
+      <text class="mute" x="44" y="328" text-anchor="middle" font-size="10">keeps the book</text>
+      <line x1="66" y1="282" x2="97" y2="282" stroke="currentColor" stroke-width="1.4" marker-end="url(#ah)"/>
+      <rect class="box-seal" x="100" y="252" width="180" height="58" rx="6" stroke-width="1.4"/>
+      <text class="ink-seal" x="110" y="270" font-size="12" font-weight="800">SEAL: the sealed book</text>
+      <text x="110" y="286">Receipts in order, sealed.</text>
+      <text x="110" y="300">Dated by an outside clock.</text>
+      <circle class="ring" cx="322" cy="282" r="20" stroke-width="1.4"/>
+      <use href="#i-clock" x="311" y="271" width="22" height="22"/>
+      <text x="322" y="316" text-anchor="middle" font-weight="700" font-size="10.5">Outside clock</text>
+      <text class="mute" x="322" y="328" text-anchor="middle" font-size="10">dates it</text>
+      <line x1="300" y1="282" x2="283" y2="282" stroke="currentColor" stroke-width="1.4" marker-end="url(#ah)"/>
+
+      <line x1="185" y1="311" x2="185" y2="357" stroke="currentColor" stroke-width="1.4" marker-end="url(#ah)"/>
+      <text class="mute" x="193" y="338" font-size="10">one page, cut from the book</text>
+
+      <rect class="box-show" x="100" y="362" width="240" height="58" rx="6" stroke-width="1.4"/>
+      <text class="ink-show" x="110" y="380" font-size="12" font-weight="800">SHOW: one page, with proof</text>
+      <text x="110" y="396">Order 5, and proof it is in the book.</text>
+      <text x="110" y="410">Names covered.</text>
+
+      <line x1="185" y1="421" x2="185" y2="467" stroke="currentColor" stroke-width="1.4" marker-end="url(#ah)"/>
+      <text class="mute" x="193" y="448" font-size="10">handed to the inspector</text>
+
+      <circle class="ring" cx="44" cy="512" r="20" stroke-width="1.4"/>
+      <use href="#i-glass" x="33" y="501" width="22" height="22"/>
+      <text x="44" y="546" text-anchor="middle" font-weight="700">Inspector</text>
+      <text class="mute" x="44" y="558" text-anchor="middle" font-size="10">runs the checker</text>
+      <line x1="66" y1="512" x2="97" y2="512" stroke="currentColor" stroke-width="1.4" marker-end="url(#ah)"/>
+      <rect class="box-plain" x="100" y="472" width="240" height="74" rx="6" stroke-width="1.6"/>
+      <text x="110" y="490" font-size="12" font-weight="800">CHECKER: free, asks nobody</text>
+      <text x="110" y="506">Did the agent stay within its slip?</text>
+      <text class="warn" x="110" y="520" font-weight="700">Outside at order 5: the total is</text>
+      <text class="warn" x="110" y="534" font-weight="700">£230, over the £200 limit.</text>
+    </g>
+  </svg>
+  <figcaption>Who signs what, in order. Every box is signed by the one who wrote it. The checker runs on the inspector's own device and asks nobody.</figcaption>
+</figure>
+
+<figure>
+  <svg class="dr" viewBox="0 0 360 296" role="img" aria-label="Three witnesses around the sealed book: the person's phone signs the permission and shows who allowed it; the other side countersigns each receipt and shows what was done; an outside clock dates the book and shows when. No single party controls all three.">
+    <g font-size="11">
+      <line x1="180" y1="66" x2="180" y2="122" stroke="currentColor" stroke-width="1.4"/>
+      <line x1="78" y1="218" x2="140" y2="172" stroke="currentColor" stroke-width="1.4"/>
+      <line x1="282" y1="218" x2="220" y2="172" stroke="currentColor" stroke-width="1.4"/>
+
+      <rect class="box-seal" x="128" y="124" width="104" height="50" rx="6" stroke-width="1.4"/>
+      <use class="ink-seal" href="#i-seal" x="168" y="130" width="24" height="24"/>
+      <text x="180" y="166" text-anchor="middle" font-weight="700" font-size="11.5">The sealed book</text>
+
+      <circle class="ring-slip" cx="180" cy="40" r="24" stroke-width="1.6"/>
+      <use class="ink-slip" href="#i-person" x="167" y="27" width="26" height="26"/>
+      <text x="192" y="86" font-weight="700">The person's phone</text>
+      <text class="mute" x="192" y="98" font-size="10">signs the permission</text>
+      <text class="ink-slip" x="192" y="113" font-size="10" font-weight="700">proves who allowed it</text>
+
+      <circle class="ring-stub" cx="60" cy="236" r="24" stroke-width="1.6"/>
+      <use class="ink-stub" href="#i-shop" x="47" y="223" width="26" height="26"/>
+      <text x="60" y="275" text-anchor="middle" font-weight="700">The other side</text>
+      <text class="mute" x="60" y="287" text-anchor="middle" font-size="10">countersigns receipts</text>
+      <text class="ink-stub" x="92" y="206" font-size="10" font-weight="700">proves what was done</text>
+
+      <circle class="ring-show" cx="300" cy="236" r="24" stroke-width="1.6"/>
+      <use class="ink-show" href="#i-clock" x="287" y="223" width="26" height="26"/>
+      <text x="300" y="275" text-anchor="middle" font-weight="700">An outside clock</text>
+      <text class="mute" x="300" y="287" text-anchor="middle" font-size="10">dates the sealed book</text>
+      <text class="ink-show" x="268" y="206" text-anchor="end" font-size="10" font-weight="700">proves when</text>
+    </g>
+  </svg>
+  <figcaption>The proof rests on three witnesses that no single party controls. Take one away, and the checker says exactly what is now only one side's word.</figcaption>
+</figure>
+
+<p>Today, the evidence is scattered across several systems, written by the software being questioned, easy to change, and nothing links the payment to what was agreed. It is the company's word against the doubt.</p>
+
+<p>With Provared, the auditor is handed the permission the manager signed, the receipt the supplier countersigned, and the sealed, dated book they sit in. Anyone can check it in seconds.</p>
+
+<h2>Why it is different</h2>
+
+<ol>
+  <li>Other projects record what an agent did. Provared also records what it was allowed to do, and compares the two automatically.</li>
+  <li>The permission has limits a machine can check: £200 in total, five orders, this supplier only, until Friday, never delete.</li>
+  <li>The person can cancel at any time. The agent signs that it was told. The book shows if it carried on.</li>
+  <li>A permission can be handed on to a helper agent, but never widened.</li>
+  <li>The signatures are designed to stay valid for decades, even against quantum computers.</li>
+  <li>It is free and open, built on published standards. The core is already a draft at the IETF, the body that sets the internet's standards.</li>
+</ol>
+
+<p>At least four other open projects make signed, time-stamped receipts. Provared adds the permission the person signed, with limits a machine can check, and a checker that says whether each action stayed within it.</p>
+
+<h2>Where it is today</h2>
+
+<p>Version 0.2.0 is published, for anyone to install, on <a href="https://www.npmjs.com/package/provared">npm</a> and on the <a href="https://pypi.org/project/provared/">Python Package Index</a>. The core of the format is an <a href="https://datatracker.ietf.org/doc/draft-izmaylov-agent-permission-receipts/">Internet-Draft at the IETF</a>; an Internet-Draft is a working document, not a standard. Every line of code and every test is public on <a href="https://github.com/provared/provared">GitHub</a>, and the <a href="check/">checking page</a>, which also works as <a href="provared-check.html" download>one file</a> with no connection, has a sample record to try.</p>
+
+<p>The library has no outside dependencies, sends nothing home, holds no money and starts no payment. It is held to more than 750 automated tests, and to about 10,000 shared test cases that the JavaScript and Python versions must answer alike. It has been through 25 rounds of independent review by fresh reviewers given only the code; every fault was fixed and kept as a test. An add-on for <a href="https://pypi.org/project/provared-langchain/">LangChain</a>, one of the most-used toolkits for building agents, is published.</p>
+
+<p>It is one author, in their own time, on their own equipment. Building started on 3 October 2026, with AI tools.</p>
+
+<h2>Hard questions</h2>
+
+<div class="qa">
+  <p><b>A log file does this already.</b>A log is written by the one being questioned, and can be edited. This is signed by the person, the agent and the other side, and dated by an outside clock. An auditor would rather be handed the second.</p>
+  <p><b>One person, in spare time?</b>Yes. That is why it is open, held to 750 tests, reviewed 25 times, and published where anyone can check it. If the author vanishes, the records still check. The standard does not depend on one person.</p>
+  <p><b>How long did it take?</b>Building started on 3 October 2026. Published on 6 October. Built with AI tools, reviewed in 25 rounds, every fault turned into a test. Judge the code, not the calendar.</p>
+  <p><b>Can it stop a bad agent?</b>Wired in before the action, it refuses anything outside the slip. It cannot judge right from wrong. Evidence, not a verdict.</p>
+  <p><b>Does it hold my money or my data?</b>Never. It holds no money, starts no payment, issues no token, and sends nothing home. The checker asks nobody.</p>
+  <p><b>Why bother with quantum computers?</b>A record must still check in ten years. Today's signatures may not. It costs the user nothing.</p>
+  <p><b>Prove it.</b>The pages linked above are public. Or give a technical person thirty minutes to try to break it; a hole found is fixed in public.</p>
+</div>
+
+<h2>What a record does not prove</h2>
+
+<ul>
+  <li>What was left out. An agent that acts and writes no receipt leaves no trace.</li>
+  <li>Who was holding the phone when the permission was signed.</li>
+  <li>Whether an action was wise, lawful or wanted.</li>
+  <li>That a name is right. A name in a record is a label; only the keys are checked.</li>
+</ul>
+
+<h2>Dictionary</h2>
+
+<div class="dict">
+  <p><b>AI agent:</b> software that does not just answer but acts: it books, orders, pays, sends and changes records.</p>
+  <p><b>Passkey:</b> the sign-in built into a phone or computer, unlocked with a fingerprint or face. A person signs a permission with it.</p>
+  <p><b>Key:</b> a secret that makes signatures, held by one person, agent or service. Its public half lets anyone check them.</p>
+  <p><b>Signature:</b> a mark that only the holder of a key can make, and that anyone with the public half can check. Each record is signed by whoever wrote it.</p>
+  <p><b>Countersignature:</b> the other side's signature on a receipt, saying that the action happened.</p>
+  <p><b>Fingerprint, or hash:</b> a short code worked out from a file. Change one letter of the file and the code changes, so it shows whether a copy is exact.</p>
+  <p><b>Chain:</b> each receipt carries the fingerprint of the one before it, so none can be removed or reordered unnoticed.</p>
+  <p><b>Time-stamp, the outside clock:</b> a signed statement from an independent service that a fingerprint existed at a given time.</p>
+  <p><b>Recorder:</b> whoever keeps the sealed book.</p>
+  <p><b>Checker:</b> the free program that reads a record and says whether it is intact, and whether the agent stayed within its permission.</p>
+  <p><b>Quantum-safe signature:</b> a signature method that a future quantum computer is not expected to break. Provared uses two methods side by side, so that a record still checks in decades.</p>
+  <p><b>Open source:</b> code published for anyone to read, use and build on. Provared's code is under the Apache 2.0 licence and its documents under Creative Commons Attribution.</p>
+  <p><b>IETF:</b> the Internet Engineering Task Force, the body that sets the internet's standards.</p>
+  <p><b>Internet-Draft:</b> a working document submitted to the IETF. Not a standard.</p>
+  <p><b>npm, Python Package Index:</b> the two main places where developers install ready-made software from.</p>
+  <p><b>LangChain:</b> one of the most-used toolkits for building AI agents.</p>
+  <p><b>Evidence, not a verdict:</b> a record shows what was signed and by which keys. People decide what it means.</p>
+</div>
+
+<p>Questions and faults are welcome by email to <a href="mailto:hello@prova.red?subject=Provared">hello@prova.red</a> or as <a href="https://github.com/provared/provared/issues">issues on GitHub</a>.</p>
+
+</main>
+<footer>
+  <p>Written by Pavel Izmaylov. This page loads nothing from anywhere and keeps nothing about you.</p>
+</footer>
+</body>
+</html>

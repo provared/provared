@@ -150,4 +150,32 @@ code { font-family: ui-monospace, monospace; font-size: 0.9em; }
 .answers li.no { border-left-color: var(--bad); }
 .answers strong { display: block; }
 
+/* Drawings: plain SVG with classes, so that the colours follow the theme
+   and no style attribute is needed (the pages allow none). */
+figure { margin: 1rem 0; }
+figure svg { width: 100%; height: auto; display: block; max-width: 30rem; }
+figcaption { color: var(--quiet); font-size: 0.9rem; margin-top: 0.4rem; }
+.dr { color: var(--text); }
+.dr text { font-family: system-ui, sans-serif; fill: currentColor; }
+.dr .mute { fill: var(--quiet); }
+.dr .warn { fill: var(--bad); }
+.dr .box { fill: var(--card); stroke: var(--line); }
+.dr .box-slip { fill: var(--card); stroke: var(--slip); }
+.dr .box-stub { fill: var(--card); stroke: var(--stub); }
+.dr .box-seal { fill: var(--card); stroke: var(--seal); }
+.dr .box-show { fill: var(--card); stroke: var(--show); }
+.dr .box-plain { fill: none; stroke: currentColor; }
+.dr .ink-slip { fill: var(--slip); color: var(--slip); }
+.dr .ink-stub { fill: var(--stub); color: var(--stub); }
+.dr .ink-seal { fill: var(--seal); color: var(--seal); }
+.dr .ink-show { fill: var(--show); color: var(--show); }
+.dr .ring { fill: none; stroke: currentColor; }
+.dr .ring-slip { fill: var(--card); stroke: var(--slip); }
+.dr .ring-stub { fill: var(--card); stroke: var(--stub); }
+.dr .ring-show { fill: var(--card); stroke: var(--show); }
+
+.qa p { margin: 0.75rem 0; }
+.qa b { display: block; }
+.dict p { margin: 0.5rem 0; }
+
 footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line); color: var(--quiet); font-size: 0.9rem; }
