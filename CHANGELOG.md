@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- 2026-10-10: **the pages at prova.red, the README and the framework
+  packages, after the adoption review**: the line under each page's
+  title names its reader and then the slogan; "How it is built" on the
+  home page is two sentences; the developer page says "the person"
+  throughout, names the nearest other projects beside what the
+  author found nowhere else, and gives the author's own reason for
+  building it; the plain-words page names Article 12 and
+  Article 26 of the AI Act, no longer repeats its opening, and asks a
+  reader who breaks it to open an issue; every page ends with two
+  lines about the author; the README shows the LangChain example; the
+  two framework packages gain keywords and a homepage. No code changes.
 - 2026-10-10: **a signing page**, `page/sign.html`, served at
   prova.red/sign/: a person writes a permission as JSON (the agent's
   name and two public keys, the actions, limits, conditions, stated

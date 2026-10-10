@@ -24,25 +24,25 @@
 <header>
   <p class="small"><a href="./">Provared</a></p>
   <h1>An agent goes over its limit, and the record shows where</h1>
-  <p class="motto">A worked example, for developers. 10 October 2026.</p>
+  <p class="motto">A worked example, for developers, 10 October 2026. Evidence, not a verdict.</p>
 </header>
 <main>
 
-<p>Suppose an office agent is allowed to order stationery. Its owner wants three things: a limit on what it spends, a say on anything expensive, and a record that still stands up if the agent, the supplier or the owner later disagree about what happened.</p>
+<p>Suppose an office agent is allowed to order stationery. The person it acts for wants three things: a limit on what it spends, a say on anything expensive, and a record that still stands up if the agent, the supplier or the person later disagree about what happened.</p>
 
 <p>Logs do not give the third. A log is a file, and whoever runs the agent can edit it. Provared is a free, open format for signed records that a stranger can check later, with a free checker that reads them. This is what it shows on a small invented example: the sample record that ships with the library.</p>
 
 <h2>The permission</h2>
 
-<p>The owner, "Sam Example", signs a permission with a passkey. Provared calls it a <strong>slip</strong>. It says:</p>
+<p>The person, "Sam Example", signs a permission with a passkey. Provared calls it a <strong>slip</strong>. It says:</p>
 <ul>
   <li>the agent may place orders and send messages;</li>
   <li>no more than 200 GBP of orders in total; no single order above 100 GBP; no more than 2 messages in any hour;</li>
-  <li>every order needs the supplier's countersignature, and an order above 60 GBP needs the owner's own approval;</li>
+  <li>every order needs the supplier's countersignature, and an order above 60 GBP needs the person's own approval;</li>
   <li>never destroy data, never claim to be a human being, never go around an access control, a block or a refusal;</li>
   <li>from 5 October 2026 until 12 October 2026, to keep the office stocked.</li>
 </ul>
-<p>The passkey signature binds the owner to exactly these words: the slip's bytes are written in one canonical form, and their fingerprint is what the passkey signed. The slip also names the agent's two public keys (one of today's kind, one quantum-safe) and the supplier's, so that a checker needs nothing else to tell who signed what.</p>
+<p>The passkey signature binds the person to exactly these words: the slip's bytes are written in one canonical form, and their fingerprint is what the passkey signed. The slip also names the agent's two public keys (one of today's kind, one quantum-safe) and the supplier's, so that a checker needs nothing else to tell who signed what.</p>
 
 <h2>The receipts</h2>
 
@@ -50,7 +50,7 @@
 <ol>
   <li>Orders printer paper, 45 GBP. The supplier countersigns.</li>
   <li>Tells the office that the paper is ordered.</li>
-  <li>Orders a toner cartridge, 80 GBP, after asking the owner, who approves with the passkey. The supplier countersigns.</li>
+  <li>Orders a toner cartridge, 80 GBP, after asking the person, who approves with the passkey. The supplier countersigns.</li>
   <li>Orders envelopes, 25 GBP. The supplier never confirms.</li>
   <li>Orders a second toner cartridge, 80 GBP, without asking. The supplier countersigns.</li>
   <li>Asks for 500 GBP of goods. The supplier refuses, and signs the refusal.</li>
@@ -102,7 +102,7 @@ Entry 8: STUB GgqxEq7aSnEOANaRyxNaK048_7dUavxh4ClBn8RX3xY
 
 <h2>Before the action, not only after</h2>
 
-<p>The same rules run before an action. The library's stub writer asks "would this action be within the slip?" and takes the action only if the answer is yes. In the example, the second toner cartridge would have been stopped at step 5: with it the total passes 200 GBP, and the owner had not approved it. The sample was written with that check switched off, so that the record shows what going outside looks like. The check before acting is a help to the agent's software. The record afterwards is the evidence.</p>
+<p>The same rules run before an action. The library's stub writer asks "would this action be within the slip?" and takes the action only if the answer is yes. In the example, the second toner cartridge would have been stopped at step 5: with it the total passes 200 GBP, and the person had not approved it. The sample was written with that check switched off, so that the record shows what going outside looks like. The check before acting is a help to the agent's software. The record afterwards is the evidence.</p>
 
 <h2>The code that made the record</h2>
 
@@ -147,7 +147,7 @@ recorder.book();     // the book, one entry to a line</pre>
 
 <h2>What it does not show</h2>
 
-<p>The checker says this itself, at the end of every answer. It shows what was recorded, not what was left out: an agent that acts and writes no stub leaves no trace. A one-sided stub shows what the agent's side said. A refusal shows what the service's side said. It does not show that an action was wise, lawful or wanted. A rule of conduct, such as "never claim to be a human being", is the owner's signed instruction, and no check can show that the agent kept it. It does not show who was holding the device when the passkey signed. A name in a record is a label; only keys are checked. What a record does not prove is stated beside what it does.</p>
+<p>The checker says this itself, at the end of every answer. It shows what was recorded, not what was left out: an agent that acts and writes no stub leaves no trace. A one-sided stub shows what the agent's side said. A refusal shows what the service's side said. It does not show that an action was wise, lawful or wanted. A rule of conduct, such as "never claim to be a human being", is the person's signed instruction, and no check can show that the agent kept it. It does not show who was holding the device when the passkey signed. A name in a record is a label; only keys are checked. What a record does not prove is stated beside what it does.</p>
 
 <h2>Try it</h2>
 
@@ -168,13 +168,16 @@ npx provared-check book.jsonl --issuer &lt;the thumbprint it prints&gt;</pre>
 
 <p>From published standards only: JSON Web Signature (RFC 7515) for the envelope; one canonical form of JSON (RFC 8785); Ed25519 (RFC 8032) and ML-DSA-87 (FIPS 204) side by side on every receipt, with SLH-DSA (FIPS 205) as a third signature on a seal; W3C Web Authentication for the passkey; RFC 3161 time-stamps; the tree of RFC 9162 for proofs that one entry is in a book. The format is described exactly in <a href="https://github.com/provared/provared/blob/main/spec/provared-format.md">one document</a>, and its core is an <a href="https://datatracker.ietf.org/doc/draft-izmaylov-agent-permission-receipts/">individual Internet-Draft</a> at the Internet Engineering Task Force. An Internet-Draft is a working document, not a standard.</p>
 
-<p>Other open projects give signed, chained and time-stamped receipts for an agent's actions, some with quantum-safe signatures. What the author has found nowhere else, in October 2026, is the permission the person signed with limits a machine can check, the checker's answer "did the agent stay within it", passing a permission on so that it can only narrow, and cancelling with the agent's signed acknowledgement. If you know a project that does one of these, say so: the <a href="./#only">list on the home page</a> is kept honest.</p>
+<p>How it compares, as the author read the others on 10 October 2026. Signed, chained and time-stamped receipts for an agent's actions exist elsewhere: at the Internet Engineering Task Force, the proposed AUDIT group has a draft of verifiable agent conversations (signed records with transparency receipts), and there are individual drafts for agent audit trails and agent receipts; the EMILIA Protocol's authorization receipts have a named person sign one exact high-risk action before it runs; an OAuth agent-delegation draft lets each step of delegation only narrow what was granted, and keeps no receipts; the payment networks' agent protocols (Google's AP2, Visa's Trusted Agent Protocol, Mastercard's Agent Pay) put spending caps on payments only, with the network holding the record; tracing tools such as Langfuse record tool calls, and neither sign them nor compare them with anything. What the author has found nowhere else is the permission the person signed with limits a machine can check, the checker's answer "did the agent stay within it", passing a permission on so that it can only narrow, and cancelling with the agent's signed acknowledgement. If you know a project that does one of these, say so: the <a href="./#only">list on the home page</a> is kept honest.</p>
+
+<p><b>Why I built it.</b> I built Provared because after every story of an agent going wrong, the first question is what it was allowed to do, and the answer is usually a log that the same software wrote. I wanted that answer to be a signed permission and signed receipts that a stranger can check on their own device, without taking anyone's word for it.</p>
 
 <p>Version 0.3.0 is a draft, published as it is by one author in their own time, and built with AI tools since 3 October 2026. The code has been through 25 rounds of review by AI reviewers, each a fresh session given only the code and the documents; every fault was fixed and kept as a test. No person other than the author has reviewed it yet. I would like that to change: if you have thirty minutes and a record you can break, I will fix what you find in public and say who found it. The code is at <a href="https://github.com/provared/provared">github.com/provared/provared</a> under the Apache License 2.0. Faults and suggestions are welcome as issues there, or by email to <a href="mailto:hello@prova.red?subject=Provared">hello@prova.red</a>.</p>
 
 </main>
 <footer>
-  <p>Written by Pavel Izmaylov. This page loads nothing from anywhere but its own style sheet and icon, and keeps nothing about you.</p>
+  <p><b>About the author.</b> Pavel Izmaylov builds Provared alone, in their own time and under their own name; on GitHub, <a href="https://github.com/sealwright">sealwright</a>. Every email to <a href="mailto:hello@prova.red?subject=Provared">hello@prova.red</a> is read and answered within a few days.</p>
+  <p>This page loads nothing from anywhere but its own style sheet and icon, and keeps nothing about you.</p>
 </footer>
 </body>
 </html>

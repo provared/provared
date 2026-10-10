@@ -28,7 +28,7 @@
   <h1>Provared</h1>
   <p class="lead">Proof of what an AI agent was allowed to do, and what it then did.</p>
   <p>A person signs the permission with a passkey. The agent signs a receipt for each action. A free checker says whether the agent stayed within the permission, and where it did not.</p>
-  <p class="motto">Evidence, not a verdict.</p>
+  <p class="motto">For anyone who runs an agent for other people, or has to check one. Evidence, not a verdict.</p>
   <nav class="small"><a href="#first">A first record</a> <a href="#checker">What the checker says</a> <a href="#only">What is only here</a> <a href="#contact">Write to the author</a> <a href="three-minutes.html">In plain words</a> <a href="over-the-limit.html">For developers</a></nav>
 </header>
 <main>
@@ -46,7 +46,7 @@
 pip install provared
 npx provared-check --sample</pre>
 
-<p>The third command prints the answer above in full. The library needs Node.js 24.7 or later, or Python 3.11 or later; it has no dependencies, sends nothing anywhere, holds no money and starts no payment. It is for anyone who runs an agent for other people, or has to check one. If you do not write code, start with <a href="three-minutes.html">Provared in plain words</a>.</p>
+<p>The third command prints the answer above in full. The library needs Node.js 24.7 or later, or Python 3.11 or later; it has no dependencies, sends nothing anywhere, holds no money and starts no payment. If you do not write code, start with <a href="three-minutes.html">Provared in plain words</a>.</p>
 
 <h2>Four parts</h2>
 
@@ -178,7 +178,7 @@ agent = create_agent(model, tools=[order_supplies, send_message],
 
 <h2>How it is built</h2>
 
-<p>From published standards only, with nothing hand-made: JSON Web Signature (RFC 7515) for the envelope; one canonical form of JSON (RFC 8785); Ed25519 (RFC 8032) and ML-DSA-87 (FIPS 204) side by side on every receipt, so that a record stays checkable when large quantum computers arrive; SLH-DSA (FIPS 205) as a third signature on a seal; W3C Web Authentication for the person's passkey; RFC 3161 time-stamps; the tree of RFC 9162; Selective Disclosure for JSON Web Tokens (RFC 9901) for covered names. The format is described exactly in <a href="https://github.com/provared/provared/blob/main/spec/provared-format.md">one document</a>, and shared test files let another implementation be held to the same answers.</p>
+<p>Built from published standards only, with nothing hand-made: JSON Web Signature, one canonical form of JSON, Ed25519 and ML-DSA-87 (FIPS 204) side by side on every receipt, RFC 3161 time-stamps, and the tree of RFC 9162. The format is described exactly in <a href="https://github.com/provared/provared/blob/main/spec/provared-format.md">one document</a>, and <a href="https://github.com/provared/provared/tree/main/test-vectors">shared test files</a> hold another implementation to the same answers.</p>
 
 <p>It is one author's work, in their own time, built with AI tools since 3 October 2026. The code has been through 25 rounds of review by AI reviewers, each a fresh session given only the code and the documents; every fault was fixed and kept as a test. No person other than the author has reviewed it yet. That is an invitation.</p>
 
@@ -196,7 +196,8 @@ agent = create_agent(model, tools=[order_supplies, send_message],
 
 </main>
 <footer>
-  <p>Written and built by Pavel Izmaylov, in their own time. This page loads nothing from anywhere but its own style sheet and icon, and keeps nothing about you: no tracking, no cookies, no form.</p>
+  <p><b>About the author.</b> Pavel Izmaylov builds Provared alone, in their own time and under their own name; on GitHub, <a href="https://github.com/sealwright">sealwright</a>. Every email to <a href="mailto:hello@prova.red?subject=Provared">hello@prova.red</a> is read and answered within a few days.</p>
+  <p>This page loads nothing from anywhere but its own style sheet and icon, and keeps nothing about you: no tracking, no cookies, no form.</p>
 </footer>
 </body>
 </html>

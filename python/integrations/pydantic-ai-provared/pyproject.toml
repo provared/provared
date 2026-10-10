@@ -10,6 +10,7 @@ readme = "README.md"
 authors = [{ name = "Pavel Izmaylov" }]
 license = "Apache-2.0 AND CC-BY-4.0"
 license-files = ["LICENSE", "LICENSE-CC-BY-4.0.txt"]
+keywords = ["pydantic-ai", "ai-agent", "agent", "audit-trail", "permission", "authorization", "receipt", "tamper-evident", "passkey", "evidence"]
 requires-python = ">=3.11"
 # Provared itself, and Pydantic AI's capabilities, as tested.
 dependencies = ["provared>=0.2.0", "pydantic-ai-slim>=2.54,<3"]
@@ -20,6 +21,7 @@ classifiers = [
 ]
 
 [project.urls]
+Homepage = "https://prova.red"
 Source = "https://github.com/provared/provared"
 Documentation = "https://github.com/provared/provared/tree/main/python/integrations/pydantic-ai-provared"
 Issues = "https://github.com/provared/provared/issues"

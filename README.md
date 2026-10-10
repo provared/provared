@@ -72,7 +72,19 @@ The same in Python is
 `from provared.dev import development_recorder`. For a LangChain agent,
 `pip install provared-langchain` puts every tool call behind the same
 check with no change to the tools
-([python/integrations/provared-langchain](python/integrations/provared-langchain)).
+([python/integrations/provared-langchain](python/integrations/provared-langchain)):
+
+```py
+from langchain.agents import create_agent
+from provared_langchain import ProvaredMiddleware
+
+agent = create_agent(model, tools=[order_supplies, send_message],
+                     middleware=[..., ProvaredMiddleware(writer, {
+                         'order_supplies': {'action': 'supplies.order', 'with': 'supplier',
+                                            'amount': lambda a: {'unit': 'GBP', 'value': a['total_gbp']}},
+                         'send_message': 'provared.message.send',
+                     })])   # last among the middleware that wrap tool calls
+```
 
 ## The four parts
 

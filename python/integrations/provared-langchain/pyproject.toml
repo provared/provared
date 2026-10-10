@@ -10,6 +10,7 @@ readme = "README.md"
 authors = [{ name = "Pavel Izmaylov" }]
 license = "Apache-2.0 AND CC-BY-4.0"
 license-files = ["LICENSE", "LICENSE-CC-BY-4.0.txt"]
+keywords = ["langchain", "langchain-middleware", "ai-agent", "agent", "audit-trail", "permission", "authorization", "receipt", "tamper-evident", "passkey", "evidence"]
 requires-python = ">=3.11"
 # Provared itself, LangChain's agents with middleware, as tested, and the
 # two packages beneath LangChain that this one imports directly.
@@ -21,6 +22,7 @@ classifiers = [
 ]
 
 [project.urls]
+Homepage = "https://prova.red"
 Source = "https://github.com/provared/provared"
 Documentation = "https://github.com/provared/provared/tree/main/python/integrations/provared-langchain"
 Issues = "https://github.com/provared/provared/issues"
