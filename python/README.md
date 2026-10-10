@@ -1,4 +1,4 @@
-# Provared for Python
+# <img src="https://prova.red/favicon.svg" alt="" width="36"> Provared for Python
 
 Proof of what an AI agent was allowed to do, and what it then did.
 

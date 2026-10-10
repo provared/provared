@@ -7,7 +7,8 @@
   social preview `site/preview.png` beside the word, as inline SVG in the
   header of every page at prova.red, of the checking page and of the
   signing page (no page makes a request for it), and at the top of the
-  README. The four colours of the parts stay as they are inside the
+  README and of the three Python packages' READMEs, which the registries
+  show with the next published version. The four colours of the parts stay as they are inside the
   pages. The style sheet gains one rule for the mark and a new version
   number. No code changes.
 - 2026-10-10: **a real record on prova.red**, `tools/make-record-page.mjs`:

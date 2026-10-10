@@ -1,4 +1,4 @@
-# pydantic-ai-provared
+# <img src="https://prova.red/favicon.svg" alt="" width="36"> pydantic-ai-provared
 
 A Pydantic AI capability that checks each tool call of an agent against
 the permission a person signed, runs the tool only if the permission

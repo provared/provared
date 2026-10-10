@@ -1,4 +1,4 @@
-# provared-langchain
+# <img src="https://prova.red/favicon.svg" alt="" width="36"> provared-langchain
 
 A LangChain middleware that checks each tool call of an agent against
 the permission a person signed, runs the tool only if the permission
