@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; img-src 'self'; form-action 'none'; base-uri 'none'">
+<title>A real record: the coding agent that builds Provared</title>
+<meta name="description" content="A real Provared record, kept day by day: the coding agent the author runs to build Provared, under a permission signed with the author's own passkey, with the checker's answer and the files to check it yourself.">
+<link rel="canonical" href="https://prova.red/records/">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Provared">
+<meta property="og:title" content="A real record: the coding agent that builds Provared">
+<meta property="og:description" content="Kept day by day under a permission the author signed with a passkey. The checker's answer, and the files to check it yourself.">
+<meta property="og:url" content="https://prova.red/records/">
+<meta property="og:image" content="https://prova.red/preview.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="A real record: the coding agent that builds Provared">
+<meta name="twitter:description" content="Kept day by day under a permission the author signed with a passkey. The checker's answer, and the files to check it yourself.">
+<meta name="twitter:image" content="https://prova.red/preview.png">
+<link rel="stylesheet" href="../style.css?v=3">
+</head>
+<body>
+<header>
+  <p class="small"><a href="../">Provared</a></p>
+  <h1>A real record: the coding agent that builds Provared</h1>
+  <p class="motto">A real record, for anyone who wants to see one. Evidence, not a verdict.</p>
+</header>
+<main>
+
+<p>Everything else on this site is an invented example. This page is a real record, kept day by day: the coding agent the author runs to build Provared, recorded under a permission the author signed with their own passkey. The record is added to each day until the permission ends on 2026-10-18 21:09 UTC. This page was last made on 2026-10-10 22:35 UTC, from a book of 144 entries.</p>
+
+<h2>What the agent is for</h2>
+<p>The agent is Claude Code, a coding agent, which the author uses in their own time to read and change the code of Provared in its repository, run its tests and tools, and publish what the author approves. The permission names it, allows seven kinds of action with limits on four of them, states five rules of conduct, and was signed on 10 October 2026 at <a href="../sign/">prova.red/sign/</a> with the author's passkey. The author's name in it, "Pavel i", is what the author typed: a name in a record is a label, and only the keys are checked.</p>
+
+<h2>How it is recorded</h2>
+<p>A small program runs before and after every tool call the agent makes (Claude Code's "hooks"; the code is <a href="https://github.com/provared/provared/tree/main/integrations/claude-code">integrations/claude-code</a> in the repository). Before a call, the check before acting asks whether the call is within the permission; a call outside it is refused and does not run. After the call, the agent's side signs a receipt (a stub) with two keys, one of them quantum-safe, naming the kind of action, the tool, the time, and the SHA-256 fingerprint of the call's arguments. The arguments themselves, and the contents of any file, are never in the record. The kind of action is chosen by the hook from the tool's name and, for a command, from its text (a command that removes something counts as a deletion; one that pushes or publishes counts as a release), not by the agent. A recorder on the author's computer keeps the book and seals it at least once a day with three keys; the seals carry no outside time-stamp, so the time of a seal is the recorder's own word, and the checker says so.</p>
+
+<h2>The permission, in the checker's words</h2>
+<pre>Entry 0: SLIP CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  Issuer:                        &quot;Pavel i&quot; (a label, not checked)
+  Issuer's key thumbprint:       BkrSDxKyk2FW0GD0-WCyOKcRRXZs6QDLBPjlBMItPPk
+  Signed on:                     https://prova.red
+  Agent:                         &quot;Claude Code, building Provared&quot; (a label, not checked)
+  May do:                        provared.code.read, provared.code.change, provared.code.run, provared.code.release, provared.data.delete, provared.web.read, provared.agent.instruct
+  Limit:                         provared.code.run: no more than 600 actions in any hour
+  Limit:                         provared.code.change: no more than 600 actions in any hour
+  Limit:                         provared.code.release: no more than 20 actions in any 24 hours
+  Limit:                         provared.data.delete: no more than 30 actions in any 24 hours
+  Stated rule:                   Never hide, alter or leave out its own records.
+  Stated rule:                   Never state what it has reason to believe is false, and never make up a record or a result.
+  Stated rule:                   Never go around an access control, a block or a refusal.
+  Stated rule:                   Never obtain or use access that it was not given.
+  Stated rule:                   Never carry on after being told to stop.
+  With:                          nobody named
+  From, until:                   2026-10-10T21:08:16Z, 2026-10-18T21:09:16Z
+  Purpose:                       &quot;Build Provared, in the author's own time: read and change the code in its repository, run its tests and tools, and publish what the author approves.&quot;
+  Signature, passkey (ES256): valid</pre>
+
+<h2>What the agent did</h2>
+<p>141 receipts, from 2026-10-10 21:20 UTC to 2026-10-10 22:34 UTC, under 2 seals. Days and times are in UTC.</p>
+<table>
+  <thead><tr><th>Day</th><th>Receipts</th><th>By kind of action</th></tr></thead>
+  <tbody>
+    <tr><td>2026-10-10</td><td>141</td><td>provared.code.run 99, provared.code.change 28, provared.code.read 6, provared.web.read 4, provared.code.release 2, provared.agent.instruct 2</td></tr>
+  </tbody>
+</table>
+<table>
+  <thead><tr><th>Kind of action</th><th>Receipts</th></tr></thead>
+  <tbody>
+    <tr><td><code>provared.code.run</code></td><td>99</td></tr>
+    <tr><td><code>provared.code.change</code></td><td>28</td></tr>
+    <tr><td><code>provared.code.read</code></td><td>6</td></tr>
+    <tr><td><code>provared.web.read</code></td><td>4</td></tr>
+    <tr><td><code>provared.code.release</code></td><td>2</td></tr>
+    <tr><td><code>provared.agent.instruct</code></td><td>2</td></tr>
+  </tbody>
+</table>
+<table>
+  <thead><tr><th>Tool</th><th>Receipts</th></tr></thead>
+  <tbody>
+    <tr><td>Bash</td><td>101</td></tr>
+    <tr><td>Write</td><td>20</td></tr>
+    <tr><td>Edit</td><td>8</td></tr>
+    <tr><td>Read</td><td>6</td></tr>
+    <tr><td>WebSearch</td><td>2</td></tr>
+    <tr><td>WebFetch</td><td>2</td></tr>
+    <tr><td>Agent</td><td>2</td></tr>
+  </tbody>
+</table>
+<table>
+  <thead><tr><th>Seal</th><th>Covers</th><th>Sealed at</th><th>Time-stamp</th></tr></thead>
+  <tbody>
+    <tr><td>entry 12</td><td>the first 12 entries</td><td>2026-10-10 21:37 UTC</td><td>no outside time-stamp: the time is the recorder's own word</td></tr>
+    <tr><td>entry 143</td><td>the first 143 entries</td><td>2026-10-10 22:35 UTC</td><td>no outside time-stamp: the time is the recorder's own word</td></tr>
+  </tbody>
+</table>
+
+<h2>Where it went outside its permission</h2>
+<p>The checker finds no action outside the permission, as far as this record shows. A call that the check before acting refused does not run and leaves no entry here, so the record shows what was taken, not what was refused.</p>
+
+<h2>The checker's summary, exactly as printed</h2>
+<pre>Summary
+  Is the record intact?                 yes
+  Was every signature checked?          yes
+  Did the agent stay within its slip?   yes, as far as this record shows
+  Time-stamped in a way you trust?      no
+  Checked against keys you named?       yes: the passkey you trust, and the recorder you expect
+  Slips 1, stubs 141 (countersigned 0, one-sided 141), seals 2</pre>
+<p>The whole answer, one block for each entry, is <a href="checker-answer.txt">checker-answer.txt</a>.</p>
+
+<h2>Check it yourself</h2>
+<p>The book is <a href="book.jsonl">book.jsonl</a> (144 entries, about 1061 KB), and its permission alone is <a href="slip.json">slip.json</a>. A checker trusts nothing it is not told to trust, so name the two keys: the author's passkey, by its thumbprint, and the recorder's three keys, by the fingerprint of the set. With Node.js 24.7 or later:</p>
+<pre>npm install provared
+npx provared-check book.jsonl --issuer BkrSDxKyk2FW0GD0-WCyOKcRRXZs6QDLBPjlBMItPPk --sealer OOgdiubfBSeXkjMOi5bUcbFyXpuuorxC2gdtV2oyAhw</pre>
+<p>Or in a browser, on the <a href="../check/">checking page</a>: choose the file, and paste the thumbprint into the passkey box and the fingerprint into the recorder box. Where the browser lacks the quantum-safe signing methods, the page says that the check was not complete and gives no pass; the command-line checker checks everything.</p>
+
+<h2>What this record does not show</h2>
+<p>The checker says this itself, at the end of its answer:</p>
+<ul>
+  <li>It shows what was recorded, not what was left out. An agent that acts and writes no stub leaves no trace here.</li>
+  <li>A one-sided stub shows what the agent's side said, not what the other side did.</li>
+  <li>A refusal shows what the service's side said, not what the agent did.</li>
+  <li>It does not show that an action was wise, lawful or wanted.</li>
+  <li>A rule of conduct in a slip, such as &quot;never claim to be a human being&quot;, is the person's signed instruction. No check can show that the agent kept it.</li>
+  <li>It does not show who was holding the device when the passkey signed.</li>
+  <li>A name in a record is a label. Only keys are checked.</li>
+  <li>Nothing here is time-stamped by an outside service that you named as trusted. So it does not show when the record was made, and the latest stubs under a slip or a pass, or a slip or a pass with all its stubs, could have been removed.</li>
+</ul>
+<p>And two things of this record's own. A refused call leaves no entry, so the record does not show how often the agent was stopped. Every receipt is one-sided, because no other party takes part in a tool call, so each shows what the agent's side said.</p>
+
+</main>
+<footer>
+  <p><b>About the author.</b> Pavel Izmaylov builds Provared alone, in their own time and under their own name; on GitHub, <a href="https://github.com/sealwright">sealwright</a>. Every email to <a href="mailto:hello@prova.red?subject=Provared">hello@prova.red</a> is read and answered within a few days.</p>
+  <p>This page loads nothing from anywhere but its own style sheet and icon, and keeps nothing about you.</p>
+</footer>
+</body>
+</html>

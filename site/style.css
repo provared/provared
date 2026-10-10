@@ -179,3 +179,8 @@ figcaption { color: var(--quiet); font-size: 0.9rem; margin-top: 0.4rem; }
 .dict p { margin: 0.5rem 0; }
 
 footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line); color: var(--quiet); font-size: 0.9rem; }
+
+/* Tables on the record page: the whole width, headers on one line, cells that wrap. */
+table { width: 100%; border-collapse: collapse; margin: 0.6rem 0; font-size: 0.95rem; }
+th, td { text-align: left; vertical-align: top; padding: 0.3rem 0.6rem 0.3rem 0; border-bottom: 1px solid var(--line); }
+th { color: var(--quiet); font-weight: normal; white-space: nowrap; overflow-wrap: normal; }

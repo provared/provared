@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- 2026-10-10: **a real record on prova.red**, `tools/make-record-page.mjs`:
+  writes `site/records/` from the book that the recorder beside Claude
+  Code keeps. It copies the book and its slip beside the page, runs the
+  command-line checker with the passkey and the recorder the reader is
+  told to trust, keeps the whole answer as a text file, and writes the
+  page from what the checker answered: the slip in the checker's own
+  words, the counts by day, by kind of action and by tool, the seals,
+  any entry outside the permission, the summary exactly as printed, and
+  what the check does not show. The page says that a refused call
+  leaves no entry and that every receipt is one-sided. It is run again
+  each day while the permission lasts; the home page links to it. A
+  test runs the tool on the sample record into a folder of its own.
 - 2026-10-10: **the pages at prova.red, the README and the framework
   packages, after the adoption review**: the line under each page's
   title names its reader and then the slogan; "How it is built" on the
