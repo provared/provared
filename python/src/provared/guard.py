@@ -73,6 +73,78 @@ def check_before_read(read, proposal, options=None):
     return _decide(read, proposal, options)
 
 
+SEAL_THIRD = 'SLH-DSA-SHA2-256s'
+
+
+def _only_seal_third_unchecked(result):
+    """The methods not checked on this device, if the only thing not checked
+    is the third signature of one or more seals whose Ed25519 and ML-DSA-87
+    signatures were checked here; otherwise None. It counts as the checker
+    counts for "fully checked" (book.py): a signature whose method is not
+    built in, or an entry with nothing to check, is not checked; a time-stamp
+    from a service the reader did not name is not "unchecked", it is uncounted."""
+    if result['summary']['fullyChecked']:
+        return None
+    state = {'skipped': False, 'excused': 0}
+    missing = set()
+
+    def note(items):
+        if len(items) == 0:
+            state['skipped'] = True
+        for x in items:
+            if x.get('state') == 'unavailable':
+                missing.add(x.get('method'))
+
+    def stamps(items):
+        for x in items:
+            if x.get('state') == 'unavailable':
+                missing.add('stamp')
+
+    for e in result['entries']:
+        kind = e.get('kind')
+        if kind == 'seal':
+            sigs = e.get('signatures') or []
+            by = {x.get('method'): x.get('state') for x in sigs}
+            third = len(sigs) == 3 and by.get('Ed25519') == 'valid' and by.get('ML-DSA-87') == 'valid' and by.get(SEAL_THIRD) == 'unavailable'
+            if third:
+                state['excused'] += 1
+            else:
+                note(sigs)
+            stamps(e.get('stamps') or [])
+        elif kind == 'slip':
+            sig = e.get('signature')
+            if not sig or sig.get('state') == 'unavailable':
+                missing.add(sig.get('alg') if sig else 'passkey')
+            elif sig.get('state') == 'unchecked':
+                state['skipped'] = True
+        elif kind == 'stub':
+            note(e.get('signatures') or [])
+            counter = e.get('countersignature') or {'state': 'absent', 'signatures': []}
+            if counter.get('state') != 'absent':
+                note(counter.get('signatures') or [])
+            approval = e.get('approval') or {'state': 'absent'}
+            if approval.get('state') == 'unavailable':
+                missing.add(approval.get('alg'))
+        elif kind == 'cancellation':
+            sig = e.get('signature')
+            if not sig:
+                state['skipped'] = True
+            elif sig.get('state') == 'unavailable':
+                missing.add(sig.get('alg'))
+            stamps(e.get('stamps') or [])
+        elif kind in ('refusal', 'terms', 'vouching', 'withdrawal', 'pass', 'acknowledgement'):
+            note(e.get('signatures') or [])
+        else:
+            state['skipped'] = True
+    for h in result.get('held') or []:
+        stamps(h.get('stamps') or [])
+        for a in h.get('acknowledgements') or []:
+            note(a.get('signatures') or [])
+    if not state['skipped'] and len(missing) == 0 and state['excused'] > 0:
+        return [SEAL_THIRD]
+    return None
+
+
 def _decide(read, proposal, options):
     answer = {'allowed': False, 'problems': [], 'breaches': [], 'needs': []}
     try:
@@ -85,9 +157,17 @@ def _decide(read, proposal, options):
         result, state, beside = got['result'], got['state'], got['beside']
         if result['summary']['problemFound']:
             raise _not_sound('A problem was found in the record so far. It must be looked at before the agent acts again.')
-        # A record this device could only partly check is not a pass, here either.
-        if not result['summary']['fullyChecked']:
+        # A record this device could only partly check is not a pass, here
+        # either, with one stated exception: a seal's third signature
+        # (SLH-DSA), where its first two were checked here. A seal widens no
+        # permission, and this version cannot check that method (F-79), so it
+        # would otherwise be refused everything once the book holds a seal.
+        # The answer names what was not checked.
+        not_checked = _only_seal_third_unchecked(result)
+        if not result['summary']['fullyChecked'] and not_checked is None:
             raise _not_sound('This device could not check every signature in the record so far.')
+        if not_checked is not None:
+            answer['notChecked'] = not_checked
         if not all(e.get('compared') is True for e in result['entries'] if e['kind'] in ('stub', 'pass')):
             raise _not_sound('This device could not compare every stub and every pass in the record so far with its slip.')
         if result['size'] >= MAX_ENTRIES:

@@ -918,7 +918,13 @@ holds too much. A checker reports nothing new for it, because the
 finding stands with the later stub. The answer MUST be that nothing is allowed
 (`record-not-sound`) if the book so far has a problem, if any signature
 in it could not be checked on that device, or if the check was not told
-which issuer keys it trusts. An action dated before the last stub of
+which issuer keys it trusts. One exception is allowed: where every
+signature that could not be checked is the third signature of a seal
+(section 21.1) whose first two signatures were checked on that device,
+and nothing else was left unchecked, the check MAY go on, and its answer
+MUST then name the method it did not check. A seal widens no permission;
+a device without that method would otherwise be refused everything once
+the book holds a seal. An action dated before the last stub of
 its own chain (the agent's, or the helper's under its pass; section 7)
 is refused (`time-went-backwards`).
 

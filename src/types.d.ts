@@ -431,6 +431,8 @@ export interface BeforeAnswer {
   problems: Finding[];
   breaches: Finding[];
   needs: ('approval' | 'countersignature')[];
+  /** Present only where the device went on without checking a seal's third signature (SLH-DSA-SHA2-256s): the methods not checked. */
+  notChecked?: string[];
 }
 /** "issuerKeys" must be given: a slip signed by any other key allows nothing. */
 export function checkBefore(book: string, proposal: Proposal, options: CheckOptions & { issuerKeys: string[] }): Promise<BeforeAnswer>;

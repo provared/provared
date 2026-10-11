@@ -389,6 +389,7 @@ const answer = await checkBefore(
 );
 
 answer.allowed;   // true only if the record so far is sound, fully checked, and the action is inside the slip
+answer.notChecked; // present only where the device went on without checking a seal's third signature (SLH-DSA)
 answer.breaches;  // why not, in the checker's own codes
 answer.problems;  // why the question could not be answered with a yes
 answer.needs;     // what the slip asks to go with it: 'approval', 'countersignature'

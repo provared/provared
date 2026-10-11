@@ -76,6 +76,54 @@ export function checkBeforeRead(read, proposal, options = {}) {
   return decide(read, proposal, options);
 }
 
+// The methods not checked on this device, if the only thing not checked is
+// the third signature of one or more seals whose Ed25519 and ML-DSA-87
+// signatures were checked here; otherwise null. It counts as the checker
+// counts for "fully checked" (book.js): a signature whose method is not
+// built in, or an entry with nothing to check, is not checked; a time-stamp
+// from a service the reader did not name is not "unchecked", it is uncounted.
+function onlySealThirdUnchecked(result) {
+  if (result.summary.fullyChecked) return null;
+  let skipped = false;
+  let excused = 0;
+  const missing = new Set();
+  const note = (list) => { if (list.length === 0) skipped = true; for (const x of list) if (x.state === 'unavailable') missing.add(x.method); };
+  const stamps = (list) => { for (const x of list) if (x.state === 'unavailable') missing.add('stamp'); };
+  for (const e of result.entries) {
+    if (e.kind === 'seal') {
+      const sigs = e.signatures ?? [];
+      const by = (method) => sigs.find((x) => x.method === method);
+      const third = sigs.length === 3 && by('Ed25519')?.state === 'valid' && by('ML-DSA-87')?.state === 'valid' && by(SEAL_THIRD)?.state === 'unavailable';
+      if (third) excused++; else note(sigs);
+      stamps(e.stamps ?? []);
+    } else if (e.kind === 'slip') {
+      if (!e.signature || e.signature.state === 'unavailable') missing.add(e.signature ? e.signature.alg : 'passkey');
+      else if (e.signature.state === 'unchecked') skipped = true;
+    } else if (e.kind === 'stub') {
+      note(e.signatures ?? []);
+      const counter = e.countersignature ?? { state: 'absent', signatures: [] };
+      if (counter.state !== 'absent') note(counter.signatures ?? []);
+      const approval = e.approval ?? { state: 'absent' };
+      if (approval.state === 'unavailable') missing.add(approval.alg);
+    } else if (e.kind === 'cancellation') {
+      if (!e.signature) skipped = true;
+      else if (e.signature.state === 'unavailable') missing.add(e.signature.alg);
+      stamps(e.stamps ?? []);
+    } else if (['refusal', 'terms', 'vouching', 'withdrawal', 'pass', 'acknowledgement'].includes(e.kind)) {
+      note(e.signatures ?? []);
+    } else {
+      skipped = true;
+    }
+  }
+  for (const h of result.held ?? []) {
+    stamps(h.stamps ?? []);
+    for (const a of h.acknowledgements ?? []) note(a.signatures ?? []);
+  }
+  return !skipped && missing.size === 0 && excused > 0 ? [SEAL_THIRD] : null;
+}
+
+const SEAL_THIRD = 'SLH-DSA-SHA2-256s';
+
 async function decide(read, proposal, options) {
   const answer = { allowed: false, problems: [], breaches: [], needs: [] };
   try {
@@ -85,8 +133,15 @@ async function decide(read, proposal, options) {
     }
     const { result, state, beside } = await read();
     if (result.summary.problemFound) throw notSound('A problem was found in the record so far. It must be looked at before the agent acts again.');
-    // A record this device could only partly check is not a pass, here either.
-    if (!result.summary.fullyChecked) throw notSound('This device could not check every signature in the record so far.');
+    // A record this device could only partly check is not a pass, here
+    // either, with one stated exception: a seal's third signature
+    // (SLH-DSA), where its first two were checked here. A seal widens no
+    // permission, and a device without that method (the Python version,
+    // every browser) would otherwise be refused everything once the book
+    // holds a seal. The answer names what was not checked.
+    const notChecked = onlySealThirdUnchecked(result);
+    if (!result.summary.fullyChecked && !notChecked) throw notSound('This device could not check every signature in the record so far.');
+    if (notChecked) answer.notChecked = notChecked;
     if (!result.entries.every((e) => (e.kind === 'stub' || e.kind === 'pass' ? e.compared === true : true))) {
       throw notSound('This device could not compare every stub and every pass in the record so far with its slip.');
     }

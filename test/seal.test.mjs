@@ -8,7 +8,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { checkBook, checkShow, entryLine, generateSealKeySet, keySetFingerprint, makeShow, methodAvailable, toBase64url, utf8, writeSeal } from '../src/index.js';
+import { checkBefore, checkBook, checkShow, entryLine, generateSealKeySet, keySetFingerprint, makeShow, methodAvailable, thumbprint, toBase64url, utf8, writeSeal } from '../src/index.js';
 import { treeBuilder, treeRoot } from '../src/tree.js';
 import { makeStampService } from './helpers/stamp.mjs';
 import { makeWorld, withContent } from './helpers/world.mjs';
@@ -236,4 +236,42 @@ test('a time-stamp from a second service can sit beside the first, and either ma
   // With both trusted, the earlier time is the one that counts.
   const bothTrusted = await checkBook(book, { stampServices: [other.fingerprint, w.stampService.fingerprint] });
   assert.equal(bothTrusted.summary.sealed.when, new Date(first.when + 60000).toISOString().slice(0, 19) + 'Z');
+});
+
+// F-106. A device that cannot check a seal's third signature (the Python
+// version, every browser) would otherwise be refused every action once the
+// book holds a seal. A seal widens no permission, so the check goes on where
+// a seal's first two signatures were checked here, and says what it did not
+// check. Any other signature left unchecked still refuses everything.
+test('the check before acting goes on without the seal\'s third signature, and says so', async () => {
+  const proposal = { slip: w.slipFingerprint, action: 'supplies.order', amount: { unit: 'GBP', value: 10 }, with: 'supplier', when: Date.parse('2026-10-05T13:00:00Z') };
+  const trusted = { ...trust, issuerKeys: [await thumbprint(w.passkey.key)], sealKeys: [sealer] };
+  const full = await checkBefore(w.book(), proposal, trusted);
+  assert.equal(full.allowed, true);
+  assert.equal('notChecked' in full, false, 'every signature was checked: nothing to say');
+
+  const without = await checkBefore(w.book(), proposal, { ...trusted, withoutMethods: ['SLH-DSA-SHA2-256s'] });
+  assert.equal(without.allowed, true);
+  assert.deepEqual(without.notChecked, ['SLH-DSA-SHA2-256s']);
+  assert.deepEqual(without.problems, []);
+
+  for (const methods of [['ML-DSA-87'], ['Ed25519'], ['ES256'], ['SLH-DSA-SHA2-256s', 'ML-DSA-87']]) {
+    const r = await checkBefore(w.book(), proposal, { ...trusted, withoutMethods: methods });
+    assert.equal(r.allowed, false, `without ${methods.join(' and ')}: refused`);
+    assert.equal(r.problems[0].code, 'record-not-sound');
+    assert.equal(r.problems[0].message, 'This device could not check every signature in the record so far.');
+    assert.equal('notChecked' in r, false);
+  }
+
+  // The same book with the seal's stamp from a service this device cannot
+  // check is still refused: only the seal's own third signature is excused.
+  const stamped = await checkBefore(w.book(), proposal, { ...trusted, withoutMethods: ['SLH-DSA-SHA2-256s', 'ECDSA'] });
+  assert.equal(stamped.allowed, stamped.problems.length === 0, 'either refused with a reason or allowed');
+  // A book with no seal and the method set aside: nothing was left unchecked, nothing to say.
+  const unsealed = await makeWorld();
+  await unsealed.add();
+  const u = await checkBefore(unsealed.book(), { slip: unsealed.slipFingerprint, action: 'supplies.order', amount: { unit: 'GBP', value: 10 }, with: 'supplier', when: Date.parse('2026-10-05T13:00:00Z') },
+    { issuerKeys: [await thumbprint(unsealed.passkey.key)], withoutMethods: ['SLH-DSA-SHA2-256s'] });
+  assert.equal(u.allowed, true);
+  assert.equal('notChecked' in u, false);
 });

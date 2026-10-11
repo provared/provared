@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- **The check before acting goes on without a seal's third signature, and
+  says so** (decision F-106; this changes choice 66 of the draft). Found on
+  11 October 2026: a device that cannot check SLH-DSA-SHA2-256s, which is
+  every Python stub writer (and so the LangChain and Pydantic AI packages)
+  and every browser, was refused every action as soon as its book held a
+  seal, because the check allowed nothing unless every signature in the
+  record so far had been checked on that device. Now, where the only
+  signatures not checked are the third ones of seals whose first two were
+  checked there, and nothing else was left unchecked, the check goes on and
+  its answer carries `notChecked: ['SLH-DSA-SHA2-256s']`. Any other
+  signature left unchecked still refuses everything, and the full checker's
+  answers are unchanged. In both languages, with tests; the shared test
+  file for the stub writer's scenarios is remade.
 - **The recorder beside Claude Code appends to the book, and no longer
   loses a receipt while another program reads the file.** It wrote the
   whole book to a temporary file and renamed it over the old one; on

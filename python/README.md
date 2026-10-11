@@ -25,7 +25,10 @@ needs, `cryptography`, does not yet have SLH-DSA (FIPS 205), the method
 of a seal's third signature. So a seal's third signature is reported as
 "not checked on this device", and never as a pass, as the checking page
 in a browser reports it. Seals are checked in full by the JavaScript
-command-line checker.
+command-line checker. The check before acting, and so the stub writer,
+goes on after a seal whose Ed25519 and ML-DSA-87 signatures were checked
+here, and its answer says what was not checked (`notChecked`); any
+other signature left unchecked still allows nothing.
 
 ## Install
 
