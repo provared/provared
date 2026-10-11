@@ -4,7 +4,7 @@
 
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, openSync, closeSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { assembleSlip, checkBook, formatTime, prepareSlip } from '../../../src/index.js';
 import { developmentPasskey } from '../../../src/dev.js';
 import { actionFor, commandAction } from '../actions.mjs';
-import { loadRecorderKeys, loadSlip, makeAgentKeys, startService } from '../recorder.mjs';
+import { loadRecorderKeys, loadSlip, makeAgentKeys, saveBook, startService } from '../recorder.mjs';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const hook = join(here, '..', 'hook.mjs');
@@ -165,4 +165,29 @@ test('the service refuses a slip that names other keys than the folder\'s', asyn
   await makeAgentKeys(other);
   writeFileSync(join(other, 'slip.json'), readFileSync(join(folder, 'slip.json')));
   await assert.rejects(startService({ folder: other, port: 0 }), /other keys/);
+});
+
+// On Windows a file cannot be replaced while another program holds it open,
+// and an uploader or a virus scanner reads the book often. A book only
+// grows, so the recorder appends; where it must replace the file, it tries
+// again until the other program lets go.
+test('the book is saved while another program holds it open', async () => {
+  const folder = mkdtempSync(join(tmpdir(), 'provared-save-'));
+  const book = join(folder, 'book.jsonl');
+  saveBook(folder, 'one\n');
+  const fd = openSync(book, 'r');
+  try {
+    saveBook(folder, 'one\ntwo\n');
+    assert.equal(readFileSync(book, 'utf8'), 'one\ntwo\n', 'appended while held open');
+    saveBook(folder, 'one\ntwo\n');
+    assert.equal(readFileSync(book, 'utf8'), 'one\ntwo\n', 'nothing to add');
+  } finally { closeSync(fd); }
+  // A file that does not match the book is replaced, once the holder lets go.
+  const holder = spawn(process.execPath, ['-e', 'const fs=require("fs");const fd=fs.openSync(process.argv[1],"r");setTimeout(()=>fs.closeSync(fd),400)', book], { stdio: 'ignore' });
+  await new Promise((r) => setTimeout(r, 150));
+  const started = Date.now();
+  saveBook(folder, 'other\n');
+  assert.equal(readFileSync(book, 'utf8'), 'other\n', 'replaced');
+  assert.ok(Date.now() - started >= 100, 'it waited for the holder');
+  await new Promise((r) => holder.on('exit', r));
 });

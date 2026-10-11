@@ -25,7 +25,7 @@
 
 import { spawn } from 'node:child_process';
 import nodeCrypto from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -101,10 +101,28 @@ export async function loadRecorderKeys(folder) {
 
 // --- the book on disk ---
 
-function saveBook(folder, text) {
+// A book only grows, so the new lines are appended to the file: that
+// works while another program (an uploader, a virus scanner) is reading
+// it. Where the file does not match the book's start (it was edited by
+// hand), the whole file is replaced through a temporary file; on Windows
+// the replacement is refused while anyone holds the file open, so it is
+// tried again for up to two seconds.
+export function saveBook(folder, text) {
   const path = files(folder).book;
+  let existing = '';
+  try { existing = readFileSync(path, 'utf8'); } catch { /* no book yet */ }
+  if (existing.length > 0 && text.startsWith(existing)) {
+    if (text.length > existing.length) appendFileSync(path, text.slice(existing.length));
+    return;
+  }
   writeFileSync(`${path}.tmp`, text);
-  renameSync(`${path}.tmp`, path);
+  const pause = new Int32Array(new SharedArrayBuffer(4));
+  for (let attempt = 1; ; attempt++) {
+    try { renameSync(`${path}.tmp`, path); return; } catch (e) {
+      if (attempt >= 100 || !['EPERM', 'EBUSY', 'EACCES'].includes(e.code)) throw e;
+      Atomics.wait(pause, 0, 0, 20);
+    }
+  }
 }
 
 /** The slip the person signed, its fingerprint, and the thumbprint of their passkey (read from the slip itself). */

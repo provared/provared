@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **The recorder beside Claude Code appends to the book, and no longer
+  loses a receipt while another program reads the file.** It wrote the
+  whole book to a temporary file and renamed it over the old one; on
+  Windows that is refused while anyone holds the file open (an uploader,
+  a virus scanner), and the hook then reported "the action was taken and
+  is not in the record". Found on 11 October 2026, when a program that
+  uploads the book was reading it every two seconds: 7 of one helper's 23
+  tool calls were taken and not recorded. A book only grows, so the
+  recorder now appends the new lines; where the file does not match the
+  book it is replaced, with retries for up to two seconds. A test holds
+  the file open while the recorder saves.
+
 - 2026-10-11: **one mark everywhere**: a permission slip with a
   signature, white on red (#8f000f), as `site/favicon.svg`, in the
   social preview `site/preview.png` beside the word, as inline SVG in the
