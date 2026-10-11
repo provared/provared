@@ -1,5 +1,5 @@
 Provared book, draft version 0. Evidence, not a verdict.
-Entries in the book: 179. Top fingerprint: spXxArqHsB_gHVQm4c7lpGnKx_AQ_23g7NNnAqsokzA
+Entries in the book: 682. Top fingerprint: dlnp9oQonMoKWzSQ7B3gyA7ep6tj3lE1FTuuJyzo6zo
 
 Entry 0: SLIP CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
   Issuer:                        "Pavel i" (a label, not checked)
@@ -1269,13 +1269,3535 @@ Entry 178: STUB T6QQKyEat_cwsiZqvNJ3s6jRkw_NWGlQW3NsWdZRP_w
   Agent's signatures: Ed25519 valid; ML-DSA-87 valid
   No other party is named. This shows what the agent's side said.
 
+Entry 179: STUB sqCwEN_IHSX_GgOJIIKsBpu0akfm4bWeeZi6Gb4WOPw
+  Number 176 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-10T23:12:23Z: provared.code.run
+  Document: "Bash" (fingerprint 7KaBiWU1zTlDJkeNHnic11RQVQCKmDptesl2wUEcheE)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 180: STUB tsjXYdTF9kxqA1hXoyj52JEfaIQkKC89kpbDQWAFovo
+  Number 177 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-10T23:12:35Z: provared.code.run
+  Document: "Bash" (fingerprint rVtpj1ExUrYe5OOWzdHbF478O9_loX3lgqJN-g3kSlg)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 181: STUB HJwn-znkyxb9W2mZwBSI3TX9AbzjTfKJ1UTcgjAUk5E
+  Number 178 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-10T23:12:38Z: provared.code.read
+  Document: "Read" (fingerprint r96xUoSmaQpSYl6XfpDmrF2_dPBIxJkjoLFqulJQ4Y4)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 182: STUB ZiIWLbhMbbFo0NOJOq6RJwFTjqzC9qgjdQDK99zKNvo
+  Number 179 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-10T23:12:53Z: provared.code.change
+  Document: "Write" (fingerprint CbHtiX2M3yTwYNGkO_vDaSVsbtxaXc54XGEpBjIgFDU)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 183: STUB 5sE8GgLHthvqiO4jDkD1LuKsHqG8rbH4KR4Y8TBW0WQ
+  Number 180 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-10T23:13:01Z: provared.code.change
+  Document: "Write" (fingerprint A5-4fW7ITYk_TLx0gQVQvs50p-tMvFIDpeXZsALta-Q)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 184: STUB y4Eb4UX59xNS9sEoIthimqrB_Takt8RxhmEQaa36s_o
+  Number 181 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-10T23:13:17Z: provared.code.run
+  Document: "Bash" (fingerprint 6l7Nw3bsjOETqwWsYsnpXZrAslMBkhkq6i4IGwbiINI)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 185: STUB WOS02dtDpkQfl7pYLmth-V8zH64MRLsDv2G1jREhPI4
+  Number 182 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-10T23:13:39Z: provared.code.change
+  Document: "Write" (fingerprint v-jvHuGEpq4AVg2gITx8hG76I7sxNCebLEQh6z4CiG4)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 186: STUB rleT4d9CFPzRletCjn5fCZfi8tHKhBUQvAH9EVv0odk
+  Number 183 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-10T23:13:53Z: provared.code.change
+  Document: "Write" (fingerprint ql5Sm3ozx12tgwLS1UPYGWtRB9HxB2H6dtx38kpLXZg)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 187: STUB Hanu5cQv9kbbdPYznNCz2WHdz7ilfiupCHVpraINNwg
+  Number 184 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-10T23:14:11Z: provared.code.release
+  Document: "Bash" (fingerprint gb9G1q-IjUhVy7zuZAjouqYvgtGloC4DxQY3rZ-SWjs)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 188: STUB 3jHzB46Xb9UD0Mdy3Kh17rtlQvy_20fEQ8a8BE3gujo
+  Number 185 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-10T23:14:16Z: provared.code.run
+  Document: "Bash" (fingerprint rvdsWKRRN1MMyE4As0YuUV-oB1mNymLvJAZgXMt4aHQ)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 189: STUB BImTa3szKh9GmYnoG4BSHe7apvDuuVrX4N4T3IkXDJ4
+  Number 186 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-10T23:14:29Z: provared.code.run
+  Document: "Bash" (fingerprint OjLl93f1IpvJen-xtLihRQh6LT59wKbXZoJDcp1Wf04)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 190: STUB DRdf0a7NCPJP9JrJhirjfOGNIkuvEzMCAso2A_GgL5E
+  Number 187 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-10T23:14:43Z: provared.code.run
+  Document: "Bash" (fingerprint q0x4Z9YCcVQHvbEGo3gSAgwM9fW0hJlToYpXL9_sOAk)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 191: STUB FtfxlJbssuNVBluTi91zzQc2PgjaTue_rvB52siuoro
+  Number 188 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-10T23:20:51Z: provared.code.run
+  Document: "Bash" (fingerprint Mo76-YMmnDcWrr4fTRFrs17nUx3ZE-3ATHbRnC0iQhY)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 192: STUB vM1GGfXJb0WrICVkb9DSJOrsSIclI_ACF5n3Ena3ytg
+  Number 189 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-10T23:21:19Z: provared.code.change
+  Document: "Write" (fingerprint AVNZ4M2et0xTr-takPsCW6qHvewUeQ-PMbP3BRhWW-U)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 193: STUB PlTWxDoSFTrDdFkPImCX3eVpUIZX2canGzF4tC6HZ98
+  Number 190 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-10T23:21:37Z: provared.code.release
+  Document: "Bash" (fingerprint 5VN3RzyEKRXwl9F8tZge6CCHvti0eWgukkxSkHwQfPk)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 194: STUB SrGtIwTAYZD0HW-PbTeAY4pGs5eHQjcphZYAfYo2Kbk
+  Number 191 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-10T23:22:57Z: provared.code.run
+  Document: "Bash" (fingerprint tp1nE2mW3DCOvfvZIlg5wnNF10XorI0jtnLStg2MUhU)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 195: STUB 3e4Zjn6A6eC037Ip48vJJvljBwkhA5lerRIPUO-AFHI
+  Number 192 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T14:28:57Z: provared.code.run
+  Document: "Bash" (fingerprint cpVI8bBlg7XyBZ8UVJ1vSLPd8nud0Me3LrzKsSaMEKs)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 196: STUB RCOUF0EUsROOxKccn4zA2i94FoscJF2zH6pqjaOUU9Y
+  Number 193 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T14:29:08Z: provared.code.run
+  Document: "Bash" (fingerprint Jrm6LoeMx_Ku5BiDme-5BVvat5G86BdZpCaDLXVWuNw)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 197: STUB FNVHcRL2Yx6ylzvqBizsSIwhv76sreX3cAEE1SeOIG0
+  Number 194 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T14:29:32Z: provared.code.run
+  Document: "Bash" (fingerprint HIs3Js5l31Et0lhDF10vTnjZyg1pdlyunCAGMnV7J8w)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 198: STUB SuUQdS5MphXpszyTuaIQoOZ9FaVeueGshKMMte6MW68
+  Number 195 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T14:29:43Z: provared.code.run
+  Document: "Bash" (fingerprint MKqpTEXQsOjo50cywZuHrbyUoj9VImpivStJvitndzg)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 199: STUB ve5lhXeQfXx3MKyNB3K8E9AGyFOyJSvoNpG7ZWp6E7g
+  Number 196 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T14:29:46Z: provared.agent.instruct
+  Document: "Agent" (fingerprint f_OkQ2Zn1Llx0GsPosX_zwRoP-UjRO1ILzKAsbHPHSU)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 200: STUB mckHpYaPZiHvKUnyC3i_-twug_aW_VKBuIPh2l9xjPs
+  Number 197 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T15:27:47Z: provared.code.run
+  Document: "Bash" (fingerprint scLpixRV87Fi3N5FjaQmI3Z8rCbDn05PfarNehYBuec)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 201: STUB ve7fW3WWUhuoj7ip2-5xMAEfcebnkpszvwj_uPwRdFI
+  Number 198 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T15:27:50Z: provared.code.run
+  Document: "Bash" (fingerprint 58roz60DEFY4SNhOmuMT0JLr3M00Z8W6kkX5O4Q6rLI)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 202: STUB oGz4Mt5kgm9zyJpBwjoW1Dvl-rhUuZVihwC7kfseQFA
+  Number 199 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T15:27:58Z: provared.code.run
+  Document: "Bash" (fingerprint WD2sN7QsAds_d8HWGqLOUcY1IxlQr3zX8OGmsvz2IC8)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 203: STUB 6xQ1_T5digBiE9NGYK62INhYBtNaIxW7JtRcAMkl5ac
+  Number 200 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T15:28:04Z: provared.code.run
+  Document: "Bash" (fingerprint vvNHPsFCXULbZrdaOPl0My41EcOCsYCs4y6ntH7XRvM)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 204: STUB YYg3YA1MDSPA68Ui21e2jWmvSpWyok2uG6Hk9ymLDpA
+  Number 201 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T15:28:14Z: provared.code.run
+  Document: "Bash" (fingerprint 41eJjnPisWQCj91Rb5ghDphtmA4t8YDIhlwTpSupuCk)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 205: STUB YakUyX_M2cDv7HBfxy0cuXdRihdHrlYyKPAyU7i03KI
+  Number 202 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T15:42:16Z: provared.code.run
+  Document: "Bash" (fingerprint 1wbfk_w_ge4GLEaL9Lhs28S29IytddzaY1HaFJVCaKY)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 206: STUB 5CxLaUEPXVq3c3wamU1J6xPBvJd3ttp73tsNf7ZJDmE
+  Number 203 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T15:42:26Z: provared.code.run
+  Document: "Bash" (fingerprint WMQTuj3rFRnv4IBP6PLZA5-YHfGnjix2NFkiLM6fzT0)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 207: STUB V1mOE4sEm0q31w2-8C4duRAdeaG_IdPyn2kRVFmmpv0
+  Number 204 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T15:42:34Z: provared.code.run
+  Document: "Bash" (fingerprint 2jRdfkfs619CX-uZxtjd-XdWl2bRfOsHB9G35C1i7G8)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 208: STUB Uw7ZwVLqP-5zOMIld6SX9Lu2PeN2GohGzVjjwGRFJNY
+  Number 205 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T15:42:43Z: provared.code.run
+  Document: "Bash" (fingerprint o7ubVPj_a9SURNGq52WZMbHkhrn5Cou7bOE6S8Sxjhs)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 209: STUB e0uZbDbKGbX4r9yl8wDPSizQ0TLMAohob31d-GbV5rk
+  Number 206 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T15:43:24Z: provared.code.run
+  Document: "Bash" (fingerprint DhCGYfGsIGQ-Ol9iQKsNFRn6jM8YnmGKqtPdkMelZvk)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 210: STUB C_o0Bsleupmoypk05YG8KxqRXsY6VXLD273ajnEbxJw
+  Number 207 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T15:43:34Z: provared.code.run
+  Document: "Bash" (fingerprint OHIDshAF5KiKIK8zvLavXVnAzmZ6wXQYcA4rsKzjUKw)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 211: STUB UT-9jPn1VH8hbdCNZdw_bxqe6ZrhH_yTAp-yOs-jXsw
+  Number 208 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T15:43:49Z: provared.code.run
+  Document: "Bash" (fingerprint CdrUQ8xI0Zu-hLSQJkgp_aB_8ycKzjtWBGzzu4hHLuU)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 212: STUB y-1TG1Gw1rA0KJBIqcBfMou9JzI7kOlTZC_jKtwLjvo
+  Number 209 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T15:44:17Z: provared.code.run
+  Document: "Bash" (fingerprint 3fRfX-uxpwdFFPLzYHSh3F6N7fwxwjV5eHCEHg6oxEE)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 213: STUB ByoMk2yu5m77zO3vRyCn0ADmFPc3WsRjndZ6wK2QMYw
+  Number 210 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T15:45:31Z: provared.code.run
+  Document: "Bash" (fingerprint -dZclmc9-WE0A1N4ODkyqYPBeT2YlV6eEb-15LZRvoU)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 214: STUB 1zDebYzlIyXBSX3pOvafsdMN98cxAnNwWcMGGx6ySbU
+  Number 211 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T15:57:01Z: provared.code.run
+  Document: "Bash" (fingerprint gCJ6EKmy4eaf5HJZcstJ4ytrhoxQqDZC98Ilos0A4rk)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 215: STUB n_NstYS5k3tfJef6eKIngZF6Xveq9BVfNU71C_okz_I
+  Number 212 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T15:57:12Z: provared.code.run
+  Document: "Bash" (fingerprint 9SXH6VJ9fawVghl5q9Ye5cdzFlclwp13YZZXWTfnIOM)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 216: STUB n9S21DS5R8b8aARgOKidhR75kZtmUt-orvlmf_f4tk4
+  Number 213 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T15:57:38Z: provared.code.run
+  Document: "PowerShell" (fingerprint A3e0hQ34fFofI9acCJEzMruEksGW5OjowG5NO1pToBU)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 217: STUB f3A609w1AaToEhtekkBdnGi2kqbxoJOtxjTNImNljuI
+  Number 214 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T15:58:27Z: provared.code.change
+  Document: "Write" (fingerprint 0SAdsPMBIQyO5Z6U2on-ZU4lnySZDfFaUDIVv24Qq8k)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 218: STUB XvJroynJDxbeZLqpcjZ38dnLitPsBGD7uWl8DpLAfhc
+  Number 215 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T15:58:42Z: provared.code.run
+  Document: "Bash" (fingerprint lo5Yonp_7le390iYnPMWFaz-9BQnCQO1iXWE9NjSx-c)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 219: STUB iBrMxIonZ67pqoBJHpujela4ZYEMMezCrcI0M9bbaHg
+  Number 216 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T15:59:05Z: provared.code.run
+  Document: "Bash" (fingerprint We7MXs1uJ8VNrJORdwhy6xCJ9S8VcR10pBuOTqzx84k)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 220: STUB cQZoHQhrMcZnq5U51cxwNff3zXL3BB7-kKO0eyTekT0
+  Number 217 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T15:59:32Z: provared.code.run
+  Document: "Bash" (fingerprint X0oMUcWcRwCCimh0iAGQkcHerPw9ObdQ3G1nYFw_OR0)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 221: STUB yTnHr9XmjW-ywHYyo4NAtjqSjlEmOlwofm6GMMDyalQ
+  Number 218 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T15:59:41Z: provared.code.run
+  Document: "Bash" (fingerprint j7QfcDtzlYzq_ZIF2LaXE9UmQTTwTY3zX65EHBvhX_M)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 222: STUB ZUQwaiG_1hv8zBbTHU3KoyJ12x35DqceTiL5dB8VdsY
+  Number 219 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:00:20Z: provared.code.run
+  Document: "Bash" (fingerprint A8BU6FsMhNlBbWgCpPqd4Zd0q6ru-XZKyolLdHrTsFY)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 223: STUB nTx-wtQRqoJCv-jP0i-K6RLK7YOGxOSp8mhVtW1lQFo
+  Number 220 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:00:34Z: provared.code.run
+  Document: "Bash" (fingerprint r0O8gKyOYEPzFEyoQjNkafGKG7IWWBPZGYeTkbB1FZI)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 224: STUB ccypPcqkYH8pxQj9jscuQFjrgKZjYZDBYzP8a3sH9Jg
+  Number 221 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:00:56Z: provared.code.run
+  Document: "Bash" (fingerprint liWY9TEQDj_UsMdoFUNI4JfXIwD8CJ5sgVFfUHVDXiE)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 225: STUB XZ4U6skcCq0KFGdPJsIpanaC-z-V8JExMPfHhx5qY2w
+  Number 222 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:01:11Z: provared.code.run
+  Document: "Bash" (fingerprint BEWDTghdEp5b0L5F_uDIs80tyNG4KwCHh5HvUDM1-Vw)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 226: STUB QBvF1UIlSKoZgf3iGNdP0GEU_B0KQ0GKUAzylcrNMFU
+  Number 223 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:02:04Z: provared.code.run
+  Document: "Bash" (fingerprint 2cdFuq8K50Z80pi-EJtZPmUwoo2mcMSN48f7tpECaDU)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 227: STUB 1xXM0OEdbUFBJt9-tE-U6sZlwn-FVqQ_enJMocQDLck
+  Number 224 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:02:20Z: provared.code.run
+  Document: "Bash" (fingerprint 7STSb8de9poRyiIswtyvdysaw18-60dCr-xeD10ox5Y)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 228: STUB JjeBhtXqeVj9tnoPXnOFJCr9ASbctfKq4UzKViQdGq0
+  Number 225 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:02:33Z: provared.code.run
+  Document: "Bash" (fingerprint 3rgjQ-Z_gHBdhO8eQH87I65G1KWFagzETp0AtkTR8vw)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 229: STUB _COikl2lSN3S1w4Iy4g9-xxe2LlptdofG-ZCyFMBd5k
+  Number 226 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:02:47Z: provared.code.run
+  Document: "Bash" (fingerprint 7b4t7gQ7cpvjQY24mvB6pPcpWDmq4bJOQtJ5s5mHSLg)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 230: STUB R-MpnNgjdaTf9BRBi6dkphrYnbS8lV8p463wC73rIvI
+  Number 227 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:02:56Z: provared.code.run
+  Document: "Bash" (fingerprint -0RLXN7q9KRL9mzOop0mGa5vj813tFLENbF9NWPsCo8)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 231: STUB 5Q3xY63ERJwR_rGBzrbB_XVBVyFptJ9ccJiy1c9oHHA
+  Number 228 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:03:09Z: provared.code.run
+  Document: "Bash" (fingerprint fCtDsY3MyFAxn6Mj_wmLRsc2VeThTk0Q0LwW6AvvDEM)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 232: STUB esMdjqQkiB0SUhRQMrxGV51y9e0uq4v-6vQdqqfw_is
+  Number 229 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:03:24Z: provared.code.run
+  Document: "Bash" (fingerprint INtvJiMyU_eJbws2uoPpxOBbTauXZpNeFnC2ahuHRLs)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 233: STUB T3Re5AngAliKdKcmNkRVtUE_jDtV0iQI-a9ByTshFgY
+  Number 230 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:03:36Z: provared.code.run
+  Document: "Bash" (fingerprint yXB55-nRoytk0LI9nvJx2QVUHP3CStaYuYlPx8VeMm0)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 234: STUB qUuJUAXiTJxdjnp-B3c9kjxlleEMg7i8ElVPSIGEF74
+  Number 231 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:04:17Z: provared.code.run
+  Document: "Bash" (fingerprint tHC85GxyakCjzUA7DYyk_h9ibhhOZCZJx9orm1Ebq_c)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 235: STUB VQEnZMcUjWaDI0uGTAmedWffP5ztcFZXs4Ps-kjYChQ
+  Number 232 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:04:30Z: provared.code.run
+  Document: "Bash" (fingerprint 0zTTm8R1exUQLbjrXnOjSQBEUhX1ri_AySvadeTUspc)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 236: STUB Vpn-vCF0IB8bKVZRrvq0Iz70iNh4NyPdWxoSYQGTA0s
+  Number 233 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:04:40Z: provared.code.run
+  Document: "Bash" (fingerprint P_sLN9h5uJ8Qk3r_EJ3MvSv_BuHlp0E9qhixfmyjA3c)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 237: STUB qZlpgCswgqiSAJMwg_CDaJtI16Gk1OuVN_BqJR21vo8
+  Number 234 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:04:53Z: provared.code.run
+  Document: "Bash" (fingerprint E8ysnruISvQVvdn1Zyl7zjU-5o9xU5gTIgTFhOLK_eM)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 238: STUB MMKak0UttckpQIfpXw1WhwxR-GBCS0hLwp3w2LYDgug
+  Number 235 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:05:44Z: provared.code.run
+  Document: "Bash" (fingerprint A9RTMm3l32hZW0DmAFoa7cOrH4ucyCHRBrhKNOrF80Y)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 239: STUB O2OIhi8t4XAzh6gZAJ-pLnY_9Z86cOoGlz5vcUA6hhk
+  Number 236 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:06:59Z: provared.code.run
+  Document: "Bash" (fingerprint sEVjv6X1ClXvHAuuuWzJXqHOW_pI7gyoDKjI8xSDVoQ)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 240: STUB yttWVZXw0umyJ7Cz0VZFQs9NxRTcSgKGjPigItN7hNs
+  Number 237 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:08:40Z: provared.code.run
+  Document: "Bash" (fingerprint efWtwFfmVuyQL5pBobgL8ik9OSlumDZ1CL6SrOBCR78)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 241: STUB -WP3PAkj2gONrrR3YnTwQecePwuMQ_cNNi3ulUPZ4WA
+  Number 238 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:08:50Z: provared.code.change
+  Document: "Write" (fingerprint yiBo1XpxxlswE9bLkTps6BlwAm2unuE0UVQkTK0zM8s)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 242: STUB s_Bu0-A-qvC27Lh6efC9x3fCsk_KrlmZCwKEL9cZRZ4
+  Number 239 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:09:07Z: provared.code.change
+  Document: "Write" (fingerprint wa9LarKUf5YDaXNFK3z2opeptApKv8v4uI91NuQEVnQ)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 243: STUB EzrWMdWUFQtaAd3bnLoXU3cFvi2XwoWGlv3TzsgAjpA
+  Number 240 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:09:24Z: provared.code.change
+  Document: "Write" (fingerprint fcrLC99ShlyEGv274Nz_l6OmO5VJyfc2ngXeu2oVxV4)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 244: STUB cir4GzNuXhRZxjufe2x4KV0misAotMhaIlW784FB2Gs
+  Number 241 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:09:42Z: provared.code.change
+  Document: "Write" (fingerprint 37Vm5MgA4WZ2rOtrSLWvCuJta9iIkGh91EGpAmoSCuE)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 245: STUB Ju8FtFU56QKVppRjRcARphAztw1eehZBBJ2G6zGuqnc
+  Number 242 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:10:33Z: provared.code.change
+  Document: "Write" (fingerprint lHZhoItrmMEQnpxvx1MRNGkN0kjTaAmCx8HW0-6IsHk)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 246: STUB D68S0hHZrE7310cRmRSpuCB4mDArpN9rJ2kXD7CkPaQ
+  Number 243 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:10:59Z: provared.code.change
+  Document: "Write" (fingerprint _MlSBXoR-GR7RBQOQa1F7WHGPLDYBmoHy12kQccPEaQ)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 247: STUB ukQMxKPSIdGO6UprFE9MOxVePlWLT1IFpexqXR1fhyM
+  Number 244 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:11:22Z: provared.code.change
+  Document: "Write" (fingerprint Uus_Cnf76z-ZcEYAyAnujbwP19enpcW8YGhWN3j4yqk)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 248: STUB OvIlVNFarl-gYnqEHnm-yEX5mPFP4exr6FXtjHlKO54
+  Number 245 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:11:34Z: provared.code.change
+  Document: "Write" (fingerprint rOgA3w0WBEJrculaBBua51Nzfkz7PxNCdG1jCu0Y9aM)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 249: STUB SupZgwJ2MOV-XM9lRJ9C6E-EOfuwPtW1XDCqY1WTuRU
+  Number 246 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:11:43Z: provared.code.change
+  Document: "Write" (fingerprint dS6zY-_k0GsZ_ZrbyNyiMZpkZZxbBuXb67_dSzWBRnE)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 250: STUB NhSYQf-KJCz5OxMkZRkIacZ8uhwVoBsdcapG97z5nfs
+  Number 247 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:12:52Z: provared.code.change
+  Document: "Write" (fingerprint 1_-Mvm97EB8-1Da23vrR76_vDmXsXnAI-Rv-4_-gHx4)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 251: STUB j4dzUiyZlw4PjdZ8iSHhnw446cWO6EwXyv58xcCEO0A
+  Number 248 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:13:25Z: provared.code.change
+  Document: "Write" (fingerprint KbZm8yQqJqKKX-_h03XRJRGFRDHbjXWfr3kjFsnARXk)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 252: STUB 6aDU_7ByaDxJs88_cXfkyrLW-6nQnXdJ1c42CSbvGqs
+  Number 249 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:13:58Z: provared.code.change
+  Document: "Write" (fingerprint o1c4GwMXMZ-P0BG_swDQ2eSbsrHSZ33WLv3pq5dAlwI)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 253: STUB Er0-AUi_4U5Sl0E04zcvXXeEzmRnVVxQO8dLu6SsCMw
+  Number 250 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:14:28Z: provared.code.change
+  Document: "Write" (fingerprint _3JWIvWansc4rlE8wZaRSPqiAxaeW0uK-0PjeM9PLAA)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 254: STUB -JnuwIMSUnw8D4uVHt0pPwyr-r_mrUGkvqe14FXbmxo
+  Number 251 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:15:53Z: provared.code.change
+  Document: "Write" (fingerprint qMEwzn5yWlo3zx5WHAhrae0CcBcEcyggXHRb6XjiV2c)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 255: STUB BwEpZETInZHxOuYxFKw83I4xtL2ljIl8KLxjEXitAcs
+  Number 252 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:16:31Z: provared.code.run
+  Document: "Bash" (fingerprint z4iUKujZIJ96HbOk_NIv61OeRzJ5O9QPq47-pcPcczw)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 256: STUB YpJbbMspOL-D0cRnYXffG7gMporuGlRpD0Zxykb6mQ0
+  Number 253 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:16:57Z: provared.code.run
+  Document: "Bash" (fingerprint xwrvXvBr0H_6mCBU106YtKFjG-GSUEL800f7RpWCM-Q)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 257: STUB iQ-T7vsK1UJh-2JrGHkwbXM5NiNu7MYcAwY78LqJdH4
+  Number 254 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:23:57Z: provared.code.run
+  Document: "Bash" (fingerprint qp7bna9-xOm0kMJ_lX7O8kczstFQWFCmIWbfscmRvYQ)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 258: STUB FI_Lnq88Lm9wVaILE2scPnCuMS_VI3lIi2_u1LHkHII
+  Number 255 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:25:54Z: provared.code.run
+  Document: "Bash" (fingerprint jeogw5OcjPXwg19F0wWbzJupDKBj8f8dojnZr_3Ffy8)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 259: STUB Dk6Z0yOfGQKcAJLrmCrUNmZ2TQb-yEGkQjsYiGlshKs
+  Number 256 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:26:30Z: provared.code.run
+  Document: "Bash" (fingerprint 7Oh8kcxSFq2MCpiwNfYLw3JSkk6ekR9U2Sl0v4efoVI)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 260: STUB Nx5GH8ATym5uH1k2XIDaKelopKTxS22xoXQRmfIVN0o
+  Number 257 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:26:55Z: provared.code.run
+  Document: "Bash" (fingerprint UKnKsluNBDYLbxSe2EIlJkAsBELLMokzOo_6G9HTvsU)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 261: STUB BiuB2ggrATNrYo9mdJVZnlOPNOU68SwpzAPARhEwPaE
+  Number 258 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:27:50Z: provared.code.change
+  Document: "Write" (fingerprint wV5SW-pJ4MNL3aE246hkwS1CCZFI3VrV7q_o8n00Dro)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 262: STUB -5iJQnBRAUxJ2yDNnsY0lM1VDYXJ-W8jgSf5g3CpYKs
+  Number 259 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:28:01Z: provared.code.run
+  Document: "Bash" (fingerprint Ql5Tz2kHn0a2mRIIHzEB-CdMw_V18f0Rn0B0MmqXT9o)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 263: STUB -_2tisx6KRrVYN5ZODXY1XJS6QNRT7wT1FkwEGI4aHQ
+  Number 260 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:30:45Z: provared.code.run
+  Document: "Bash" (fingerprint ohPeddRAKP-m_b6Gvv-sTSsAjihkSFDGQdqNUkWcuus)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 264: STUB 6G3v0bHBkR3wfZz13UHyDMtStMuwyA9FvN9lGqa1jpc
+  Number 261 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:31:15Z: provared.code.run
+  Document: "Bash" (fingerprint 4GuVZD4A5CK_9_-UaGSDqLAmeGmiEioPvKWbW5COWvM)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 265: STUB ihq3FXQXIlqpw4RyCQNEOh-G89TZph37JvHNC2d5gPI
+  Number 262 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:33:10Z: provared.code.run
+  Document: "Bash" (fingerprint WHFOKO9GQ2-luCyXp1buHtElk22WBOF0JvHptx32Ayc)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 266: STUB rMPpb9lOpUeGj24tlYseB40xOByGWL3tbCb_hxzrCfU
+  Number 263 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:35:03Z: provared.code.run
+  Document: "Bash" (fingerprint XdFp_2LYFgsP80ILgxdZiYsf667Fz-9HrE1gnNpLRuU)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 267: STUB LWEE5IXGx43i9j_lGK2VH3WxeezFgt7MabzhdvVWdl0
+  Number 264 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:35:40Z: provared.code.run
+  Document: "Bash" (fingerprint 8j34jrtXHL5etsx2f8OzstoNYg4uL0MWskBKNeyxm-o)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 268: STUB QCLhGPz_WhfFSo33QhatlhOYigOIS5OSZOBfPqoqcMg
+  Number 265 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:35:58Z: provared.code.run
+  Document: "Bash" (fingerprint 9V1pXTk5B_H25C3t4aBncBaAbefn0VbVL3iSF-odbb4)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 269: STUB F3K2SjZrn7jvr7nyOz-RRegpGKduZ_GfmcXrMYVjm7g
+  Number 266 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:36:08Z: provared.code.run
+  Document: "Bash" (fingerprint oUK8arAyzBbIQ8SKgf8_HLatler0AxZmbtjSDKyPFmk)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 270: STUB lrMehRsL87Yu75LLkFJpzH0mT3dZw_JAeD0qhv48Hf8
+  Number 267 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:36:55Z: provared.code.change
+  Document: "Write" (fingerprint sPXPD3ZRtfOxd-5Roz7unICRbYdB5zT8jTjsJbRNKoM)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 271: STUB tMUJlQHz2UPWfysML7G4mxQohwFl5xDCyWhqNmjyPyM
+  Number 268 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:37:38Z: provared.code.run
+  Document: "Bash" (fingerprint iJ2n60AHMu2WHFdPOfuC6nLY2dYBziW4PLzF96jbrLI)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 272: STUB y0UDFV5ytydyZ-873hSJV6Zc5sBRlJUah6rIPAo5b74
+  Number 269 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:37:56Z: provared.code.run
+  Document: "Bash" (fingerprint Hi7vjmzky3DBQA10_4Nli8UliAnX19EbLqkjHXWc_EA)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 273: STUB 3bnovYxz52ES0el5dnBdLeTHsclE5IO-6n7UczyzHb8
+  Number 270 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:38:30Z: provared.code.change
+  Document: "Write" (fingerprint hI0uQuvqKZxH6Ou0Behb-wq6ddU4BNLqpSwrTeJhQ7c)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 274: STUB NBXTZecGEaxhbF2G7e_2M65vtyHxLlHOTHfZaDTIc5k
+  Number 271 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:38:45Z: provared.code.change
+  Document: "Write" (fingerprint TLQocxjy_uki0KSeBRK8zk20ybYGsjqLbITt_nEyQy0)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 275: STUB HUIwOJDFgm4l4IAdhSFxqR4jn9aNtgEw4R8fCPCsxqk
+  Number 272 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:38:54Z: provared.code.run
+  Document: "Bash" (fingerprint PW0Nu1CqGAasI_ZvHHmbHdMNlDNCNU3YDXekHNP1UWM)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 276: STUB RgG67rNl0iWP-lzDgaQ5mIAMw-8ZEcE0irDf_PdFNSM
+  Number 273 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:39:26Z: provared.code.change
+  Document: "Write" (fingerprint Bz3HhkYjaNKLdjf9SLECzyAJvCmaMrQpH57qnQV3RZ0)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 277: STUB TFnJXF0mdq6Hj3kzta5CROW2ChbgB2Ojrnc0Rl4SWag
+  Number 274 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:39:38Z: provared.code.change
+  Document: "Write" (fingerprint PHDR4XLX9zMhpFTEJ0e-zK4hyYMbio7_90o4J32Gcvw)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 278: STUB L4qi0upXs4LEqDnGjMSdCmpUKrC5ItliBX9-5a4es94
+  Number 275 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:40:02Z: provared.code.change
+  Document: "Write" (fingerprint dVlzZINUFXhlI0iMwAAk0ARW7i0ktQpUhZWVDHUisYk)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 279: STUB -JubSVunS92HTscgpJ9IkTVN_8VZ5BLv5EWgqtPmSFw
+  Number 276 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:40:16Z: provared.code.run
+  Document: "Bash" (fingerprint PUAcbcR9nZhAnZr9H0eFbZ2xHc3m4LW8dkchnenk0Sw)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 280: STUB rj0J_d1Ma76IDilHC5Sdnicwrp68g7MeJOvoFDd-DfQ
+  Number 277 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:40:29Z: provared.code.read
+  Document: "Read" (fingerprint nderWxNxlk7omhPP0YAkiWYIyI08tNsAeoHu9ktv8dM)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 281: STUB DtnWbWVFV9N1DfHjwoVZ_m5cv-rjDLCrJkdqpql9JcQ
+  Number 278 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:40:47Z: provared.code.run
+  Document: "Bash" (fingerprint XCThWDdOclmWkpX5wkVM7zqMCVNb7yTdSEZ1FqPicpU)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 282: STUB surwJDuNoGAZHrsJVLI7N5C6OQVfTBt7IPlvJSwBE9M
+  Number 279 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:41:22Z: provared.code.change
+  Document: "Write" (fingerprint GmcJqqSyy6nTP11-xP073F1faeax3CmTmqO9Vv766fU)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 283: STUB NR5XW7qg1OCmiiQuzdXH1albthIf8YxOHR2qDGcK7dA
+  Number 280 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T16:41:35Z: provared.code.run
+  Document: "Bash" (fingerprint hO_zbDAE3I1GNclVXmhtPSY5GsopCjqZQs-kEx6nVT0)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 284: STUB -ryy4VamTwFXWFHfJnSSnDLxcxtS9mEjEanHe5O8ocs
+  Number 281 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:15:21Z: provared.code.change
+  Document: "Write" (fingerprint k6Cm2uKB7cQNY4cuRtSAwfxiCK8zmGY09DYIBGy-SCU)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 285: STUB Z8GDlbNVOw1lpFGX6rzmoZZ9sO39y9GPoeTTfJpjfkc
+  Number 282 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:15:43Z: provared.code.run
+  Document: "Bash" (fingerprint tTqGj4m3qTkSATf3MS_dT5yOVJ97IEBfqzpJhjtPWyU)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 286: STUB HANIiO5hsmEiyxnx1KPVVz_RAiuuScIqqYrJWa0bgLA
+  Number 283 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:29:53Z: provared.code.run
+  Document: "Bash" (fingerprint IABxlEILczGdXuq6W1HBPSoNC_M-o8FgIfbx1YzfPFM)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 287: STUB JPfA0W2avzMPWBmb3I54OT-trhqk00Z2J5vkUJ3fayg
+  Number 284 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:29:56Z: provared.code.run
+  Document: "Bash" (fingerprint aXUWRInm3KmNjNAs3O1-sjJO3EDoeR1TLcgnaBG19xI)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 288: STUB bKPIfQDFHSZpHTWRoYMVlO2NGTzOkNkhmpYdmrM-Gww
+  Number 285 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:30:57Z: provared.code.run
+  Document: "Bash" (fingerprint NFNfSQ1RnRufyCkmn6quJBo5Y5JD9EL3nGGmg475CNk)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 289: STUB 2fwVtvkr1QBn4uocsqvpxVnSSfMD1DRRoq39P2kaFAg
+  Number 286 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:31:06Z: provared.code.run
+  Document: "Bash" (fingerprint rd5LNrSV0i041-hxIv7XyVeAY9KJmDWVP2ME6tpX-qo)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 290: STUB IderHAsXxVWdrOLyqvA5WnzvWm3NtlaNdKpWj4r7Cls
+  Number 287 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:31:14Z: provared.code.run
+  Document: "Bash" (fingerprint 6qnoMOW1OjhxZqgKhy7Bc2xXITqvjDB-qaXsq5Zn7fE)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 291: STUB rFyEyzOTVZlrxD2D8R8ytYYzGmqaVabb6REQKJCOvm8
+  Number 288 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:32:59Z: provared.code.run
+  Document: "Bash" (fingerprint g9G_DLuSc_EmHN6W0YvxbhxdMRt0ZDicPg1oi44PELo)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 292: STUB 3_rzeYEAzfYqF8SYNoyARt50tqx0wJo9rvG9mzm8wKc
+  Number 289 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:34:10Z: provared.code.run
+  Document: "Bash" (fingerprint G6gE-FhYdDAZibOHGu5kqtjUrMVouERJxfNt-Al-zv4)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 293: STUB 0YLcexUDHLkrTRV5wriU5c1t7WYHH6JMwoXV_MO5J8Q
+  Number 290 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:35:21Z: provared.code.run
+  Document: "Bash" (fingerprint UpyTdK9f7dPeT3nwonVbUwbyDCwitFc4UNbVoYYhjlo)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 294: STUB luMpKRVkRnLOI5hkUnuYnmc9OZQAFOEnhvOIrEMUV7Y
+  Number 291 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:35:57Z: provared.code.run
+  Document: "Bash" (fingerprint BiCIhz7WOblhIZbCCsaYT4QM50lOqQfht-VCNxHO2Kc)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 295: STUB Lw4o4AF1bXMsjrMxpyuKDHhxBMsNkj5lwEzTwnww_s0
+  Number 292 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:36:09Z: provared.code.run
+  Document: "Bash" (fingerprint HZuGNCvNDQiy3lX5_LuQzAPZCFFz6XNRty23fOuzP30)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 296: STUB PZctv4DJE5lUkUnLjdSM4b3ZN6Ah2tJkLhDs_HNmO0I
+  Number 293 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:38:11Z: provared.code.run
+  Document: "Bash" (fingerprint IBoC6xRPCWyY-JMB7UfnTlle8n20lkfJ7gk5Yq169Jk)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 297: STUB nq-jmqeIJUwtQgCa4C1ImUiCgaLbsD_sCravLsbEWwk
+  Number 294 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:39:14Z: provared.code.run
+  Document: "Bash" (fingerprint kTzR8s7KzUVM_wPWVJqxYxj5T-WVh3utFQR-cL0TZCA)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 298: STUB 4qiB3xw7g9hkSdLspUX9NvUkGmRK7JKcN_aUqFgSVbE
+  Number 295 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:39:58Z: provared.code.run
+  Document: "Bash" (fingerprint Xya7xRE1ApO9PA4mVXPcEThHV1EIBpig0XnoSoDv5GU)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 299: STUB LryGkMpb1s6seAd7VMkD3eZVNUbGElQz0M5YoZKFVvQ
+  Number 296 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:41:15Z: provared.code.run
+  Document: "Bash" (fingerprint iP_QXjrB0XRBPjd6LY-CraI57IvfVHYw2mepXTByADY)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 300: STUB pmYbSy0ikslcfyb9jP-OXhD779NLBYRL4N0uyqkij3Q
+  Number 297 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:41:27Z: provared.code.run
+  Document: "Bash" (fingerprint Hf5onnpTkmr9rRr0FKJCLs7_KnzfEOPJriSIKBpOyrU)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 301: STUB M7OBZQFFhJHZIVsstVNrWnBOZFuQBanbJglFdujUuF8
+  Number 298 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:42:55Z: provared.code.run
+  Document: "Bash" (fingerprint mLrBFiWlGesNSkQWSOEMsnG0jwWEDsS20_eaeM-b2oI)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 302: STUB ekDtCWr2xRsbdZ37nAHV64Ng5q_ZsBHVy0lgLJsazbo
+  Number 299 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:44:03Z: provared.code.run
+  Document: "Bash" (fingerprint 7afnA5hqhusT1cCkYcZNGFO6-Q_39-r1lCAsvG2Hiso)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 303: STUB qJYvkXQEeSWoA4R__cSZx2Hu4SmoK1f6IAXJIp5fU1I
+  Number 300 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:44:18Z: provared.code.run
+  Document: "Bash" (fingerprint 4w0HwGNt_tqNXZ-6ouKdo1x3Ikjq1qBy-c_fpY4GTKg)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 304: STUB gwBC03RFyw7plEUj53hQf0_181EWHW4G2WfoRbt6zXE
+  Number 301 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:45:50Z: provared.code.run
+  Document: "Bash" (fingerprint xvqNDmAAZAkekdgEfxUGFS2zjriyGnrLnoypFYzAjXU)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 305: STUB Uo6vp_9QRktvvBrouZ9J_gowlYYVnctqoQO5MNgEI6A
+  Number 302 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:47:16Z: provared.code.run
+  Document: "Bash" (fingerprint NlGNNDAoHGlYh-ZkYURY9Fnp6vOMN91oDjT1rpQP1e0)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 306: STUB HKZdmDYPDFPRFCGP4be_Y_-tpz6aT1hiQHByd_KbEKc
+  Number 303 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:48:25Z: provared.code.run
+  Document: "Bash" (fingerprint WjtXdpotWKsIyh-iOHp1DUSNpgYTVrkCjEbMAMyfNWU)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 307: STUB Bh6Qjr4oJt0Pw5oj_Y7Gi8Syx5p5bz-q61FWdT1C8Og
+  Number 304 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:48:44Z: provared.data.delete
+  Document: "Bash" (fingerprint tiB9-r3nBwQIB-I9-0_RnO8VgYb5jOtGMT_SFkONJPQ)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 308: STUB O7A4TAWqo5iYbvK0k8yrUxjrtXbmtC-bc-VVFlyNh-Q
+  Number 305 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:49:03Z: provared.code.run
+  Document: "Bash" (fingerprint t-W0DT4lQH8dgAyl_Ae2uon8Cj9kigapPs7HrJMBuIY)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 309: STUB 86QcIXA7kuMqheiOd0vReGb-QjJHwqmuikjt3MSDw7U
+  Number 306 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:50:09Z: provared.code.run
+  Document: "Bash" (fingerprint XKeeVx3zXoFxruz3WTWr30obx-BYBk-rm1dbEDXkqtY)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 310: STUB l20P4iiGgxoXi8tbZbo23PtRDRuZBk7mHZIWBQwrg-8
+  Number 307 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:50:49Z: provared.code.run
+  Document: "Bash" (fingerprint rSJGmcnxJGP85ihhNd3zeHPvE57YIb6-nCDD6OMgiH0)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 311: STUB HZrRnPDzbl8JcdNODLxv_bpxQ21cQWPNhUE0_HFdhaY
+  Number 308 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:51:37Z: provared.code.run
+  Document: "Bash" (fingerprint wCJN7he08Uu4JF4P4CAwZj62B5fhCh40wVsKv4HRG6I)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 312: STUB YBaRTOuBhVUutL4t8TtYKD5NStbDSOgItGMedq0XSBE
+  Number 309 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:52:10Z: provared.code.run
+  Document: "Bash" (fingerprint P9sC9lt1PO3zFof34zud332Bx_hH8MCPAgHAFPwXFv0)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 313: STUB 7I1LZ6grqzu5ignSFMOFvms2PtDnbSLJuQKm4op9RnM
+  Number 310 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:52:34Z: provared.code.run
+  Document: "Bash" (fingerprint FQMjYQu0eENWxAxjLz236J1f9wWIqg7oV5KxW_vJxQo)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 314: STUB qAn8ygkWdmzet6lKgmNcoW6vFVfdk7HUpvd0gpr4vhc
+  Number 311 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:53:09Z: provared.data.delete
+  Document: "Bash" (fingerprint kwh8JwDDMD_jBweQph3spbJ4ggjfNV2Ft2VMRLWqr6U)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 315: STUB 1qv6VSXJlGRfzGs3zV650KDymjz68Ma8xCrPoWwcCDQ
+  Number 312 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:54:31Z: provared.code.run
+  Document: "Bash" (fingerprint 4iOY1RnGRSnlbNJf4g40Bf35YSvTdE1Fvh6C4ZR8IKw)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 316: STUB I9luCA-CxQGYo0YBVJlMLGB5RKenjw6ogWgdiUF43bQ
+  Number 313 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:54:37Z: provared.code.run
+  Document: "Bash" (fingerprint pXTnJQYkn-XPktjw3mwaK6KC1EH7pblTp0fjSkj4FDU)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 317: STUB LKu2-orBBVPzr0Cy2mgRH2pNfPLxpM-DXiONSEiQDlg
+  Number 314 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:55:37Z: provared.data.delete
+  Document: "Bash" (fingerprint fV5Spsr-LXNW45aQUU8qy2b4rxN8DRdTx34lhHaTzAk)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 318: STUB 7wHep3nsj4xRukNB30rJ1ZZBv9WICO1g1EGHghzHLBU
+  Number 315 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:56:40Z: provared.data.delete
+  Document: "Bash" (fingerprint 2EXpgmu_BWpLMSRY53Pums05_CLx3VTKZwpdGBPxPOs)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 319: STUB uZO30lmHRwZnPV-IZwfX-6DRzyQA5le3Ope1Y7IlW7E
+  Number 316 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:57:16Z: provared.data.delete
+  Document: "Bash" (fingerprint 2izw-xrbJgGV_epWMcpzm7md73mXaCwQS9cMFCp-1v0)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 320: STUB 7v4wyX7xE2Oit6spFk6U6yfJcEY9Crm0gi_Zl3yehBw
+  Number 317 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:58:03Z: provared.code.run
+  Document: "Bash" (fingerprint nA2PRt4T6mdoEWZ2AEUu4gG7Tj3KQaAAG7Ogncd_0Fw)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 321: STUB 0ZPYFyhK5RWjWhDWsRGp-JkB1Jqu93A8HFAnqysyqBI
+  Number 318 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:58:11Z: provared.code.run
+  Document: "Bash" (fingerprint J0ANmN0QfbMd8YC7FjE_TohKnbBVZeJJW_7qyiBD60g)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 322: STUB 774tWJOd9NwLMnTuCWMI_4BHiCIpdhNvVL3ZDirVKwo
+  Number 319 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:58:32Z: provared.code.run
+  Document: "Bash" (fingerprint dk7P459IkeW8nvicPyDgMPRmXtdJZEW1Etf_wmGlfHk)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 323: STUB IYccIr5Y1bHe-qnABWTyrXhJYeWCghD5NLWacVJdZw4
+  Number 320 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:58:50Z: provared.code.run
+  Document: "Bash" (fingerprint VNZkmRCBkFC_11rEdT2T3ole32t4ctL2DTaQHd6zHKo)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 324: STUB iGBWa-3jLM8smxC3DoAZgUvqywI64JqbgUTwH3q0o3o
+  Number 321 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:58:57Z: provared.code.run
+  Document: "Bash" (fingerprint 65FqgI3Hu3CQEg1L41C_8WIIWPcLFajNgYCUYQqeH_s)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 325: STUB uwD-pi5BYyIqz9ue_VCsBcUkvL5gD8oU7A5zqQv8DgQ
+  Number 322 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:59:01Z: provared.code.run
+  Document: "Bash" (fingerprint jhYClr0PlB7yQXfQK3XFNKQPsXq9zE5F48lYm52BUQs)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 326: STUB UcQah-BkUl6Uv-Bfu9YtV_jcVTVlt-DbKz9DMlzlj78
+  Number 323 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:59:05Z: provared.code.run
+  Document: "Bash" (fingerprint 0Jg6gqJ_2CGQ6j8qKLeZqO9nSdIQih72g2Xz-QSHea0)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 327: STUB SZk7WMjZiPbr4Fne5zCuBiXTfWi2CcE1f9WGHwrcKzw
+  Number 324 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:59:15Z: provared.code.run
+  Document: "Bash" (fingerprint M00WrVj9o6pjyMo8jum35vphZEw6QxBmkPCR--IlVcA)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 328: STUB 7HCBDsIkqXLjOlJnGju5qdh3VZ5KZNSAirJEqS0Q11w
+  Number 325 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:59:23Z: provared.code.run
+  Document: "Bash" (fingerprint cvmU9pKDoCVA485a1KVZvwBp-8BRp3_8Cj1p9AUPhYg)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 329: STUB GDL1W-pDsdlz3bGAnVqzuvJlwRItI2avEsNzXfbKp4E
+  Number 326 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T17:59:55Z: provared.code.run
+  Document: "Bash" (fingerprint vZ9GHHKvcKWvSYU6zr4B5fb3mBvJosYRDcgx5MKb5DY)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 330: STUB Zwhub4NrA_kwrT8jf0O_UsR8Qzxm2EFvyJsigsWE5Kk
+  Number 327 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T18:01:30Z: provared.code.run
+  Document: "Bash" (fingerprint sBIcO6bi7wIAQmSA6ePGEmFnDPoZ3pky0MuTlaArOmM)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 331: STUB fTdPA2UJD0bctTQhkW3_oliWC9vy9tTKvpCwJ8YVOzY
+  Number 328 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T18:02:38Z: provared.code.run
+  Document: "Bash" (fingerprint 8p0NC95D1D4Ll3PPtcQncJtkkiPI-wqjB-YwaPIO0tE)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 332: STUB dIQ7dDBx4AjC6i_lEcH_awu40cxwdziZNBVV3MG_KtQ
+  Number 329 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T18:15:41Z: provared.code.run
+  Document: "Bash" (fingerprint 5F2rhgVusB6waJugG7Julokd7_adwX8BFB3Nq50rVZI)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 333: STUB vo7MVHz5u-JVO_KZq75Zp4cpF-LkiiSVtMCmCXn3F1E
+  Number 330 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T18:15:51Z: provared.code.run
+  Document: "Bash" (fingerprint e5r1K05CCAG-A1UEfC0xoU2-N-hCgDjHqmiks9_-uEA)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 334: STUB BG4Sy7rZDyfT4uceN5a0pInMsDnMnfF30vRaRX53fWQ
+  Number 331 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T18:16:01Z: provared.code.run
+  Document: "Bash" (fingerprint H_j0EsHZztPyEchKDP3hyelljniOawNUNgZppv5kc4I)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 335: STUB PKtuPLI30o2rYpNrxKCM1hrU7tkUqO5u1HI7ZKQTQYs
+  Number 332 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T18:16:11Z: provared.code.run
+  Document: "Bash" (fingerprint l5cQwQqH6udOzWmNBoehALXK57KOgde5WrsJ2xOqvEU)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 336: STUB YvQ76lYpSbTx_lxo_tQaAZrSh8uTvtY6TYLWthWyXxw
+  Number 333 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T18:16:17Z: provared.code.run
+  Document: "Bash" (fingerprint 07IA3skYSW8jsTd5zVEcMeoQGO7JEPpia2PJv8Ax_Wk)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 337: STUB f59GFNkZ5ATyKnoEahUhBoccyqMCrXx_YgzZbUTZLLw
+  Number 334 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T18:16:24Z: provared.code.run
+  Document: "Bash" (fingerprint r0DVBYoLeDPXt9JUnqpFohSfYvLh7NM5v7TnK3EB_AY)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 338: STUB gGAqTy6Kr6xIwo6cooaSO9GC8z2np-NsCqaJwGwwNQg
+  Number 335 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T18:16:28Z: provared.code.run
+  Document: "Bash" (fingerprint 4EWkSakyqsBocg9BjcuarwVD7I8wNrgAyZT7GKKK5ZM)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 339: STUB ad4QGzlPV4o4Dp413T1ekZi3kG-ingrpnvMqk7KQxUc
+  Number 336 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T18:16:41Z: provared.code.run
+  Document: "Bash" (fingerprint -qrnLQH7-uz4NKzKJbuZGo1DGJogmnWyiJmaDSMazkY)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 340: STUB 6CSJhoMRRFLtGu6H4z75bVLk1691tvQj_pGpOr0cnjM
+  Number 337 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T18:16:50Z: provared.code.run
+  Document: "Bash" (fingerprint TKHgZhi_wiys5EfE0XoURYj-4YOLrEhvlhuILh3VAEE)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 341: STUB O40NmNVh4jqfybZ0uyyn1cwxrLX4W4c3bLS0_w3ITIo
+  Number 338 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T18:26:36Z: provared.code.run
+  Document: "Bash" (fingerprint XzfmJaX1y7pwCOCsSHf25FS0wi2iU49J3kOEi0qENsw)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 342: STUB 4ID6Dz9mynBwdfEdw2-cqm1oIsOjoA_HkWP_eZxdOtY
+  Number 339 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T18:26:50Z: provared.code.run
+  Document: "Bash" (fingerprint RD2waNvYH-eopO4sUL1Nnff71akI6LFsbQ5Riv_ncuI)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 343: STUB V-GPiEoU1QMS8Ka-_CjVFUVSxkwwo0EzFKnGWWeOgb0
+  Number 340 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T19:21:42Z: provared.code.run
+  Document: "Bash" (fingerprint uy4tN5hOumy4DAobkhpaAT2oQsnDwM3kBv5ETLkxQDw)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 344: STUB Ymp2fPiekjpQei-TJ7Ase91lCaxWazGUT4-DIw45GMQ
+  Number 341 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T19:56:49Z: provared.code.run
+  Document: "Bash" (fingerprint 1rMDGiAFLre_fdL8XRLmw46zcTJ1EC8EFFScMvtHsaM)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 345: STUB OqshT3P45NOV1ZMV18eHBlqFanbrwUHxcXNr1T4xWzc
+  Number 342 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T19:59:12Z: provared.code.run
+  Document: "Bash" (fingerprint KRA_GNGTCn19vmqMwzcEely0Y0UzM-a15XxTsoC81KE)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 346: STUB VNW92RvjNf7LO8r1_GBY30UvOO8nS9DuHgeoYxIZTRM
+  Number 343 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T19:59:28Z: provared.code.run
+  Document: "Bash" (fingerprint FaR0l__07fItcLnlnYQP_DZQN-I9s1nGiYKn2spZ2j4)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 347: STUB gOcc6fe-Deo6JYtyeZXW6AZbj9Eg-a_yJA2VzGGKJzw
+  Number 344 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T20:00:01Z: provared.code.run
+  Document: "Bash" (fingerprint 92Y91QP-fQu6Izg0_mnw0Z4LBFhukEn6KpGrG2CUQnk)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 348: STUB K8y9uFEwuVngipwMYPxRiefxwOvebOMfM3K7HjINTDw
+  Number 345 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T20:00:36Z: provared.code.run
+  Document: "Bash" (fingerprint WQg_OSFthvfaFFDQsLB5hm8mGDF5x-u0FML0oDtVE9w)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 349: STUB vdbRC0iUQFADJlhTBrMSRMkL-eTfliz352uDUKCxROc
+  Number 346 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T20:01:08Z: provared.code.run
+  Document: "Bash" (fingerprint _0LfojUsCRCE0JJqZX_UYpkREdyFUhfJJbEN5_yaLTc)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 350: STUB 6oeiXn3z02esHxOsAFQd-hw2Pw7Je0bsAqJLIdRnNoU
+  Number 347 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T20:01:14Z: provared.code.run
+  Document: "Bash" (fingerprint kqMT-x4XDWLLAGLjOUMMjngjcgH8D8vSLjJn1ceTh5Y)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 351: STUB yRg3nU-AxQGCjZzcqQ_nYzfwF843DOaALP0VDbvkBZ0
+  Number 348 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T20:01:20Z: provared.code.run
+  Document: "Bash" (fingerprint mnNy5_ncpKbgtkL2lN-XK66tL87rEVvYpZTAGJOBW08)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 352: STUB iB_B3GRq6zzTOHhsGFYJVGVvgo_nca2MpQSB0SXArA8
+  Number 349 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T20:01:50Z: provared.code.run
+  Document: "Bash" (fingerprint iui3Yd3H8Mk3KUO-bYQMaCozma-WZTPPd3VLZLvDkz4)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 353: STUB e8tMFE1WGjLBKRAQ7Ic4dnbZq3MK8RgVWX7hz5NojG4
+  Number 350 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T20:02:33Z: provared.code.run
+  Document: "Bash" (fingerprint 24HtH44W5TSg-ryNzq8qKZSIQRkW1i36SYvnSj1loC0)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 354: STUB C6ggdFxXDX2XSgdFJPDSetitmoEB0TDFtNK0ugK2kLU
+  Number 351 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T20:02:50Z: provared.data.delete
+  Document: "Bash" (fingerprint q7CWBnnCw94BiyTRRuDURXaH2ZDgKpv6Z2jtj9Bt0_A)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 355: STUB PdwLZLUbZiylhd70ArNCEUmrK3dFzcVjWeyHdXvpKwI
+  Number 352 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T20:03:12Z: provared.code.run
+  Document: "Bash" (fingerprint bFQqak3Fg6xYx1eAS0x8U3tgqIO7Pke0WZ4QMOJXBU4)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 356: STUB 0d7LS-97k6I8YMlaKGFKAlyXQ4wpJVGrTzzqPzo0fMg
+  Number 353 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T20:03:24Z: provared.code.run
+  Document: "Bash" (fingerprint w5Vt0GqvQ-fnc6b-jnMGc9vrTrPCW_Fh3q1YhoYvUws)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 357: STUB rqoML9ZDJcekTR83MAzf-tclcp4kzWyNkCTi3iArT-0
+  Number 354 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T20:04:05Z: provared.code.run
+  Document: "Bash" (fingerprint vWMpqzBFTcgkBO3nyPlBtXk2tqeXU53zjINx8y651M0)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 358: STUB Ga0UdQGd-dCP6270AfKbl_UaGVNaH2Y6AzOWBjqeyNg
+  Number 355 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T20:04:20Z: provared.code.run
+  Document: "Bash" (fingerprint R-GJbaFLClgsqbCLl7iC4MUleDDR7AcbEQm_0JtWHDY)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 359: STUB iJznquRSYFG0d68OlYI3wy9cVxnG63awdbOaUuvzhwA
+  Number 356 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T20:04:32Z: provared.data.delete
+  Document: "Bash" (fingerprint XZt2eq0HL78Y3FXfgGD2NCfq-IYPOPxhx2qiyveHpVE)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 360: STUB NGcv2EjsrdP_rZiuMyGyNlE8ilzuAdAyyfyRSed9bBg
+  Number 357 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T20:04:51Z: provared.code.run
+  Document: "Bash" (fingerprint vdbehmY6bAwO7UhE-gJSkAPWb90EJfRbklqiLk7BmtI)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 361: STUB R-nOpI7HVuQ6BWnxJ_H-nYVcJjGHxsW0S42nF0R-D10
+  Number 358 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T20:04:58Z: provared.code.run
+  Document: "Bash" (fingerprint naMG5-bK0Kilv8eBX2Q11DrpTWWTno3BKUOBQXzceXk)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 362: STUB 6CofaIKXHBR0GjGgeI9bZEX6fHG2laxqHSbKFQFr5FY
+  Number 359 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T20:05:08Z: provared.code.run
+  Document: "Bash" (fingerprint IrWf8-ro2DA_SXuR9twwRbSpaJcOwdqJlnYil-DXzy8)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 363: STUB 6-yqtRdrefldRJ7QB9CWcIr8colXgFX7qCF4AhiQFwE
+  Number 360 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T20:05:25Z: provared.code.run
+  Document: "Bash" (fingerprint N3uHD6PZDuLkc3SjS6K8jSSbEQ-jDu--kCcno-HXT9E)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 364: STUB _9r8nsLpspmTGnks4f3bHyR5GpTA3-va1WzYC4W2h20
+  Number 361 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T20:05:41Z: provared.code.run
+  Document: "Bash" (fingerprint TgxAGtC9WDKlt1dBXltaGVQD7LQNK5FNHy0cMgwgoOY)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 365: STUB FvzIps8tc3_1UjZtkZD6St7AAM0LlaNEzgIY4pQ38dM
+  Number 362 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T20:06:07Z: provared.data.delete
+  Document: "Bash" (fingerprint HYM6tnqTy33wXXR1KVv1IvNzDDwDVd6utacxlzkBDv8)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 366: STUB JPT1QYvZ85-_er_Snp1CS7OBFPa_fB73k5WvOfa_JZE
+  Number 363 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T20:06:15Z: provared.code.run
+  Document: "Bash" (fingerprint dy6Ue-W7Z-YwXt1kUva1bDcMwq4hj7dOnKE_9nk2rCo)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 367: STUB PIEEKY_jDeX3wcquAYJ6hNE_qWhJjIfm9qOiRit7MYA
+  Number 364 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T20:06:48Z: provared.code.run
+  Document: "Bash" (fingerprint -p6lvcAqpVe_UU1XlCtLVdmvTWS-S2eCTJNPENyp7tk)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 368: STUB -2Igo0A7uzAN_zOX2ZBVOdefRm3t0xt8vC1cYamKLzU
+  Number 365 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T20:07:16Z: provared.code.run
+  Document: "Bash" (fingerprint K5L7uph4BT0D_Sy7Td2G8TGZobXxXCfwDIe3TeoTOcI)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 369: STUB N87RTKWi5-9ffZtUkJoclNvmgNmz9UgOanss1msFhTo
+  Number 366 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T20:07:30Z: provared.code.run
+  Document: "Bash" (fingerprint tUzTo6INCb8ESeKbyaPzwHnO0UlLwr--F6o9D6wiY54)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 370: STUB RRYSjokkJlbp8cbCCMvqHlhL5pY2EAEyqfkwD0SbN8g
+  Number 367 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T20:07:54Z: provared.code.run
+  Document: "Bash" (fingerprint LWVHbGaABIgTrFJNybGOPdBkDEDvM1_LPLzweO-UV90)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 371: STUB 5aVk6fA9wOUdbmX9XRmC2jJ6qMiVOypSDMY-Smdf5U8
+  Number 368 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T20:09:13Z: provared.code.run
+  Document: "Bash" (fingerprint tJQl21ps2JSbLpT-g2DFRvcq1q_Sr3yQhvYrtSLYO1k)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 372: STUB n23bSs2oir8l2LzOJX8KChINr4mEM1ANRks5TaMYmD8
+  Number 369 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T20:09:47Z: provared.code.run
+  Document: "Bash" (fingerprint 63ukihanFm8cgBa8fl0axcPfV7D4KbPEWe4SOqazJBs)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 373: STUB VLzsJJv2HQ2htbZtdaGidU4RS72afYHJDIfOeRTEemI
+  Number 370 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T20:10:18Z: provared.code.run
+  Document: "Bash" (fingerprint rd3Rn4coeP0iONdARWWkAXGgAZEcUtLsLDICmwBesRc)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 374: STUB 8Y5dMOg-F_y2AI_nXJpWhJUwGZOt2fdtixbWVPueL8w
+  Number 371 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T20:10:38Z: provared.code.run
+  Document: "Bash" (fingerprint 7UPQqNq0tPIZm-JTpwHzph6P_sOyRrwcoL8-ty7nUWA)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 375: STUB BqNt58N1v4zQuaXFkFwCpb_aP7RVVQVFSYZ_H-bC_RE
+  Number 372 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T20:12:20Z: provared.code.run
+  Document: "Bash" (fingerprint GuqNPd-gzwvYdkYVWShDXrgbJQkMz6tHzdpjOmPr2uQ)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 376: STUB jzpfDh8CYsCkv5lWHVNm1kUJrgPQjWQW3gKhN5MPtzg
+  Number 373 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T20:12:36Z: provared.code.run
+  Document: "Bash" (fingerprint 63ukihanFm8cgBa8fl0axcPfV7D4KbPEWe4SOqazJBs)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 377: STUB wj6W7ssKfSHSElvp-HNnrRP-Y4x3SRGF8n9erZtKIaE
+  Number 374 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T20:12:56Z: provared.code.run
+  Document: "Bash" (fingerprint p4ypCZrtWtTj2axpPn6saPA5Tn1DBAESV8M8EUQLWWA)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 378: STUB IeFOb-Xn2Im1CFLfu1_3o1KV9eGYyhr37274Hmz9G_4
+  Number 375 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T20:13:18Z: provared.code.run
+  Document: "Bash" (fingerprint 2wpPPlnkkeUJen8hP_c4G4QUMGCP3eKDL661G5-hw84)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 379: STUB DKLXTEc9UFs6PfboIWbJWgldMuuTwy4SW5lJiVvWQ-0
+  Number 376 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T20:13:38Z: provared.code.run
+  Document: "Bash" (fingerprint XApWKW88RVf7I9qOuZjwoJTk366V2ns_-XWZ3BaZVXw)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 380: STUB f9iLwI6svekZVPt8XEUuI77TG_3YcLxEKkBOFGa2WQo
+  Number 377 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T20:14:13Z: provared.code.change
+  Document: "Write" (fingerprint _Z7Um7z8oFfz0toqKhjMx6ILEKpj3Cz0B07Dt-lEf6s)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 381: STUB fUSV502mbcn2Zf2EBxXHu0OgDOsAGOJ7OlVzX8kAAac
+  Number 378 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T20:14:23Z: provared.code.run
+  Document: "Bash" (fingerprint sV25SgtEzP-eASeN7qTWA_OFrtDMn-5zuuTVXMxMo0c)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 382: STUB Pn98_cXtsNFb1i_7uJHYieXkIS5QTI8Y645ZNm53HBI
+  Number 379 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T20:14:36Z: provared.code.run
+  Document: "Bash" (fingerprint ujzVaNbLvtFXfETcq0yI5rLAMKWkW4mQGEg7aSQ05-I)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 383: STUB rjyi014EGt2JutzGUSAlve599fznk5h1IqY5-Cfe5yY
+  Number 380 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T20:14:44Z: provared.code.change
+  Document: "Write" (fingerprint HkujYTNiPY6tkAmVRSIBc_3XxVCkw1WuDhafauFEpbM)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 384: STUB V-yYzNRDo2XwoKh3Ydc-2QR-fImKhGg6nYsLdkYiqmE
+  Number 381 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T20:14:52Z: provared.code.change
+  Document: "Write" (fingerprint Mh1474tazFu-9Bc9YxGRK66rPdevas5DNeN2VvHK2CY)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 385: STUB TqwB_2aW3LfXEgYVt1T31t1JGyfl_pvOVsqQisWiVis
+  Number 382 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T20:15:01Z: provared.code.run
+  Document: "Bash" (fingerprint NgFWMX7I39m21wq-E2IF53xGRe_pB9L2Ojc0t8roidM)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 386: STUB 7DghzMI4Sz-t360dNbdJO2Q2evSYe2XJxsX9gXf8kxs
+  Number 383 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T20:16:14Z: provared.code.run
+  Document: "Bash" (fingerprint P-FRx_E0EZvYwzhwJi5rcH5QfK8AGOciWVATb_mhoMQ)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 387: STUB HLEy8qmzQu6tl_ji1Sv9e_F0ZGrSOA-72gW5tLSNgUE
+  Number 384 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T20:59:39Z: provared.code.run
+  Document: "Bash" (fingerprint vKCmW_JiRbcXxAl32_v1taGex_iuNDsvaieF8qplG_c)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 388: STUB 5f4zb4vL8l-xTE1E8vaHoSR80OSwgSHsFm2UCRvqScY
+  Number 385 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T20:59:53Z: provared.code.run
+  Document: "Bash" (fingerprint yDpO5Tf9RaldIGXMd_GlSNHSuhgcZ7lAbdyzM8MkJsw)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 389: STUB aT3fC5WKhahrNGZUGqkmNN3TRZefzIsr6l2oazjBBZI
+  Number 386 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:00:03Z: provared.code.run
+  Document: "Bash" (fingerprint N0I_eoHMcdXARHSZjUdNVrxxaFNy-O811I5lvFM0waY)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 390: STUB pSg-bOx4lDOUnv5gTDC53XzEuR_4mfrbNprSb9kh4bw
+  Number 387 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:00:12Z: provared.code.run
+  Document: "Bash" (fingerprint da1-ADAqHKND2W1fXIZ_T3Rw3PFppVQrq0i2YZEr4rE)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 391: STUB DYWE3wlWNU0Z2nm0svwXMBZusOftreOgLPfOJUdn-mU
+  Number 388 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:00:37Z: provared.code.run
+  Document: "Bash" (fingerprint 0Zy1Sx4RYmyHS-HufoB5K0KFatMELruiRPhgdhRD_PU)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 392: STUB JiFP25HbvSVZ-l7jOnC__4AaRbuPlpE3CQI4GT5j79k
+  Number 389 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:00:49Z: provared.code.run
+  Document: "Bash" (fingerprint Jnt_l3WTPDU2bwFpag556rtYqBHCZz3Plb98AOIKgqM)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 393: STUB fsE5MaXxVL8vmXmtc_Lpp1hDBp5OLX8LDG6TfrM__a8
+  Number 390 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:00:59Z: provared.code.run
+  Document: "Bash" (fingerprint vqW6LTNTzqW51P96wFhOh9Z_bCCR8hHSj2XH-t2ruOQ)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 394: STUB XOru-_FMeLEXV38EHBIfip1rEqbG4mwaZu2bnb-eLnI
+  Number 391 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:01:13Z: provared.code.change
+  Document: "Write" (fingerprint KU9nxFhVc8wgqN4I3czsWLG4nshGmSk899vXElPDnIM)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 395: STUB ULXNgAG9P1Nm3DkZx_BdpAYhHCXvGuLjxf1Ud4bpRWU
+  Number 392 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:01:20Z: provared.code.run
+  Document: "Bash" (fingerprint _mXvq_qVhGlTJxfO0h0sXMIFMqKAebYXLuexTWmRc8c)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 396: STUB DogazovawV-C_FNfM4RONd-UsKz6oo6w92aFOP1jOwk
+  Number 393 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:01:31Z: provared.data.delete
+  Document: "Bash" (fingerprint QlW3pJFG-5M-TFCJbxvQDGKlZKfnrFrbQBGsoKtC_6Q)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 397: STUB yQ7sRqF-MUucp_Qi5PwKnEpeL854cb9fmItl6r-p6FI
+  Number 394 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:01:47Z: provared.code.change
+  Document: "Write" (fingerprint CBbyqg6kICcExRp5bFb2YWoVlI6yv1nAJEDK5AmjrrQ)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 398: STUB lXEL-tUnhPIAormHVdJXE9ZQ-XV1tUOC0JvQl9Ba7U8
+  Number 395 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:02:46Z: provared.code.run
+  Document: "Bash" (fingerprint n_4kpt3hIHIOwYtOB2FdRsOsi-FVxuTi8FjX8CTWk5o)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 399: STUB bv4wiMX1XxROxgopTpQ1nRRiV2hE_umSBEXVUv9E0NY
+  Number 396 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:03:09Z: provared.code.run
+  Document: "Bash" (fingerprint KK-hDdQuPsT9weLPBoEa3C5icyXZiohWgczyXwKjhE8)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 400: STUB kOgcEUsVY4z7Z-n8AsxSOeG36QkAmTZn0pRFEBKV2JY
+  Number 397 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:03:27Z: provared.code.run
+  Document: "Bash" (fingerprint d1QyKxBpo-hyyw1rjuDkCG_hM_agYX_jVlbTDOwVNWU)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 401: STUB PSkU1eDGh8slB9qf1uAVIiabYixIj2W6s_soG4v-dWI
+  Number 398 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:04:06Z: provared.code.run
+  Document: "Bash" (fingerprint 0ITvXXv67PWtSIL6pWp44qZ251KkJwhftzY023I7DxE)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 402: STUB nix55QPzB2L1KkmDhuym_Ib_nzgsO_xEdMHcpdtS62k
+  Number 399 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:04:27Z: provared.code.run
+  Document: "Bash" (fingerprint H2A2ih0dJQd7tzx5U6fQccL33wggDq_t6osPQGlGiio)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 403: STUB 3WurwwAc0o2S8hqL4oS5KpYOmNB4BPHK3F3i0zwpu8c
+  Number 400 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:04:31Z: provared.code.read
+  Document: "Read" (fingerprint qVCBXMAjaaswwjuMCwwnH-yYsIb08g6yJejbWEJup1A)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 404: STUB IPbA6iLlm1IqAYatVvv6KDy_OZsuF_zMHWrszd2q61M
+  Number 401 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:04:59Z: provared.code.run
+  Document: "Bash" (fingerprint EnCOvwIHMWhaQ4OXJhcsDh1jWBomdpTS5iuc3_nVHBQ)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 405: STUB DyEiFsMH3cxFX8aTQZmyQaCraXiLigoxEUYW7xaMwW4
+  Number 402 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:05:02Z: provared.code.read
+  Document: "Read" (fingerprint qVCBXMAjaaswwjuMCwwnH-yYsIb08g6yJejbWEJup1A)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 406: STUB DOK8ywUFlasrxbQ6ISYNpu1IQt1YgWlxQ9zJyPkAqgA
+  Number 403 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:06:21Z: provared.code.run
+  Document: "Bash" (fingerprint 0Di0kGguSz-lz-fZk8PpBAZNSdn44iiA5_v5krr6jjc)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 407: STUB qwDaA974SZryXElWOG0RiSVmVYTRTof6Yl6ygUnrZT0
+  Number 404 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:06:44Z: provared.code.run
+  Document: "Bash" (fingerprint Ld-rJNOGP9SkoKpGdlEJHqKo2D0qG3buvSF4KbXJwaQ)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 408: STUB sPEg0mtz43hjjaiUDJm-d9VX2OHARExOFXmMkYplfTs
+  Number 405 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:11:57Z: provared.code.run
+  Document: "Bash" (fingerprint wycp7vsfEYHloFCMhCbPjoMZkUEm7t8Bwhg19kGTICQ)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 409: STUB fGY6JmYsUScbabIqqG1UtRRPomNuVn1x4PKE5iTA3dw
+  Number 406 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:12:08Z: provared.code.run
+  Document: "Bash" (fingerprint O7cnkMlLu1xFRTlkjJBJaq1wLc8S8hdYZQyWcV3YUtQ)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 410: STUB P4cDdAi0HDcc6xgdDR8GxtZrmmuccwWIihcr_MDZyv0
+  Number 407 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:12:15Z: provared.data.delete
+  Document: "Bash" (fingerprint E5EsvhGVuFuC2NsXdTi---infNSJIXTuB1rzCNSIRBs)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 411: STUB LpBgRFrGOi5tsEcYxZKnfJ6rRceaahZQj44WolaKvjo
+  Number 408 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:12:25Z: provared.code.run
+  Document: "Bash" (fingerprint IEthMfnvl5Mf2H6v33XsYcWqjaW9p3Ipgd4qWi19f0A)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 412: STUB EpTeJAb4iYRqZhz-fbO-yByGn87mCpU5Yst-7b7lz0E
+  Number 409 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:12:32Z: provared.code.run
+  Document: "Bash" (fingerprint tNwSS97P9auxv1wALzRyf_LMWkw7XMsjSrIk9NFK-Qo)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 413: STUB OjVoy7NJzpjK5euur_Mio1jPPLuUv_OoFZHt3sfKcf0
+  Number 410 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:12:40Z: provared.code.run
+  Document: "Bash" (fingerprint okuipI1REnZg2EKduUilmGiUwv47F_4yEYYmXyEAKe8)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 414: STUB HZyAAqTV2PV_c_ANEPoMoUzrsgy2czFmgH0Rkl5onrY
+  Number 411 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:12:52Z: provared.code.run
+  Document: "Bash" (fingerprint trKgk10VhOvYkaA9dyM2v40PHOZTILcrfMkbhFlWjZ8)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 415: STUB ssuOwG8egFl3VmbFci-eS6s7n-CZtObuqz3NT8mi2vc
+  Number 412 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:13:10Z: provared.code.change
+  Document: "Write" (fingerprint Ctn5P-dKWP5m_s6H2kc9-DpRfcEQJll3qZXJ2g9y9Kc)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 416: STUB -FkCgqXygJuG-q3XcfWAVwKsErizbIgZHYrr2Z3lkgM
+  Number 413 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:13:32Z: provared.code.run
+  Document: "Bash" (fingerprint Se5_qS-H7sMfoO6Nv4fDuIH5kEMyJaFtWffxEOigkyY)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 417: STUB aTpR7qRBVOxlGAAos6j30_OyiWwaSHq95lkypxBaLo8
+  Number 414 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:13:47Z: provared.code.run
+  Document: "Bash" (fingerprint BiqBfQP901q3UqYILz_RtO-PG7tATf4-cWC9a8tsKkk)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 418: STUB wMGAYcE7fz3RKz8VodiX4RsPsxdXc3EkQq_1SkdKOdY
+  Number 415 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:13:56Z: provared.code.run
+  Document: "Bash" (fingerprint 3jlQhJA-AZZ6gM3nnA4fKlN8-AWN51z9kFOI-4gnPuQ)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 419: STUB D-zL-mFl9wpS2sb0vc2m0zRbtagRZ5fCS0rgrKXMIqY
+  Number 416 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:14:05Z: provared.code.run
+  Document: "Bash" (fingerprint ylX5Ycmt_4iwofnAO8LUQ9N9Kwjr9g_BUOu_IfmCZKU)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 420: STUB 33Y2t7uGlSzPGh8x4S8CdX0QznOSopQWxKvSk6cXnqI
+  Number 417 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:14:16Z: provared.code.change
+  Document: "Write" (fingerprint AIXVkOcjAshIy0A3VqilsJXdbmMcev9rM67PXj6PC4s)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 421: STUB Ywx3nGO5BRxwRzDCBZ9V5rVst_X_muPMq31haw6odZQ
+  Number 418 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:15:04Z: provared.code.run
+  Document: "Bash" (fingerprint 19b9IOJQU3r7K36iIZOur8bj_vU4G5EsBamDB0dPnS8)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 422: STUB v_I9i0RpQ90wEFnWFdSZywC3hQT-gZX4ygb64CPIyqQ
+  Number 419 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:15:18Z: provared.code.run
+  Document: "Bash" (fingerprint 9rtvQqQEUsGrNiCsRwORaPmzMdJozgfz24QnqYxW1XU)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 423: STUB IiTBdu-LDRxK27nQSDhIgl0ntszNTqdosU7tuTXTN9E
+  Number 420 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:15:28Z: provared.code.run
+  Document: "Bash" (fingerprint kBHVOg2GybCLjqkXoodpRx6DnVprXEcK7gYQgYMWVGE)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 424: STUB p0VSYBzXCtO8ybF-QB9UZ0QBGwz7u4sZ4LVFGriZgjE
+  Number 421 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:51:24Z: provared.code.run
+  Document: "Bash" (fingerprint 7MtiQief6ByqmoZxrY5DUjqejSOSlV0UZlsapUkeojc)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 425: STUB dOzqWDm1t8hxgPBDAAu8M4ghrnFz_nRDDT4GFE3BdYs
+  Number 422 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:51:59Z: provared.agent.instruct
+  Document: "Agent" (fingerprint dflCkweI6X39oLPueW9wy8MVV0s31zL5CNR7tIB00hc)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 426: STUB a-J5X-5NQJbBzwdUMkTajHIw08d36fW7sNVR6j-_5_o
+  Number 423 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:52:06Z: provared.code.read
+  Document: "Read" (fingerprint SyHyGNjcKjvrfMU7IEIbWiM0OR3tKpdkIq3d4OGRSV8)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 427: STUB kr_-nmtnQfuIkfGKTCfmSUc-jAXLrOKOLbXPrpzBOGQ
+  Number 424 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:52:06Z: provared.code.read
+  Document: "Read" (fingerprint j9LLLlIcewjFPbPGWmMg0r4Xm_VauZWUxUASHw7Yjwc)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 428: STUB cs5iJXuM5HQlAEO8YyCh0yrirdozJ6-zjrM_obesbd0
+  Number 425 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:52:08Z: provared.code.read
+  Document: "Grep" (fingerprint PUlbz_8AAitEkCojlfmETYgP-C2VCZR3yEGMwUM5qu0)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 429: STUB P5uf1qbVZFH3V7xV0plmLFXDNWoC14p7MU0w1xUfYJI
+  Number 426 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:52:09Z: provared.code.read
+  Document: "Grep" (fingerprint qYnEME3Q6QRhciKRrKZ-HBZN9r9NM9X11MviYg2DrF0)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 430: STUB osSbtMDb5Pis9daedvfHM5sJJOljt_pGZaz_NP308Xo
+  Number 427 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:52:18Z: provared.code.run
+  Document: "Bash" (fingerprint RhFmLIsPFM9mNjMldpCGU6DywzV1dDQhjXr_X2ouwFc)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 431: STUB jGwS7SbAHXoV2uymQ2AhERBpP_WwpM52PR-RzYH2zz4
+  Number 428 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:52:18Z: provared.code.run
+  Document: "Bash" (fingerprint EDd9-nH0lH-zPivsURigT2qdQNMUw0qakAg0L27vG7Y)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 432: STUB Jog8WC3n0qzcThCRaGNuXv0QIYXUuWNIVgTiIT60vKY
+  Number 429 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:52:20Z: provared.code.run
+  Document: "Bash" (fingerprint 1qOZysmC14YLbH6phv8eRHlcE9RJcZ20u3FF4q2jjmo)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 433: STUB FOdU15WlAu44_2fyX2lmph140yREG2OpRBe3KBGkwuY
+  Number 430 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:52:21Z: provared.code.run
+  Document: "Bash" (fingerprint q5eZLS9T1OrHPuZni9JXmPHJq2Rub6IsmKzDzBcbtUI)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 434: STUB LbfRKKxbLp_0rLsdFcnzorlvNg9CvYggTzXHVYViljM
+  Number 431 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:52:22Z: provared.code.run
+  Document: "Bash" (fingerprint Ve03Jvd_OhaQSUD1qtOK-vKXsdjLdC6DZYi1qkdiYfg)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 435: STUB hY__SBnuuo3FvoP-P38-pwuA9gzuaznr9UfsLvaCNns
+  Number 432 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:52:22Z: provared.agent.instruct
+  Document: "Agent" (fingerprint PMa_gZ2-peqnPddZWCs-Okjc1AC7FJrG7DMlfikfYVM)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 436: STUB c4P-z0nLb1stq10G6VNR9RRqLqzuEmioM0fB2V3NcbQ
+  Number 433 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:52:24Z: provared.code.run
+  Document: "Bash" (fingerprint H--jcshIQQCSDTppem4Po7fVPAPu9SbzkcOeho6xQZw)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 437: STUB iu18YFMQOsqEv1S5MN0XBxrBq9hCAa9rTEhKyXiFsWo
+  Number 434 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:52:27Z: provared.code.run
+  Document: "Bash" (fingerprint MYZs8KJH658fcAq7Uqb1kcOtBg8XHd9sx8xnafC6R6Q)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 438: STUB fpKBpP4H54feCGAj-fTvhf0-aLVIcxfqO30ogjhz2OQ
+  Number 435 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:52:29Z: provared.code.read
+  Document: "Read" (fingerprint SyHyGNjcKjvrfMU7IEIbWiM0OR3tKpdkIq3d4OGRSV8)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 439: STUB GNG16sGkdDeapZ53Yz3rbYuhMcnd8DjKCgckObYLgEY
+  Number 436 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:52:33Z: provared.code.run
+  Document: "Bash" (fingerprint hec3wLOsZgWsfJuxATbQyFB6qyvDs-uqSh9Y3hGIHAM)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 440: STUB NGbiMUCTeSsGxr4o6A9EWyoDbzly9Nrf9VvI_d46gxw
+  Number 437 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:52:42Z: provared.code.run
+  Document: "Bash" (fingerprint XqmjMW9viWAx0YUprGRlG1GteIGk3IqXCdMXpgO8vPc)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 441: STUB qNITRsaR-esWiwOqhAeToLr0O0puvbdOzgIb3ZLuZuk
+  Number 438 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:52:43Z: provared.code.run
+  Document: "Bash" (fingerprint _FQIlDjakl6-aTMl7RXpEJaQkVXK_3HCO6_Vu0T43LQ)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 442: STUB qzUDyjkAA_AYWzKiL0vC9-eSW6mFBb_e3l2-cJ9NKjk
+  Number 439 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:52:48Z: provared.agent.instruct
+  Document: "Agent" (fingerprint hBdC1XAA7F5M-xv3hT0MYDJl3YSq8BIk8IFEre8jjAE)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 443: STUB i5UrU_2DnUBZhqKLTERowOgeZtcNET6omQIgR8mT8KI
+  Number 440 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:52:54Z: provared.code.read
+  Document: "Read" (fingerprint SyHyGNjcKjvrfMU7IEIbWiM0OR3tKpdkIq3d4OGRSV8)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 444: STUB s_ztv3AYCuEFBQcQ0f3Rr7XnigltksBjG2QwCkq__cM
+  Number 441 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:52:54Z: provared.code.read
+  Document: "Read" (fingerprint tEYedqAR2RUuygOEhsp6ROC1uCb_8keb7T-gBac1jt4)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 445: STUB VV__NJMmRaz72ndBeBDY7uHZZBRb2sMlaAit4dKm-_8
+  Number 442 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:52:54Z: provared.code.run
+  Document: "Bash" (fingerprint NRxj2fNXmjSX2yqGkPVTc8E3gdoFj8c1fzC0b110864)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 446: STUB fiZ_6OlTXksnWOkUS8ijYB-it3hsnPNliSkRdOKb5fw
+  Number 443 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:52:55Z: provared.code.read
+  Document: "Read" (fingerprint EN_V-Wn6rc6rQIFjXLSvZFS-GE2sQuzaqWSOTXSwgDQ)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 447: STUB gHQVVpBHpk_0bVkkNZTnOVLnUBF1yRzU_Ez2LjUq7co
+  Number 444 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:52:56Z: provared.code.run
+  Document: "Bash" (fingerprint kw079NPJ4W_-l-Ce-x901vyC6viV8JjeiOSV17DqyDk)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 448: STUB xiKsM9wxjLxd-foP6zR7GPJV2YUcUwm8p79ahayhzz4
+  Number 445 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:52:57Z: provared.code.run
+  Document: "Bash" (fingerprint MS6Q7PW0RPjpJ9Fdmc2cgSLGJzC3frwfLPKfYgZoZMA)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 449: STUB ttCTnOgCmHboE3KT90dpPuHOuVmuYXEC3qG_OhynEhk
+  Number 446 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:52:58Z: provared.code.run
+  Document: "Bash" (fingerprint 9AP951sNZoFT94uzblbunX3nIPJh8S4fnh7dAgwBtk4)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 450: STUB pjj6ccTkXRj5BjYoI4zltSj_4oT63CSfBRjDNPFf0oM
+  Number 447 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:52:58Z: provared.code.run
+  Document: "Bash" (fingerprint IudHzuhfrYGdtOI3xwyyMgTq85TMAwuIH19k_ozym7s)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 451: STUB dRsFc7zZ6LBHE-gUA3kND2AxnaOa5sRtCMax7V2NuC8
+  Number 448 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:00Z: provared.code.run
+  Document: "Bash" (fingerprint RrlRp1CJOXLTT5QNcivp4PBEIciRotRFHHbbNw416IE)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 452: STUB Sr28YT_V0HT75ZrwfZq7V-C2zmhLFf0ooavgWtiYwWE
+  Number 449 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:01Z: provared.code.run
+  Document: "Bash" (fingerprint NQL3wQbs7R3iKEPiwoU-JnNERSp2sSyRG43TqBx00n8)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 453: STUB pELiL6K4bTmEJ6sP_i9L2oWjMvTYSWxxfoKnBC0bodE
+  Number 450 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:03Z: provared.code.run
+  Document: "Bash" (fingerprint f6jYVWkZVe2YtUVWWOvixHi1LLZJqvY8pc7_Iwl7GTM)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 454: STUB 3RnQ5sZDnOhurD6Op0vmrDm7lzyTzTAXqatHHx0VDZM
+  Number 451 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:03Z: provared.code.run
+  Document: "Bash" (fingerprint zISSG-QNhM9Y1svxkf55iEJ6Q4bP11hjA_OZ7D-G7xI)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 455: STUB 5mT9AjrA3sM6WO5y5YG3UNywwhNubzAy3LNRx3BNapM
+  Number 452 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:04Z: provared.code.run
+  Document: "Bash" (fingerprint yoHHnuDJChjrFdUNYyx0fs5jTWUXP0Bj-72msATDEPM)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 456: STUB 6LBuX_gHRJBE5zzzEBKdyBR1ug3KuiEbgxnI_RCBvuI
+  Number 453 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:07Z: provared.web.read
+  Document: "WebSearch" (fingerprint 6z-bW046PbjUm1CzLO6c-iQcqm-iEQ5WjJFpuShDQ74)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 457: STUB rBtiWuZMfcUKjDbZhjyt4MnyO2RE2fuJCmHZUKgBfSc
+  Number 454 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:08Z: provared.web.read
+  Document: "WebSearch" (fingerprint nLG0jA5eG1xnpxJj5MKCx_DZCZf1BuTlt1pe185mK90)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 458: STUB M9WZDgxmNqG3p-5E37VSUqjS7cfVNFWX_s1e5Y1FURk
+  Number 455 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:10Z: provared.web.read
+  Document: "WebSearch" (fingerprint LyoxVek2yOYkz3A6y9WoP1jYAnNxMED3yjYFikIFDNY)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 459: STUB h11_omOoJENZ2QRxXgLap4AUg9yskvTAW8V8XQgN0xM
+  Number 456 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:11Z: provared.code.run
+  Document: "Bash" (fingerprint 1akHmO9Fx2_-enWNaPSWYGyGu5oe7rAoBgNXcyO1Oag)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 460: STUB zd_TKLMR-9dabxh1iNi8xpgEQWszrcD3gWfKg4xCksM
+  Number 457 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:11Z: provared.agent.instruct
+  Document: "Agent" (fingerprint e91NDKneLrWbe-ApxbOyyXCwJPgOtdkSLI9SRifL1hI)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 461: STUB WYxDblfwipBwn1uR1LSblDLng1tV_5AYrLx6U4I6Lsc
+  Number 458 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:11Z: provared.code.run
+  Document: "Bash" (fingerprint jSADj3qv1VWob8gfOQlSj-Ykc3FV25J8j-fmKfp5rNg)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 462: STUB dYVJlU2hN6INskxu6U-vmzpM9SneZaYAqbx9p1nD6p8
+  Number 459 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:13Z: provared.web.read
+  Document: "WebSearch" (fingerprint ToDmH4vt0fcesY7E4ebv8HGumHWjijW_sEPlyq8lszg)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 463: STUB gTzWfbCPQ88Fs1CvU2zdNHyZXCnzfTwA6YJGvtnmgfU
+  Number 460 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:13Z: provared.code.run
+  Document: "Bash" (fingerprint Q6Fl2cjiN6u17JG-irjtpW1Md8AB3uolJUTYhBWG-i4)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 464: STUB kZhMEIq8qvSCtfGtfmDykPQXJZlAXeR89ry9ijDDcA8
+  Number 461 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:15Z: provared.web.read
+  Document: "WebSearch" (fingerprint Z1eOcX1VA2Cf7TwMBapHXaWfIunlbPEp1FVS38mx34Y)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 465: STUB v7p57u_K21WH7waPjpdg5REbNUyJtd8zqkBC1vY7N0o
+  Number 462 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:17Z: provared.code.read
+  Document: "Read" (fingerprint SyHyGNjcKjvrfMU7IEIbWiM0OR3tKpdkIq3d4OGRSV8)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 466: STUB 15_TXzfacM-eUY5jc2OmfdVzKBGrUoLcGuR5u54qVE0
+  Number 463 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:17Z: provared.web.read
+  Document: "WebSearch" (fingerprint s036JB22KW2BIuuX97bGGlIpumJHpzoinIUbwFF4F4c)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 467: STUB I5J5mAm-hAahuVU36POZDX8EGgQkc2YC9Gu7h_mc1hw
+  Number 464 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:18Z: provared.code.read
+  Document: "Read" (fingerprint tEYedqAR2RUuygOEhsp6ROC1uCb_8keb7T-gBac1jt4)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 468: STUB 3W2zrLaOsOcYLSveN6ViiUbMiItsBORrY5h_JjgfJj8
+  Number 465 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:18Z: provared.code.read
+  Document: "Read" (fingerprint JHfm_KZkzGy1JAhpqlK1xl6iElsfk8XFvlj5vT6q2Qk)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 469: STUB _pbWC_3y_pR467HA9nRlRFFVOdVLtOHeXtASMtPGpn8
+  Number 466 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:18Z: provared.web.read
+  Document: "WebSearch" (fingerprint 87avDoWelX2NlfcBL4n-aEeI7skpgiaLyIqzTYTky2g)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 470: STUB LnWaKmIpFTwTT5Uk8EUIDmWONx2S11uSBPiUeORB3-w
+  Number 467 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:19Z: provared.code.read
+  Document: "Read" (fingerprint QyqRE-nNW50yU4iygQlH0yCCl-lj2bNBFVfVCrMcmlM)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 471: STUB 3lmmmX0QN1eam8IKnSls_RkalYdxzSpFcl3CzutpBFQ
+  Number 468 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:21Z: provared.code.run
+  Document: "Bash" (fingerprint AFIICzd9B8eI6mpvfk8gBGg9ilM6r8Pglp3AQp4t6JY)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 472: STUB qGup8Dg75Lqh6fAq2rv7HuTtwzZBOpnb75xlzgVdA5M
+  Number 469 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:24Z: provared.code.run
+  Document: "Bash" (fingerprint TqMDDVs-55a7VF3QU8-AslA3DGqa-GDwa4qQV8JGtwY)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 473: STUB Vd1BPVrV4F4tOK-T-XgYafB7XxHkpwVOAWtgwPaniHQ
+  Number 470 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:25Z: provared.code.run
+  Document: "Bash" (fingerprint hZXVmT7nXs5JFplOHV2g-GnErijvnZIvejzjr5u5Wik)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 474: STUB QYlKnbMHbJhAid1my5FaSj-2_vjAKy04UxY5wT5lGgA
+  Number 471 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:26Z: provared.code.run
+  Document: "Bash" (fingerprint dQ1Nm_YVqPeDuDl8xEjsWQIGLkbSzEGuWjkNghbjys4)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 475: STUB 5inq9KfZHMO7EYwL5doYJ6V3ICQckIEHQLppXKA-utQ
+  Number 472 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:27Z: provared.code.run
+  Document: "Bash" (fingerprint 1Ia8o9EwFvhV81lQ33iWKWkZaWRSj_KwLNHPlNhjM14)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 476: STUB _Rqtqtt_tXYAAU6J2y2EM_dRJMmX5IUz7AtOkZrrqJo
+  Number 473 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:27Z: provared.code.run
+  Document: "Bash" (fingerprint x2z0tMbxrlc01V1nYQe-3ddTKWYYbnmfUbFnKKgNBBk)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 477: STUB lZvRYnQWq4nVN68KumKbay5aTlyrkOXOFuc_6EQ4c1k
+  Number 474 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:27Z: provared.code.run
+  Document: "Bash" (fingerprint OrXl221Ve0e4VUH0qrRnj6EnIO6Ti1Uze8DNHoikTv0)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 478: STUB osgeMCBAQAHVhixSodNOwfRyuc2TYSWJE0u09kC3cmo
+  Number 475 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:28Z: provared.code.run
+  Document: "Bash" (fingerprint hYfo-k_zB2QcBy4SNjzU_TceK1npK-JxsL8BosRdHuk)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 479: STUB aVplYXLKR4H07ScYmQuzSjHnW6eoTfk5l2cK_fsDKmI
+  Number 476 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:30Z: provared.web.read
+  Document: "WebSearch" (fingerprint 264d_al-M4SsC-X6Y8EYSfk_JWunzzeLf2Sv9fRuMmE)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 480: STUB dxNgzZxFn89a6hI9GTxH1rMyiP3XtLVznG5ii3zB24s
+  Number 477 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:32Z: provared.code.run
+  Document: "Bash" (fingerprint 23BjnDyQd9wbOXemapTMG8Tzvl9H044PrHkPMK12IzI)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 481: STUB fKajdQD_CPVgUPxWpC2rsr3-NvSMKB1ysEZ7WNS2ytw
+  Number 478 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:33Z: provared.code.run
+  Document: "Bash" (fingerprint I7fCkulS5uWICDEYDfPr44D6woaLPNftNUuKFnBhZKg)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 482: STUB 4IaRLoWFH5uUU8u_5SHykbtff2l2MlEqtXZ_v6J6_vE
+  Number 479 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:34Z: provared.web.read
+  Document: "WebSearch" (fingerprint 6ymzYMMxGpebWy2OULL6GW2aJlhatPvtBI66XJDZLhU)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 483: STUB Dec-AGhOGhUOjKZqhWeDnGVaC_9Y1ZhGQKpa--AqRFE
+  Number 480 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:35Z: provared.web.read
+  Document: "WebSearch" (fingerprint oUNPQNrH6zFiqggSASZs5CVKN6ddIIFtOHW2-PwNa_k)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 484: STUB 9k6j_arpYuEG2PQjvlZ7DtF850YNfrb9hF_bitBT_xk
+  Number 481 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:35Z: provared.code.run
+  Document: "Bash" (fingerprint z0QMoMIXMUmjuRIp_ukv4Wcr9-lSnLsrTNmDi-VYfJs)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 485: STUB VDsaZgk7J49ANAe0pHlaVQo0Iw9rO8_OiNEmEe2elBQ
+  Number 482 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:36Z: provared.code.run
+  Document: "Bash" (fingerprint --6R__9v_aGwtHS2hjRajmJcrEw4bB-CRoTDfkX-k-8)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 486: STUB gu5EaaeWjf7KI2FomfT3xNIHQukOy7Bbdur4dR2Gc-w
+  Number 483 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:37Z: provared.web.read
+  Document: "WebSearch" (fingerprint 1VAPVLm6V1hS4Omup8934KiNj4XJA2s5XLoMtfa2s7U)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 487: STUB 3ZRX3Q90DhOoKTJ41VKGZ8PT_QkQ_YE4N9Um1iQIsMw
+  Number 484 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:40Z: provared.web.read
+  Document: "WebSearch" (fingerprint QW3pGWMmV8C54vKVP0b6K_BfhUHY3XfSp-sfheo3ZPU)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 488: STUB 00QjcTjR0hQAgDVVUiW9QHhqOXzeoJjRgCBYCCTfv90
+  Number 485 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:40Z: provared.web.read
+  Document: "WebFetch" (fingerprint DRU-cc4VRmZoJV5h7s43FHcFqktRfBKoND63Pf22rBM)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 489: STUB piwhRbiZxFRqvRjXL0FfMtn17PlAffZocL2WGqLn8h8
+  Number 486 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:41Z: provared.web.read
+  Document: "WebSearch" (fingerprint -T6UdcUpcN4wDRgLvysvNdh7NPzCP3X7BtcO9JGfGak)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 490: STUB 4qTuQE6S6ZzQg0YBOufbkuCoKcwtcLIi1NONiVSf994
+  Number 487 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:42Z: provared.web.read
+  Document: "WebFetch" (fingerprint dyR8K2xvBwVWLI7UqsA0E12Y-KOfrsbktD4JtERDEgk)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 491: STUB mTJeQ4ODwx3GpmQd7E2Mrcij0Hbw3buX7Qyy0Pcsbm4
+  Number 488 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:43Z: provared.web.read
+  Document: "WebSearch" (fingerprint GHgzSPD2g1-AAi6ZWnZWbvjMh_mNs2gBNy1KABxQ3O4)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 492: STUB Fx02BjvhNgtw8sUwpmj7vZTLouSoI8KLRMDGwiJPDzU
+  Number 489 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:43Z: provared.web.read
+  Document: "WebFetch" (fingerprint lMg-rwYosq9bQYTjlag3Al5GtzOVE2KFvzBXZp6GoNI)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 493: STUB 5lPaY5DBy-CBMoASqBBFHlD4dgGeTqFldFAxkk7WHvk
+  Number 490 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:46Z: provared.web.read
+  Document: "WebSearch" (fingerprint ZV6-mdppjx2en9egEztN4J-p0je4uxFKPkRFAeaHrrY)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 494: STUB D1C3D5XQuNbCK4f0KDdPYbBagCX-RdWNHdtgd8yMlhY
+  Number 491 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:47Z: provared.web.read
+  Document: "WebSearch" (fingerprint WctVaeilRWCd8-BIIZYkqfywSfLd1x1V1yi78VGg36w)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 495: STUB 8eTEirWkRASKnpEVY2U35Yi9A2mIykD1GIugqTh0cas
+  Number 492 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:47Z: provared.code.run
+  Document: "Bash" (fingerprint K8OMinGxsAxYg7he1sTpUY2a969_UGwn8G-5ZtyEfPA)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 496: STUB ZKEKctkM_-4JBeWrQgKSn_QIbAQ0bUU4Jhsu3eFJ-CU
+  Number 493 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:49Z: provared.code.run
+  Document: "Bash" (fingerprint ylp6tABGEVmgbyb4Nyz3aSQ6Tt8W3HJ9m66Nvq8p9_Q)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 497: STUB EEBIpg0HNBX7a5lqjCQ53fbpKq-40vHgXDpiuHlDBHU
+  Number 494 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:49Z: provared.web.read
+  Document: "WebSearch" (fingerprint -q3q1hKqXSMxuAUibRYRvVvd48t5QclnjPUb795QH1o)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 498: STUB gJUkVwtj8qdIVsOFFI_yWI-8ZvwRL4cHM7ZoLMhILKc
+  Number 495 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:53:54Z: provared.web.read
+  Document: "WebFetch" (fingerprint spVnhT27giL8YWSsiO8yfS_1kHb-g3Yv574H6j_U5r4)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 499: STUB _2BH_J_bTTQPEWkwqNclU-c6sAKB0LF42d4Vuv_jydI
+  Number 496 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:54:08Z: provared.code.run
+  Document: "Bash" (fingerprint SezTceX_B_m_u0BnBP59Ub_CAbYZhPuXWEt_aX8caVc)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 500: STUB RSekZY805jBkwTbnxVOG8l5HYw4GWt2zoR_ScZkY3JY
+  Number 497 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:54:14Z: provared.web.read
+  Document: "WebSearch" (fingerprint c6HJsGYbvKEyuSxs1lC-nf8Dp1aB5lOZuBflPvjs1_Y)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 501: STUB ACaDhTz8J8jq9BGxFo_hz4qrw6J1BznJBfdONe15Z50
+  Number 498 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:54:14Z: provared.web.read
+  Document: "WebFetch" (fingerprint 6SwNCrhPRHwpQlbXGyWtqqiF6FFL3inEF1K70WShZGo)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 502: STUB Yi847PZOVXfSRsU5V0GbZsUYqKGXUxd8LRJiNORrK0k
+  Number 499 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:54:15Z: provared.web.read
+  Document: "WebFetch" (fingerprint vIlhOZ16L9SXR4PMCsEVAhqGROQjY0SeXPhHIMBHoXY)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 503: STUB -kKufVxGDFrrkq6htobc7JNX0yEwjLNg6wpvtC-W9Lo
+  Number 500 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:54:15Z: provared.web.read
+  Document: "WebFetch" (fingerprint DBl0lANdI6oC57VKUd4kIjRCrtYMUUj6_klSZ3yp9Ao)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 504: STUB BPB0pUaeCFos-j5M2E7wTznPApUmOw4_d7b2GVW1uyk
+  Number 501 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:54:16Z: provared.web.read
+  Document: "WebSearch" (fingerprint Itw_eY8yVEYN3821-qqcuu82Y3W9GWOPZ6u1jc_xRGM)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 505: STUB uf288rXmuSWYZx-mzCaO2ecjGh0Htwzm1_gZwlrIP-s
+  Number 502 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:54:17Z: provared.web.read
+  Document: "WebSearch" (fingerprint X9mmvhBDGJC_q055e_3Ufx_9U3zFjTA9p-cUvWoA8os)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 506: STUB SxJqRv2HwDAggjbUydmqdDbyJOxIn59QHxdn71PdRDY
+  Number 503 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:54:18Z: provared.web.read
+  Document: "WebFetch" (fingerprint 8tJQqMN5Gc__W1E8T4naXVimL7WipFpML-vzoMXIWws)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 507: STUB HNXacqlVLTND6__AobUYEDHlFJybdtOiPjVaR0kwSY8
+  Number 504 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:54:18Z: provared.web.read
+  Document: "WebSearch" (fingerprint UInhs7ND5JGqyKak38c6isN7hH7rlKyiTKK4d_cY9bw)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 508: STUB fVQxKOEr7JOMbkio7NT0cYvg9oBmD1BANeZ1uOwhj8A
+  Number 505 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:54:21Z: provared.web.read
+  Document: "WebSearch" (fingerprint dzEK_TiUDUf3wnlFFf-lUyVWISpWVi5-mNcVqrSXVRI)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 509: STUB lEp-vYSL70hOYJoJ4uL6NsIgpK_G5lm6goXLXY3bh_k
+  Number 506 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:54:22Z: provared.web.read
+  Document: "WebFetch" (fingerprint Fy-d4Rz4L6Ce4ltrAh-q8ZH8ayJdK7d5_KFT_b6ToYg)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 510: STUB NTQ2hBhYY4VjYq4YiE5RNngzcAA_IhdWsvheoO5v3ig
+  Number 507 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:54:23Z: provared.web.read
+  Document: "WebSearch" (fingerprint KbWTGBmUQlSGp1nxqyGcvfZFHzYx57rF-8-nkcbDWmE)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 511: STUB N90tn3yAIyWYXIRR-bD5oYA4Uw9DMYVCVMa_wYFutMY
+  Number 508 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:54:24Z: provared.web.read
+  Document: "WebFetch" (fingerprint lIBifFIbic100XYEYDCPz7xdn0focknisAmH_97Gi-I)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 512: STUB x80OjHfRpRlKKlNMW2_I4WQgFGE5sLMwMAbHeo4scFk
+  Number 509 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:54:25Z: provared.code.run
+  Document: "Bash" (fingerprint V20L87CKEvReYo-mvhHJT_UVw0ufvT_yqI4n9thIq4Y)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 513: STUB oDy9ew4euzgrepfSE_zzHHhkNz3LDuNZoO3IfcIzYSU
+  Number 510 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:54:25Z: provared.web.read
+  Document: "WebFetch" (fingerprint 18g-g7apGn6T54H0IQi_aX3KEQX6GwKaiE0Sf55XJWU)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 514: STUB QfS3-59QkZI5qybE1GUBZFoYANpCl44KI7Vpxd4HL5Y
+  Number 511 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:54:26Z: provared.web.read
+  Document: "WebSearch" (fingerprint ITBB1hxzAeEuoUW4YRrHinCqn0zabX5BIfT9VXhujgc)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 515: STUB mqDpw4NOQvK04-GakGe0xp8qFJZOvYWIWYq5pC08f3w
+  Number 512 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:54:29Z: provared.web.read
+  Document: "WebSearch" (fingerprint iZnpmtyNMSTGEtf_Q-fVV3yGjxV5GuvclY3wwfQlTTQ)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 516: STUB kNVgud8Xao__Vgemv5Z5XGVwiPjkhmRpDPc2h5gayIE
+  Number 513 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:54:29Z: provared.web.read
+  Document: "WebSearch" (fingerprint WoHGyO8YsuTiUhwkQkRqFpE7bM5cp9MzAe31BmqubBQ)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 517: STUB YM3qb2rNQz3inoVpBGbZl3QFdzMZbl-tPs9h3IEbA1M
+  Number 514 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:54:30Z: provared.web.read
+  Document: "WebSearch" (fingerprint fyIPT4hME5ZUNMcIcbIl3GaXnELhqy2Yn-yn4tHwvOw)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 518: STUB bk7u5gWXAMHuZw1LmlXzG2BWIn19DM74hoGrF4YgwJI
+  Number 515 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:54:30Z: provared.web.read
+  Document: "WebFetch" (fingerprint 3sLQ4k9nR1HY77e8EOB5MymSRURu_24-B9WsYZEOUsg)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 519: STUB B9DrM3OrSmKDs0b9upHDvBeLldQFPPAByHxH7UGFPr0
+  Number 516 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:54:32Z: provared.web.read
+  Document: "WebFetch" (fingerprint ZD9MKWojvo9ifdlgdoJT75jRaTeufXfr4GmxnMW42BQ)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 520: STUB M9KCGLR4k_5aYxvbN8E_PMI3SZnm6kbUmi9kG3S7R_U
+  Number 517 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:54:33Z: provared.web.read
+  Document: "WebSearch" (fingerprint ZbuGivjOKA7Ujxf4w2zdw08_Nda1zdIPOOWSmeYdid0)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 521: STUB ixZJdkxKs7VF_dbvlWU9kgmsVmJbxOn0CX9f7R86H7o
+  Number 518 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:54:35Z: provared.web.read
+  Document: "WebSearch" (fingerprint jDnJoxdF0juysUWE0uhKvQkdwQSt0vMtKwYnhvupY7M)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 522: STUB -WPzX7LtuiwfMj5SL_zahx2p6XPhnJjyU84DOJOVeQA
+  Number 519 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:54:39Z: provared.web.read
+  Document: "WebSearch" (fingerprint d7FuXZFYYQMz7hFHKXgdS3mj5NF-3FbOUxEWi-_yEj8)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 523: STUB 4sL--Bm7p4FR9hqaqKPSi-W26prsQvhmv5qeR3F6isM
+  Number 520 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:54:40Z: provared.web.read
+  Document: "WebSearch" (fingerprint voyUZJ2C_iVc1aIK2CKu-unzcb-mu89dAZO6GZcitqE)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 524: STUB TkzYKZQADU_oZSYbTFhPoc_wLmPPUsnid1XKICZc3uw
+  Number 521 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:54:43Z: provared.web.read
+  Document: "WebSearch" (fingerprint jCWhJ7g9esc4RjaOk8MWN4niT93Ep2aAy9d4T8b-mbY)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 525: STUB 9--OupYzLhQVTBEFbQTjBEqQ34jvCze4svCemIbo7E0
+  Number 522 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:54:44Z: provared.web.read
+  Document: "WebSearch" (fingerprint goSrG3YsT04ikPZc5p_bydB5jyJBu0y7WpaXI7U36Os)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 526: STUB X6ThEw05mJnviPk5v3OrAY4X2eQuWXVvC7bPnePcwl8
+  Number 523 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:54:45Z: provared.web.read
+  Document: "WebSearch" (fingerprint LtYmAGus2BHViS7aJrIBfEK-8vEPlshFWmRSFmfCiGk)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 527: STUB -kyBgLcqBRRtaw-fK61bJKWjnmwRjPSGPX9U8BCnj5g
+  Number 524 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:54:49Z: provared.web.read
+  Document: "WebFetch" (fingerprint iWZAFQx5SkbozRdLXgCa-8JQrvkdJEI9rVLAEOakwqM)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 528: STUB HUPFiJjKQHk0P6-PrBmhOWHa_3BsuEPg35Gr_oUXEbI
+  Number 525 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:54:56Z: provared.web.read
+  Document: "WebFetch" (fingerprint csW6oaOOKh7fOyrVovIOD_PersE5EYx_WjNufAcLsxs)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 529: STUB S7x-znXLSd_ltPk6W46bDJ7QGw99CAZ4cAFKsCwKhMU
+  Number 526 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:55:00Z: provared.web.read
+  Document: "WebFetch" (fingerprint 0xW_0lmD0DcXoV1qEnJqo9v0D2G8qvECW56GoxqHUpc)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 530: STUB u2-SNk5h-Y7iiD2R1Y7XsakbQpf9exrHbHfDjTOSwbo
+  Number 527 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:55:04Z: provared.web.read
+  Document: "WebFetch" (fingerprint ELsk_IS3peEzo2U1-6DjkoZOBeqUZXZbfbxrgQ4bMeU)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 531: STUB YWJsHSM2cMyblgWUTe7LjRjiHTHhC_3tdY-INYq2yo0
+  Number 528 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:55:07Z: provared.web.read
+  Document: "WebFetch" (fingerprint 4jL6zdWGRaURuDZg6vvVYotO---8zJFm77i7tl3Ejpc)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 532: STUB QXwYYvMjXw4ActGqcZhXwqQ0znauVZP7cy_4T1t1qk8
+  Number 529 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:55:08Z: provared.web.read
+  Document: "WebFetch" (fingerprint wczd8AHL-FRPleNEL9nr8CkUeACuP4OTB41NN3OjUUQ)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 533: STUB aXRFaQoISlkBiWMQT2fUlKo3j5PyRYsWXxVtFLo_RNc
+  Number 530 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:55:09Z: provared.web.read
+  Document: "WebFetch" (fingerprint 8pMfi7lQCSNo6tyNbg5sHZ9Gi0U9vvpidcy0hI5GGHY)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 534: STUB QkwKVH7irQ5zUj8E85V7rI_978NSbOu4_44jvqJvFno
+  Number 531 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:55:15Z: provared.web.read
+  Document: "WebFetch" (fingerprint 8evZXdLHElLtv9XSqyHcu6i2iniRoigNCaCyy_OB-nk)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 535: STUB WGsjB9IjTOHB9R1OaGsf_NnplASnlvNHgok6Ly7UBsM
+  Number 532 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:55:16Z: provared.code.run
+  Document: "Bash" (fingerprint kvJlsGAWXhnOhAY-vZAw4aq0clYWLnwOpwj4pKp33PY)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 536: STUB 3OMaYRxHl5atD9b1xGnVmY3iVwgHEOzLi__Zxh8zvsE
+  Number 533 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:55:20Z: provared.code.run
+  Document: "Bash" (fingerprint pGaMalW0QBdJM_OGq2BZd12Q8GS2Xk4I-058MLIL1V0)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 537: STUB RbBEIGaWCl0s2ByaG546eia9KSNr7ck5QNrlVAiIJ2U
+  Number 534 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:55:33Z: provared.web.read
+  Document: "WebFetch" (fingerprint ipYUirM2XE9TQilVMPcUcM9IyhdxmtYKVinD1w3LP50)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 538: STUB mQ7SnuuxgAIaC_WNczbN3EyFpOi2cPOf_FLcD7juHCA
+  Number 535 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:55:43Z: provared.code.run
+  Document: "Bash" (fingerprint TBVJ-pbtiqNP-O9jxerWQ68pa9AktaR06RHUPl6DnDk)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 539: STUB dPudJ1DLZ1Surppi4dwDpo4tSWkr-hKbAPdO0TqN4xM
+  Number 536 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:55:53Z: provared.web.read
+  Document: "WebFetch" (fingerprint LFSGONyy8jwduvVkWjyB1fjX3L3W8AHSzk3Ad_JPHks)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 540: STUB KDH_ko_bbb00jId-IIjRqKVw0caDKzI53pqVTpbX4cU
+  Number 537 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:56:01Z: provared.code.run
+  Document: "Bash" (fingerprint 3QnSwnSY3xjDd5itSiA7qDKKMAo4W35-ycXteC3fiCw)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 541: STUB XBXULrkQqwmxTJN0gspNCy7EKR3hRoqteu8sD8Dhab8
+  Number 538 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:56:02Z: provared.code.run
+  Document: "Bash" (fingerprint 4_Dkl4C6efvn8TaCDOp2Nai9HpmILLxqzhzr7_zhLms)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 542: STUB JgOh8SAKzSCxIKJArX8xj9HisNGqeK4juSo9eEEvSDw
+  Number 539 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:56:21Z: provared.code.run
+  Document: "Bash" (fingerprint zysy5DpQOVENTOJHGxeFYs0ti1jLLoO8TgCH_FGn3wk)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 543: STUB O6M0MmV1NTMs0cKKmsZY-KijIGbJI0lYxSOoDz5YvQY
+  Number 540 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:57:04Z: provared.code.run
+  Document: "Bash" (fingerprint SFH06FrIGWTOBes-Be5L-rkijCJE6rpth4zy-5SOK3E)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 544: STUB VcvJ-dPU2csNdPbXRLS7IrjACwS2Su4YmpIotznt6NE
+  Number 541 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:57:32Z: provared.code.run
+  Document: "Bash" (fingerprint nRKbFqZBUHcnRhvqV2q7H81VI3a6tD--VWrW8lB0qWo)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 545: STUB QNmhqLxenBK7UlGBc-8sleZmc8j3lNRUuhThRwoNLFo
+  Number 542 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:58:23Z: provared.code.change
+  Document: "Write" (fingerprint 5JiHGkypSQMBhqZ85zSqGsWxDWaHjhr5YVV6hlJ-RzY)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 546: STUB T2VOeD2yW3cxnMc92JwNwEWKlgqLxBPNTGaekM__be4
+  Number 543 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:58:30Z: provared.code.run
+  Document: "Bash" (fingerprint YhS-wgKv5NZyksao7bXB0FEvo1UE6F1f0dfdHDxjdos)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 547: STUB 0QDIoukOl0RRxaB3WZI_1tk9eubkc2bx7I16fth7iMc
+  Number 544 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:59:19Z: provared.code.change
+  Document: "Write" (fingerprint aWKLMPLHJHOkkbk6fin-mZ8Ymmp1qTravMFX7-jQjP8)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 548: STUB 2wqzPAG3SobBbeksM1GDXvQQq0x8I0Rdc4jQCACyytU
+  Number 545 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:59:29Z: provared.code.run
+  Document: "Bash" (fingerprint VtqY4GRXEG0SofrYMUMTP-NwnTc4zCc1QCPxSh2E_U0)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 549: STUB kCnc_VnUObYNjqK852j5Z89CG8WuVSedw4HY6lVDTJM
+  Number 546 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:59:32Z: provared.code.change
+  Document: "Write" (fingerprint g2R4CJw9HlBQAMsSUc_hCmdrKQLmTn9Qv87nQFBxhXs)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 550: STUB 6q4D6gemAnUuJddqTHQ00yxDQKG382umP9Fitk08ndc
+  Number 547 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T21:59:39Z: provared.code.run
+  Document: "Bash" (fingerprint xoBmbWz-_hPO5yQILa6ttV-Kl4GMAOOjhnSLkTv2K9s)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 551: STUB nXyzlcCFVUF7nffgV4xfoG4QdiRc9xIfiGBUF8jZEus
+  Number 548 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:00:09Z: provared.code.change
+  Document: "Write" (fingerprint 5FsdgoaDsIj-B8Z73Jq_yH12_GRYQgDvSGERtyF7MF4)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 552: STUB PteIWD7QniGOEK3mpxhExYi36WeEmLYllATQVi3ud6Y
+  Number 549 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:00:22Z: provared.code.run
+  Document: "Bash" (fingerprint 0yqYOdHYPsQfCzaUAs2gHLLhrhff8woHK1-AAzSlPts)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 553: STUB KXdgeBvA5TODE-uhXSSdhXCW0IlTK08NzV6fKWwAGw8
+  Number 550 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:00:41Z: provared.code.run
+  Document: "Bash" (fingerprint IlmfoTcfN8ZZl-ktjwgWpUUgrPKFHMU-QO4hti62QWU)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 554: STUB iVis9ZKS04eaOxDnV-4-yckG808jcbPHcQtMUGbnFrc
+  Number 551 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:00:46Z: provared.code.run
+  Document: "Bash" (fingerprint D1_ynQ7-3oIofAZVuSxvCJXCAE9_9QfOyaoeIlyIMbw)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 555: STUB k6KO4L-_y5HYzC8ndsmW2HB5uSiHHsB_GbAqVUr_2IY
+  Number 552 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:00:56Z: provared.code.run
+  Document: "Bash" (fingerprint 42GWu-edViLSqx-3nR1iyDc7XW8lcNaW2PBQas2oe-I)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 556: STUB e7V9HyehdhUw3rFBWr6oyZGCu6PTi-yZeXdUFKIhTMs
+  Number 553 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:01:09Z: provared.code.change
+  Document: "Write" (fingerprint X-dk6HpXUWD7suuR2ncKB6TK1DT07RRafnuLh1FHOLM)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 557: STUB hDrgZQFRC2jQoCN9qj8kPBY4CQBNTE2_AxK-1-xbgSQ
+  Number 554 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:01:20Z: provared.code.run
+  Document: "Bash" (fingerprint OjAVRPZz2xXLtHqOr-ojgPY_Fc8xsiq0_J5u1N7VHCc)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 558: STUB 2TnSkiHnt-cs8XMs7cPKuYsgQM65wNa0IhzKLlwiO3g
+  Number 555 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:01:36Z: provared.code.run
+  Document: "Bash" (fingerprint x2dg71ZpxKpIYaxzfS4enVX9p9ajHCMC-VLRuuweqO0)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 559: STUB pIvyAMi3HhAq6QVqLlB8R5-IpEmBaVLl8WGWD8ZG5nE
+  Number 556 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:01:44Z: provared.code.change
+  Document: "Edit" (fingerprint GxjM9Su6jtvx_omcB6vZBqg1TwHv3ZGomwIPML27-bo)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 560: STUB 5SNAw6xKKpdF8DsRuBVPQY9uI0T3Q65SaNgyA35giSc
+  Number 557 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:01:48Z: provared.code.change
+  Document: "Edit" (fingerprint rY0RAY9h_uyIvDu5TyUL89S8LoRgjd2MPXH3AWnyNoE)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 561: STUB -yY0ULXtGOL4ZVywuYVV3OO9UmNL6sZNzeaNX7fl1SA
+  Number 558 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:01:55Z: provared.code.run
+  Document: "Bash" (fingerprint NfYKAz9cOJrgpv9LC_2BhHvl_BOpc1pHBlYUlcEDilU)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 562: STUB 6eOCagxFYVQ04kKC6_jDd1uThs-jtI6iOgAWh1dwrMI
+  Number 559 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:02:01Z: provared.code.change
+  Document: "Edit" (fingerprint 6RrixmuuqK_5qh6wyEvNXPZQD4OYisBQLNZ0Opty-dU)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 563: STUB mcr1hhRV7TBM6AqkL4SGofq4jNbVbUAc0M-hrTugBI0
+  Number 560 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:02:07Z: provared.code.change
+  Document: "Write" (fingerprint 4mHO8udVawNKrGxQyaCm0whClIjmq39Vw6mdOj0HlcA)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 564: STUB Lnr_i5KcGPzYDyvPy8T7VReDxk7Ryg9mRW7pkKalmxo
+  Number 561 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:02:12Z: provared.code.change
+  Document: "Edit" (fingerprint 60TdbthAmv6VZ8EAjeOT2vjmapcsKYjc2YRmRK07paw)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 565: STUB nE64CU5_x87X6gOUYdLF5oPMW67HEmwIVLdmFXXYf-o
+  Number 562 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:02:19Z: provared.data.delete
+  Document: "Bash" (fingerprint KuXhwMmnH3vPdjIqWwluoYYKOicL9xthmzbn8wVSQww)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 566: STUB QzJcq2CVwxjis5zClq614QxF4hokL0hpUQdEmsya1yA
+  Number 563 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:02:23Z: provared.code.run
+  Document: "Bash" (fingerprint SuhwbVeCE7TRpmPDf2QlfwV_IpWxIeEfhIhlLG6hhX0)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 567: STUB wG7JRL4gjKfOJMU6yhjeixKCMCveClrb5XCLB_RGsZ0
+  Number 564 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:02:25Z: provared.code.change
+  Document: "Edit" (fingerprint eB_sG9w71YI0rHLhmkso56pAdp6P_bRy8mRVAQobstA)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 568: STUB ju5_9009cbOV3Nqip3F5-5nQYryGFtCMaZ4TM_gux9k
+  Number 565 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:02:36Z: provared.code.change
+  Document: "Edit" (fingerprint Sv3-6LKuMwdv4ZmUjpyKnDGXydD7oAuIjhCW3RanDlA)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 569: STUB jGyABNzijdr8XntHOWiU9XvH8IbPrwD0PnBA5twFsSg
+  Number 566 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:02:37Z: provared.code.run
+  Document: "Bash" (fingerprint 1ai8IGsAMOarSG2oavtqwN8xSSh5pxJTBPgRd9ZBY8k)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 570: STUB hFETZWRythpYr4q2f0lJhacNPJFlCthMUquepDK9JXk
+  Number 567 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:02:38Z: provared.code.run
+  Document: "Bash" (fingerprint 4uU8JYoclDnbljSdj755XWLXEfkVmfCBfy6XXobPi9U)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 571: STUB HaKlIe653m4RJUMw2DFLu5blHW7cHJMvY3-IqqIeOPc
+  Number 568 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:02:46Z: provared.code.change
+  Document: "Edit" (fingerprint vQncI2HXYARKd52skpU110Vq6nLjvwKv4w3tqMdFOP8)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 572: STUB 7HdY6ScLPjJdT4_QPuewggEsqkAPCXyFM1AFz7LyNNU
+  Number 569 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:02:50Z: provared.code.run
+  Document: "Bash" (fingerprint 2I6QbrbRMtVIKAlbTbtWcN9ECSvMOEj4G80Tlo5a5Zc)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 573: STUB ojEbW6kLOYC4q9qzcPnrjozPRZ2EasnC9BVbbRSyLzE
+  Number 570 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:03:02Z: provared.code.change
+  Document: "Write" (fingerprint vuiC4utulcgVtUbXede9Zwf8xHBa_yJ_WiZqUZUGQ58)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 574: STUB xIwlnNCmAtb-Co0HjfUsBX6OLVcDzW9rGGEpCkXLyAs
+  Number 571 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:03:04Z: provared.code.run
+  Document: "Bash" (fingerprint PX970VnURZ8_Ck943T5lJIjY5hsDpuJ1qe0OMX4q3lM)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 575: STUB dq2BI80oiDjfiP3zIBBzTqToSwPILT_rY0_cD7hnQyE
+  Number 572 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:03:06Z: provared.code.run
+  Document: "Bash" (fingerprint ZmO0pkaO5zKo82QNczklXCqihIGo0pYD5wEruUN9PT8)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 576: STUB _zImXVBp66v9mMJYEEJAdkwGwxS4U_phYXdJ3C8pa8A
+  Number 573 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:03:15Z: provared.code.change
+  Document: "Edit" (fingerprint 1veGtXpY3hrrWzcMoW1vix5Benu8Evab4bjHEXJkwIo)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 577: STUB RMNFxpeKobHzN22DD8PoliJF4KunQwGuazjmMAiBHfY
+  Number 574 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:03:19Z: provared.code.change
+  Document: "Edit" (fingerprint gBCt6547hSDL3lfIiCPqc1FDMefIztNQGVaxyU1QytU)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 578: STUB XAb38ur7t8nzIMBe5EYvTj8fXt6aPMtH2e2LcGkUt80
+  Number 575 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:03:22Z: provared.code.run
+  Document: "Bash" (fingerprint gWadJoWloIuND399fWiyn0HJsMFeSXQ4e0-6GPw7r4w)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 579: STUB VJ2hMMSeRdvwy6BLaGMAjau8yeB0KJPwoZ8RzGU2Q5U
+  Number 576 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:03:26Z: provared.code.change
+  Document: "Edit" (fingerprint IyS1MjFX5ax3RC6vepHox6j3Xek5EGYoIJJTI_n_Qpo)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 580: STUB 9aRt0HGrYFaJ15AH8fxMhG5osXELe3fiGTzd5cgDtUg
+  Number 577 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:03:31Z: provared.code.change
+  Document: "Edit" (fingerprint Mm0MHQMWVSJ7EU6D6ZGPp6CBmL8qys9-Mtorq9V7K2Q)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 581: STUB qq4gf1kmkmHM9jNXbFskXYyDaMtgtbqD2_vPOag8uhU
+  Number 578 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:03:34Z: provared.code.change
+  Document: "Edit" (fingerprint jeNb-IhN9N9mOs7gEaWQT1ahMef1yiR_ZPo6lMHoj6k)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 582: STUB wZo-hy24F8J2ZIRxSEXkT-D404QoqBopWrJJPJsk_dY
+  Number 579 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:03:37Z: provared.code.run
+  Document: "Bash" (fingerprint DUJfcQ8BeGsdtoCefi7kjmUMPJQjvmDf0c6TYG0tj3A)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 583: STUB VfIwI66pD3P4SEij-v-zBsw9eGfp0ogLMU2B285dRgo
+  Number 580 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:03:41Z: provared.code.change
+  Document: "Edit" (fingerprint sz8-KbxM7TB1maH8GNxAryNFHuUaM7EUMeD3mkbWYG4)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 584: STUB 5YpD6rJJRtgORD0wD4uFQZMed51h8pm2zcxcCIvBtfA
+  Number 581 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:03:42Z: provared.code.change
+  Document: "Write" (fingerprint UjDWrt3rrQPafym_qtYGH2b1LYWN-cQxMOPX4jPfjYg)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 585: STUB pRvvkL4qMtaEh9at-1QQWyTTnAVu697v3iCRnaipT58
+  Number 582 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:03:47Z: provared.code.change
+  Document: "Edit" (fingerprint zR-0ScIeMsqGBbzBKBSJCzqUFrZvf79-nPFdkwtXbgM)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 586: STUB PNS5v9xXsBnYgoSI1SzWIfsr40a2h6jIX_r0GbOxZUI
+  Number 583 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:03:52Z: provared.code.run
+  Document: "Bash" (fingerprint 8y62S8He_y6ngGQKhqTE5_cDrxtwF8fsNHJxwKESbMA)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 587: STUB OYUl7hNVC1v2i0C0aMoeO6jT1QoQ0pGb0ve0tULWIFY
+  Number 584 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:03:56Z: provared.code.run
+  Document: "Bash" (fingerprint ieSyxCdG4lckq4vQ8aY0Yb01eWeP96DWt2LUD595vsY)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 588: STUB qn7KFZDR6oxLHRipanpzcDeJkbVFip5agieogbgZYyw
+  Number 585 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:04:00Z: provared.code.run
+  Document: "Bash" (fingerprint bffw42TGRSxO727dUf02xxOZalej9USF8qId77199Qs)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 589: STUB 4fpLebLQQzhVvwyEF85TdXswaD5mHNcu5bKQVuCiOIc
+  Number 586 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:04:00Z: provared.code.run
+  Document: "Bash" (fingerprint wO3gNFKjEgHZmzveM0w8R2mVCmx87tUVrmsrAwnUoks)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 590: STUB YGb09DXKJzuS1bJWigP4DNnrxDMVq3EqBgLVH1DFUN4
+  Number 587 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:04:20Z: provared.code.run
+  Document: "Bash" (fingerprint V-oFjQxOkG_Sq0knVUh6EcxXcQNwpeBvsdn-xJnDd7U)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 591: STUB iNylisk7OQlcmOpAOhRhHALr8TCLSI4h5fRh_btrnB4
+  Number 588 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:04:30Z: provared.code.change
+  Document: "Edit" (fingerprint 2Uc7rIxSg2pYsb2z8uCel0PgPeqBnohYynGXigJ3LIo)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 592: STUB 2yWENKRRh_CaXKmRWRjhiknYLwl5oG8i6qzpdMwGqk4
+  Number 589 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:04:34Z: provared.code.change
+  Document: "Edit" (fingerprint KyFo4ONSZr8LDu9QJHKpIgI7ansytlfNbjiyAYuUV44)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 593: STUB MQblGs4Mqy5tM7aaaw6Sjg29LzvxZfEwjjS1S5TnJM8
+  Number 590 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:04:35Z: provared.code.run
+  Document: "Bash" (fingerprint KVq6T9TjIzxULqBaHhK9S1-Q1y9uvOAVxtKmT2xbHZY)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 594: STUB OgjRKF0hlwa9IWx8jyZyGEMKlRCvl_iXDuv38d0hW0c
+  Number 591 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:04:37Z: provared.code.change
+  Document: "Edit" (fingerprint W52NO6L3kAJ0yGHEdwEcQeZKUvFQcl1DTZZlpYPxSVQ)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 595: STUB -82AtSzUo_Esho3vDq-y1ifZOwyvIygQ1Vb_cMFEYkI
+  Number 592 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:04:40Z: provared.code.run
+  Document: "Bash" (fingerprint m1KL3F00SkFuZ5M0OxMwH_xHPCXscCLg7abxXU9vt5M)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 596: STUB jGmy1ec9T1oC8o3o-3UUeGHDK_Qt9jIubV5DspiVBys
+  Number 593 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:04:41Z: provared.code.run
+  Document: "Bash" (fingerprint 3zwqC-soiJvz8dOZyYJxtOaa9UiR2cA19_RIV2MoHrE)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 597: STUB ZjvD37tkmzvKDB6494yjQNUfYvOoE8ZpCuKXVgdldjE
+  Number 594 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:04:46Z: provared.code.run
+  Document: "Bash" (fingerprint Vr_8ETS6qz57yylEKkYAfhNe75Ts3ggza2KOpZ30hbc)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 598: STUB 0dTdSNo_cslHBNkpGuoV69LFJNFk__kWKtK6U_EaU6E
+  Number 595 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:04:52Z: provared.code.run
+  Document: "Bash" (fingerprint JJowrrSXjZ-qc6DXIENKlcuxUaPYdIsRca-dNRnfkos)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 599: STUB VhtIzTJi9cqhO7NEzA47rMp78THL4FwFGrMk4pwWRh0
+  Number 596 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:05:38Z: provared.data.delete
+  Document: "Bash" (fingerprint uf8spuL7d8ih9Blv6yz_aY9JCCHCMNxcvG1LVUTFT9k)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 600: STUB 25h-wiRMOABgAj0-pO77dpDCJzlwQHLIqzPKhqe2QsM
+  Number 597 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:05:54Z: provared.data.delete
+  Document: "Bash" (fingerprint 7fVjDvRM0mYE_TUw-OGsXTjTDqIaXatMFYU7klS7Oco)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 601: STUB -8RrTwZhxYF3TIfqR2CDYUDch_IivgKZayb4VuKEEjQ
+  Number 598 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:05:59Z: provared.code.run
+  Document: "Bash" (fingerprint hbpdFFl_wqB7XPu8JpZm8RJLKwLDNLioVOmPNYM0eZQ)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 602: STUB obXHwt3Vl0VR1cLyUcNGdriEj3NfBAXf5e0u6_WZt7Q
+  Number 599 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:06:02Z: provared.code.run
+  Document: "Bash" (fingerprint AySmhny_UI_Q2l357dyQ-pHjbF6fOSoHGp2beE6LU1E)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 603: STUB m0gYBKy8mLYF_ZNPqPshu__ybK_eltot5fIOmjexbec
+  Number 600 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:06:13Z: provared.data.delete
+  Document: "Bash" (fingerprint 3EDvpFxxCNP6Ejskfw7ARz-P41Qam9IZWv3hJuBaGl8)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 604: STUB XLbeSf0yM5dmlxg70_EaWM-kI2I6Qea60uqYNg6Aln8
+  Number 601 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:06:38Z: provared.data.delete
+  Document: "Bash" (fingerprint xzjuSll8PekcLoWeR1UmolmpXTPUoV6EaH-CZETtcb8)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 605: STUB nT5PJ-2xBhh4TgR_Tg5SoCtpmF_0wmEwAcaxYN4juco
+  Number 602 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:07:12Z: provared.code.run
+  Document: "Bash" (fingerprint 8Vrqw2M04ZNM8lULCEyz6qS9xweGNg8c8J9A0HuHoCk)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 606: STUB H0Z3Vr2BJovuBrC0LnpzR5IUy7xh09nB_O4Cryvd3no
+  Number 603 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:09:10Z: provared.code.change
+  Document: "Write" (fingerprint PeBaYaFvJ0uYuDV6Q5w1NVkkVS1MHcdynGssYuhK9jA)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 607: STUB uHRSjO1iYfnG2plqY4wOSbs5QtkQY9ONe5gSQpvl9xM
+  Number 604 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:09:27Z: provared.code.run
+  Document: "Bash" (fingerprint CKFvSuhB5b8BCjMZ94buqmA8tw7b5-4kGKaTR8M1jJE)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 608: STUB Cyc8UIKaZjsGLR4OOyHodqWzUL4fLscGH043FCRdI4s
+  Number 605 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:18:36Z: provared.code.release
+  Document: "Bash" (fingerprint zcOPWc7k1AkGLsP186KERpX-LpXTUvpKR1UUvxhDDWQ)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 609: STUB VGRTJ2bKLnBwcdVfU2SvPvUYSIGYGj83BMhLuD6m-tw
+  Number 606 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:18:37Z: provared.code.run
+  Document: "Bash" (fingerprint yaLZzwMiJ0OPPyA8LrbTzF5UPd5eBDPqoOnQWlK5nUY)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 610: STUB 53P0E7iTxd8CKHjYpqY9JpgDgjPtb23wO2iQe-auRjU
+  Number 607 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:18:43Z: provared.code.run
+  Document: "Bash" (fingerprint GCfAJ-Ckig9BDmAroF6yO-ecARv7td8x4hNdAZXhfHA)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 611: STUB VUYY8UXMYFEAeaKJKwkzv69Q_aDw6460-wvbvd5H4Y4
+  Number 608 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:18:58Z: provared.code.run
+  Document: "Bash" (fingerprint FsN7iFiyoQtiBVgyb93SlXuIUzMnD4AnZBGoUzbTTBU)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 612: STUB ngEIqdP3_RTBI03skySLOKRHRNlyl9681FUMRLACuHw
+  Number 609 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:20:12Z: provared.code.run
+  Document: "Bash" (fingerprint _rXN6qQO9H54ySyoT0MNxY31zMyIXlrAuWUqXV-erDQ)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 613: STUB wuitNQN7Uls2WWgutUxZ6fwMgfY-Uori-VAKBTNXvfs
+  Number 610 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:20:13Z: provared.code.change
+  Document: "Write" (fingerprint 1AFkw0GJLhayvfjvHQwLo--7w05XOi0dqSWZo8DZFAo)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 614: STUB --Rfm9WkR8jaTrLi3ToNvcOOJsVJIgSgcuL6yot-MFQ
+  Number 611 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:20:30Z: provared.code.run
+  Document: "Bash" (fingerprint 4ro11BBDqZQlnRKUIUXZbm717jBxWvKR3O5lJsbFc1I)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 615: STUB A2Ip70Alqvmpx7g65pjwWYkvD9LEiChdBdZSbYvAwdI
+  Number 612 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:20:31Z: provared.code.run
+  Document: "Bash" (fingerprint -34OySFEbPx44zynVMRJMueKGESdKC6manmeLKi9H6g)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 616: STUB Nai8cCROmI0zBf8QC9wltbC_E0O4hiAPH0lXXG27RVc
+  Number 613 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:20:31Z: provared.code.run
+  Document: "Bash" (fingerprint CfVqFryzCFX8iIDNas24ivThnxIYAz_QRn4sF53gyYc)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 617: STUB mGisOkwf8fQTXdN95cxpAB8fLlvLYA2NfU8BVunTsfU
+  Number 614 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:20:31Z: provared.code.run
+  Document: "Bash" (fingerprint KiGJkg_CEWdG0hEFM863HMl_Y5Q6QpG_3lYdz2yC6RY)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 618: STUB DN-GKKZ4z0hPVsZ51ALThISGKtblJ7dv12RyX7K0ZGU
+  Number 615 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:20:39Z: provared.code.run
+  Document: "Bash" (fingerprint D8gxxF3aDfJLyyztlX06zbbd4Pa2L5TEU_aSb3FCrlc)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 619: STUB -lqAarTXNemF77Cn_CoY5o1MjA86rS2FIG5QuB3ZyKU
+  Number 616 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:20:40Z: provared.code.run
+  Document: "Bash" (fingerprint nHK6SY5f97ewD724_cVw-NeCM-wAfbgO0trgsuBc70w)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 620: STUB vlp_0LsF_A1co7PDPjWpXSdBU900R9eWEBimhIPrLG8
+  Number 617 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:20:44Z: provared.code.run
+  Document: "Bash" (fingerprint 2piRyVctmVYdGJFTPRGfNCY3h4GL4VLy3lQJxIIP1nM)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 621: STUB Jih_rwMRJ5-n2ObNtZ3mXvCB8f8vXs8F6TpP5zhklAE
+  Number 618 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:21:22Z: provared.code.run
+  Document: "Bash" (fingerprint NmQVozpinezltaaBachJyvc0fB-TuMoe1GTVSCv3qYo)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 622: STUB 4jQw-DpozTPqiH2sZaw2mrdZMDuH7K8kQXmJ3B5i0PQ
+  Number 619 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:21:28Z: provared.code.run
+  Document: "Bash" (fingerprint LP2RwSENPSxMYm1CiHWIxclky5W1Za8pGXf0uFjqh84)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 623: STUB FXMdkxQMIig7EsJpfvC5NCpUMpFude08PdMkeFtZfPk
+  Number 620 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:21:29Z: provared.code.run
+  Document: "Bash" (fingerprint K2L7d8qNGOQLdf61Kujb02eZECiipO_2f8Vh6wXWEiA)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 624: STUB sPvFnaLpq6mXnhbzpQeLzhjjaQZIfMSyN9UtlxenOVc
+  Number 621 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:21:30Z: provared.code.run
+  Document: "Bash" (fingerprint v5wckzHATIhikwaEl4WTxdIdzPWfCwAYCyyAyeHcsNI)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 625: STUB PPvZDrizmLyVgCMRakjwMr_u1PY-XG-JUd4NZ25J9jM
+  Number 622 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:21:42Z: provared.code.run
+  Document: "Bash" (fingerprint UkfEigky8eaiQ8pCfkM1ZKYJKQEo4dfblSxNxy8imEg)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 626: STUB fMC-pvRKP7khh1Is4SkBG80C8UnmmOjevEWSc2AbRNc
+  Number 623 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:21:49Z: provared.code.run
+  Document: "Bash" (fingerprint W2g91TYTk3tUKY3XdYc2dwAVF8nNI0HwY27LenMan88)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 627: STUB F5vrva5nOZslevDGnfirp9baCNmxDNEx5k6_nNavnJY
+  Number 624 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:21:50Z: provared.code.run
+  Document: "Bash" (fingerprint A0UhTiZSTV_zt1kFlQg3o1yNreTxbywo-rwv-0Q0fmU)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 628: STUB B5ukVW1V-HCajMGV5OuWf_8Wo7Jr_zR-mSy4ck1lEEI
+  Number 625 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:22:10Z: provared.code.run
+  Document: "Bash" (fingerprint OqlFptlgrfWCPCvrogjEbt1OVCSYTR94HiJMDXQKxvc)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 629: STUB NVweOEMZAnPDV829ZxRzN6ZP4VUWQblHSYAJJGYAR9U
+  Number 626 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:22:10Z: provared.code.run
+  Document: "Bash" (fingerprint AQtTDmq6_kssIkDuZYdXaHJ885P3duxvY1Kdi_-NHxg)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 630: STUB cv1kB2uD940p9uu-nBt3uWGyY1ZOX49f9rN91mCZTsM
+  Number 627 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:22:15Z: provared.code.run
+  Document: "Bash" (fingerprint Nxw94_E-3k5cBwE9ia6M6Q80ItVEJIIfhij3x8JLLqk)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 631: STUB vUqRNedv_YcB0lrJtb5KaWL9ALRikg3qzD5Qtyt9fm4
+  Number 628 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:22:29Z: provared.code.run
+  Document: "Bash" (fingerprint NdjBvSeJS9Jnoi_t-XOJJpz8Pzs5F90cc1vI7O2G0BA)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 632: STUB jhIjAx2st6CeS4_0WhOaSg0aDZhHua-qBDUJJdKA-sE
+  Number 629 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:22:30Z: provared.code.run
+  Document: "Bash" (fingerprint 6ZVIIpgK5PeIOzWJxP85IKj6av9QzgtpkPOFZPhk87Y)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 633: STUB Zyfx8y4Rq264SkpZ3yH02bGX7pq8_kbwccEzzBeHJho
+  Number 630 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:23:05Z: provared.code.change
+  Document: "Write" (fingerprint YnVlQVcx9fUbxVPUFUYjwfDVndcalM8ooxbOywxook0)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 634: STUB A5d89c071JI0SLf3dLmvJNZED-JuPaPVUhwFHG0AD5U
+  Number 631 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:23:21Z: provared.code.run
+  Document: "Bash" (fingerprint KZlnGa32_0EuEfNWPirYj6B66SBXYfzIcjvz_xszlT8)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 635: STUB d1KgbPl_KH3KI8Pe3fc3zS_M1t4UVyG9caPylLisF-g
+  Number 632 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:23:22Z: provared.code.run
+  Document: "Bash" (fingerprint 5l1AderltxfpLMTpRai4fkcw5TdKM9UjfcXJFaUiN4I)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 636: STUB V9YNGO9rmC_3Aq9GUgChNSptKpPrpvi4D7EGMZPieWI
+  Number 633 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:23:22Z: provared.code.run
+  Document: "Bash" (fingerprint V9Hnl3XrQpJkG33NPGp5aZFmSpfxzQiR72rrzAPtYiA)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 637: STUB Iwfd48eDkygBK21Y5vUOV_nuAzCwx0pU1OzmDwiVYmI
+  Number 634 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:23:29Z: provared.code.run
+  Document: "Bash" (fingerprint 5MIWRpyziBGjtJ9n7a323epKvNpWSUnk0jqi9IvD_MA)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 638: STUB R_XGkPwrumadrWg2ZnP3dWkH_e8fY6GhUtZ7wtlO2w4
+  Number 635 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:23:32Z: provared.code.run
+  Document: "Bash" (fingerprint i6Cjjf51e0sGy4aE8o25Rg4ZLhAFYB9MLIDyYHbyLr4)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 639: STUB t_NazQ0YbyZ_TtqQRiyH9lAWeL0AEHx2iGqZ9Dh6XHU
+  Number 636 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:23:34Z: provared.code.run
+  Document: "Bash" (fingerprint NomjAuTGKW9jqBH2uT528X9-vhL5rgcY2411G6qD2aw)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 640: STUB mG82i3CfNsTvb5aA-2_MQs1XkQahACAMQNWo0tnPNNM
+  Number 637 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:23:45Z: provared.code.run
+  Document: "Bash" (fingerprint 7ZUraKwZHHTLw_bMoiCAsb-p4F_Kyy4wUW0UxjtskDw)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 641: STUB ksJ4nIMcv8BvHMwGnMckAbR22UoZ86KnJPSfPcNO3Ac
+  Number 638 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:23:47Z: provared.code.run
+  Document: "Bash" (fingerprint 6GPlnOaTHjPh1N1EL_DYoe2XEkXZPppIsHyumJ7GdWg)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 642: STUB FeMuJvAJ7szcub2LgDWb6tWWJ_QIVc6GtZwRg6lccLI
+  Number 639 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:24:05Z: provared.code.run
+  Document: "Bash" (fingerprint 83Ix7fT0FuN4aU0eGc_AXBrBwkveRKaQexqy-hOKZUs)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 643: STUB Z9md9ytiaM_lSsXvwAtr4QOMaF2h1aZfhits_lCj76A
+  Number 640 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:24:06Z: provared.code.run
+  Document: "Bash" (fingerprint iZZgrVok-gD8FKKg6DpNpx_Sq1I6FN7C1MI-pzcoMuc)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 644: STUB qhRSDYXFALT9vMHsGm4de2PeiPVHsNgZ2BoQDcLhsac
+  Number 641 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:24:37Z: provared.code.change
+  Document: "Write" (fingerprint owZxBJsUkSivtwXvPPIHdx6W9ABsqIzVYTpaXi-1YrU)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 645: STUB -sbJRn3uYMxOezaJb9XC1lJYndHOfi6Hzr-lOnEqyx0
+  Number 642 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:24:56Z: provared.code.run
+  Document: "Bash" (fingerprint XK_ciJUItJ7wrheOZVdhZG9jurdt6IF1VCEB6DFuc2M)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 646: STUB eLUWbRlebALVSxkL2XyD1we8iEWXHYH-T114rFsibrQ
+  Number 643 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:25:01Z: provared.code.run
+  Document: "Bash" (fingerprint Hp8H_Jq25NBE-_WD48D1odJ2C3fu7rL_3zRDfkNBrvM)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 647: STUB Qqvakaa5qnJiL7rqianJCSzmrmHZl7kjpwUJ-6FWjOI
+  Number 644 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:25:22Z: provared.code.run
+  Document: "Bash" (fingerprint KIbUE1esQl-qg6T-lvlw_6tGrDI4szYLMHpyOrwa36Y)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 648: STUB 8pNrZdYRxniG-fxTFZUtu8T2vcYfeLuKTk_Er5h-4RU
+  Number 645 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:25:44Z: provared.code.run
+  Document: "Bash" (fingerprint 9h5LUjTeSdVZaUknpkqauVZeCCyfCdq3AsR_LqEm788)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 649: STUB jHP0J0vqHc901UNyAl-uQTiuIVqoM3SJe4DyA5SkbDk
+  Number 646 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:25:50Z: provared.code.run
+  Document: "Bash" (fingerprint 4NCw2SwXmd7C4DtKPq0l0V0ZpwaxQml49yfqbqAcd8w)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 650: STUB qFnMin3D31jAD80sFGm7oigK_-fWOgnj8ZKgJtbJLb8
+  Number 647 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:25:54Z: provared.code.run
+  Document: "Bash" (fingerprint Mg_hHcWKKkSYxVUsKvehndtFv_MDpOfQyUDVMOZbTLI)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 651: STUB I_uy_OBfTWXZVJyz7NuAaK-r3EOYl_-0MRT5gma4PUA
+  Number 648 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:26:12Z: provared.code.run
+  Document: "Bash" (fingerprint c8y7EkJP3RMGweW_FtuKuQbmIlss1hmdf_mQlAckefw)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 652: STUB _FNJnhbT4nq95enoeaZgOucwmwpVSnHxHPJKvamQA38
+  Number 649 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:26:13Z: provared.code.run
+  Document: "Bash" (fingerprint umcL4lMEoUQfm2llN7ibno3TV-xRHU32unfnTukpHVQ)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 653: STUB lcaZ9vWl_5Sj8OI9JWbdnSDHjdPfdG__JgsN0EgF3QQ
+  Number 650 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:26:31Z: provared.code.run
+  Document: "Bash" (fingerprint Lc347jxgb7FyI_dAeTyci3lh-2kaXku3tOQjibq6-Qc)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 654: STUB HDb_LauX7JokWr67JB0IVXq50RG_--FcQEzwIR5JV30
+  Number 651 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:26:32Z: provared.code.run
+  Document: "Bash" (fingerprint CQbA5Oggb-GiDQaApv_-Tg-3ON1gz8QdydAfRt8QJ8w)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 655: STUB tvX1AX6zQ2bO1IcPEk_QAwTEn4pUrZgeyRbmiy5_Kpk
+  Number 652 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:26:51Z: provared.code.run
+  Document: "Bash" (fingerprint lYPiI05dAyUDGy6crK9ryMs11acdt_wy8WlLQ9eI5UA)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 656: STUB Y3m5gi_csnyn91DeX_unSOQhLjeWu5VTIiLfjebEyBc
+  Number 653 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:26:55Z: provared.code.run
+  Document: "Bash" (fingerprint gevb6k34NxsGRJwtAYmRrTXa5F4uk8sM3jqciVMHzO4)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 657: STUB rBMt1N88iovFfc4WNm6n_nSpJwA_NEk0U8ZPn8z0bgo
+  Number 654 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:27:10Z: provared.code.run
+  Document: "Bash" (fingerprint t0aIXkfs_ztml2MbXbbXmqVMtK-SHrFyKaXH4aNj24A)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 658: STUB tJulZ31r8filoxbELcUizKWN7Hd2s4ZBo7wmELcKkdI
+  Number 655 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:28:01Z: provared.data.delete
+  Document: "Bash" (fingerprint 0JvKDWKVACCC84qHM31OOD711o0qAlh7rBpw-lCLz-4)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 659: STUB vk7aJQoEtzu2B7djMHjKUQX75G1AS37YwrMcdrwT3cA
+  Number 656 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:28:47Z: provared.code.change
+  Document: "Write" (fingerprint UwpAkz8LcAIF26vfztsYCUvdElHZ0Ra71WF3anA-_wc)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 660: STUB iHFAk2PtLKzRkJT7FOpqzf2WDBdneP360OjHe8dxWHg
+  Number 657 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:29:11Z: provared.data.delete
+  Document: "Bash" (fingerprint fBJj7qnDvPjbJ-QpfwFIzjMGTGqQIwcbmQgnrbLHKEM)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 661: STUB qo1vVlm1HLSMyR1Co0TBmtHMr892zmvq1WuTJeM9xac
+  Number 658 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:29:25Z: provared.code.run
+  Document: "Bash" (fingerprint 7_-ERRoyDEfLMcU9Zrv29VBYu3R8RnwABwMuE1PbNbw)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 662: STUB rCUKyiRG0E5kbkCRndyygrN55rEDZeVt9Eq8HIRjLz0
+  Number 659 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:29:29Z: provared.code.run
+  Document: "Bash" (fingerprint p-KiVXATByNMqvKiZrLWPVg1e7aFzbUGaP4xF9teDpI)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 663: STUB fGuDeUsxQNXKSjT5HmeHIvC5Dmzv6egNkS1C9jKDwz0
+  Number 660 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:29:30Z: provared.code.run
+  Document: "Bash" (fingerprint jtCTAHJdl4Wn7sqvv6xv4_yWPiVygdQLRjZEMAD5Ybo)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 664: STUB J7qaFDS3Cht17M5lZGtK6uUWFCOXQraVS_WMfJZHo9M
+  Number 661 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:29:35Z: provared.code.run
+  Document: "Bash" (fingerprint 1BDOUQldC_GkhTv7Pj_JEqVmj9z9_D7zSj7nAZr9QyM)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 665: STUB CFVFkfPEMSutMXD2ZqFXJRE8AXLZI_0Z5z15s0TFB-c
+  Number 662 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:29:45Z: provared.code.change
+  Document: "Write" (fingerprint L4ypZvXNM9hOi65fqcfjeZojiix94ZRNt411QXeFQ0g)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 666: STUB 7MO1KousdTICLAmQkjdhncTQN55GQuRG_aieL7prakA
+  Number 663 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:29:52Z: provared.code.run
+  Document: "Bash" (fingerprint HYT5OMg_qNRq69OKjuA25vYq5lrBGFqdYhwU1fT3UuM)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 667: STUB R8XAIUO4YdzlZt5gcavsZGbAfTRzMFs6g1fftoMl0cI
+  Number 664 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:30:07Z: provared.code.run
+  Document: "Bash" (fingerprint mr-ALd245zy2ohTMM22MLTb1p8U8H5Utlc4hhjQ2x_w)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 668: STUB bBzSC7ZrdxnwzpD6tHosWnSyaGUnnPEZNbmIYhGm9Fo
+  Number 665 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:30:11Z: provared.code.run
+  Document: "Bash" (fingerprint Mg_hHcWKKkSYxVUsKvehndtFv_MDpOfQyUDVMOZbTLI)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 669: STUB dKpMmKvHDscT4bvpR68-Gn8ps7aHrADWR45I1tWNb8k
+  Number 666 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:30:15Z: provared.code.run
+  Document: "Bash" (fingerprint 5865HNDKGrHBIzGnEUWnIOONuYNq2qrE8LnuYf1nfno)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 670: STUB QNXzFjwpKzPcZqmC1aHF_HPn1BMOYjw4N1EWqrxeKOA
+  Number 667 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:30:37Z: provared.code.run
+  Document: "Bash" (fingerprint -boNybWFqYgbF-qkCgW11EbLmUzYeTpyEPoFQk-Dp10)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 671: STUB KgU9PJjKmHYyUEHHTNfsSzeKkW5YBKyoNnrLeULJ-Y0
+  Number 668 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:30:43Z: provared.code.run
+  Document: "Bash" (fingerprint 3Ctxajz--jEvBFH1K4z-vkApzaG7Op2q8L4KyZKuGAw)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 672: STUB bs06YBLiEBilrfU5qxRriprW6QKFDjs-PdaMozN8I9k
+  Number 669 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:30:44Z: provared.code.change
+  Document: "Write" (fingerprint x1f6w-t7nBmwpmHrEGBiYIbzXccqV0UrKpay6hCCQ2A)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 673: STUB Oh--I0BcoFIHc_wRsedSlLh_FlziYnBKBT2jZa-ft80
+  Number 670 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:31:01Z: provared.code.run
+  Document: "Bash" (fingerprint rdcfoAeWUM6UI0UeY4bCiSN35q6MJXVeuHFP0VusxYA)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 674: STUB Kxy4DD2y9i_NyS3Bk5EmuN-SfcZCCxpsEFlTkz-PQe0
+  Number 671 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:31:10Z: provared.code.run
+  Document: "Bash" (fingerprint L0N3TgRKJIKW9eE3nScfgXH-Z3epxX-h8KWpJ_KUhLE)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 675: STUB XOuZ7VY9AJZEz0Je_MeU4zihMrq_1g9UompXBGp8ggg
+  Number 672 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:31:21Z: provared.code.run
+  Document: "Bash" (fingerprint 6yr_egpewglrn4KEYbZ3seszeqTgD1j-J4gzG4RrO-A)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 676: STUB Ecg2Q-q7SswIafoGrmazQQX5p6z3ogdTlFrbxloa5fc
+  Number 673 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:31:30Z: provared.code.run
+  Document: "Bash" (fingerprint T27cdFBSAOXa4TFT41F4z78hdl0fDe4QDyvC0tSXSX0)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 677: STUB UYdD0BfUhBMOto6h870AzS7gX8t_Skg2WmGOmcvTVok
+  Number 674 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:31:43Z: provared.code.run
+  Document: "Bash" (fingerprint 5X8jiOIkTBYqjs_rUR9KEs8TS5JvQUIoF9WWjeqUkuA)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 678: STUB Ez5Oawy8oOxsMKKIoSJ7-OCNfOaQjjqTwpCTUaDvyp0
+  Number 675 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:31:49Z: provared.code.run
+  Document: "Bash" (fingerprint Dyq4yKOicCMC_OwurWG9P9YFzlNXXcP3rdcRSUOJ7Fk)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 679: SEAL 52sY-rWJnvlIjLUoDGvmrJUro22iwxDTKam4slZEbOc
+  Covers the first 679 entries, with the top fingerprint 4eSIobBOZuWKq4LVaPMeGmOvC6scz5aSVDPiIIUwMoE
+  Sealed at (the recorder's own word): 2026-10-11T22:31:55Z
+  Recorder:                            "The recorder beside the coding agent" (a label, not checked)
+  Recorder's key set fingerprint:      OOgdiubfBSeXkjMOi5bUcbFyXpuuorxC2gdtV2oyAhw
+  No outside time-stamp: the time is only the recorder's own word.
+  Recorder's signatures: Ed25519 valid; ML-DSA-87 valid; SLH-DSA-SHA2-256s valid
+
+Entry 680: STUB xWEe2DmnS9007IMUP5-gDGnZtuCgNGmQH8BQzrwt28k
+  Number 676 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:31:57Z: provared.code.run
+  Document: "Bash" (fingerprint YjFwcCK7SVrCuWzdZbo8HRRDFgN1pRORrwC9DfszLoY)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
+Entry 681: STUB J4mjydEG-6vCREYYp0Ij6jAwolEYDtfCj0BTwt4PB9g
+  Number 677 under slip CnTvaSDU7wh-PXnMyAG-EUNwtpoonB9DeM1OIPJfBOY
+  2026-10-11T22:32:07Z: provared.code.run
+  Document: "Bash" (fingerprint CbJwb83r3DDdImXa928X89ejWhemcrGzpUF8IgJF9NU)
+  Agent's signatures: Ed25519 valid; ML-DSA-87 valid
+  No other party is named. This shows what the agent's side said.
+
 Summary
   Is the record intact?                 yes
   Was every signature checked?          yes
   Did the agent stay within its slip?   yes, as far as this record shows
   Time-stamped in a way you trust?      no
   Checked against keys you named?       yes: the passkey you trust, and the recorder you expect
-  Slips 1, stubs 176 (countersigned 0, one-sided 176), seals 2
+  Slips 1, stubs 678 (countersigned 0, one-sided 678), seals 3
 
 What this check does not show
   - It shows what was recorded, not what was left out. An agent that acts and writes no stub leaves no trace here.
