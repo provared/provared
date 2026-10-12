@@ -50,9 +50,11 @@ function lineBound(c, approval) {
  * @param {object} options the same options as checkBook
  * @param {string[]} options.issuerKeys the thumbprints of the passkeys this check trusts. It must be given:
  *   a slip signed by any other key allows nothing
- * @returns {Promise<{allowed: boolean, problems: {code: string, message: string}[], breaches: {code: string, message: string}[], needs: string[]}>}
+ * @returns {Promise<{allowed: boolean, problems: {code: string, message: string}[], breaches: {code: string, message: string}[], needs: string[], notChecked?: string[]}>}
  *   "allowed" is true only if the record so far is sound, this device
- *   checked every signature in it, and the action would be inside the slip.
+ *   checked every signature in it (or every one but the third signature of
+ *   a seal whose first two it checked, which "notChecked" then names), and
+ *   the action would be inside the slip.
  *   "needs" lists what the slip asks to go with the action. A needed
  *   approval must be handed over, or the action is not allowed. A needed
  *   countersignature cannot be known beforehand: the action is allowed, and
@@ -152,8 +154,14 @@ async function decide(read, proposal, options) {
     // Date. Text is read by rules that differ between devices.
     const given = proposal.when ?? Date.now();
     if (typeof given !== 'number' && !(given instanceof Date)) throw new Refusal('bad-field', 'when: must be a number of milliseconds, or a Date.');
-    if (!Number.isFinite(new Date(given).getTime())) throw new Refusal('bad-field', 'when: does not give a time.');
-    const c = { action: proposal.action, when: formatTime(given) };
+    let ms;
+    try {
+      ms = new Date(given).getTime();
+    } catch {
+      ms = NaN; // a Date wrapped in a Proxy, which Date cannot read
+    }
+    if (!Number.isFinite(ms)) throw new Refusal('bad-field', 'when: does not give a time.');
+    const c = { action: proposal.action, when: formatTime(ms) };
     for (const name of ['amount', 'details', 'with']) if (proposal[name] !== undefined) c[name] = proposal[name];
     validateRequest(c);
     const when = f.time(c.when, 'when');

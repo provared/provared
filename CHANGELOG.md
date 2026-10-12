@@ -2,16 +2,36 @@
 
 ## Unreleased
 
+- **The two framework packages require version 0.4.0**, so that an
+  agent behind either goes on after its book is sealed (below).
+  `provared-langchain` becomes 0.1.1, which also carries the keywords,
+  the homepage and the mark added on 10 and 11 October.
+  `pydantic-ai-provared` 0.1.0 is published for the first time; its
+  README already gave the command to install it.
 - **A proposed action dated by text gets a plain refusal.** The check
   before acting took a time given as text, or a number or a Date that
   gives no time, to the catch-all "the checker met something it did not
-  expect" (`check-failed`). It now answers `bad-field`, in the words the
-  stub writer already uses: "when: must be a number of milliseconds, or a
-  Date", or "when: does not give a time". Nothing that was allowed is
+  expect" (`check-failed`). It now answers `bad-field`: "when: must be a
+  number of milliseconds, or a Date" (the stub writer's own words), or
+  "when: does not give a time" (new words, for a number such as Infinity,
+  a Date that is not a time, or a Date wrapped in a Proxy). In Python a
+  datetime counts as dated only where its time zone gives an offset, as
+  Python's own rule for an "aware" time says. Nothing that was allowed is
   refused, and nothing that was refused is allowed. In both languages; the
   shared test file for the check before acting gains two cases, and in the
-  stub writer's scenarios the one step with a clock that gives no time
+  stub writer's scenarios the one step that hands in a time of Infinity
   changes its words.
+- **A signature of the wrong length is invalid on every device.** An
+  Ed25519 signature is 64 bytes, an ML-DSA-87 signature 4,627 and an
+  SLH-DSA-SHA2-256s signature 29,792 (RFC 8032, FIPS 204, FIPS 205). One of
+  another length can never check, and a device that has the method already
+  said "invalid"; a device without it said "not checked on this device".
+  Now every device says "invalid". So, on a device without SLH-DSA, a seal
+  whose third signature is cut short or empty is a problem, not something
+  the check before acting goes on without. A third signature of the right
+  length that would not check is still not seen there: the format
+  description (section 20) and the list of threats now say so. In both
+  languages; the shared test files gain a case each.
 - **The check before acting goes on without a seal's third signature, and
   says so** (decision F-106; this changes choice 66 of the draft). Found on
   11 October 2026: a device that cannot check SLH-DSA-SHA2-256s, which is
@@ -23,8 +43,10 @@
   checked there, and nothing else was left unchecked, the check goes on and
   its answer carries `notChecked: ['SLH-DSA-SHA2-256s']`. Any other
   signature left unchecked still refuses everything, and the full checker's
-  answers are unchanged. In both languages, with tests; the shared test
-  file for the stub writer's scenarios is remade.
+  answers are unchanged. In both languages: the shared test file for the
+  check before acting gains seven cases with a seal (found missing by an
+  independent review, which showed that a weaker rule passed every test),
+  and the shared test file for the stub writer's scenarios is remade.
 - **The recorder beside Claude Code appends to the book, and no longer
   loses a receipt while another program reads the file.** It wrote the
   whole book to a temporary file and renamed it over the old one; on

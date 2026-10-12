@@ -29,6 +29,10 @@ except ImportError:  # "cryptography" before version 48
 
 SLH = 'SLH-DSA-SHA2-256s'
 
+# The length of a signature, in bytes, by method (RFC 8032, FIPS 204,
+# FIPS 205).
+_SIGNATURE_BYTES = {'Ed25519': 64, 'ML-DSA-87': 4627, SLH: 29792}
+
 
 def method_available(alg):
     """Whether this device can check signatures made with this method."""
@@ -66,6 +70,10 @@ def verify_signature(jwk, signature, data, without=()):
     without them; it can only withhold a pass.
     """
     alg = jwk['alg']
+    # A signature of another length than its method's can never check, so it
+    # is refused on every device, whether or not this one has the method.
+    if alg in _SIGNATURE_BYTES and len(signature) != _SIGNATURE_BYTES[alg]:
+        return 'invalid'
     if alg == SLH:
         return 'unavailable'
     if alg not in ('Ed25519', 'ML-DSA-87', 'ES256', 'RS256'):

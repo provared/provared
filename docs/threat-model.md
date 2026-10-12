@@ -450,7 +450,12 @@ within 5 minutes for a time-stamp from a service, and to within 2 hours
 and 5 minutes for a block time-stamp). A6 cannot make a
 seal: it needs the recorder's three keys. A8 must break Ed25519, ML-DSA-87
 and SLH-DSA together to forge a seal; the third rests only on fingerprint
-functions. Nobody can move a time-stamp to another seal: it is made over
+functions. One exception, stated: the check before acting on a device
+without SLH-DSA (the Python version, every browser) goes on after a seal
+whose first two signatures check there, so on that device a seal rests on
+Ed25519 and ML-DSA-87 alone, and a third signature of the right length
+that would not check is not seen. A device with SLH-DSA, such as the
+command-line checker, sees it. Nobody can move a time-stamp to another seal: it is made over
 the seal's fingerprint.
 
 A block time-stamp is a second witness of the time, which rests on no

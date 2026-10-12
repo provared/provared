@@ -322,7 +322,7 @@ def _time_value(value):
     library."""
     if _js.is_number(value):
         return _time_clip(value)
-    if isinstance(value, datetime.datetime) and value.tzinfo is not None:
+    if isinstance(value, datetime.datetime) and value.utcoffset() is not None:
         epoch = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
         return _time_clip((value - epoch) // datetime.timedelta(milliseconds=1))
     raise Refusal('bad-field', 'when: must be a number of milliseconds, or a Date.')

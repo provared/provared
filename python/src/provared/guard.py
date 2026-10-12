@@ -55,9 +55,11 @@ def check_before(book, proposal, options=None, **named):
     the passkeys this check trusts) must be given: a slip signed by any
     other key allows nothing.
 
-    Returns {"allowed", "problems", "breaches", "needs"}. "allowed" is True
-    only if the record so far is sound, this device checked every signature
-    in it, and the action would be inside the slip. "needs" lists what the
+    Returns {"allowed", "problems", "breaches", "needs"}, and "notChecked"
+    where it applies. "allowed" is True only if the record so far is sound,
+    this device checked every signature in it (or every one but the third
+    signature of a seal whose first two it checked, which "notChecked" then
+    names), and the action would be inside the slip. "needs" lists what the
     slip asks to go with the action. A needed approval must be handed over,
     or the action is not allowed. A needed countersignature cannot be known
     beforehand: the action is allowed, and is inside the slip only if the
@@ -181,7 +183,7 @@ def _decide(read, proposal, options):
         # devices.
         when_given = proposal.get('when')
         given = now_ms() if when_given is None else when_given
-        if not _js.is_number(given) and not (isinstance(given, datetime.datetime) and given.tzinfo is not None):
+        if not _js.is_number(given) and not (isinstance(given, datetime.datetime) and given.utcoffset() is not None):
             raise Refusal('bad-field', 'when: must be a number of milliseconds, or a Date.')
         try:
             when_text = format_time(given)

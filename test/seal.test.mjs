@@ -263,10 +263,20 @@ test('the check before acting goes on without the seal\'s third signature, and s
     assert.equal('notChecked' in r, false);
   }
 
-  // The same book with the seal's stamp from a service this device cannot
-  // check is still refused: only the seal's own third signature is excused.
-  const stamped = await checkBefore(w.book(), proposal, { ...trusted, withoutMethods: ['SLH-DSA-SHA2-256s', 'ECDSA'] });
-  assert.equal(stamped.allowed, stamped.problems.length === 0, 'either refused with a reason or allowed');
+  // With the seal's third signature excused, any other signature this
+  // device cannot check still refuses everything: here the person's
+  // passkey (ES256, a kind of ECDSA) and the time-stamp service's ECDSA.
+  // Only the seal's own third signature is excused.
+  for (const methods of [['SLH-DSA-SHA2-256s', 'ES256'], ['SLH-DSA-SHA2-256s', 'ECDSA']]) {
+    const r = await checkBefore(w.book(), proposal, { ...trusted, withoutMethods: methods });
+    assert.equal(r.allowed, false, `without ${methods.join(' and ')}: refused`);
+    assert.equal(r.problems[0].message, 'This device could not check every signature in the record so far.');
+    assert.equal('notChecked' in r, false);
+  }
+  // A method this record does not use changes nothing.
+  const rsa = await checkBefore(w.book(), proposal, { ...trusted, withoutMethods: ['SLH-DSA-SHA2-256s', 'RSA'] });
+  assert.equal(rsa.allowed, true);
+  assert.deepEqual(rsa.notChecked, ['SLH-DSA-SHA2-256s']);
   // A book with no seal and the method set aside: nothing was left unchecked, nothing to say.
   const unsealed = await makeWorld();
   await unsealed.add();

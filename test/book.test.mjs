@@ -3,7 +3,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { checkBook, checkShow, makeShow, thumbprint, writeBook } from '../src/index.js';
+import { checkBook, checkShow, fromBase64url, makeShow, thumbprint, toBase64url, writeBook } from '../src/index.js';
 import { START, makeWorld } from './helpers/world.mjs';
 
 const codes = (list) => list.map((p) => p.code);
@@ -144,11 +144,20 @@ test('a slip signed with a method the device lacks is not fully checked, and the
 });
 
 test('a record forged with no key at all is never "intact", even on a device that can check nothing', async () => {
-  // Every signature is empty. A device with neither method cannot tell.
+  // Every signature is zeros, of its method's length. A device with neither
+  // method cannot tell.
   const w = await makeWorld({ passkeyAlg: 'Ed25519' });
   await w.add({ value: 500 });
+  const zeros = (record) => ({ ...record, signatures: record.signatures.map((s) => ({ ...s, signature: toBase64url(new Uint8Array(fromBase64url(s.signature).length)) })) });
+  const forged = writeBook([{ slip: zeros(w.entries[0].slip) }, { stub: zeros(w.entries[1].stub), countersignature: zeros(w.entries[1].countersignature) }]);
+
+  // An empty signature is of no method's length: every device refuses it,
+  // with the method or without.
   const empty = (record) => ({ ...record, signatures: record.signatures.map((s) => ({ ...s, signature: '' })) });
-  const forged = writeBook([{ slip: empty(w.entries[0].slip) }, { stub: empty(w.entries[1].stub), countersignature: empty(w.entries[1].countersignature) }]);
+  const emptied = writeBook([{ slip: w.entries[0].slip }, { stub: empty(w.entries[1].stub), countersignature: empty(w.entries[1].countersignature) }]);
+  const emptiedBlind = await checkBook(emptied, { withoutMethods: ['Ed25519', 'ML-DSA-87'] });
+  assert.equal(emptiedBlind.summary.problemFound, true);
+  assert.equal(emptiedBlind.summary.intact, false);
 
   const here = await checkBook(forged);
   assert.equal(here.summary.problemFound, true);

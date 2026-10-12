@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "provared-langchain"
-version = "0.1.0"
+version = "0.1.1"
 description = "A LangChain middleware that checks each tool call of an agent against the permission a person signed, and records it with Provared. Evidence, not a verdict."
 readme = "README.md"
 authors = [{ name = "Pavel Izmaylov" }]
@@ -14,7 +14,7 @@ keywords = ["langchain", "langchain-middleware", "ai-agent", "agent", "audit-tra
 requires-python = ">=3.11"
 # Provared itself, LangChain's agents with middleware, as tested, and the
 # two packages beneath LangChain that this one imports directly.
-dependencies = ["provared>=0.2.0", "langchain>=1.4,<2", "langchain-core>=1.6,<2", "pydantic>=2"]
+dependencies = ["provared>=0.4.0", "langchain>=1.4,<2", "langchain-core>=1.6,<2", "pydantic>=2"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Programming Language :: Python :: 3",

@@ -16,6 +16,10 @@
 import { importPublicKey, weakEd25519 } from './keys.js';
 
 const SLH = 'SLH-DSA-SHA2-256s';
+
+// The length of a signature, in bytes, by method (RFC 8032, FIPS 204,
+// FIPS 205).
+const SIGNATURE_BYTES = { Ed25519: 64, 'ML-DSA-87': 4627, [SLH]: 29792 };
 const nodeCrypto = globalThis.process && typeof globalThis.process.getBuiltinModule === 'function' ? globalThis.process.getBuiltinModule('node:crypto') : null;
 
 function slhKey(pub) {
@@ -80,6 +84,9 @@ export function methodAvailable(alg) {
  * @returns {Promise<SignatureState>}
  */
 export async function verifySignature(jwk, signature, data, without = []) {
+  // A signature of another length than its method's can never check, so it
+  // is refused on every device, whether or not this one has the method.
+  if (Object.hasOwn(SIGNATURE_BYTES, jwk.alg) && signature.length !== SIGNATURE_BYTES[jwk.alg]) return 'invalid';
   if (jwk.alg === SLH) {
     if (without.includes(SLH) || !(await methodAvailable(SLH))) return 'unavailable';
     try {

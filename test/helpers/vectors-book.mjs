@@ -188,6 +188,11 @@ async function bookCases() {
   // The sample record.
   add('the sample record', sample());
   add('the sample record, its passkey trusted', sample(), { issuerKeys: [JSON.parse(readFile('samples', 'office-supplies.expected.json')).issuerKey] });
+
+  // A seal signature of the wrong length is invalid on every device, even
+  // where the method is not built in.
+  const { sealTrusted, withSeal } = await sealedWorld();
+  add('a seal whose third signature is cut short', withSeal((s) => { s.signatures[2].signature = 'AAAA'; }), sealTrusted);
   return cases;
 }
 
@@ -263,8 +268,47 @@ async function beforeCases() {
   add('an action dated by text', { ...base, when: '2026-10-05T10:00:00Z' });
   add('an action dated outside the range of times', { ...base, when: 1e20 });
   add('a book with a problem', base, trusted, text.replace('"stub"', '"stub "'));
+  // A book with a seal. On this device the seal's third signature is not
+  // checked, and the check goes on and says so (choice 380); any other
+  // signature left unchecked, or a seal signature of the wrong length,
+  // still allows nothing.
+  const { sealed, sealTrusted, withSeal } = await sealedWorld();
+  const sealBase = { ...base, slip: sealed.slipFingerprint, when: START + 5 * 3600 * 1000 };
+  add('a book with a seal', sealBase, sealTrusted, sealed.book());
+  add('a book with a seal, on a device without ML-DSA-87 either', sealBase, { ...sealTrusted, withoutMethods: ['ML-DSA-87'] }, sealed.book());
+  add("a book with a seal, on a device that cannot check the person's passkey either", sealBase, { ...sealTrusted, withoutMethods: ['ES256'] }, sealed.book());
+  add("a seal whose third signature is cut short", sealBase, sealTrusted, withSeal((s) => { s.signatures[2].signature = 'AAAA'; }));
+  add("a seal whose third signature is changed, at its full length", sealBase, sealTrusted, withSeal((s) => { s.signatures[2].signature = flipByte(s.signatures[2].signature); }));
+  add("a seal whose ML-DSA-87 signature is changed", sealBase, sealTrusted, withSeal((s) => { s.signatures[1].signature = flipByte(s.signatures[1].signature); }));
+  // A permission and a seal only: the seal's Ed25519 signature is the only
+  // one of its method, and a seal is excused only where its first two
+  // signatures were both checked.
+  const lone = await makeWorld();
+  await lone.seal();
+  add('a permission and a seal, on a device without Ed25519 either', { ...base, slip: lone.slipFingerprint },
+    { issuerKeys: [await thumbprint(lone.passkey.key)], sealKeys: [await keySetFingerprint(lone.recorder.keys)], withoutMethods: ['Ed25519'] }, lone.book());
   return cases;
 }
+
+// A book of a slip, one stub and a seal, and a way to change its seal.
+async function sealedWorld() {
+  const sealed = await makeWorld();
+  await sealed.add();
+  await sealed.seal();
+  const sealTrusted = { issuerKeys: [await thumbprint(sealed.passkey.key)], sealKeys: [await keySetFingerprint(sealed.recorder.keys)] };
+  const withSeal = (change) => {
+    const entries = JSON.parse(JSON.stringify(sealed.entries));
+    change(entries.find((e) => e.seal).seal);
+    return writeBook(entries);
+  };
+  return { sealed, sealTrusted, withSeal };
+}
+
+const flipByte = (b64) => {
+  const bytes = fromBase64url(b64);
+  bytes[10] ^= 1;
+  return toBase64url(bytes);
+};
 
 /** Each set of cases, by the name of its file. */
 export const CASES = {

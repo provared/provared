@@ -250,7 +250,7 @@ def format_time(when):
     read: text, True or a datetime with no time zone would be read by rules
     that differ from one device to another (as local time), so they are
     refused."""
-    if isinstance(when, _datetime.datetime) and when.tzinfo is not None:
+    if isinstance(when, _datetime.datetime) and when.utcoffset() is not None:
         when = (when - _EPOCH) // _datetime.timedelta(milliseconds=1)
     if not _js.finite(when) or abs(when) > MAX_TIME_MS:
         raise ValueError('Invalid time value')

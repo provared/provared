@@ -7,7 +7,7 @@ allows it, and records the call with
 
 *Evidence, not a verdict.*
 
-**Version 0.1.0, a draft**, as Provared itself is. Published as it is, by
+**Version 0.1.1, a draft**, as Provared itself is. Published as it is, by
 one author in their own time; fixes as time allows.
 
 ## What it does

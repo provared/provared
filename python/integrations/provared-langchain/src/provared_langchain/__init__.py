@@ -21,7 +21,7 @@ from langchain_core.messages import ToolMessage
 from provared import NotTaken, Refusal, record_tools
 
 __all__ = ['ProvaredMiddleware']
-__version__ = '0.1.0'
+__version__ = '0.1.1'
 
 _UNLISTED = ('refuse', 'run')
 _MEMBERS = ('action', 'with', 'amount', 'details', 'countersign', 'approve')

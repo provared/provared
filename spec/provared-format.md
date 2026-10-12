@@ -924,7 +924,12 @@ signature that could not be checked is the third signature of a seal
 and nothing else was left unchecked, the check MAY go on, and its answer
 MUST then name the method it did not check. A seal widens no permission;
 a device without that method would otherwise be refused everything once
-the book holds a seal. An action dated before the last stub of
+the book holds a seal. On such a device a seal rests on its first two
+signatures only: a third signature of the right length that would not
+check is not seen there. A signature of another length than its
+method's (64 bytes for Ed25519, 4,627 for ML-DSA-87, 29,792 for
+SLH-DSA-SHA2-256s) is invalid on every device, with the method or
+without it. An action dated before the last stub of
 its own chain (the agent's, or the helper's under its pass; section 7)
 is refused (`time-went-backwards`).
 
