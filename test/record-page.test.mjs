@@ -5,7 +5,7 @@
 // record; this test checks only what the tool makes from a book.
 
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -45,4 +45,36 @@ test('the tool refuses to run without the keys to trust', () => {
   const r = spawnSync(process.execPath, [tool, '--book', sample], { encoding: 'utf8' });
   assert.equal(r.status, 2);
   assert.ok(r.stderr.includes('Usage'));
+});
+
+test('a renewed permission: the page shows both, the command names each passkey, and each permission has its own file', async () => {
+  const { writeBook, thumbprint } = await import('../src/index.js');
+  const { keySetFingerprint } = await import('../src/seal.js');
+  const { makeWorld } = await import('./helpers/world.mjs');
+  const first = await makeWorld();
+  await first.add();
+  await first.seal();
+  const second = await makeWorld({ agent: first.agent, fields: { validFrom: '2026-10-12T08:00:00Z', validUntil: '2026-12-31T23:59:59Z' } });
+  await second.add({ when: Date.parse('2026-10-12T09:00:00Z') });
+  const out = mkdtempSync(join(tmpdir(), 'provared-record-page-'));
+  try {
+    const bookPath = join(out, 'source.jsonl');
+    const text = writeBook([...first.entries, ...second.entries]);
+    writeFileSync(bookPath, text);
+    const issuers = [await thumbprint(first.passkey.key), await thumbprint(second.passkey.key)];
+    const sealer = await keySetFingerprint(first.recorder.keys);
+    const r = spawnSync(process.execPath, [tool, '--book', bookPath, '--issuer', issuers[0], '--issuer', issuers[1], '--sealer', sealer, '--out', join(out, 'page')], { encoding: 'utf8' });
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    const page = readFileSync(join(out, 'page', 'index.html'), 'utf8');
+    assert.ok(page.includes('The permissions, in the checker&#39;s words') || page.includes("The permissions, in the checker's words"));
+    assert.ok(page.includes('Entry 0: SLIP') && page.includes(`Entry ${first.entries.length}: SLIP`), 'both permissions in the checker\'s words');
+    assert.ok(page.includes('renewed with permission 2'), 'the renewal is said');
+    assert.ok(page.includes(`--issuer ${issuers[0]} --issuer ${issuers[1]} --sealer ${sealer}`), 'the command names each passkey');
+    assert.ok(page.includes('until the latest permission ends on 2026-12-31 23:59 UTC'));
+    const lines = text.split('\n');
+    assert.equal(readFileSync(join(out, 'page', 'slip.json'), 'utf8'), lines[0] + '\n');
+    assert.equal(readFileSync(join(out, 'page', 'slip-2.json'), 'utf8'), lines[first.entries.length] + '\n');
+  } finally {
+    rmSync(out, { recursive: true, force: true });
+  }
 });

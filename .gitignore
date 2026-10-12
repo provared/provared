@@ -26,3 +26,4 @@ python/integrations/*/dist/
 
 # The environment in which the examples for agent frameworks are run
 python/.venv-examples/
+python/integrations/*/.venv/

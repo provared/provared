@@ -30,9 +30,9 @@ const args = process.argv.slice(2);
 const values = (name) => args.flatMap((a, i) => (a === name && i + 1 < args.length ? [args[i + 1]] : []));
 const value = (name) => values(name)[0];
 
-const issuer = value('--issuer');
+const issuers = values('--issuer');
 const sealer = value('--sealer');
-if (!issuer || !sealer) {
+if (issuers.length === 0 || !sealer) {
   console.error('Usage: node tools/make-record-page.mjs --issuer <passkey thumbprint> --sealer <recorder key-set fingerprint> [--book <file>] [--out <folder>] [--stamp-service <fingerprint>]...');
   process.exit(2);
 }
@@ -44,7 +44,7 @@ const out = value('--out') ? resolve(value('--out')) : defaultOut;
 const stampServices = values('--stamp-service');
 
 function check(extra) {
-  const checkerArgs = [join(root, 'bin', 'provared-check.mjs'), bookPath, '--issuer', issuer, '--sealer', sealer];
+  const checkerArgs = [join(root, 'bin', 'provared-check.mjs'), bookPath, ...issuers.flatMap((i) => ['--issuer', i]), '--sealer', sealer];
   for (const s of stampServices) checkerArgs.push('--stamp-service', s);
   const r = spawnSync(process.execPath, [...checkerArgs, ...extra], { encoding: 'utf8', maxBuffer: 1 << 28 });
   if (r.error) throw r.error;
@@ -57,13 +57,17 @@ const result = JSON.parse(check(['--json']));
 const book = readFileSync(bookPath, 'utf8');
 const firstLine = book.slice(0, book.indexOf('\n') < 0 ? book.length : book.indexOf('\n'));
 if (result.entries[0]?.kind !== 'slip') throw new Error('the first entry of the book is not a slip');
-const slip = result.entries[0];
+// Each permission in the book: the first, and one more for each renewal.
+const slips = result.entries.filter((e) => e.kind === 'slip');
+const slip = slips[0];
+const latest = slips.at(-1);
+const bookLines = book.split('\n');
 const stubs = result.entries.filter((e) => e.kind === 'stub');
 const seals = result.entries.filter((e) => e.kind === 'seal');
 
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const block = (re) => { const m = text.match(re); if (!m) throw new Error(`the checker's answer has no block matching ${re}`); return m[0].trimEnd(); };
-const slipBlock = block(/^Entry 0: SLIP[^\n]*\n(?:[^\n]+\n)*/m);
+const slipBlock = slips.map((e) => block(new RegExp(`^Entry ${e.index}: SLIP[^\\n]*\\n(?:[^\\n]+\\n)*`, 'm'))).join('\n\n');
 const summaryBlock = block(/^Summary\n(?:[^\n]+\n)*/m);
 
 const byDay = new Map();
@@ -107,7 +111,12 @@ if (breaches.length === 0) {
   outside = `<p>The checker reports ${plural(breaches.length, 'entry', 'entries')} outside the permission. Going outside is not a fault in the record: it is what a sound record shows.</p>\n<ul>\n${items}\n</ul>`;
 }
 const limits = (result.summary.limits || []).map((l) => `  <li>${esc(l)}</li>`).join('\n');
-const validUntil = slip.content.validUntil;
+const validUntil = latest.content.validUntil;
+// What a renewal kept: the same actions, limits, conditions, rules and services.
+const terms = (e) => JSON.stringify(['actions', 'limits', 'requires', 'never', 'with', 'passes'].map((k) => e.content[k] ?? null));
+const renewals = slips.slice(1).map((e, i) => ` It was renewed with permission ${i + 2}, in force from ${esc(when(e.content.validFrom))} until ${esc(when(e.content.validUntil))}, ${terms(e) === terms(slips[i]) ? 'with the same actions, limits and rules' : 'with changes that its entry below shows'}.`).join('');
+const slipFiles = slips.map((e, i) => (i === 0 ? 'slip.json' : `slip-${i + 1}.json`));
+const slipLinks = slipFiles.map((f) => `<a href="${f}">${f}</a>`).join(', ');
 
 const html = `<!doctype html>
 <html lang="en">
@@ -141,15 +150,15 @@ const html = `<!doctype html>
 </header>
 <main>
 
-<p>Everything else on this site is an invented example. This page is a real record, kept day by day: the coding agent the author runs to build Provared, recorded under a permission the author signed with their own passkey. The record is added to each day until the permission ends on ${esc(when(validUntil))}. This page was last made on ${esc(now)}, from a book of ${result.size} entries.</p>
+<p>Everything else on this site is an invented example. This page is a real record, kept day by day: the coding agent the author runs to build Provared, recorded under ${slips.length === 1 ? 'a permission' : 'permissions'} the author signed with their own passkey. The record is added to each day until the ${slips.length === 1 ? 'permission' : 'latest permission'} ends on ${esc(when(validUntil))}. This page was last made on ${esc(now)}, from a book of ${result.size} entries.</p>
 
 <h2>What the agent is for</h2>
-<p>The agent is Claude Code, a coding agent, which the author uses in their own time to read and change the code of Provared in its repository, run its tests and tools, and publish what the author approves. The permission names it, allows seven kinds of action with limits on four of them, states five rules of conduct, and was signed on 10 October 2026 at <a href="../sign/">prova.red/sign/</a> with the author's passkey. The author's name in it, "Pavel i", is what the author typed: a name in a record is a label, and only the keys are checked.</p>
+<p>The agent is Claude Code, a coding agent, which the author uses in their own time to read and change the code of Provared in its repository, run its tests and tools, and publish what the author approves. The permission names it, allows seven kinds of action with limits on four of them, states five rules of conduct, and was signed on 10 October 2026 at <a href="../sign/">prova.red/sign/</a> with the author's passkey.${renewals} The author's name in it, "Pavel i", is what the author typed: a name in a record is a label, and only the keys are checked.</p>
 
 <h2>How it is recorded</h2>
 <p>A small program runs before and after every tool call the agent makes (Claude Code's "hooks"; the code is <a href="https://github.com/provared/provared/tree/main/integrations/claude-code">integrations/claude-code</a> in the repository). Before a call, the check before acting asks whether the call is within the permission; a call outside it is refused and does not run. After the call, the agent's side signs a receipt (a stub) with two keys, one of them quantum-safe, naming the kind of action, the tool, the time, and the SHA-256 fingerprint of the call's arguments. The arguments themselves, and the contents of any file, are never in the record. The kind of action is chosen by the hook from the tool's name and, for a command, from its text (a command that removes something counts as a deletion; one that pushes or publishes counts as a release), not by the agent. A recorder on the author's computer keeps the book and seals it at least once a day with three keys; the seals carry no outside time-stamp, so the time of a seal is the recorder's own word, and the checker says so.</p>
 
-<h2>The permission, in the checker's words</h2>
+<h2>${slips.length === 1 ? 'The permission' : 'The permissions'}, in the checker's words</h2>
 <pre>${esc(slipBlock)}</pre>
 
 <h2>What the agent did</h2>
@@ -187,9 +196,9 @@ ${outside}
 <p>The whole answer, one block for each entry, is <a href="checker-answer.txt">checker-answer.txt</a>.</p>
 
 <h2>Check it yourself</h2>
-<p>The book is <a href="book.jsonl">book.jsonl</a> (${result.size} entries, about ${kb} KB), and its permission alone is <a href="slip.json">slip.json</a>. A checker trusts nothing it is not told to trust, so name the two keys: the author's passkey, by its thumbprint, and the recorder's three keys, by the fingerprint of the set. With Node.js 24.7 or later:</p>
+<p>The book is <a href="book.jsonl">book.jsonl</a> (${result.size} entries, about ${kb} KB), and ${slips.length === 1 ? 'its permission alone is' : 'its permissions alone are'} ${slipLinks}. A checker trusts nothing it is not told to trust, so name the two keys: the author's passkey, by its thumbprint, and the recorder's three keys, by the fingerprint of the set. With Node.js 24.7 or later:</p>
 <pre>npm install provared
-npx provared-check book.jsonl --issuer ${esc(issuer)} --sealer ${esc(sealer)}</pre>
+npx provared-check book.jsonl ${issuers.map((i) => `--issuer ${esc(i)}`).join(' ')} --sealer ${esc(sealer)}</pre>
 <p>Or in a browser, on the <a href="../check/">checking page</a>: choose the file, and paste the thumbprint into the passkey box and the fingerprint into the recorder box. No browser tried on the author's computer on 12 October 2026 has the third method a seal is signed with (SLH-DSA), so in a browser the page says that the check was not complete and gives no pass; Edge 155 and Brave 155 check the receipts' quantum-safe signatures (ML-DSA), and Chrome 154 does not. The command-line checker checks everything.</p>
 
 <h2>What this record does not show</h2>
@@ -211,7 +220,7 @@ ${limits}
 
 mkdirSync(out, { recursive: true });
 copyFileSync(bookPath, join(out, 'book.jsonl'));
-writeFileSync(join(out, 'slip.json'), firstLine + '\n');
+slips.forEach((e, i) => writeFileSync(join(out, slipFiles[i]), (i === 0 ? firstLine : bookLines[e.index]) + '\n'));
 writeFileSync(join(out, 'checker-answer.txt'), text);
 writeFileSync(join(out, 'index.html'), html);
 
@@ -225,5 +234,5 @@ if (out === defaultOut) {
   if (updated !== sitemap) writeFileSync(sitemapPath, updated);
 }
 
-console.log(`${out}: index.html, book.jsonl (${result.size} entries), slip.json, checker-answer.txt`);
+console.log(`${out}: index.html, book.jsonl (${result.size} entries), ${slipFiles.join(', ')}, checker-answer.txt`);
 console.log(summaryBlock);
