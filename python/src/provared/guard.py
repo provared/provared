@@ -7,8 +7,10 @@
 # a period which a stub dated after it already overfills. It writes
 # nothing and changes nothing.
 
+import datetime
 from collections.abc import Mapping
 
+from . import _js
 from . import fields as f
 from .book import MAX_ENTRIES, MAX_LINE_BYTES, _Ids, check_approval_record, check_book_keeping_state, fixed_options, keys_of, pass_as_slip
 from .compare import compare_with_slip
@@ -174,8 +176,18 @@ def _decide(read, proposal, options):
             raise Refusal('too-large', 'The book is full: it holds 100,000 entries.')
 
         f.members(proposal, ['action', 'slip'], ['amount', 'approval', 'details', 'pass', 'terms', 'when', 'with'], 'proposal')
+        # The time, as the stub writer takes it: a number of milliseconds or a
+        # datetime with a time zone. Text is read by rules that differ between
+        # devices.
         when_given = proposal.get('when')
-        c = {'action': proposal['action'], 'when': format_time(now_ms() if when_given is None else when_given)}
+        given = now_ms() if when_given is None else when_given
+        if not _js.is_number(given) and not (isinstance(given, datetime.datetime) and given.tzinfo is not None):
+            raise Refusal('bad-field', 'when: must be a number of milliseconds, or a Date.')
+        try:
+            when_text = format_time(given)
+        except ValueError:
+            raise Refusal('bad-field', 'when: does not give a time.') from None
+        c = {'action': proposal['action'], 'when': when_text}
         for name in ('amount', 'details', 'with'):
             if name in proposal:
                 c[name] = proposal[name]

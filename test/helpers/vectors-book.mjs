@@ -260,6 +260,8 @@ async function beforeCases() {
     { issuerKeys: [await thumbprint(n.passkey.key)] }, n.book());
   add('another slip', { ...base, slip: toBase64url(new Uint8Array(32)) });
   add('an unknown member', { ...base, colour: 'red' });
+  add('an action dated by text', { ...base, when: '2026-10-05T10:00:00Z' });
+  add('an action dated outside the range of times', { ...base, when: 1e20 });
   add('a book with a problem', base, trusted, text.replace('"stub"', '"stub "'));
   return cases;
 }

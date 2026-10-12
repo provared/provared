@@ -148,7 +148,12 @@ async function decide(read, proposal, options) {
     if (result.size >= MAX_ENTRIES) throw new Refusal('too-large', 'The book is full: it holds 100,000 entries.');
 
     f.members(proposal, ['action', 'slip'], ['amount', 'approval', 'details', 'pass', 'terms', 'when', 'with'], 'proposal');
-    const c = { action: proposal.action, when: formatTime(proposal.when ?? Date.now()) };
+    // The time, as the stub writer takes it: a number of milliseconds or a
+    // Date. Text is read by rules that differ between devices.
+    const given = proposal.when ?? Date.now();
+    if (typeof given !== 'number' && !(given instanceof Date)) throw new Refusal('bad-field', 'when: must be a number of milliseconds, or a Date.');
+    if (!Number.isFinite(new Date(given).getTime())) throw new Refusal('bad-field', 'when: does not give a time.');
+    const c = { action: proposal.action, when: formatTime(given) };
     for (const name of ['amount', 'details', 'with']) if (proposal[name] !== undefined) c[name] = proposal[name];
     validateRequest(c);
     const when = f.time(c.when, 'when');

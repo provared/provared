@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **A proposed action dated by text gets a plain refusal.** The check
+  before acting took a time given as text, or a number or a Date that
+  gives no time, to the catch-all "the checker met something it did not
+  expect" (`check-failed`). It now answers `bad-field`, in the words the
+  stub writer already uses: "when: must be a number of milliseconds, or a
+  Date", or "when: does not give a time". Nothing that was allowed is
+  refused, and nothing that was refused is allowed. In both languages; the
+  shared test file for the check before acting gains two cases, and in the
+  stub writer's scenarios the one step with a clock that gives no time
+  changes its words.
 - **The check before acting goes on without a seal's third signature, and
   says so** (decision F-106; this changes choice 66 of the draft). Found on
   11 October 2026: a device that cannot check SLH-DSA-SHA2-256s, which is
