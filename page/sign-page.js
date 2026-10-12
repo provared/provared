@@ -71,15 +71,72 @@ function showWords(f) {
   dl.hidden = false;
 }
 
-$('fields').value = JSON.stringify(EXAMPLE, null, 2);
+// A starting permission may come in this page's address, after
+// "#permission=", as base64url of its JSON: the recorder beside a coding
+// agent prints such a link, with the agent's public keys in it. The part
+// of an address after "#" (its fragment) stays in the browser: it is never
+// sent to any server, this website's own included. Its members are laid
+// over the starting point above, so that what it leaves out (the times)
+// is set when the page opens. Nothing is signed until the person has read
+// the permission and pressed the buttons.
+function startingPoint() {
+  const given = new URLSearchParams(location.hash.slice(1)).get('permission');
+  if (given === null) return EXAMPLE;
+  const instead = 'The page\'s own starting point is shown instead.';
+  let bytes;
+  let text;
+  try {
+    bytes = fromBase64url(given);
+  } catch {
+    say('read-status', `The permission in this page's address could not be read: it is not written in base64url. ${instead}`);
+    return EXAMPLE;
+  }
+  try {
+    text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    say('read-status', `The permission in this page's address could not be read: it is not text. ${instead}`);
+    return EXAMPLE;
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (e) {
+    say('read-status', `The permission in this page's address is not JSON: ${e.message}. ${instead}`);
+    return EXAMPLE;
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    say('read-status', `The permission in this page's address is not one JSON object. ${instead}`);
+    return EXAMPLE;
+  }
+  say('read-status', 'The permission below came with the link you opened. Read it, change it if you wish, write your name, and press "Read the permission".');
+  return { ...EXAMPLE, ...parsed };
+}
 
-$('read').addEventListener('click', () => {
+// Back to the first step: nothing read, so nothing can be signed.
+function unread() {
   slip = null;
   $('step2').classList.add('waiting');
   $('step3').classList.add('waiting');
   $('sign').disabled = true;
   $('save-line').hidden = true;
   $('fingerprint-line').hidden = true;
+}
+
+function fill() {
+  unread();
+  $('slip-words').hidden = true;
+  say('read-status', '');
+  $('fields').value = JSON.stringify(startingPoint(), null, 2);
+}
+
+fill();
+// A link opened in a tab that shows this page already changes only the
+// fragment, and the browser does not load the page again: the page fills
+// itself in again, and what was read before can no longer be signed.
+window.addEventListener('hashchange', fill);
+
+$('read').addEventListener('click', () => {
+  unread();
   let parsed;
   try {
     parsed = JSON.parse($('fields').value);
