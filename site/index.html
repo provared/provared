@@ -140,7 +140,7 @@ agent = create_agent(model, tools=[order_supplies, send_message],
 </ol>
 
 <div class="card seal">
-  <p><strong>The sealed book <span class="kind">(the seal)</span></strong>, by "Example recorder (invented)", covers the nine entries before it. Sealed at 10:15 by the recorder's own word; time-stamped at 10:16 by an outside service the person checking named as trusted. Three signatures, one of them quantum-safe, all valid.</p>
+  <p><strong>The sealed book <span class="kind">(the seal)</span></strong>, by "Example recorder (invented)", covers the nine entries before it. Sealed at 10:15 by the recorder's own word; time-stamped at 10:16 by an outside service the person checking named as trusted. Three signatures, two of them quantum-safe, all valid.</p>
 </div>
 
 <p>The checker's summary, exactly as printed:</p>
@@ -165,7 +165,7 @@ agent = create_agent(model, tools=[order_supplies, send_message],
   <li>A name in a record is a label. Only keys are checked.</li>
 </ul>
 
-<p><a href="over-the-limit.html">The worked example, for developers</a>, shows the code that made the record above and what the checker said about it. Or check it in a browser: <a href="check/">the checking page</a> checks the sample at a click and any record you choose, and loads nothing from anywhere. You can also <a href="provared-check.html" download>download it as one file</a> and open it from your disk. Browsers are only now adding the quantum-safe signing method; where yours lacks it, the page says that the check was not complete and gives no pass. The command-line checker checks everything.</p>
+<p><a href="over-the-limit.html">The worked example, for developers</a>, shows the code that made the record above and what the checker said about it. Or check it in a browser: <a href="check/">the checking page</a> checks the sample at a click and any record you choose, and loads nothing from anywhere. You can also <a href="provared-check.html" download>download it as one file</a> and open it from your disk. The page uses only the signing methods your browser has built in. Tried on the author's computer on 12 October 2026: Edge 155 and Brave 155 check the quantum-safe signatures on receipts, and Chrome 154 does not. None of the three has the further quantum-safe method that a seal is also signed with, so for this sample each of them says that the check was not complete and gives no pass. The command-line checker checks everything.</p>
 
 <h2 id="only">What the author found nowhere else (October 2026)</h2>
 

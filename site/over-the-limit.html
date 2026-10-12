@@ -162,7 +162,7 @@ npx provared-check --sample</pre>
 node first-record.mjs
 npx provared-check book.jsonl --issuer &lt;the thumbprint it prints&gt;</pre>
 
-<p>The Python version (<code>pip install provared</code>) gives the same answers, with <code>provared.dev</code> for the stand-in, and <code>provared-langchain</code> puts every tool call of a LangChain agent behind the stub writer. The <a href="check/">checking page</a> checks a record in a browser, loading nothing from anywhere.</p>
+<p>The Python version (<code>pip install provared</code>) gives the same answers, with <code>provared.dev</code> for the stand-in, and <code>provared-langchain</code> puts every tool call of a LangChain agent behind the stub writer. The <a href="check/">checking page</a> checks a record in a browser, loading nothing from anywhere, with the signing methods the browser has built in. Tried on the author's computer on 12 October 2026: Edge 155 and Brave 155 check ML-DSA, and Chrome 154 does not. None of the three has SLH-DSA, so a seal's third signature is not checked in a browser, and a book with a seal is never a pass there; the command-line checker checks all three.</p>
 
 <h2>How it is built</h2>
 

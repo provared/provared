@@ -141,7 +141,13 @@ each part protects against, is in
   in plain words for a reader who does not write code.
 - **[The checking page](https://prova.red/check/)**, which checks a
   record in a browser and loads nothing from anywhere; also built as
-  one file, attached to each release.
+  one file, attached to each release. It uses only the signing methods
+  the browser has built in. Tried on the author's computer on
+  12 October 2026: Edge 155 and Brave 155 check the quantum-safe
+  signatures on receipts (ML-DSA), and Chrome 154 does not. None of the
+  three has the third method a seal is signed with (SLH-DSA), so in a
+  browser a book with a seal is never a pass. The command-line checker
+  checks all three.
 - **The core of the format as an individual Internet-Draft** at the
   IETF:
   [draft-izmaylov-agent-permission-receipts](https://datatracker.ietf.org/doc/draft-izmaylov-agent-permission-receipts/).

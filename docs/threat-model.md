@@ -58,10 +58,10 @@ keys. People decide what it means.
   under a seal, whose three signatures include two quantum-safe ones.
   The outside time-stamps themselves are of today's kind.
 - **A signature that cannot be checked is not a pass.** Where a device
-  has no built-in ML-DSA, the checker says so, and never reports the
-  record as intact. An entry none of whose signatures the device could
-  check is not treated as evidence: what it says is not shown, and it is
-  not compared with its slip.
+  has no built-in ML-DSA, or no SLH-DSA for a seal, the checker says
+  so, and never reports the record as intact. An entry none of whose
+  signatures the device could check is not treated as evidence: what it
+  says is not shown, and it is not compared with its slip.
 - **A record does not show that an action was wise, lawful or wanted.**
 - **A badly written slip is faithfully recorded as a badly written slip.**
 
@@ -490,8 +490,12 @@ person checking gives.
   does not read what a certificate says its key is for. It checks that
   the stated time lies within the certificate's dates, and leaves the
   rest to the person who chose to trust it.
-- **A browser.** No browser offers SLH-DSA or ML-DSA to a page yet. A
-  checker there reports a seal as not fully checked, never as a pass.
+- **A browser.** Tried on the author's computer on 12 October 2026:
+  Edge 155 and Brave 155 offer ML-DSA to a page, and Chrome 154 does
+  not; none of the three offers SLH-DSA. So a checker in a browser
+  reports a seal as not fully checked, never as a pass, and counts no
+  time-stamp beside it. In a browser without ML-DSA, every record signed
+  with ML-DSA is reported as not fully checked too.
 - **A few bytes of a time-stamp's wrapper** are not covered by the
   service's signature (the list of fingerprint methods, and the lines
   that name the certificate by its issuer). Changing them changes nothing
