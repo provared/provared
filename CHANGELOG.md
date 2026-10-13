@@ -17,21 +17,37 @@
   a Date that is not a time, or a Date wrapped in a Proxy). In Python a
   datetime counts as dated only where its time zone gives an offset, as
   Python's own rule for an "aware" time says. Nothing that was allowed is
-  refused, and nothing that was refused is allowed. In both languages; the
-  shared test file for the check before acting gains two cases, and in the
-  stub writer's scenarios the one step that hands in a time of Infinity
-  changes its words.
-- **A signature of the wrong length is invalid on every device.** An
-  Ed25519 signature is 64 bytes, an ML-DSA-87 signature 4,627 and an
-  SLH-DSA-SHA2-256s signature 29,792 (RFC 8032, FIPS 204, FIPS 205). One of
-  another length can never check, and a device that has the method already
-  said "invalid"; a device without it said "not checked on this device".
-  Now every device says "invalid". So, on a device without SLH-DSA, a seal
-  whose third signature is cut short or empty is a problem, not something
-  the check before acting goes on without. A third signature of the right
-  length that would not check is still not seen there: the format
-  description (section 20) and the list of threats now say so. In both
-  languages; the shared test files gain a case each.
+  refused, and nothing that was refused is allowed. The stub writer
+  answers in the same words: its "before" and "act" took a Date wrapped
+  in a Proxy to a plain TypeError, and now answer "when: does not give a
+  time", as the check before acting does; its "record", which does not
+  ask first, took any time that gives none to a plain "Invalid time
+  value" error, and now refuses it with `bad-field` in those words. In
+  both languages; the shared test file for the check before acting gains
+  two cases, and in the stub writer's scenarios the one step that hands in
+  a time of Infinity changes its words, and the one step that records an
+  action at a time outside the range of times changes its answer. Tests
+  in both languages hold a Date in a Proxy and, in Python, a time zone
+  that gives no offset.
+- **A record's signature of the wrong length is invalid on every
+  device.** An Ed25519 signature is 64 bytes, an ML-DSA-87 signature 4,627
+  and an SLH-DSA-SHA2-256s signature 29,792 (RFC 8032, FIPS 204, FIPS 205).
+  One of another length can never check, and a device that has the method
+  already said "invalid"; a device without it said "not checked on this
+  device". Now every device says "invalid", for every signature of a
+  record, the passkey's Ed25519 signature on a slip among them. So, on a
+  device without SLH-DSA, a seal whose third signature is cut short or
+  empty is a problem, not something the check before acting goes on
+  without. The signature inside a time-stamp from a service is not
+  covered: on a device without its method a time-stamp is not checked,
+  whatever its length, and is not counted. A third signature of the right
+  length that would not check is still not seen on a device without
+  SLH-DSA. The format description states the rule in section 3.9 and
+  what it means for a seal in section 20; the list of threats says that a
+  third signature of the right length is not seen there. In both
+  languages; the shared test files for a whole book and for the check
+  before acting gain a case each, and tests in both languages hold each
+  method's length, shorter and longer, with the method and without it.
 - **The check before acting goes on without a seal's third signature, and
   says so** (decision F-106; this changes choice 66 of the draft). Found on
   11 October 2026: a device that cannot check SLH-DSA-SHA2-256s, which is
@@ -44,9 +60,28 @@
   its answer carries `notChecked: ['SLH-DSA-SHA2-256s']`. Any other
   signature left unchecked still refuses everything, and the full checker's
   answers are unchanged. In both languages: the shared test file for the
-  check before acting gains seven cases with a seal (found missing by an
-  independent review, which showed that a weaker rule passed every test),
-  and the shared test file for the stub writer's scenarios is remade.
+  check before acting gains seven cases with a seal, besides the one with
+  a third signature cut short counted above (found missing by two
+  independent reviews, which showed that weaker rules passed every test:
+  the last case, a permission and a seal alone on a device without
+  ML-DSA-87, holds the rule that the seal's ML-DSA-87 signature must have
+  been checked), and the shared test file for the stub writer's scenarios
+  is remade. Tests in both languages hold the same rule.
+- **The signing page names the agent's keys by the fingerprint of their
+  key set** before the passkey is asked, worked out by the library's own
+  `keySetFingerprint` (as a recorder's key set is named), and asks the
+  person to compare it with the one the agent's software printed when it
+  made its keys: a link, or a permission pasted from elsewhere, could
+  carry someone else's keys under a familiar name. Keys that are not a
+  key set are refused there, in the library's own words. A test holds the
+  page's words against the library's fingerprint.
+- **What browsers check, tried again on 13 October 2026.** Chrome 155,
+  Edge 155 and Brave 155 each offer Ed25519 and ML-DSA (all three
+  strengths) to a page and check real signatures made with them; none of
+  them offers SLH-DSA. The README, the guide, the list of threats, the
+  home page, the worked example and the tool that writes the record page
+  now say so; they said, from a try on 12 October, that Chrome 154 did
+  not check ML-DSA. No code changes.
 - **The recorder beside Claude Code appends to the book, and no longer
   loses a receipt while another program reads the file.** It wrote the
   whole book to a temporary file and renamed it over the old one; on

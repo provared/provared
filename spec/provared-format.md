@@ -226,10 +226,22 @@ Because the slip names both keys, taking the quantum-safe signature off a
 stub does not leave a valid stub.
 
 A checker on a device with no built-in ML-DSA MUST report that the
-quantum-safe signature could not be checked, and MUST NOT report the
-record as intact. An entry none of whose signatures the device could
-check MUST NOT be treated as evidence: what it says is not shown as fact,
-and it is not compared with its slip.
+quantum-safe signature could not be checked (unless it is of the wrong
+length, below), and MUST NOT report the record as intact. An entry none
+of whose signatures the device could check MUST NOT be treated as
+evidence: what it says is not shown as fact, and it is not compared with
+its slip.
+
+**A signature of the wrong length.** A signature whose length is not its
+method's (64 bytes for Ed25519, 4,627 for ML-DSA-87, 29,792 for
+SLH-DSA-SHA2-256s) can never check. A checker MUST report it as invalid,
+whether or not the device has the method: it is a problem with the
+record, not a signature left unchecked. This holds for every signature of
+a record, the passkey's Ed25519 signature on a slip among them, and so
+for the check of a whole book or of a Show as for the check before acting
+(section 20). It does not reach the signature inside a time-stamp from a
+service (section 21.2): a device without that time-stamp's method does
+not check it, whatever its length, and does not count it.
 
 A recorder is known by a key set of exactly three keys: Ed25519,
 ML-DSA-87, then SLH-DSA-SHA2-256s (FIPS 205, the plain method with an
@@ -238,8 +250,8 @@ order, and counts as signed only if all three check. The third rests only
 on fingerprint functions, so it would stand even if the mathematics
 behind ML-DSA were broken. When this draft was written, no browser
 offered it to a page, and Node.js offered it outside the standard
-interface: a checker in a browser reports it as not checked, which is
-never a pass.
+interface: a checker in a browser reports it as not checked (or, if it is
+of the wrong length, as invalid), which is never a pass.
 
 The issuer's passkey signature on a slip is of today's kind only. No
 device offers a quantum-safe passkey.
@@ -926,10 +938,10 @@ MUST then name the method it did not check. A seal widens no permission;
 a device without that method would otherwise be refused everything once
 the book holds a seal. On such a device a seal rests on its first two
 signatures only: a third signature of the right length that would not
-check is not seen there. A signature of another length than its
-method's (64 bytes for Ed25519, 4,627 for ML-DSA-87, 29,792 for
-SLH-DSA-SHA2-256s) is invalid on every device, with the method or
-without it. An action dated before the last stub of
+check is not seen there. A third signature of the wrong length is not
+left unchecked: as section 3.9 sets out, it is invalid on every device,
+so the seal is a problem there and nothing is allowed. An action dated
+before the last stub of
 its own chain (the agent's, or the helper's under its pass; section 7)
 is refused (`time-went-backwards`).
 

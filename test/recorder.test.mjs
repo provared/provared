@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { checkBook, countersign, openRecorder, thumbprint } from '../src/index.js';
+import { checkBefore, checkBook, countersign, openRecorder, thumbprint } from '../src/index.js';
 import { START, makeWorld, openWriter } from './helpers/world.mjs';
 
 const HOUR = 3600 * 1000;
@@ -115,4 +115,28 @@ test('where the slip asks for approval, the writer takes the action only with th
   const r = await checkBook(recorder.book());
   assert.equal(r.summary.withinSlips, true);
   assert.equal(r.summary.counts.approved, 1);
+});
+
+test('a time handed in that gives no time is refused in plain words, by the check before acting and the writer alike', async () => {
+  // A Date wrapped in a Proxy cannot be read as a Date; one that is not a
+  // time, and a number outside the range of times, give none either. The
+  // check before acting and the writer's "before" and "act" answer
+  // bad-field in the same words; "record", which does not ask first,
+  // refuses with them. Nothing is taken and nothing is written.
+  const w = await makeWorld();
+  const issuerKeys = [await thumbprint(w.passkey.key)];
+  const recorder = await openRecorder({ book: w.book(), slip: w.slipFingerprint, privateKeys: w.agent.privateKeys, issuerKeys, now: () => START });
+  const plainly = [{ code: 'bad-field', message: 'when: does not give a time.' }];
+  for (const [what, when] of [['a Date in a Proxy', new Proxy(new Date(START), {})], ['a Date that is not a time', new Date(NaN)], ['a number outside the range of times', 9e15]]) {
+    const before = await checkBefore(w.book(), { slip: w.slipFingerprint, ...order(1), when }, { issuerKeys });
+    assert.deepEqual(before.problems, plainly, `checkBefore, ${what}`);
+    assert.deepEqual((await recorder.before(order(1), { when })).problems, plainly, `before, ${what}`);
+    let taken = false;
+    const acted = await recorder.act(order(1), async () => (taken = true), { when });
+    assert.equal(acted.done, false, `act, ${what}`);
+    assert.equal(taken, false);
+    assert.deepEqual(acted.answer.problems, plainly, `act, ${what}`);
+    await assert.rejects(recorder.record(order(1), { when }), (e) => e.name === 'Refusal' && e.code === 'bad-field' && e.message === 'when: does not give a time.', `record, ${what}`);
+  }
+  assert.equal(recorder.book(), w.book());
 });

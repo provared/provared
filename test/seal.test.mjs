@@ -285,3 +285,24 @@ test('the check before acting goes on without the seal\'s third signature, and s
   assert.equal(u.allowed, true);
   assert.equal('notChecked' in u, false);
 });
+
+// In the book above, the stubs are signed with Ed25519 and ML-DSA-87 too, so
+// a device without either is refused because of the stubs, whatever the
+// rule says of the seal. A book of a permission and a seal alone shows the
+// rule itself: the seal's first two signatures are the only ones of their
+// methods, and a seal is let through only where both were checked here.
+test('the seal\'s third signature is let through only where its first two were both checked here', async () => {
+  const lone = await makeWorld();
+  await lone.seal();
+  const proposal = { slip: lone.slipFingerprint, action: 'supplies.order', amount: { unit: 'GBP', value: 10 }, with: 'supplier', when: Date.parse('2026-10-05T10:00:00Z') };
+  const trusted = { issuerKeys: [await thumbprint(lone.passkey.key)], sealKeys: [await keySetFingerprint(lone.recorder.keys)] };
+  const without = await checkBefore(lone.book(), proposal, { ...trusted, withoutMethods: ['SLH-DSA-SHA2-256s'] });
+  assert.equal(without.allowed, true);
+  assert.deepEqual(without.notChecked, ['SLH-DSA-SHA2-256s']);
+  for (const also of ['ML-DSA-87', 'Ed25519']) {
+    const r = await checkBefore(lone.book(), proposal, { ...trusted, withoutMethods: ['SLH-DSA-SHA2-256s', also] });
+    assert.equal(r.allowed, false, `without ${also} as well: refused`);
+    assert.deepEqual(r.problems, [{ code: 'record-not-sound', message: 'This device could not check every signature in the record so far.' }]);
+    assert.equal('notChecked' in r, false);
+  }
+});

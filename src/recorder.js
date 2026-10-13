@@ -70,10 +70,18 @@ const notWritten = (why) => new Refusal('record-not-sound', why);
 
 // A time handed in: a number of milliseconds, or a Date. Text, true or a
 // list would be read by rules that differ from one device to another (text
-// with no time zone is taken as local time), so they are refused.
+// with no time zone is taken as local time), so they are refused. A Date
+// that cannot be read (one wrapped in a Proxy) gives no time, as a Date
+// that is not a time gives none, and the check before acting refuses it.
 function timeOf(when) {
   if (typeof when === 'number') return new Date(when).getTime();
-  if (when instanceof Date) return when.getTime();
+  if (when instanceof Date) {
+    try {
+      return when.getTime();
+    } catch {
+      return NaN;
+    }
+  }
   throw new Refusal('bad-field', 'when: must be a number of milliseconds, or a Date.');
 }
 
@@ -775,6 +783,8 @@ export async function openRecorder({ book, slip, privateKeys, issuerKeys, pass, 
       return calling(request, more, async (call) => {
         await writeWaiting(now());
         const when = call.when ?? now();
+        // In the words of the check before acting, which "act" and "before" give.
+        if (!Number.isFinite(when)) throw new Refusal('bad-field', 'when: does not give a time.');
         if (aheadOfClock(when)) throw notWritten('The stub was not written: it is dated ahead of the clock.');
         const made = await composeStub(call, when);
         const tried = await fitsBook(made, 'The stub was not written: with it, the book would not pass its check.');

@@ -1028,6 +1028,9 @@ class Recorder:
         def work(call):
             self._write_waiting(self._now())
             when = call['when'] if call['when'] is not _ABSENT else self._now()
+            # In the words of the check before acting, which "act" and "before" give.
+            if not _js.finite(when):
+                raise Refusal('bad-field', 'when: does not give a time.')
             if self._ahead_of_clock(when):
                 raise _not_written('The stub was not written: it is dated ahead of the clock.')
             made = self._compose_stub(call, when)

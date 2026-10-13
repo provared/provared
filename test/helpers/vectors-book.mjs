@@ -287,6 +287,8 @@ async function beforeCases() {
   await lone.seal();
   add('a permission and a seal, on a device without Ed25519 either', { ...base, slip: lone.slipFingerprint },
     { issuerKeys: [await thumbprint(lone.passkey.key)], sealKeys: [await keySetFingerprint(lone.recorder.keys)], withoutMethods: ['Ed25519'] }, lone.book());
+  add('a permission and a seal, on a device without ML-DSA-87 either', { ...base, slip: lone.slipFingerprint },
+    { issuerKeys: [await thumbprint(lone.passkey.key)], sealKeys: [await keySetFingerprint(lone.recorder.keys)], withoutMethods: ['ML-DSA-87'] }, lone.book());
   return cases;
 }
 

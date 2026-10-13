@@ -71,6 +71,23 @@ test('a method this device is told it lacks is "unavailable", never "valid"', as
   assert.equal(await verifySignature(ed25519Key, RFC8032_SIGNATURE, new Uint8Array(0), ['Ed25519']), 'unavailable');
 });
 
+test('a signature of another length than its method\'s is "invalid", with the method or without it', async () => {
+  // 64 bytes for Ed25519, 4,627 for ML-DSA-87 and 29,792 for
+  // SLH-DSA-SHA2-256s: one shorter or longer can never check, so no device
+  // calls it "not checked here" (format description, section 3.9).
+  const slhKey = { alg: 'SLH-DSA-SHA2-256s', kty: 'AKP', pub: 'A'.repeat(86) };
+  for (const [key, length] of [[ed25519Key, 64], [mlDsaKey, 4627], [slhKey, 29792]]) {
+    for (const wrong of [0, length - 1, length + 1, 2 * length]) {
+      for (const without of [[], [key.alg]]) {
+        const where = `${key.alg}, ${wrong} bytes, ${without.length ? 'without' : 'with'} the method`;
+        assert.equal(await verifySignature(key, new Uint8Array(wrong), utf8('x'), without), 'invalid', where);
+      }
+    }
+    // Of the right length, on a device without the method: not checked here, never a pass.
+    assert.equal(await verifySignature(key, new Uint8Array(length), utf8('x'), [key.alg]), 'unavailable', key.alg);
+  }
+});
+
 test('a key the device refuses to load is "invalid", not "unavailable"', async () => {
   // x and y are 32 bytes each, but not a point on the curve.
   const off = { alg: 'ES256', crv: 'P-256', kty: 'EC', x: toBase64url(new Uint8Array(32).fill(1)), y: toBase64url(new Uint8Array(32).fill(2)) };

@@ -495,9 +495,9 @@ person checking gives.
   does not read what a certificate says its key is for. It checks that
   the stated time lies within the certificate's dates, and leaves the
   rest to the person who chose to trust it.
-- **A browser.** Tried on the author's computer on 12 October 2026:
-  Edge 155 and Brave 155 offer ML-DSA to a page, and Chrome 154 does
-  not; none of the three offers SLH-DSA. So a checker in a browser
+- **A browser.** Tried on the author's computer on 13 October 2026:
+  Chrome 155, Edge 155 and Brave 155 offer ML-DSA to a page; none of the
+  three offers SLH-DSA. So a checker in a browser
   reports a seal as not fully checked, never as a pass, and counts no
   time-stamp beside it. In a browser without ML-DSA, every record signed
   with ML-DSA is reported as not fully checked too.

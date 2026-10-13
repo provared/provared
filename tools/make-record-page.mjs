@@ -199,7 +199,7 @@ ${outside}
 <p>The book is <a href="book.jsonl">book.jsonl</a> (${result.size} entries, about ${kb} KB), and ${slips.length === 1 ? 'its permission alone is' : 'its permissions alone are'} ${slipLinks}. A checker trusts nothing it is not told to trust, so name the two keys: the author's passkey, by its thumbprint, and the recorder's three keys, by the fingerprint of the set. With Node.js 24.7 or later:</p>
 <pre>npm install provared
 npx provared-check book.jsonl ${issuers.map((i) => `--issuer ${esc(i)}`).join(' ')} --sealer ${esc(sealer)}</pre>
-<p>Or in a browser, on the <a href="../check/">checking page</a>: choose the file, and paste the thumbprint into the passkey box and the fingerprint into the recorder box. No browser tried on the author's computer on 12 October 2026 has the third method a seal is signed with (SLH-DSA), so in a browser the page says that the check was not complete and gives no pass; Edge 155 and Brave 155 check the receipts' quantum-safe signatures (ML-DSA), and Chrome 154 does not. The command-line checker checks everything.</p>
+<p>Or in a browser, on the <a href="../check/">checking page</a>: choose the file, and paste the thumbprint into the passkey box and the fingerprint into the recorder box. No browser tried on the author's computer on 13 October 2026 (Chrome 155, Edge 155 and Brave 155) has the third method a seal is signed with (SLH-DSA), so in a browser the page says that the check was not complete and gives no pass; all three check the receipts' quantum-safe signatures (ML-DSA). The command-line checker checks everything.</p>
 
 <h2>What this record does not show</h2>
 <p>The checker says this itself, at the end of its answer:</p>

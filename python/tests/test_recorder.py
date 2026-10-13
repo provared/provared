@@ -22,6 +22,7 @@ from provared import (
     Recorder,
     Refusal,
     arguments_fingerprint,
+    check_before,
     check_book,
     countersign,
     fingerprint,
@@ -284,6 +285,50 @@ class PythonValues(unittest.TestCase):
         r = writer.act(order(1), lambda: None, {'when': moment})
         self.assertTrue(r['done'])
         self.assertEqual(check_book(writer.book())['entries'][1]['content']['when'], '2026-10-05T10:00:00Z')
+
+    def test_a_datetime_whose_time_zone_gives_no_offset_is_refused_in_plain_words(self):
+        # Python's own rule: a datetime is "aware" only where its time zone
+        # gives an offset. One that gives none is read as local time, which
+        # differs from one device to another: the check before acting and
+        # the writer refuse it in the same words, and nothing is written.
+        class NoOffset(datetime.tzinfo):
+            def utcoffset(self, dt):
+                return None
+
+            def dst(self, dt):
+                return None
+
+        moment = datetime.datetime(2026, 10, 5, 10, 0, tzinfo=NoOffset())
+        refusal = {'code': 'bad-field', 'message': 'when: must be a number of milliseconds, or a Date.'}
+        w = World()
+        answer = check_before(w.book(), {'slip': w.slip_fingerprint, **order(1), 'when': moment}, issuer_keys=w.issuer_keys)
+        self.assertFalse(answer['allowed'])
+        self.assertEqual(answer['problems'], [refusal])
+        with self.assertRaises(Refusal) as refused:
+            _time_value(moment)
+        self.assertEqual((refused.exception.code, refused.exception.message), (refusal['code'], refusal['message']))
+        writer = w.open()
+        for call in (lambda more: writer.before(order(1), more), lambda more: writer.act(order(1), lambda: None, more), lambda more: writer.record(order(1), more)):
+            with self.assertRaises(Refusal) as refused:
+                call({'when': moment})
+            self.assertEqual((refused.exception.code, refused.exception.message), (refusal['code'], refusal['message']))
+        self.assertEqual(writer.book(), w.book())
+
+    def test_a_time_that_gives_no_time_is_refused_in_plain_words_by_record_too(self):
+        # "before" and "act" answer as the check before acting does;
+        # "record", which does not ask first, refuses in the same words.
+        plainly = {'code': 'bad-field', 'message': 'when: does not give a time.'}
+        w = World()
+        writer = w.open()
+        for when in (float('nan'), float('inf'), 9e15):
+            self.assertEqual(writer.before(order(1), {'when': when})['problems'], [plainly])
+            acted = writer.act(order(1), lambda: self.fail('the action was taken'), {'when': when})
+            self.assertFalse(acted['done'])
+            self.assertEqual(acted['answer']['problems'], [plainly])
+            with self.assertRaises(Refusal) as refused:
+                writer.record(order(1), {'when': when})
+            self.assertEqual((refused.exception.code, refused.exception.message), (plainly['code'], plainly['message']))
+        self.assertEqual(writer.book(), w.book())
 
     def test_what_is_not_plain_data_is_refused_where_javascript_could_not_copy_it(self):
         w = World()

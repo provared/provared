@@ -149,8 +149,8 @@ in a browser straight from the disk; it needs no server. The file allows
 itself no request of any kind: its content security policy lets nothing
 be loaded from anywhere. The tool prints the file's SHA-256 fingerprint,
 so that a copy can be compared with it. (Tried on 8 October 2026 in the
-three browser builds this repository is tested with, and on 12 October
-2026 in Edge 155, Brave 155 and Chrome 154.) The file for
+three browser builds this repository is tested with, and on 13 October
+2026 in Chrome 155, Edge 155 and Brave 155.) The file for
 version 0.3.0 is attached to the release on GitHub; it is the same
 file, byte for byte, as for version 0.2.0, because nothing the page
 holds changed. Its SHA-256 fingerprint is
@@ -564,16 +564,17 @@ names no agent software, and works with any function.
   offers a quantum-safe passkey yet.
 - **Whoever keeps the book** signs each seal with three keys: the same
   two, and SLH-DSA-SHA2-256s, which rests only on fingerprint functions.
-- **Some browsers have ML-DSA; none tried has SLH-DSA.** Tried on the
-  author's computer on 12 October 2026: Edge 155 and Brave 155 offer
-  Ed25519 and ML-DSA to a page, and Chrome 154 offers Ed25519 only. None
-  of the three offers SLH-DSA. So in Edge 155 and Brave 155 the checking
-  page checks every signature of a slip, a stub, a countersignature and
-  the other records, but not a seal's third signature: a book with a
-  seal reads "not complete" there, and the time-stamp beside the seal is
-  not counted. Where a browser lacks a method, the checking page says
-  that those signatures were not checked, and does not show a pass.
-  Node.js checks all of them.
+- **The browsers tried have ML-DSA; none has SLH-DSA.** Tried on the
+  author's computer on 13 October 2026: Chrome 155, Edge 155 and
+  Brave 155 each offer Ed25519 and ML-DSA (all three strengths) to a
+  page, and check real signatures made with them. None of the three
+  offers SLH-DSA. So in these browsers the checking page checks every
+  signature of a slip, a stub, a countersignature and the other records,
+  but not a seal's third signature: a book with a seal reads "not
+  complete" there, and the time-stamp beside the seal is not counted.
+  Where a browser lacks a method, the checking page says that those
+  signatures were not checked, and does not show a pass. Node.js checks
+  all of them.
 
 ## Using the library
 
