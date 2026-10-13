@@ -4,11 +4,11 @@
 
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { tempFolder } from './helpers/temp.mjs';
 import { disclosureDigest, uncover } from '../src/cover.js';
 import { canonicalJson } from '../src/encoding.js';
 import {
@@ -76,7 +76,7 @@ async function itemDisclosure(value) {
 
 const CLI = join(fileURLToPath(new URL('..', import.meta.url)), 'bin', 'provared-check.mjs');
 function cli(book, ...more) {
-  const file = join(mkdtempSync(join(tmpdir(), 'provared-')), 'book.jsonl');
+  const file = join(tempFolder('provared-'), 'book.jsonl');
   writeFileSync(file, book);
   return spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', CLI, file, ...more], { encoding: 'utf8' });
 }

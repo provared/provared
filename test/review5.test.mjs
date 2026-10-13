@@ -5,11 +5,11 @@
 
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { tempFolder } from './helpers/temp.mjs';
 import { label, shown } from '../page/render.js';
 import { disclosureDigest } from '../src/cover.js';
 import {
@@ -58,7 +58,7 @@ async function reslip(w, change) {
 
 const CLI = join(fileURLToPath(new URL('..', import.meta.url)), 'bin', 'provared-check.mjs');
 function cli(book, ...more) {
-  const file = join(mkdtempSync(join(tmpdir(), 'provared-')), 'book.jsonl');
+  const file = join(tempFolder('provared-'), 'book.jsonl');
   writeFileSync(file, book);
   return spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', CLI, file, ...more], { encoding: 'utf8' });
 }

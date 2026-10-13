@@ -152,6 +152,12 @@
   record, no action. The folder names a product, as the framework
   packages do; the library names none, and the npm package does not
   hold it. Five tests run the hook as Claude Code runs it.
+- **The tests clean up after themselves.** Nine test files made a
+  temporary folder for each run and left it behind; on 13 October 2026
+  the computer's temporary folder held about 2,800 of them. A small
+  helper, `test/helpers/temp.mjs`, now makes each folder and removes it
+  when that test file's tests end. Run with an empty temporary folder,
+  the library's tests leave nothing in it.
 
 ## 0.3.0 (10 October 2026)
 

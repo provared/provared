@@ -4,11 +4,11 @@
 
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { tempFolder } from './helpers/temp.mjs';
 import { BLOCK_TIME_ALLOWANCE_MS, blockFingerprint, blockStampItem, checkBlockStamp } from '../src/blockstamp.js';
 import { concatBytes, sha256, utf8 } from '../src/encoding.js';
 import { checkBook, checkShow, entryLine, formatTime, keySetFingerprint, makeShow, thumbprint } from '../src/index.js';
@@ -264,7 +264,7 @@ test('a cancellation can carry a block time-stamp, and a stub must be shown to h
 });
 
 test('the command-line checker takes --block, and says what a block time-stamp is', async () => {
-  const file = join(mkdtempSync(join(tmpdir(), 'provared-')), 'book.jsonl');
+  const file = join(tempFolder('provared-'), 'book.jsonl');
   writeFileSync(file, upTo(4));
   const cli = join(fileURLToPath(new URL('..', import.meta.url)), 'bin', 'provared-check.mjs');
   const run = (...more) => spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', cli, file, ...more], { encoding: 'utf8' });

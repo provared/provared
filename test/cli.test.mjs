@@ -2,11 +2,11 @@
 
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { tempFolder } from './helpers/temp.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const cli = join(root, 'bin', 'provared-check.mjs');
@@ -81,7 +81,7 @@ test('a Show is recognised and checked', () => {
 
 test('a sound book within its slip gives exit code 0', () => {
   // The first four entries of the sample: the slip and three orders.
-  const dir = mkdtempSync(join(tmpdir(), 'provared-'));
+  const dir = tempFolder('provared-');
   const file = join(dir, 'within.jsonl');
   writeFileSync(file, readFileSync(sample, 'utf8').split('\n').slice(0, 4).join('\n') + '\n');
   const r = run(file, '--issuer', expected.issuerKey);
@@ -92,7 +92,7 @@ test('a sound book within its slip gives exit code 0', () => {
 });
 
 test('a damaged book gives exit code 2, and text from a record cannot move the cursor', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'provared-'));
+  const dir = tempFolder('provared-');
   const file = join(dir, 'damaged.jsonl');
   writeFileSync(file, readFileSync(sample, 'utf8').replace('"payload":"ey', '"payload":"ez') + 'not a record \u001b[2J\n');
   const r = run(file);
@@ -103,7 +103,7 @@ test('a damaged book gives exit code 2, and text from a record cannot move the c
 
 test('what a failed entry says is not printed as if it were fact', () => {
   // The first order's amount is changed from 45 to 1 after it was signed.
-  const dir = mkdtempSync(join(tmpdir(), 'provared-'));
+  const dir = tempFolder('provared-');
   const file = join(dir, 'changed.jsonl');
   const lines = readFileSync(sample, 'utf8').split('\n');
   const entry = JSON.parse(lines[2]);
@@ -140,7 +140,7 @@ test('a Show of single pages says what single pages cannot show', () => {
 });
 
 test('--json writes text that could disturb a terminal as escapes, and stays exact JSON', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'provared-'));
+  const dir = tempFolder('provared-');
   const file = join(dir, 'controls.jsonl');
   writeFileSync(file, '{"\u009b2J\u202e":"x"}\n');
   const r = run(file, '--json');
@@ -149,7 +149,7 @@ test('--json writes text that could disturb a terminal as escapes, and stays exa
 });
 
 test('a record that crashed an earlier checker is refused with exit code 2', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'provared-'));
+  const dir = tempFolder('provared-');
   const file = join(dir, 'hostile.jsonl');
   writeFileSync(
     file,
@@ -176,7 +176,7 @@ test('characters that cannot be seen are shown as a mark, in words and in --json
   const hidden = ['\u200b', '\u200d', '\u2060', '\u2028', '\u2029', '\ufeff', '\u00ad', '\u3164', '\u{e0001}', '\u202e', '\u0007'];
   const w = await makeWorld({ fields: { purpose: 'Buy' + hidden.join('x') + 'paper' } });
   await w.add();
-  const dir = mkdtempSync(join(tmpdir(), 'provared-'));
+  const dir = tempFolder('provared-');
   const file = join(dir, 'hidden.jsonl');
   writeFileSync(file, w.book());
   for (const out of [run(file).out, run(file, '--json').out]) {

@@ -3,11 +3,11 @@
 
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { tempFolder } from './helpers/temp.mjs';
 import { shown } from '../page/render.js';
 import { assembleSlip, checkBook, entryLine, keySetFingerprint, prepareSlip, thumbprint, toBase64url } from '../src/index.js';
 import { cancelWithPasskey, signChallengeWithPasskey } from '../src/passkey-browser.js';
@@ -23,7 +23,7 @@ function run(...args) {
 }
 
 function saved(text) {
-  const file = join(mkdtempSync(join(tmpdir(), 'provared-')), 'book.jsonl');
+  const file = join(tempFolder('provared-'), 'book.jsonl');
   writeFileSync(file, text);
   return file;
 }

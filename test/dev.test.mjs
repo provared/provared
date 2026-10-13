@@ -4,11 +4,11 @@
 
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { tempFolder } from './helpers/temp.mjs';
 import { checkBook, checkSlip, thumbprint } from '../src/index.js';
 import { DEVELOPMENT_MARK, developmentPasskey, developmentRecorder, developmentSlip } from '../src/dev.js';
 
@@ -80,7 +80,7 @@ test('the stub writer opened under a development slip: within the limit, then ou
 });
 
 test('the first-record example runs, writes a book, and the checker reads it with the thumbprint it prints', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'provared-first-'));
+  const dir = tempFolder('provared-first-');
   const run = (file, ...args) => spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', file, ...args], { encoding: 'utf8', cwd: dir });
   const example = run(join(root, 'examples', 'first-record.mjs'));
   assert.equal(example.status, 0, example.stderr);

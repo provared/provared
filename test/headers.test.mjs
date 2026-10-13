@@ -7,12 +7,12 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { cpSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { tempFolder } from './helpers/temp.mjs';
 import { apart, fetchHeaders, networkOf, nodeAddress, updateChainFile } from '../net/headers.js';
 import { BITCOIN, MIN_BLOCKS_AFTER, answerFor, blocksInChain, checkHeaderChain, nextBits, readHeaderChain, startHeaderChain } from '../src/headers.js';
 import { checkBook, toBase64url } from '../src/index.js';
@@ -422,7 +422,7 @@ test('addresses of nodes are read strictly, and nodes are grouped by the network
 // --- keeping the chain in a file ---
 
 test('the chain file is written only where it grew, never shorter, and kept as it was when it cannot be used', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'provared-'));
+  const dir = tempFolder('provared-');
   const file = join(dir, 'chain.bin');
   const good = await fakeNode(LONG);
   const partial = await fakeNode(chainOf(4100, { at: { 3000: () => ({ fail: true }) } }));
@@ -462,7 +462,7 @@ test('provared-headers asks no one without two nodes named, and keeps a chain fi
   assert.equal(none.code, 2);
   assert.match(none.err, /Name at least two nodes/);
   assert.equal(run('provared-headers.mjs', '--node', 'not an address').code, 2);
-  const file = join(mkdtempSync(join(tmpdir(), 'provared-')), 'chain.bin');
+  const file = join(tempFolder('provared-'), 'chain.bin');
   writeFileSync(file, 'not a chain');
   const r = run('provared-headers.mjs', '--chain', file, '--node', '127.0.0.1:9', '--node', 'localhost:9');
   assert.equal(r.code, 2);
@@ -471,7 +471,7 @@ test('provared-headers asks no one without two nodes named, and keeps a chain fi
 });
 
 test('provared-check --headers refuses a file that is not the real chain, before checking anything', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'provared-'));
+  const dir = tempFolder('provared-');
   const sample = join(root, 'samples', 'office-supplies.jsonl');
   for (const [name, bytes, words] of [
     ['made-up.bin', joined(chainOf(5)), /Block 0: this is not the chain's first block/],
@@ -490,7 +490,7 @@ test('provared-check --headers refuses a file that is not the real chain, before
 // they print, and how the command that fetches keeps its file, can be
 // tried end to end with made-up nodes.
 function madeUpBuild() {
-  const dir = mkdtempSync(join(tmpdir(), 'provared-build-'));
+  const dir = tempFolder('provared-build-');
   for (const part of ['src', 'bin', 'net', 'package.json']) cpSync(join(root, part), join(dir, part), { recursive: true });
   const file = join(dir, 'src', 'headers.js');
   const text = readFileSync(file, 'utf8');
@@ -525,7 +525,7 @@ test('with a chain of headers, the checker says why a block counts, and --json s
   const recent = Math.floor(Date.now() / 1000) - 30 * 600;
   const headers = chainOf(30, { start: Math.min(sealTime - 20 * 600, recent), rootAt: { 20: Buffer.from(stamp.header.subarray(36, 68)) } });
   sealed.entry.stamps = [{ block: toBase64url(headers[20]), proof: toBase64url(stamp.proof) }];
-  const dir = mkdtempSync(join(tmpdir(), 'provared-'));
+  const dir = tempFolder('provared-');
   const book = join(dir, 'book.jsonl');
   const chainFile = join(dir, 'chain.bin');
   writeFileSync(book, w.book());
@@ -550,7 +550,7 @@ test('provared-headers, built for a made-up chain, fetches, keeps its file, and 
   const headers = chainOf(4100, { start: Math.floor(Date.now() / 1000) - 4100 * 600 - 600 });
   const node = await fakeNode(headers);
   try {
-    const dir = mkdtempSync(join(tmpdir(), 'provared-'));
+    const dir = tempFolder('provared-');
     const list = join(dir, 'nodes.txt');
     writeFileSync(list, `# made-up nodes\n127.0.0.1:${node.port} # one\nnot a node\n[::1]:${node.port}\n`);
     const chainFile = join(dir, 'chain.bin');

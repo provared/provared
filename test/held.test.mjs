@@ -4,11 +4,11 @@
 
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { tempFolder } from './helpers/temp.mjs';
 import { checkBefore, checkBook, checkShow, fromBase64url, keySetFingerprint, makeShow, openRecorder, thumbprint, toBase64url } from '../src/index.js';
 import { START, makeWorld } from './helpers/world.mjs';
 
@@ -156,7 +156,7 @@ test('the copy of a cancellation that the book holds unchanged adds nothing and 
 
 test('the command-line checker takes the person\'s copy, and a Show says that it cannot use one', async () => {
   const { w, cancel, trust } = await leftOut();
-  const dir = mkdtempSync(join(tmpdir(), 'provared-'));
+  const dir = tempFolder('provared-');
   const book = join(dir, 'book.jsonl');
   const copy = join(dir, 'cancellation.json');
   writeFileSync(book, w.book());

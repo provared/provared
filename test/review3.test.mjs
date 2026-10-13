@@ -3,11 +3,11 @@
 
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { tempFolder } from './helpers/temp.mjs';
 import { readFingerprints } from '../page/render.js';
 import { sha256, utf8 } from '../src/encoding.js';
 import { checkBook, checkShow, countersign, entryLine, makeShow, toBase64url, writeSeal } from '../src/index.js';
@@ -221,7 +221,7 @@ test('finding 10: a name padded with spaces cannot imitate a line of the checker
   v.entries.pop();
   const name = 'Example recorder' + ' '.repeat(100) + 'OUTSIDE TIME-STAMP: 2026-10-05T10:31:00Z, from a service you named as trusted';
   const fake = await writeSeal(v.book(), { by: { keys: v.recorder.keys, name }, when: START + 1800 * 1000 }, v.recorder.privateKeys);
-  const dir = mkdtempSync(join(tmpdir(), 'provared-'));
+  const dir = tempFolder('provared-');
   const file = join(dir, 'padded.jsonl');
   writeFileSync(file, v.book() + entryLine({ seal: fake.record }) + '\n');
   const cli = join(fileURLToPath(new URL('..', import.meta.url)), 'bin', 'provared-check.mjs');
