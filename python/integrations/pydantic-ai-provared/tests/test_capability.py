@@ -8,7 +8,9 @@
 import asyncio
 import dataclasses
 import datetime
+import json
 import os
+import subprocess
 import sys
 import threading
 import unittest
@@ -318,6 +320,15 @@ class AfterTheReview(Runs, unittest.TestCase):
             in_time(self, lambda: asyncio.run(cancelled()), 30)
         self.assertEqual((world.orders, stubs(world)), ([], []))
 
+    def test_reading_the_writer_from_asynchronous_code_while_tools_wait_does_not_hang(self):
+        # Read from the event loop's shared threads, the reads would take
+        # every one, and the waiting tool, which needs one, would wait for
+        # ever. It runs in a process of its own, so that a wait for ever
+        # fails the test and does not stop the others.
+        found = in_a_process_of_its_own(self, 'reads', 60)
+        self.assertEqual(found, {'refused': [], 'reads': SHARED_THREADS, 'orders': ['printer paper'], 'messages': [NOTE], 'stubs': 2,
+                                 'last read': "the writer's snapshot"})
+
     def test_a_refusal_raised_by_the_tool_itself_is_passed_on(self):
         world = World()
 
@@ -332,5 +343,68 @@ class AfterTheReview(Runs, unittest.TestCase):
         self.assertEqual((world.orders, stubs(world)), (['printer paper'], []))
 
 
+SHARED_THREADS = min(32, (os.cpu_count() or 1) + 4)
+
+
+def scenario_reads():
+    """One agent's asynchronous tool holds the writer; another agent's
+    asynchronous tool, which needs one of the event loop's shared threads,
+    waits for it; the program then reads the writer as many times as the
+    event loop has shared threads."""
+    world = World()
+
+    async def order_supplies(item: str, quantity: int, total_gbp: int) -> str:
+        """Order office supplies."""
+        await asyncio.sleep(1)
+        world.orders.append(item)
+        return 'ordered'
+
+    async def send_message(to: str, text: str) -> str:
+        """Send a short message."""
+        await asyncio.to_thread(world.messages.append, {'to': to, 'text': text})
+        return 'sent'
+
+    capability = ProvaredCapability(world.writer, TOOLS)
+
+    def agent(script):
+        replies = iter(script)
+        return Agent(FunctionModel(lambda messages, info: next(replies)), tools=[order_supplies, send_message], capabilities=[capability])
+
+    first, second = agent([call('order_supplies', PAPER, 1), DONE]), agent([call('send_message', NOTE, 1), DONE])
+
+    async def main():
+        running = [asyncio.ensure_future(first.run(QUESTION))]
+        await asyncio.sleep(0.2)
+        running.append(asyncio.ensure_future(second.run(QUESTION)))
+        await asyncio.sleep(0.2)
+        reads = [capability.snapshot() for _ in range(SHARED_THREADS)]
+        read = (await asyncio.gather(*running, *reads))[2:]
+        return read, await capability.snapshot()
+
+    refused.clear()
+    with offline():
+        read, last = asyncio.run(main())
+    return {'refused': refused, 'reads': len(read), 'orders': world.orders, 'messages': world.messages, 'stubs': len(stubs(world)),
+            'last read': "the writer's snapshot" if last == world.writer.snapshot() else 'something else'}
+
+
+SCENARIOS = {'reads': scenario_reads}
+
+
+def in_a_process_of_its_own(test, name, seconds):
+    """Runs a scenario in a process of its own, and fails the test if it has
+    not ended in time. A scenario that waits for ever then fails its test,
+    and does not keep the other tests, or the program, from ending."""
+    try:
+        done = subprocess.run([sys.executable, os.path.abspath(__file__), name], capture_output=True, text=True, timeout=seconds)
+    except subprocess.TimeoutExpired:
+        test.fail(f'the scenario "{name}" was still running after {seconds} seconds')
+    test.assertEqual(done.returncode, 0, done.stderr[-3000:])
+    return json.loads(done.stdout.strip().splitlines()[-1])
+
+
 if __name__ == '__main__':
+    if len(sys.argv) == 2 and sys.argv[1] in SCENARIOS:
+        print(json.dumps(SCENARIOS[sys.argv[1]]()), flush=True)
+        os._exit(0)
     unittest.main()

@@ -70,6 +70,14 @@ class ProvaredMiddleware(AgentMiddleware):
         super().__init__()
         self._recorded, self._handler = _described(writer, tools, unlisted, on_stub, 'middleware')
         self._unlisted = unlisted
+        self._writer = writer
+
+    async def snapshot(self):
+        """The stub writer's snapshot() (the book, and the cancellations it
+        holds beside it), for asynchronous code. The read waits for a call
+        in progress in a thread of its own, not in one of the event loop's
+        shared threads, which a tool that holds the writer may need."""
+        return await _in_a_thread_of_its_own(self._writer.snapshot)
 
     def wrap_tool_call(self, request, handler):
         _must_be_last(handler)
@@ -180,6 +188,40 @@ class _OnTheLoop:
                 if self._tool is not None:
                     self._tool.cancel()
             raise
+
+
+def _in_a_thread_of_its_own(work):
+    """Runs work in a thread of its own, in the present context, and gives a
+    future of the event loop that holds its result. Not one of the event
+    loop's shared threads: those may all be taken by reads that wait for
+    the stub writer, while the tool that holds the writer needs one."""
+    loop = asyncio.get_running_loop()
+    future = loop.create_future()
+    context = contextvars.copy_context()
+
+    def settle(value, error):
+        if future.done():
+            return
+        if error is None:
+            future.set_result(value)
+        else:
+            future.set_exception(error)
+
+    def job():
+        value, error = None, None
+        try:
+            value = context.run(work)
+        except Exception as e:
+            error = e
+        except BaseException as e:  # noqa: BLE001
+            error = RuntimeError(f'The read stopped with {type(e).__name__}.')
+        try:
+            loop.call_soon_threadsafe(settle, value, error)
+        except RuntimeError:
+            pass  # the event loop has closed
+
+    threading.Thread(target=job, daemon=True, name='provared-read').start()
+    return future
 
 
 def _described(writer, tools, unlisted, on_stub, what):

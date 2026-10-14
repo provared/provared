@@ -8,6 +8,16 @@
   the homepage and the mark added on 10 and 11 October.
   `pydantic-ai-provared` 0.1.0 is published for the first time; its
   README already gave the command to install it.
+- **The LangChain and Pydantic AI packages read the stub writer safely
+  from asynchronous code**: `await middleware.snapshot()` and
+  `await capability.snapshot()` give the book and the cancellations the
+  writer holds, waiting in a thread of their own. The READMEs said to
+  read it with `asyncio.to_thread(writer.snapshot)`; but in the event
+  loop's shared threads such a read waits for the action in progress,
+  and enough of them at once leave no shared thread for a tool that
+  needs one, so the tool and the reads wait for ever. Found while
+  building a package for another framework; checked by an independent
+  reviewer, and a test in each package fails without it.
 - **A proposed action dated by text gets a plain refusal.** The check
   before acting took a time given as text, or a number or a Date that
   gives no time, to the catch-all "the checker met something it did not

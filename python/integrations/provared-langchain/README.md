@@ -101,10 +101,15 @@ How to make a slip, a book and the agent's keys is in Provared's
   is waiting: no stub is written, and the writer goes on. An ordinary
   tool that LangChain is already running in a thread cannot be stopped:
   it finishes, and leaves no stub, because its call was cancelled.
-- **In an asynchronous program, do not call the stub writer on the event
-  loop while an agent may be running**, not even `writer.snapshot()`: it
-  waits for the action it is taking, and that action needs the event
-  loop. Call it from a thread: `await asyncio.to_thread(writer.snapshot)`.
+- **In an asynchronous program, read the writer with
+  `await middleware.snapshot()`**, which waits in a thread of its own.
+  Do not call the writer on the event loop while an agent may be
+  running, not even `writer.snapshot()`: it waits for the action it is
+  taking, and that action needs the event loop. Do not read it from the
+  event loop's shared threads (`asyncio.to_thread`) either: there a read
+  waits for the action too, and enough such reads at once leave no
+  shared thread for an ordinary tool, which LangChain runs in one, so
+  the tool and the reads wait for ever.
 - **One call at a time.** The stub writer takes one call at a time and
   holds it while the tool runs, so tools that LangChain would run side by
   side run one after another.
