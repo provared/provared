@@ -457,7 +457,9 @@ function named(s) {
 }
 
 function trustWords(s) {
-  if (named(s)) return s.counts.seals ? 'yes: the passkey you trust, and the recorder you expect' : 'yes: the passkey you trust';
+  const passkeys = new Set(args.issuerKeys).size === 1 ? 'the passkey you trust' : 'the passkeys you trust';
+  const recorders = new Set(args.sealKeys).size === 1 ? 'the recorder you expect' : 'the recorders you expect';
+  if (named(s)) return s.counts.seals ? `yes: ${passkeys}, and ${recorders}` : `yes: ${passkeys}`;
   if (args.issuerKeys.length === 0) return 'NO: you named no passkey you trust (--issuer), so anyone could have made this record. This is not a pass.';
   return 'NO: the record has a seal, and you named no recorder you expect (--sealer), so anyone could have sealed it. This is not a pass.';
 }

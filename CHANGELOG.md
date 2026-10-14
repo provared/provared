@@ -1,13 +1,30 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 (14 October 2026)
 
+- **The command-line checker counts the keys it was given.** With two
+  passkeys named, its summary said "yes: the passkey you trust"; it now
+  says "the passkeys you trust", and "the recorders you expect" where
+  more than one recorder is named; the same key named twice counts once.
+  Only the words change; tests hold them. The guide gives the fingerprint
+  of the checking page built as one file for this version, which changed
+  because the checker it holds, and the page itself, changed.
+- **The README's count of review rounds is brought up to date: 40.** The
+  25 recorded by version 0.3.0, and 15 since: three of the library's
+  changes of 11 to 13 October (the seal rule, then a narrow review of four
+  commits and a check of its fixes), three of the signing page, six of the
+  recorder beside Claude Code, two of the record page's book in a release,
+  and one of the asynchronous reads below. Each reviewer is a fresh
+  session given the code, the documents and a brief of what to look at;
+  the README now says so, and that a fault may be stated as a limit rather
+  than fixed.
 - **The two framework packages require version 0.4.0**, so that an
   agent behind either goes on after its book is sealed (below).
   `provared-langchain` becomes 0.1.1, which also carries the keywords,
   the homepage and the mark added on 10 and 11 October.
-  `pydantic-ai-provared` 0.1.0 is published for the first time; its
-  README already gave the command to install it.
+  `pydantic-ai-provared` 0.1.0 is its first version; its README already
+  gave the command to install it. Both are published separately, on the
+  Python Package Index.
 - **The LangChain and Pydantic AI packages read the stub writer safely
   from asynchronous code**: `await middleware.snapshot()` and
   `await capability.snapshot()` give the book and the cancellations the
@@ -101,9 +118,9 @@
   security policy that lets it load only its own scripts and style sheet
   and send nothing anywhere; the message of the commit that added the
   link said its policy was unchanged, but the page had none. Tests hold
-  each point.
+  each point. Checked by an independent reviewer over three rounds.
 - **The recorder beside Claude Code is a package of its own,
-  `provared-claude-code` 0.1.0** (not yet published), in
+  `provared-claude-code` 0.1.0** (published separately, on npm), in
   `integrations/claude-code/`, in place of the recorder of 10 October.
   `init` makes the keys, writes the hooks and prints a link to the signing
   page filled in with a starting permission; `use` puts the signed
@@ -136,7 +153,8 @@
   checker's answer and the fingerprints describe one book (the page of
   14 October said 3,771 receipts above a summary of 3,770 stubs). It
   counts the passkeys that signed the book's permissions from the book,
-  and refuses a passkey named to it that signed none.
+  and refuses a passkey named to it that signed none. Checked by an
+  independent reviewer in two rounds.
 - **What browsers check, tried again on 13 October 2026.** Chrome 155,
   Edge 155 and Brave 155 each offer Ed25519 and ML-DSA (all three
   strengths) to a page and check real signatures made with them; none of

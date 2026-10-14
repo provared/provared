@@ -195,6 +195,19 @@ test('--sample checks the sample record that comes with the library, naming its 
   assert.match(r.out, /Time-stamped in a way you trust\?\s+yes: the first 9 entries existed by 2026-10-05T10:16:00Z/);
   assert.match(r.out, /Checked against keys you named\?\s+yes: the passkey you trust, and the recorder you expect/);
   assert.equal(r.err, '');
+  // Two passkeys named (as for a permission renewed with a second passkey): the words count them.
+  const two = run(sample, '--issuer', expected.issuerKey, '--issuer', 'A'.repeat(43), '--sealer', expected.sealKeys[0]);
+  assert.match(two.out, /Checked against keys you named\?\s+yes: the passkeys you trust, and the recorder you expect/);
+  // Two recorders named: counted too. The same key named twice counts once.
+  const sealers = run(sample, '--issuer', expected.issuerKey, '--sealer', expected.sealKeys[0], '--sealer', 'A'.repeat(43));
+  assert.match(sealers.out, /Checked against keys you named\?\s+yes: the passkey you trust, and the recorders you expect/);
+  const twice = run(sample, '--issuer', expected.issuerKey, '--issuer', expected.issuerKey, '--sealer', expected.sealKeys[0], '--sealer', expected.sealKeys[0]);
+  assert.match(twice.out, /Checked against keys you named\?\s+yes: the passkey you trust, and the recorder you expect/);
+  // A book with no seal, with two passkeys named.
+  const unsealed = join(tempFolder('provared-'), 'unsealed.jsonl');
+  writeFileSync(unsealed, readFileSync(sample, 'utf8').split('\n').slice(0, 9).join('\n') + '\n');
+  const noSeal = run(unsealed, '--issuer', expected.issuerKey, '--issuer', 'A'.repeat(43));
+  assert.match(noSeal.out, /Checked against keys you named\?\s+yes: the passkeys you trust\n/);
   // With --json the result alone is printed, so a script can read it.
   const json = JSON.parse(run('--sample', '--json').out);
   assert.equal(json.summary.firstBreach, 5);
