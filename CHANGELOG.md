@@ -75,6 +75,23 @@
   carry someone else's keys under a familiar name. Keys that are not a
   key set are refused there, in the library's own words. A test holds the
   page's words against the library's fingerprint.
+- **The signing page fills itself from a link, and shows everything a
+  link could slip in before the passkey is asked.** A link to
+  prova.red/sign/ may hold a starting permission after "#"; that part
+  stays in the browser and is never sent to a server. A link that cannot
+  be read leaves the page's own starting point and says why; a second
+  link opened in the same tab fills the page again. Because a link can
+  name anything, the page now shows, besides the agent's key-set
+  fingerprint (above): each service's keys by the fingerprint of their key
+  set, as a checker names them (keys that are not a key set are refused,
+  in the library's own words); and the agent's software statement, marked
+  as the person's statement and not proof of what runs. Shown inside
+  another page, it offers nothing to sign or cancel, since another site
+  could frame it filled from a link of its choosing. It now has a content
+  security policy that lets it load only its own scripts and style sheet
+  and send nothing anywhere; the message of the commit that added the
+  link said its policy was unchanged, but the page had none. Tests hold
+  each point.
 - **What browsers check, tried again on 13 October 2026.** Chrome 155,
   Edge 155 and Brave 155 each offer Ed25519 and ML-DSA (all three
   strengths) to a page and check real signatures made with them; none of
