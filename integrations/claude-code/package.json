@@ -1,0 +1,46 @@
+{
+  "name": "provared-claude-code",
+  "version": "0.1.0",
+  "description": "Records a Claude Code agent with Provared: each tool call is checked against a permission a person signed with a passkey, refused if it is outside it, and receipted if it is taken. Evidence, not a verdict.",
+  "author": "Pavel Izmaylov",
+  "license": "Apache-2.0 AND CC-BY-4.0",
+  "homepage": "https://prova.red",
+  "bugs": "https://github.com/provared/provared/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/provared/provared.git",
+    "directory": "integrations/claude-code"
+  },
+  "keywords": [
+    "claude-code",
+    "claude-code-hooks",
+    "ai-agent",
+    "agent",
+    "audit-trail",
+    "permission",
+    "authorization",
+    "receipt",
+    "tamper-evident",
+    "passkey",
+    "evidence"
+  ],
+  "type": "module",
+  "bin": {
+    "provared-claude-code": "recorder.mjs"
+  },
+  "files": [
+    "recorder.mjs",
+    "hook.mjs",
+    "actions.mjs",
+    "LICENSE-CC-BY-4.0.txt"
+  ],
+  "engines": {
+    "node": ">=24.7"
+  },
+  "scripts": {
+    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "provared": "^0.4.0"
+  }
+}

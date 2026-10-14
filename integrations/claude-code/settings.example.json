@@ -14,26 +14,42 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "Read|Grep|Glob|LS|NotebookRead|Edit|Write|MultiEdit|NotebookEdit|WebFetch|WebSearch|Agent|Task|Workflow|Bash|PowerShell",
+        "matcher": "*",
         "hooks": [
           {
             "type": "command",
             "command": "node",
             "args": ["--disable-warning=ExperimentalWarning", "${CLAUDE_PROJECT_DIR}/integrations/claude-code/hook.mjs"],
-            "timeout": 30
+            "timeout": 30,
+            "onFailure": "block"
           }
         ]
       }
     ],
     "PostToolUse": [
       {
-        "matcher": "Read|Grep|Glob|LS|NotebookRead|Edit|Write|MultiEdit|NotebookEdit|WebFetch|WebSearch|Agent|Task|Workflow|Bash|PowerShell",
+        "matcher": "*",
         "hooks": [
           {
             "type": "command",
             "command": "node",
             "args": ["--disable-warning=ExperimentalWarning", "${CLAUDE_PROJECT_DIR}/integrations/claude-code/hook.mjs"],
-            "timeout": 30
+            "timeout": 30,
+            "onFailure": "block"
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["--disable-warning=ExperimentalWarning", "${CLAUDE_PROJECT_DIR}/integrations/claude-code/hook.mjs"],
+            "timeout": 30,
+            "onFailure": "block"
           }
         ]
       }

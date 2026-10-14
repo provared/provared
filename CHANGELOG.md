@@ -92,6 +92,28 @@
   and send nothing anywhere; the message of the commit that added the
   link said its policy was unchanged, but the page had none. Tests hold
   each point.
+- **The recorder beside Claude Code is a package of its own,
+  `provared-claude-code` 0.1.0** (not yet published), in
+  `integrations/claude-code/`, in place of the recorder of 10 October.
+  `init` makes the keys, writes the hooks and prints a link to the signing
+  page filled in with a starting permission; `use` puts the signed
+  permission in place; `renew` takes a new permission while the recorder
+  runs, with no moment in which a call finds it gone. A permission from a
+  passkey the recorder has not trusted before is taken only with
+  `--new-passkey`, and the passkeys it trusts are kept in
+  `trusted-passkeys.json`. The hooks `init` writes match every tool,
+  record calls that failed, and refuse a call where the hook itself fails
+  (`"onFailure": "block"`). A command is named by reading its line three
+  ways (as a shell splits it, from every known program's name, and with
+  the first version's patterns), and the strictest name counts; a line
+  handed to a shell, to `eval`, `iex` or `Invoke-Expression`, and the
+  command `find -exec` runs are read the same way. A call allowed under
+  one permission and taken while a renewal switched to the next is
+  recorded under the one it was allowed under, and the stub of a call that
+  was taken is always written. `keys` and `init` print the fingerprint of
+  the agent's key set, which the signing page asks the person to compare;
+  `seal` shows the recorder's error. Checked by an independent reviewer in
+  six rounds; each fault found is a test (57 in all).
 - **What browsers check, tried again on 13 October 2026.** Chrome 155,
   Edge 155 and Brave 155 each offer Ed25519 and ML-DSA (all three
   strengths) to a page and check real signatures made with them; none of
