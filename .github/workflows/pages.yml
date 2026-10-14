@@ -61,6 +61,17 @@ jobs:
           cp provared-check.html _site/
           touch _site/.nojekyll
           sha256sum _site/provared-check.html
+      # The record's book and the checker's answer grow by megabytes a day, and GitHub refuses a
+      # file over 100 MB, so they are kept in the release "record" of this repository, not in the
+      # repository itself. Each must match its SHA-256 fingerprint in site/records/files.sha256,
+      # written by tools/make-record-page.mjs with the page; otherwise nothing is published.
+      - name: Fetch the record's book and the checker's answer from their release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download record --repo "$GITHUB_REPOSITORY" --pattern book.jsonl --pattern checker-answer.txt --dir _site/records --clobber
+          cd _site/records && sha256sum --check --strict files.sha256
+          grep -o 'href="[a-z0-9.-]*\.\(json\|jsonl\|txt\)"' index.html | cut -d'"' -f2 | while read -r f; do test -f "$f" || { echo "The record page links to $f, which is missing."; exit 1; }; done
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:

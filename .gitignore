@@ -27,3 +27,8 @@ python/integrations/*/dist/
 # The environment in which the examples for agent frameworks are run
 python/.venv-examples/
 python/integrations/*/.venv/
+
+# The record's book and the checker's answer at prova.red/records/ grow by megabytes a day:
+# they are kept in the release "record", with their fingerprints in site/records/files.sha256.
+site/records/book.jsonl
+site/records/checker-answer.txt

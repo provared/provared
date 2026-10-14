@@ -114,6 +114,19 @@
   the agent's key set, which the signing page asks the person to compare;
   `seal` shows the recorder's error. Checked by an independent reviewer in
   six rounds; each fault found is a test (57 in all).
+- **The record page's book and the checker's answer are kept in a release
+  of the repository, not in the repository itself**: they grow by
+  megabytes a day, and GitHub refuses a file over 100 MB.
+  `tools/make-record-page.mjs` writes their SHA-256 fingerprints beside
+  the page (`site/records/files.sha256`); the site's publishing run
+  fetches both from the release "record" and publishes nothing unless each
+  matches, and every file the page links is there. Readers see no change.
+  The tool now reads the growing book once, into the page's own folder,
+  leaving out a last line still being written, so that the page, the
+  checker's answer and the fingerprints describe one book (the page of
+  14 October said 3,771 receipts above a summary of 3,770 stubs). It
+  counts the passkeys that signed the book's permissions from the book,
+  and refuses a passkey named to it that signed none.
 - **What browsers check, tried again on 13 October 2026.** Chrome 155,
   Edge 155 and Brave 155 each offer Ed25519 and ML-DSA (all three
   strengths) to a page and check real signatures made with them; none of

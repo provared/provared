@@ -19,7 +19,8 @@
 // page goes to site/records/ unless --out names another folder; the sitemap
 // is updated only for site/records/.
 
-import { copyFileSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -43,8 +44,21 @@ const defaultOut = join(root, 'site', 'records');
 const out = value('--out') ? resolve(value('--out')) : defaultOut;
 const stampServices = values('--stamp-service');
 
+// The recorder adds lines all the time, so the book is read once, into the page's own folder, and
+// everything here is made from that copy: the checker's answer, the counts, the size and the
+// fingerprints all describe one book. A last line still being written is left out.
+mkdirSync(out, { recursive: true });
+const copied = join(out, 'book.jsonl');
+let bytes = readFileSync(bookPath);
+const whole = bytes.lastIndexOf(0x0a) + 1;
+if (whole < bytes.length) {
+  console.log(`The book's last line was still being written: the page is made from the ${bytes.subarray(0, whole).toString('utf8').split('\n').length - 1} whole lines before it.`);
+  bytes = bytes.subarray(0, whole);
+}
+writeFileSync(copied, bytes);
+
 function check(extra) {
-  const checkerArgs = [join(root, 'bin', 'provared-check.mjs'), bookPath, ...issuers.flatMap((i) => ['--issuer', i]), '--sealer', sealer];
+  const checkerArgs = [join(root, 'bin', 'provared-check.mjs'), copied, ...issuers.flatMap((i) => ['--issuer', i]), '--sealer', sealer];
   for (const s of stampServices) checkerArgs.push('--stamp-service', s);
   const r = spawnSync(process.execPath, [...checkerArgs, ...extra], { encoding: 'utf8', maxBuffer: 1 << 28 });
   if (r.error) throw r.error;
@@ -54,13 +68,20 @@ function check(extra) {
 
 const text = check([]);
 const result = JSON.parse(check(['--json']));
-const book = readFileSync(bookPath, 'utf8');
+const book = bytes.toString('utf8');
 const firstLine = book.slice(0, book.indexOf('\n') < 0 ? book.length : book.indexOf('\n'));
 if (result.entries[0]?.kind !== 'slip') throw new Error('the first entry of the book is not a slip');
 // Each permission in the book: the first, and one more for each renewal.
 const slips = result.entries.filter((e) => e.kind === 'slip');
 const slip = slips[0];
 const latest = slips.at(-1);
+// The passkeys that signed the book's permissions, by their thumbprints, as the checker gives them.
+const signers = [...new Set(slips.map((e) => e.issuerKey))];
+const unused = issuers.filter((i) => !signers.includes(i));
+if (unused.length > 0) {
+  console.error(`--issuer names a passkey that signed no permission in the book: ${unused.join(', ')}`);
+  process.exit(2);
+}
 const bookLines = book.split('\n');
 const stubs = result.entries.filter((e) => e.kind === 'stub');
 const seals = result.entries.filter((e) => e.kind === 'seal');
@@ -89,7 +110,7 @@ const first = stubs[0]?.content.when;
 const last = stubs.at(-1)?.content.when;
 const when = (iso) => (iso ? iso.replace('T', ' ').replace(/:\d\dZ$/, ' UTC') : '');
 const now = new Date().toISOString().replace('T', ' ').replace(/:\d\d\.\d+Z$/, ' UTC');
-const kb = Math.round(statSync(bookPath).size / 1024);
+const kb = Math.round(bytes.length / 1024);
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
 const dayRows = [...byDay.entries()].map(([day, d]) => {
@@ -116,6 +137,14 @@ const validUntil = latest.content.validUntil;
 const terms = (e) => JSON.stringify(['actions', 'limits', 'requires', 'never', 'with', 'passes'].map((k) => e.content[k] ?? null));
 const renewals = slips.slice(1).map((e, i) => ` It was renewed with permission ${i + 2}, in force from ${esc(when(e.content.validFrom))} until ${esc(when(e.content.validUntil))}, ${terms(e) === terms(slips[i]) ? 'with the same actions, limits and rules' : 'with changes that its entry below shows'}.`).join('');
 const slipFiles = slips.map((e, i) => (i === 0 ? 'slip.json' : `slip-${i + 1}.json`));
+// Notes of this record's own, each shown only where the book holds what it explains. What the
+// record shows is said as fact; what only the author can say is said as the author's account.
+const overHourNote = breaches.some((e) => e.index === 3135 && e.content?.when === '2026-10-13T19:28:46Z')
+  ? `\n<p>The entry of 13 October 2026, explained: it is the 601st run of a command in one hour, where the permission allows 600. The author states that several helper agents were working at once. Each call is checked against the book as it stands when the call is asked, so calls asked at nearly the same moment near the limit are each allowed, because none of them is in the book yet, and together they can go over. The check before acting does not count calls allowed and not yet recorded; the checker reports what happened, as it should.</p>`
+  : '';
+const secondPasskeyNote = signers.includes('Wt7n9Omj4ZvioJdUV4OhP2V0pAte3HAVpI0xqL_1aIw') && signers.length > 1
+  ? `\n<p>The permission of 14 October 2026 is signed with a different passkey from the first. The author states it is their own, made in another browser. The recorder takes a permission from a passkey it does not already trust only when told to with <code>--new-passkey</code>, and a checker names every passkey it trusts, as the command under "Check it yourself" does.</p>`
+  : '';
 const slipLinks = slipFiles.map((f) => `<a href="${f}">${f}</a>`).join(', ');
 
 const html = `<!doctype html>
@@ -153,7 +182,7 @@ const html = `<!doctype html>
 <p>Everything else on this site is an invented example. This page is a real record, kept day by day: the coding agent the author runs to build Provared, recorded under ${slips.length === 1 ? 'a permission' : 'permissions'} the author signed with their own passkey. The record is added to each day until the ${slips.length === 1 ? 'permission' : 'latest permission'} ends on ${esc(when(validUntil))}. This page was last made on ${esc(now)}, from a book of ${result.size} entries.</p>
 
 <h2>What the agent is for</h2>
-<p>The agent is Claude Code, a coding agent, which the author uses in their own time to read and change the code of Provared in its repository, run its tests and tools, and publish what the author approves. The permission names it, allows seven kinds of action with limits on four of them, states five rules of conduct, and was signed on 10 October 2026 at <a href="../sign/">prova.red/sign/</a> with the author's passkey.${renewals} The author's name in it, "Pavel i", is what the author typed: a name in a record is a label, and only the keys are checked.</p>
+<p>The agent is Claude Code, a coding agent, which the author uses in their own time to read and change the code of Provared in its repository, run its tests and tools, and publish what the author approves. The permission names it, allows seven kinds of action with limits on four of them, states five rules of conduct, and was signed on 10 October 2026 at <a href="../sign/">prova.red/sign/</a> with the author's passkey.${renewals} The author's name in it, "Pavel i", is what the author typed: a name in a record is a label, and only the keys are checked.</p>${secondPasskeyNote}
 
 <h2>How it is recorded</h2>
 <p>A small program runs before and after every tool call the agent makes (Claude Code's "hooks"; the code is <a href="https://github.com/provared/provared/tree/main/integrations/claude-code">integrations/claude-code</a> in the repository). Until 14 October 2026 at 19:05 UTC the hooks ran only for the common tools (reading and changing files, commands, the web and helper agents); from then, for every tool but a question to the person, a plan, a list of tasks, a skill or a search for tools, and for calls that failed as well. Before a call, the check before acting asks whether the call is within the permission; a call outside it is refused and does not run. After the call, the agent's side signs a receipt (a stub) with two keys, one of them quantum-safe, naming the kind of action, the tool, the time, and the SHA-256 fingerprint of the call's arguments. The arguments themselves, and the contents of any file, are never in the record. The kind of action is chosen by the hook from the tool's name and, for a command, from its text (a command that removes something counts as a deletion; one that pushes or publishes counts as a release), not by the agent. A recorder on the author's computer keeps the book and seals it at least once a day with three keys; the seals carry no outside time-stamp, so the time of a seal is the recorder's own word, and the checker says so.</p>
@@ -189,17 +218,17 @@ ${sealRows}
 </table>
 
 <h2>Where it went outside its permission</h2>
-${outside}
+${outside}${overHourNote}
 
 <h2>The checker's summary, exactly as printed</h2>
 <pre>${esc(summaryBlock)}</pre>
 <p>The whole answer, one block for each entry, is <a href="checker-answer.txt">checker-answer.txt</a>.</p>
 
 <h2>Check it yourself</h2>
-<p>The book is <a href="book.jsonl">book.jsonl</a> (${result.size} entries, about ${kb} KB), and ${slips.length === 1 ? 'its permission alone is' : 'its permissions alone are'} ${slipLinks}. A checker trusts nothing it is not told to trust, so name the two keys: the author's passkey, by its thumbprint, and the recorder's three keys, by the fingerprint of the set. With Node.js 24.7 or later:</p>
+<p>The book is <a href="book.jsonl">book.jsonl</a> (${result.size} entries, about ${kb} KB), and ${slips.length === 1 ? 'its permission alone is' : 'its permissions alone are'} ${slipLinks}. A checker trusts nothing it is not told to trust, so name the keys: ${signers.length === 1 ? 'the author\'s passkey, by its thumbprint,' : `the ${['two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'][signers.length - 2] ?? signers.length} passkeys that signed the permissions, each by its thumbprint,`} and the recorder's three keys, by the fingerprint of the set. With Node.js 24.7 or later:</p>
 <pre>npm install provared
 npx provared-check book.jsonl ${issuers.map((i) => `--issuer ${esc(i)}`).join(' ')} --sealer ${esc(sealer)}</pre>
-<p>Or in a browser, on the <a href="../check/">checking page</a>: choose the file, and paste the thumbprint into the passkey box and the fingerprint into the recorder box. No browser tried on the author's computer on 13 October 2026 (Chrome 155, Edge 155 and Brave 155) has the third method a seal is signed with (SLH-DSA), so in a browser the page says that the check was not complete and gives no pass; all three check the receipts' quantum-safe signatures (ML-DSA). The command-line checker checks everything.</p>
+<p>Or in a browser, on the <a href="../check/">checking page</a>: choose the file, and paste ${signers.length === 1 ? 'the thumbprint' : 'the thumbprints, one to a line,'} into the passkey box and the fingerprint into the recorder box. No browser tried on the author's computer on 13 October 2026 (Chrome 155, Edge 155 and Brave 155) has the third method a seal is signed with (SLH-DSA), so in a browser the page says that the check was not complete and gives no pass; all three check the receipts' quantum-safe signatures (ML-DSA). The command-line checker checks everything.</p>
 
 <h2>What this record does not show</h2>
 <p>The checker says this itself, at the end of its answer:</p>
@@ -208,7 +237,6 @@ ${limits}
 </ul>
 <p>And two things of this record's own. A refused call leaves no entry, so the record does not show how often the agent was stopped. Every receipt is one-sided, because no other party takes part in a tool call, so each shows what the agent's side said.</p>
 <p>One gap in this record, stated: on 11 October 2026, seven tool calls of a helper agent were taken and not recorded. The recorder could not replace the book file while another program was reading it, and the hook reported each as "taken and not in the record". The fault and its fix are in the change log; the seven calls stay unrecorded.</p>
-<p>One finding in this record, explained: on 13 October 2026 at 19:28 UTC, while several helper agents worked at once, the agent made 601 runs of commands in one hour, where the permission allows 600. Each call is checked against the book as it stands when the call is asked; calls asked at nearly the same moment near the limit are each allowed, because none of them is in the book yet, and together they can go over. The check before acting does not count calls allowed and not yet recorded; the checker reports what happened, as it should.</p>
 
 </main>
 <footer>
@@ -219,11 +247,14 @@ ${limits}
 </html>
 `;
 
-mkdirSync(out, { recursive: true });
-copyFileSync(bookPath, join(out, 'book.jsonl'));
 slips.forEach((e, i) => writeFileSync(join(out, slipFiles[i]), (i === 0 ? firstLine : bookLines[e.index]) + '\n'));
 writeFileSync(join(out, 'checker-answer.txt'), text);
 writeFileSync(join(out, 'index.html'), html);
+// The book and the checker's answer grow by megabytes a day, so they are kept in a release of the
+// repository, not in the repository itself; the site's publishing run fetches them and publishes
+// only if each matches its SHA-256 fingerprint here, in the form "sha256sum --check" reads.
+const sha256 = (name) => createHash('sha256').update(readFileSync(join(out, name))).digest('hex');
+writeFileSync(join(out, 'files.sha256'), ['book.jsonl', 'checker-answer.txt'].map((name) => `${sha256(name)}  ${name}\n`).join(''));
 
 if (out === defaultOut) {
   const sitemapPath = join(root, 'site', 'sitemap.xml');
@@ -235,5 +266,10 @@ if (out === defaultOut) {
   if (updated !== sitemap) writeFileSync(sitemapPath, updated);
 }
 
-console.log(`${out}: index.html, book.jsonl (${result.size} entries), ${slipFiles.join(', ')}, checker-answer.txt`);
+console.log(`${out}: index.html, book.jsonl (${result.size} entries), ${slipFiles.join(', ')}, checker-answer.txt, files.sha256`);
+if (out === defaultOut) {
+  console.log('The book and the checker\'s answer are not committed: upload them to the release "record" just before the page is pushed, then commit the rest of the folder:');
+  console.log('  gh release upload record "site/records/book.jsonl" "site/records/checker-answer.txt" --clobber');
+  console.log('  git add site/records site/sitemap.xml');
+}
 console.log(summaryBlock);
