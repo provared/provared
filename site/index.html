@@ -93,7 +93,7 @@ for (let i = 1; i &lt;= 3; i++) {
 writeFileSync('book.jsonl', recorder.book());
 console.log(`npx provared-check book.jsonl --issuer ${issuerKeys[0]}`);</pre>
 
-<p>The same in Python, with <code>from provared.dev import development_recorder</code>, is <a href="https://github.com/provared/provared/blob/main/python/examples/first_record.py">in the repository</a> too. For a LangChain agent, one package puts every tool call behind the same check, with no change to the tools:</p>
+<p>The same in Python, with <code>from provared.dev import development_recorder</code>, is <a href="https://github.com/provared/provared/blob/main/python/examples/first_record.py">in the repository</a> too. For a LangChain agent, one package puts every tool call behind the same check, with no change to the tools (and another does the same for Pydantic AI):</p>
 
 <pre>pip install provared-langchain</pre>
 
@@ -181,15 +181,15 @@ agent = create_agent(model, tools=[order_supplies, send_message],
 
 <p>Built from published standards only, with nothing hand-made: JSON Web Signature, one canonical form of JSON, Ed25519 and ML-DSA-87 (FIPS 204) side by side on every receipt, RFC 3161 time-stamps, and the tree of RFC 9162. The format is described exactly in <a href="https://github.com/provared/provared/blob/main/spec/provared-format.md">one document</a>, and <a href="https://github.com/provared/provared/tree/main/test-vectors">shared test files</a> hold another implementation to the same answers.</p>
 
-<p>It is one author's work, in their own time, built with AI tools since 3 October 2026. The code has been through 25 rounds of review by AI reviewers, each a fresh session given only the code and the documents; every fault was fixed and kept as a test. No person other than the author has reviewed it yet. That is an invitation.</p>
+<p>It is one author's work, in their own time, built with AI tools since 3 October 2026. The code has been through 40 rounds of review by AI reviewers, each a fresh session given the code, the documents and a brief of what to look at; every fault was fixed, or stated as a limit, and kept as a test. No person other than the author has reviewed it yet. That is an invitation.</p>
 
 <h2>Where it is</h2>
 <ul>
   <li>The code and the format: <a href="https://github.com/provared/provared">github.com/provared/provared</a>. Apache License 2.0 for the software; Creative Commons Attribution 4.0 for the documents.</li>
-  <li>The JavaScript library: <a href="https://www.npmjs.com/package/provared">provared on npm</a>. The Python version: <a href="https://pypi.org/project/provared/">provared</a> and <a href="https://pypi.org/project/provared-langchain/">provared-langchain</a> on the Python Package Index.</li>
+  <li>The JavaScript library: <a href="https://www.npmjs.com/package/provared">provared on npm</a>. The Python version: <a href="https://pypi.org/project/provared/">provared</a>, with <a href="https://pypi.org/project/provared-langchain/">provared-langchain</a> and <a href="https://pypi.org/project/pydantic-ai-provared/">pydantic-ai-provared</a> for two agent frameworks, on the Python Package Index.</li>
   <li>The core of the format as an individual Internet-Draft at the Internet Engineering Task Force: <a href="https://datatracker.ietf.org/doc/draft-izmaylov-agent-permission-receipts/">draft-izmaylov-agent-permission-receipts</a>. An Internet-Draft is a working document, not a standard.</li>
 </ul>
-<p><strong>Status:</strong> version 0.3.0, a draft, published as it is by one author in their own time, with fixes as time allows. The format may still change. Every published version stays on npm and the Python Package Index, so a record made with one version can always be checked by that version. What a record does not prove is stated beside what it does.</p>
+<p><strong>Status:</strong> version 0.4.0, a draft, published as it is by one author in their own time, with fixes as time allows. The format may still change. Every published version stays on npm and the Python Package Index, so a record made with one version can always be checked by that version. What a record does not prove is stated beside what it does.</p>
 
 <h2 id="contact">Write to the author</h2>
 
