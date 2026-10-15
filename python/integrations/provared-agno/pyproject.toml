@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "provared-agno"
+version = "0.1.0"
+description = "An Agno tool hook that checks each tool call of an agent against the permission a person signed, and records it with Provared. Evidence, not a verdict."
+readme = "README.md"
+authors = [{ name = "Pavel Izmaylov" }]
+license = "Apache-2.0 AND CC-BY-4.0"
+license-files = ["LICENSE", "LICENSE-CC-BY-4.0.txt"]
+keywords = ["agno", "agno-tool-hooks", "ai-agent", "agent", "audit-trail", "permission", "authorization", "receipt", "tamper-evident", "passkey", "evidence"]
+requires-python = ">=3.11"
+# Provared itself, from the version whose stub writer in Python goes on
+# after a seal; Agno's tool hooks, as tested; and the package beneath Agno
+# that this one imports directly, to read the arguments as Agno reads them.
+dependencies = ["provared>=0.4.0", "agno>=3.1.3,<4", "pydantic>=2"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Programming Language :: Python :: 3",
+  "Topic :: Security :: Cryptography",
+]
+
+[project.urls]
+Homepage = "https://prova.red"
+Source = "https://github.com/provared/provared"
+Documentation = "https://github.com/provared/provared/tree/main/python/integrations/provared-agno"
+Issues = "https://github.com/provared/provared/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+- **`provared-agno` 0.1.0, an Agno tool hook**
+  (`python/integrations/provared-agno/`): every tool call of an Agno
+  agent is checked against the slip before it runs, and a stub is
+  written once it has run. A call the slip does not allow is not run, and
+  the model is told why. Agno's own steering tools cannot carry an action
+  past the record: a hand-over, or a task in a team's task mode, goes
+  only to a member with the same writer's hooks, read from Agno's own
+  list of tasks, not from the session's copy that the model can rewrite.
+  A stub is written only once its tool has completed, even where a
+  helper agent runs inside the tool, on the same event loop or on one of
+  its own; a tool that never completes leaves none, and a cancelled tool
+  that completes all the same is recorded. Checked by an independent reviewer
+  over five rounds (faults found in the first four, the fifth clean);
+  each fault is a test, 68 in all. Not on the Python Package Index yet:
+  the README gives the command to install it from this repository.
+
 ## 0.4.0 (14 October 2026)
 
 - **The command-line checker counts the keys it was given.** With two
