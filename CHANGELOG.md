@@ -15,6 +15,31 @@
   last six with the shared reading of commands, the last three clean;
   71 tests. Not on the Python Package Index yet: the README gives the
   command to install it from this repository.
+- **The recorder beside Claude Code reads commands more closely**
+  (`integrations/claude-code/`, not published), with the same reading
+  as the Hermes plugin. A deletion or a publication is now named as one
+  where it sits inside `"$( … )"` or back-quotes in double quotes, with
+  quotation marks, `case` choices and comments inside; after a shell,
+  `eval`, `ssh`, `watch` or another program that runs a command line;
+  in a quoted command after `-c`, `-Command` or `-ArgumentList`; where a
+  program is written as a path; or in text piped or handed into a
+  shell. More publishing and deleting commands are named (among them
+  `gem push`, `helm push`, `dotnet nuget push`, `docker buildx --push`,
+  `rsync --delete`, `DELETE FROM` given to a database client and
+  `redis-cli FLUSHALL`). Quoted words that run nothing, such as a commit
+  message holding `rm`, are no longer named deletions; a back-quoted
+  command in double quotes is, because the shell runs it. On a varied
+  set of 11,340 deleting and publishing lines, none is named less
+  strictly than before; on 109 everyday commands, 2 are named deletions,
+  as before. The longest lines tried (about 900,000 characters) are read
+  in under a second. The README lists what the reading still misses: a
+  command line kept in a file or a variable, `-EncodedCommand`, and
+  others. Writing the book file, the slip and the list of trusted
+  passkeys is retried for up to ten seconds where Windows holds the file
+  busy, and leaves no temporary file behind; a renewal held by a busy
+  file can keep the service waiting about 40 seconds, during which calls
+  are refused, never let through. Checked by an independent reviewer
+  over six rounds, the last three clean; 60 tests.
 
 ## 0.5.0 (17 October 2026)
 

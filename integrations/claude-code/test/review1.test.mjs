@@ -4,17 +4,29 @@
 
 import './local-library.mjs'; // first: "provared" is this repository's own library
 import assert from 'node:assert/strict';
-import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
 const { checkBook, entryLine, fingerprint, fromBase64url, sha256, thumbprint, toBase64url, utf8 } = await import('provared');
 const { developmentPasskey } = await import('provared/dev');
-const { bookSaver, checkNewSlip, hookSettings, startService, writeHooks } = await import('../recorder.mjs');
+const { bookSaver, checkNewSlip, hookSettings, replaceFile, startService, writeHooks } = await import('../recorder.mjs');
 const { freePort, runCommand, runHook, signSlip, status, stopService, tempFolder, world } = await import('./world.mjs');
 
 const read = (folder, name) => readFileSync(join(folder, name), 'utf8');
+// A file the recorder has just written may be held open for a moment on
+// Windows (a virus scanner reads each new file), so the test's own changes
+// to it are tried again for up to ten seconds, as the recorder's are.
+async function untilFree(step) {
+  const deadline = Date.now() + 10000;
+  for (let wait = 10; ; wait = Math.min(wait * 2, 200)) {
+    try { return step(); } catch (e) {
+      if (!['EPERM', 'EBUSY', 'EACCES'].includes(e.code) || Date.now() >= deadline) throw e;
+      await new Promise((done) => setTimeout(done, wait));
+    }
+  }
+}
 const slipFingerprint = (slip) => fingerprint(fromBase64url(slip.payload));
 const textFingerprint = async (text) => toBase64url(await sha256(utf8(text)));
 const saveSlip = (slip) => {
@@ -110,8 +122,7 @@ test('trust: a book from a recorder that kept no list is taken where it has one 
   let service = await startService({ folder, port: 0 });
   await service.close();
   // As an earlier version left it: no list.
-  const { renameSync } = await import('node:fs');
-  renameSync(join(folder, 'trusted-passkeys.json'), join(folder, 'old-list.json'));
+  await untilFree(() => renameSync(join(folder, 'trusted-passkeys.json'), join(folder, 'old-list.json')));
   service = await startService({ folder, port: 0 });
   await service.close();
   assert.deepEqual(JSON.parse(read(folder, 'trusted-passkeys.json')).passkeys, [await thumbprint(passkey.key)], 'written for it');
@@ -120,15 +131,16 @@ test('trust: a book from a recorder that kept no list is taken where it has one 
   service = await startService({ folder, port: 0 });
   await service.renew(await signSlip({ agentKeys: agent.keys, passkey: other }), { newPasskey: true });
   await service.close();
-  renameSync(join(folder, 'trusted-passkeys.json'), join(folder, 'old-list-2.json'));
+  await untilFree(() => renameSync(join(folder, 'trusted-passkeys.json'), join(folder, 'old-list-2.json')));
   await assert.rejects(startService({ folder, port: 0 }), /signed by 2 passkeys.*no list/s);
   // A list that cannot be read: refused, never taken as empty.
-  writeFileSync(join(folder, 'trusted-passkeys.json'), '{"passkeys": "everyone"}');
+  await untilFree(() => writeFileSync(join(folder, 'trusted-passkeys.json'), '{"passkeys": "everyone"}'));
   await assert.rejects(startService({ folder, port: 0 }), /does not hold a list of passkey thumbprints/);
   // An empty list, and one with something that is not a thumbprint: refused the same way.
-  writeFileSync(join(folder, 'trusted-passkeys.json'), '{"passkeys": []}');
+  await untilFree(() => writeFileSync(join(folder, 'trusted-passkeys.json'), '{"passkeys": []}'));
   await assert.rejects(startService({ folder, port: 0 }), /does not hold a list of passkey thumbprints/);
-  writeFileSync(join(folder, 'trusted-passkeys.json'), `{"passkeys": ["${await thumbprint(passkey.key)}", "not one"]}`);
+  const notOne = `{"passkeys": ["${await thumbprint(passkey.key)}", "not one"]}`;
+  await untilFree(() => writeFileSync(join(folder, 'trusted-passkeys.json'), notOne));
   await assert.rejects(startService({ folder, port: 0 }), /does not hold a list of passkey thumbprints/);
 });
 
@@ -310,6 +322,29 @@ test('saving a book that does not go on from the one last saved replaces the fil
   assert.equal(readFileSync(path, 'utf8'), book);
   save(book + 'more\n');
   assert.equal(readFileSync(path, 'utf8'), book + 'more\n');
+});
+
+test('a file that cannot be written leaves no temporary file behind, and the old file as it was', () => {
+  const folder = tempFolder('provared-replace-');
+  const path = join(folder, 'book.jsonl');
+  writeFileSync(path, 'the old book\n');
+  // A write that stops part of the way, as on a full disk.
+  const partial = (file, text) => {
+    writeFileSync(file, text.slice(0, 5));
+    throw Object.assign(new Error('no space left on the device'), { code: 'ENOSPC' });
+  };
+  assert.throws(() => replaceFile(path, 'the new book\n', { write: partial }), /no space left/);
+  assert.equal(existsSync(`${path}.tmp`), false, 'no temporary file left behind');
+  assert.equal(readFileSync(path, 'utf8'), 'the old book\n');
+  // A replacement that is refused for good: the same.
+  const refused = () => { throw Object.assign(new Error('refused'), { code: 'ENOTDIR' }); };
+  assert.throws(() => replaceFile(path, 'the new book\n', { rename: refused }), /refused/);
+  assert.equal(existsSync(`${path}.tmp`), false, 'no temporary file left behind');
+  assert.equal(readFileSync(path, 'utf8'), 'the old book\n');
+  // And where nothing goes wrong, the file is replaced.
+  replaceFile(path, 'the new book\n');
+  assert.equal(readFileSync(path, 'utf8'), 'the new book\n');
+  assert.equal(existsSync(`${path}.tmp`), false);
 });
 
 test('the stub of a call that was taken is written even where its hook gave up waiting', async () => {

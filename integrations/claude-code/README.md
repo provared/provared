@@ -73,7 +73,10 @@ checks the new permission (the passkey's signature, with the library's
 own checker, and that it names this agent's keys), opens the book with it
 added, and only then switches to it. It never stops listening, so no
 tool call finds it gone; a call made at that moment waits until the
-switch is done. The book keeps both permissions, and every receipt for a
+switch is done. On Windows, a file held open by another program (a virus
+scanner, an uploader) can hold a renewal up for as long as about 40
+seconds; calls made meanwhile are refused, never let through
+unrecorded. The book keeps both permissions, and every receipt for a
 call asked after the switch is under the new one. A call allowed under
 the permission before and finished after the switch keeps that
 permission: the hook hands over Claude Code's identifier of the call
@@ -190,23 +193,59 @@ found:
 - As a shell reads it, roughly: quotation marks taken off (a quotation
   mark after `\` or `` ` `` is a plain character), comments left out, and
   split into simple commands at `;`, `&`, `|`, brackets, back-quotes,
-  `$(` and line breaks, except that a word that is exactly `\;` or `{}`
-  (as in `find -exec … {} \;`) is a plain word; a line that holds `\;` is
-  also read with it as a break, as PowerShell and `cmd` read it, and the
+  `$(` and line breaks, except that `>&`, `2>&1` and `&>` are
+  redirections, and a word that is exactly `\;` or `{}` (as in
+  `find -exec … {} \;`) is a plain word; a line that holds `\;` is also
+  read with it as a break, as PowerShell and `cmd` read it, and the
   stricter name counts. A program is known by its name in any letter
   case, without its folder or its ending (`.exe`, `.cmd`, `.ps1`), after
   any `NAME=value` settings, redirections (`2>/dev/null`) and wrappers
   such as `sudo -u root`, `env -u X`, `timeout -s KILL 10` or `xargs`; a
   shell handed a command line (`bash -c` or `-lc`, `cmd /c`, also written
   `cmd /c"…"`, `powershell -Command`) has that line read the same way, as
-  have the words of `eval`, `iex` and `Invoke-Expression`, and the command
-  that `find -exec` runs.
-- Every word that names a known program is read as the start of a
-  command, whatever stands before it: `ssh host rm`, `docker exec c rm`,
-  `wsl rm`, `python -m twine upload`, `npx npm publish`.
-- With the patterns of this hook's first version, kept as they were. So a
-  word that names a deletion counts even where a shell would not run it
-  (`echo rm`, `git clean -n`): the hook errs towards the stricter name.
+  have the words of `eval`, `iex` and `Invoke-Expression`, the words
+  `ssh` runs after its destination, the words after `watch` and
+  `parallel`, and the command that `find -exec` runs; so has a value in
+  quotation marks after `-c`, `--command`, `-Command` or `-ArgumentList`
+  (`su -c "…"`, `script -qc "…"`, `Start-Process cmd -ArgumentList
+  '/c …'`) or after `env -S`, unless it is handed to a program that only
+  searches or shows text (`grep -c "rm -rf"` is a run), to `git`, to
+  `ssh` or to an interpreter. Inside `"…"`, a quotation mark after `` ` ``
+  is a plain character, as PowerShell reads it; and a line that holds
+  `` ` `` before a quotation mark is also read as bash reads it (`` ` ``
+  starts a command). This reading also finds a script's own calls that
+  delete (`shutil.rmtree`, `os.remove`, `fs.rmSync`, `Path(…).unlink()`,
+  `File.Delete` and the like) in a command line that runs an interpreter
+  (Python, Node.js, Ruby, Perl, PHP, Deno, Bun, PowerShell), a script
+  written into the line after it (`python - <<EOF`) included, and reads
+  again the strings of a script that hands a command line to the system
+  (`subprocess.run(['git', 'push'])`, `os.system`, `child_process`); a
+  move to the null device (`mv x /dev/null`); and a file emptied by a
+  redirection alone (`: > file`).
+- In each simple command, every later word that names a known program
+  or an interpreter is read as the start of a command, whatever stands
+  before it: `docker exec c rm`, `wsl rm`, `python -m twine upload`,
+  `npx npm publish`; and a later shell, `eval`, `ssh`, `watch` or
+  `parallel` has its line read as above (`docker exec c sh -c "…"`). A
+  word written as a program's path counts (`docker exec c /bin/rm`,
+  `strace \rm`, `C:\Tools\rm.exe`), but not a word with `/` or `\` inside
+  it (a path to a file, a web address, a `sed` expression). A word
+  written in quotation marks counts only after a program that runs
+  another one (`docker exec c "rm"`, `npx "npm"`, `python -m "twine"`),
+  and not once a program that only searches or shows text stands after
+  that one (`sudo grep -w "rm"`). The value of `-m` does not count after
+  a program whose `-m` takes a message (`git`, `hg`, `svn`, `docker`,
+  `npm` and a few more), nor the value of `--message`: so
+  `git commit -m "Remove the rm calls"` is a run, and
+  `nsenter -t 1 -m shred x` a deletion.
+- With the patterns of this hook's first version, kept as they were, in
+  the text outside quotation marks. So a word that names a deletion
+  counts even where a shell would not run it (`echo rm`, `git clean -n`):
+  the hook errs towards the stricter name, though not inside a quoted
+  message, a path or a web address.
+
+A recorder written in Python, elsewhere in this repository, reads a
+command by the same rules, and the tests of both hold the same rows.
 
 - Deletions: `rm`, `rmdir`, `rd`, `del`, `erase`, `ri`, `Remove-Item`,
   `Clear-Content`, `unlink`, `truncate`, `shred`; `find` with `-delete`
@@ -219,18 +258,46 @@ found:
   history away; `reset --hard`; `clean` (not `-n`); `branch` or `tag`
   with `-d`, `-D` or `--delete`; `stash drop` and `stash clear`;
   `checkout --force` or `checkout -- <paths>`; `restore` of the working
-  files. And `DROP TABLE` or `DROP DATABASE` anywhere in the text.
-- Releases: `git push` (with git's options before it), `npm publish`
-  (pnpm, yarn, bun; any options before `publish`), `twine upload`, `uv
-  publish`, `poetry publish`, `cargo publish`, `docker push`, `gh release
+  files. And `DROP TABLE` or `DROP DATABASE` anywhere in the text;
+  `DELETE FROM` given to a database client (`psql`, `mysql`, `sqlite3` and
+  a few more); `redis-cli FLUSHALL` or `FLUSHDB`; `rsync --delete` (and
+  its other deleting options); `cp /dev/null x`; `gem yank`, `cargo yank`,
+  `dotnet nuget delete`.
+- Releases: `git push` (with git's options before it, and `hub push`),
+  `npm publish` (pnpm, yarn, bun; any options before `publish`), `twine
+  upload`, `publish` given to `uv`, `poetry`, `cargo`, `hatch`, `flit`,
+  `pdm`, `vsce` or `ovsx`, `gem push`, `helm push`, `dotnet nuget push`,
+  `docker push`, `docker build` or `buildx` with `--push`, `gh release
   create`, `upload` or `edit`, `gh repo edit`, `gh pr create` and `gh pr
   merge`.
+- Also read, one level down: each `$( … )` and `` `…` `` inside `"…"`
+  (`echo "$(rm -rf x)"`), but not inside `'…'`, nested to any depth: a
+  quotation mark inside a `$( … )` does not end the `"…"`
+  (`echo "$(cd "/tmp"; rm -rf x)"`), nor does the `)` of a `case`
+  pattern end the `$( … )` (`echo "$(case x in a) rm -rf y;; esac)"`), nor
+  a `)` in a `#` comment there, and a `\$` or `` \` `` written in
+  `"…"` is plain text (`grep -rn "\$(rm" docs`); what a command writes
+  into a shell given nothing but options after a single `|`
+  (`echo "rm -rf x" | sh`); a here-string (`bash <<< "…"`); and
+  `-ArgumentList` written as a list (`"/c","del x"`).
 
 This is a reading of the command's text, and it can always be got round:
-a script that deletes (`node -e "…"`, `python -c "…"`), a program
+a script that deletes in a way not listed here or from a file, a program
 renamed or copied, a name built in a variable, an upload with `curl` or
 `scp`. That is why the record says the kind of action is the hook's
-reading of the call, not a fact about it.
+reading of the call, not a fact about it. Known gaps, as of 16 October
+2026: a command line in a file (`pwsh -File clean.ps1`, `sh script.sh`)
+or in a variable (`x=rm; $x -rf y`); PowerShell's `-EncodedCommand`;
+text piped into a shell that is also given a script or other words, or
+from a file (`cat cmds.txt | sh`); a program's name written in escaped
+quotation marks inside a quoted line (`bash -c "\"rm\" -rf x"`), because
+`\"` inside `"…"` is not read as an escape, so that a Windows folder
+written `"C:\x\"` ends its quotation where cmd ends it, and the same
+holds for a quotation inside a `$( … )` (`echo "$(echo "\")\"" ; rm x)"`
+is a run); SQL other than
+`DROP` and `DELETE FROM` (`TRUNCATE TABLE`, `UPDATE`); publishing tools
+not listed above; and a request that deletes or publishes through an
+API, such as `curl -X DELETE`.
 
 The stub holds the action, the time, the tool's name and the fingerprint
 of its arguments: never the arguments themselves, and never a file's

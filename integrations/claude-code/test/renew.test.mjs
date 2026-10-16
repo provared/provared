@@ -18,6 +18,20 @@ const { freePort, runCommand, runHook, signSlip, status, tempFolder, world } = a
 const slipFingerprint = (slip) => fingerprint(fromBase64url(slip.payload));
 const read = (folder, name) => readFileSync(join(folder, name), 'utf8');
 
+// Another program holds the file open while "act" runs, and lets it go once
+// "act" has answered (not after a fixed time): { r: what act gave }.
+async function holdingOpen(file, act) {
+  const holder = spawn(process.execPath, ['-e', `const fs=require('fs');const fd=fs.openSync(${JSON.stringify(file)},'r');console.log('held');process.stdin.on('end',()=>fs.closeSync(fd));process.stdin.resume()`], { stdio: ['pipe', 'pipe', 'inherit'] });
+  const closed = new Promise((resolve) => holder.on('close', resolve));
+  await new Promise((resolve) => holder.stdout.once('data', resolve));
+  try {
+    return { r: await act() };
+  } finally {
+    holder.stdin.end();
+    await closed;
+  }
+}
+
 /** Check a book as a reader would, trusting the given passkeys and the recorder. */
 async function checked(folder, passkeys, sealer) {
   const result = await checkBook(read(folder, 'book.jsonl'), { issuerKeys: passkeys, ...(sealer ? { sealKeys: [sealer] } : {}) });
@@ -246,11 +260,9 @@ test('a renewal that fails after the book file took the new permission puts the 
   try {
     await runHook(service.port, 'PostToolUse', 'Read', { file_path: 'first' });
     const second = await signSlip({ agentKeys: agent.keys, passkey: await developmentPasskey() });
-    // The list of trusted passkeys is held open, so that writing it fails after slip.json and the book are written.
-    const holder = spawn(process.execPath, ['-e', `const fs=require('fs');const fd=fs.openSync(${JSON.stringify(join(folder, 'trusted-passkeys.json'))},'r');console.log('held');setTimeout(()=>fs.closeSync(fd),4000)`], { stdio: ['ignore', 'pipe', 'inherit'] });
-    await new Promise((resolve) => holder.stdout.once('data', resolve));
-    const r = await fetch(`http://127.0.0.1:${service.port}/renew`, { method: 'POST', body: JSON.stringify({ slip: second, newPasskey: true }) });
-    await new Promise((resolve) => holder.on('close', resolve));
+    // The list of trusted passkeys is held open, so that writing it fails after slip.json and the book are written. It
+    // is let go only once the renewal has answered, however long the recorder's retries take on a busy computer.
+    const { r } = await holdingOpen(join(folder, 'trusted-passkeys.json'), () => fetch(`http://127.0.0.1:${service.port}/renew`, { method: 'POST', body: JSON.stringify({ slip: second, newPasskey: true }) }));
     if (process.platform !== 'win32' && r.ok) return; // elsewhere a file held open can be replaced: nothing failed
     assert.equal(r.ok, false, 'the renewal failed');
     assert.equal(read(folder, 'book.jsonl'), service.recorder.book(), 'the book file is the recorder\'s book again');
@@ -280,12 +292,10 @@ test('a renewal with --new-passkey that fails on the way leaves the new passkey 
     const before = await status(service.port);
     const slipBefore = read(folder, 'slip.json');
     const listBefore = read(folder, 'trusted-passkeys.json');
-    // Another program holds slip.json open for longer than the recorder's two
-    // seconds of retries, so that on Windows it cannot be replaced.
-    const holder = spawn(process.execPath, ['-e', `const fs=require('fs');const fd=fs.openSync(${JSON.stringify(join(folder, 'slip.json'))},'r');console.log('held');setTimeout(()=>fs.closeSync(fd),4000)`], { stdio: ['ignore', 'pipe', 'inherit'] });
-    await new Promise((resolve) => holder.stdout.once('data', resolve));
-    const r = await fetch(`http://127.0.0.1:${service.port}/renew`, { method: 'POST', body: JSON.stringify({ slip: second, newPasskey: true }) });
-    await new Promise((resolve) => holder.on('close', resolve));
+    // Another program holds slip.json open until the renewal has answered, so
+    // that on Windows it cannot be replaced, however long the recorder's two
+    // seconds of retries take to run on a busy computer.
+    const { r } = await holdingOpen(join(folder, 'slip.json'), () => fetch(`http://127.0.0.1:${service.port}/renew`, { method: 'POST', body: JSON.stringify({ slip: second, newPasskey: true }) }));
     if (process.platform !== 'win32' && r.ok) return; // elsewhere a file held open can be replaced: nothing failed
     assert.equal(r.ok, false, 'the renewal failed');
     const after = await status(service.port);

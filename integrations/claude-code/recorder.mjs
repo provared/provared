@@ -131,20 +131,31 @@ export async function loadRecorderKeys(folder) {
 
 // --- files on disk ---
 
-// A file is replaced through a temporary file. On Windows the replacement
-// is refused while anyone holds the file open, so it is tried again for up
-// to two seconds.
-function replaceFile(path, text) {
-  writeFileSync(`${path}.tmp`, text);
+// A file is replaced through a temporary file. On Windows the writing and the
+// replacement are both refused while anyone holds a file open (a virus
+// scanner reads each new file as it is closed), so each is tried again for
+// up to ten seconds.
+const BUSY = ['EPERM', 'EBUSY', 'EACCES'];
+function untilFree(step) {
   const pause = new Int32Array(new SharedArrayBuffer(4));
-  for (let attempt = 1; ; attempt++) {
-    try { renameSync(`${path}.tmp`, path); return; } catch (e) {
-      if (attempt >= 100 || !['EPERM', 'EBUSY', 'EACCES'].includes(e.code)) {
-        try { unlinkSync(`${path}.tmp`); } catch { /* nothing to remove */ }
-        throw e;
-      }
-      Atomics.wait(pause, 0, 0, 20);
+  const deadline = Date.now() + 10000;
+  for (let wait = 10; ; wait = Math.min(wait * 2, 200)) {
+    try { return step(); } catch (e) {
+      if (!BUSY.includes(e.code) || Date.now() >= deadline) throw e;
+      Atomics.wait(pause, 0, 0, wait);
     }
+  }
+}
+// A temporary file left by a write or a replacement that failed for the last
+// time (perhaps after part of it was written) is removed. The two ways of
+// writing can be handed in, for the tests.
+export function replaceFile(path, text, { write = writeFileSync, rename = renameSync } = {}) {
+  try {
+    untilFree(() => write(`${path}.tmp`, text));
+    untilFree(() => rename(`${path}.tmp`, path));
+  } catch (e) {
+    try { unlinkSync(`${path}.tmp`); } catch { /* nothing to remove */ }
+    throw e;
   }
 }
 
