@@ -451,6 +451,641 @@
      "message": "stub: must be an object."
     }
    }
+  },
+  {
+   "name": "the reserved document name provared.arguments",
+   "content": {
+    "type": "provared.stub.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "seq": 0,
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "details": [
+     {
+      "name": "provared.arguments",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     }
+    ]
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "the reserved document name provared.http-request",
+   "content": {
+    "type": "provared.stub.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "seq": 0,
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "details": [
+     {
+      "name": "provared.http-request",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     }
+    ]
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "the reserved document name provared.http-response",
+   "content": {
+    "type": "provared.stub.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "seq": 0,
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "details": [
+     {
+      "name": "provared.http-response",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     }
+    ]
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "the reserved document name provared.trace-id",
+   "content": {
+    "type": "provared.stub.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "seq": 0,
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "details": [
+     {
+      "name": "provared.trace-id",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     }
+    ]
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "the reserved document name provared.request-id",
+   "content": {
+    "type": "provared.stub.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "seq": 0,
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "details": [
+     {
+      "name": "provared.request-id",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     }
+    ]
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "the reserved document name provared.event-id",
+   "content": {
+    "type": "provared.stub.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "seq": 0,
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "details": [
+     {
+      "name": "provared.event-id",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     }
+    ]
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "the reserved document name provared.error",
+   "content": {
+    "type": "provared.stub.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "seq": 0,
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "details": [
+     {
+      "name": "provared.error",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     }
+    ]
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "a reserved document name not on the list",
+   "content": {
+    "type": "provared.stub.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "seq": 0,
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "details": [
+     {
+      "name": "order.pdf",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     },
+     {
+      "name": "provared.invoice",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     }
+    ]
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "details[1].name: names that begin \"provared.\" are reserved, and this one is not on the list of document names."
+    }
+   }
+  },
+  {
+   "name": "the reserved prefix alone as a document name",
+   "content": {
+    "type": "provared.stub.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "seq": 0,
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "details": [
+     {
+      "name": "provared.",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     }
+    ]
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "details[0].name: names that begin \"provared.\" are reserved, and this one is not on the list of document names."
+    }
+   }
+  },
+  {
+   "name": "a reserved document name with a capital",
+   "content": {
+    "type": "provared.stub.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "seq": 0,
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "details": [
+     {
+      "name": "provared.Event-id",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     }
+    ]
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "details[0].name: names that begin \"provared.\" are reserved, and this one is not on the list of document names."
+    }
+   }
+  },
+  {
+   "name": "a reserved document name with a space after it",
+   "content": {
+    "type": "provared.stub.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "seq": 0,
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "details": [
+     {
+      "name": "provared.event-id ",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     }
+    ]
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "details[0].name: names that begin \"provared.\" are reserved, and this one is not on the list of document names."
+    }
+   }
+  },
+  {
+   "name": "a document name that begins with the prefix in capitals",
+   "content": {
+    "type": "provared.stub.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "seq": 0,
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "details": [
+     {
+      "name": "Provared.invoice",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     }
+    ]
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "a document name that holds the prefix later",
+   "content": {
+    "type": "provared.stub.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "seq": 0,
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "details": [
+     {
+      "name": "my provared.invoice",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     }
+    ]
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "a reserved document name twice",
+   "content": {
+    "type": "provared.stub.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "seq": 0,
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "details": [
+     {
+      "name": "provared.event-id",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     },
+     {
+      "name": "provared.event-id",
+      "sha256": "AgICAgICAgICAgICAgICAgAAAAAAAAAAAAAAAAAAAAA"
+     }
+    ]
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "provared.trace-id three times",
+   "content": {
+    "type": "provared.stub.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "seq": 0,
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "details": [
+     {
+      "name": "provared.trace-id",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     },
+     {
+      "name": "provared.trace-id",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     },
+     {
+      "name": "provared.trace-id",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     }
+    ]
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "provared.request-id three times",
+   "content": {
+    "type": "provared.stub.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "seq": 0,
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "details": [
+     {
+      "name": "provared.request-id",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     },
+     {
+      "name": "provared.request-id",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     },
+     {
+      "name": "provared.request-id",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     }
+    ]
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "provared.event-id three times",
+   "content": {
+    "type": "provared.stub.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "seq": 0,
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "details": [
+     {
+      "name": "provared.event-id",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     },
+     {
+      "name": "provared.event-id",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     },
+     {
+      "name": "provared.event-id",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     }
+    ]
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "provared.arguments twice",
+   "content": {
+    "type": "provared.stub.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "seq": 0,
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "details": [
+     {
+      "name": "provared.arguments",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     },
+     {
+      "name": "provared.arguments",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     }
+    ]
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "details[2].name: this reserved name is named twice. Only provared.trace-id, provared.request-id and provared.event-id may be named more than once."
+    }
+   }
+  },
+  {
+   "name": "provared.http-request twice",
+   "content": {
+    "type": "provared.stub.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "seq": 0,
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "details": [
+     {
+      "name": "provared.http-request",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     },
+     {
+      "name": "provared.http-request",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     }
+    ]
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "details[2].name: this reserved name is named twice. Only provared.trace-id, provared.request-id and provared.event-id may be named more than once."
+    }
+   }
+  },
+  {
+   "name": "provared.http-response twice",
+   "content": {
+    "type": "provared.stub.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "seq": 0,
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "details": [
+     {
+      "name": "provared.http-response",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     },
+     {
+      "name": "provared.http-response",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     }
+    ]
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "details[2].name: this reserved name is named twice. Only provared.trace-id, provared.request-id and provared.event-id may be named more than once."
+    }
+   }
+  },
+  {
+   "name": "provared.error twice",
+   "content": {
+    "type": "provared.stub.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "seq": 0,
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "details": [
+     {
+      "name": "provared.error",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     },
+     {
+      "name": "provared.error",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     }
+    ]
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "details[2].name: this reserved name is named twice. Only provared.trace-id, provared.request-id and provared.event-id may be named more than once."
+    }
+   }
+  },
+  {
+   "name": "every reserved name once, and the identifiers twice",
+   "content": {
+    "type": "provared.stub.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "seq": 0,
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "details": [
+     {
+      "name": "provared.arguments",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     },
+     {
+      "name": "provared.http-request",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     },
+     {
+      "name": "provared.http-response",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     },
+     {
+      "name": "provared.error",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     },
+     {
+      "name": "provared.trace-id",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     },
+     {
+      "name": "provared.request-id",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     },
+     {
+      "name": "provared.event-id",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     },
+     {
+      "name": "provared.trace-id",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     },
+     {
+      "name": "provared.request-id",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     },
+     {
+      "name": "provared.event-id",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     }
+    ]
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "a label named twice",
+   "content": {
+    "type": "provared.stub.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "seq": 0,
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "details": [
+     {
+      "name": "order.pdf",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     },
+     {
+      "name": "order.pdf",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     }
+    ]
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "the old name \"arguments\" beside the reserved one",
+   "content": {
+    "type": "provared.stub.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "seq": 0,
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "details": [
+     {
+      "name": "arguments",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     },
+     {
+      "name": "provared.arguments",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     }
+    ]
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "an unknown reserved document name with a bad fingerprint",
+   "content": {
+    "type": "provared.stub.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "seq": 0,
+    "action": "supplies.order",
+    "when": "2026-10-05T09:00:00Z",
+    "details": [
+     {
+      "name": "provared.x",
+      "sha256": "short"
+     }
+    ]
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "details[0].name: names that begin \"provared.\" are reserved, and this one is not on the list of document names."
+    }
+   }
   }
  ]
 }

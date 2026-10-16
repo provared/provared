@@ -3,6 +3,7 @@
 
 from . import fields as f
 from ._js import truthy
+from .documents import DOCUMENT_NAMES, REPEATABLE_DOCUMENT_NAMES, is_unknown_reserved_document
 from .encoding import fingerprint, format_time, now_ms, random_id, to_base64url
 from .jws import KINDS, encode_content, parse_record, protected_headers, signing_input, within_size
 from .keys import KEY_SET_METHODS
@@ -47,9 +48,16 @@ def validate_request(c):
         f.short_name(c['with'], 'with')
     if 'details' in c:
         f.list_of(c['details'], 1, 32, 'details')
+        once = set()
         for i, d in enumerate(c['details']):
             f.members(d, ['name', 'sha256'], [], f'details[{i}]')
             f.label(d['name'], f'details[{i}].name')
+            if is_unknown_reserved_document(d['name']):
+                raise f.fail(f'details[{i}].name', 'names that begin "provared." are reserved, and this one is not on the list of document names.')
+            if d['name'] in DOCUMENT_NAMES and d['name'] not in REPEATABLE_DOCUMENT_NAMES:
+                if d['name'] in once:
+                    raise f.fail(f'details[{i}].name', 'this reserved name is named twice. Only provared.trace-id, provared.request-id and provared.event-id may be named more than once.')
+                once.add(d['name'])
             f.fingerprint_text(d['sha256'], f'details[{i}].sha256')
 
 

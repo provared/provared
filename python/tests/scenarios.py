@@ -320,7 +320,39 @@ def _more_of(spec, ctx, writer, seen):
     if spec.get('countersign'):
         seen['countersign'] = {}
         more['countersign'] = _countersigner(spec['countersign'], ctx, writer, seen['countersign'])
+    if spec.get('detailsAfter'):
+        seen['detailsAfter'] = {}
+        more['details_after'] = _details_after(spec['detailsAfter'], ctx, writer, seen['detailsAfter'])
+    elif 'detailsAfter' in spec:
+        more['detailsAfter'] = _top(resolve(spec['detailsAfter'], ctx))
     return more
+
+
+def _details_after(spec, ctx, writer, seen):
+    """"detailsAfter" of "act": further documents from what the action gave.
+    "seen" gathers what it was handed and did; what it gave is kept apart,
+    so that the step can change it afterwards ("meddle")."""
+    if 'notFunction' in spec:
+        return _top(resolve(spec['notFunction'], ctx))
+
+    def later(result):
+        seen['asked'] = seen.get('asked', 0) + 1
+        seen.setdefault('handed', []).append(norm(result, ctx))
+        if spec.get('never'):
+            threading.Event().wait(5)
+            return None
+        if spec.get('inside'):
+            seen.setdefault('inside', []).append(_inside(spec['inside'], ctx, writer))
+        # Time passes while the action's answer is read: the stub keeps the time the action began.
+        if spec.get('clockAdd'):
+            ctx.clock.time += spec['clockAdd']
+        if 'throws' in spec:
+            raise Exception(spec['throws'])
+        given = _top(resolve(spec.get('gives'), ctx))
+        ctx.given = given
+        return given
+
+    return later
 
 
 def _performer(spec, ctx, writer, seen):
@@ -500,8 +532,18 @@ def _play_step(step, ctx):
                 c.giving = False
             return None
         if op == 'act':
+            ctx.given = None
             r = w.act(_top(resolve(step['request'], ctx)), _performer(step.get('perform', {}), ctx, w, seen), _more_of(step.get('more'), ctx, w, seen))
-            return {'done': r['done'], 'answer': norm(r['answer'], ctx), 'result': norm(r.get('result'), ctx), 'stub': norm(r.get('stub'), ctx), 'seen': norm(seen, ctx)}
+            # What "detailsAfter" gave, changed once the writer has it: the stub must not change with it.
+            more = step.get('more')
+            if isinstance(more, dict) and isinstance(more.get('detailsAfter'), dict) and more['detailsAfter'].get('meddle') and isinstance(ctx.given, list):
+                for d in ctx.given:
+                    if isinstance(d, dict):
+                        d['sha256'] = 'E' * 43
+            out = {'done': r['done'], 'answer': norm(r['answer'], ctx), 'result': norm(r.get('result'), ctx), 'stub': norm(r.get('stub'), ctx), 'seen': norm(seen, ctx)}
+            if 'detailsAfter' in r:
+                out['detailsAfter'] = norm(r['detailsAfter'], ctx)
+            return out
         if op == 'record':
             r = w.record(_top(resolve(step['request'], ctx)), _more_of(step.get('more'), ctx, w, seen))
             return {'stub': norm(r, ctx), 'seen': norm(seen, ctx)}

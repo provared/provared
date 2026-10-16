@@ -245,7 +245,30 @@ function moreOf(spec, ctx, writer, seen) {
   const more = {};
   for (const name of ['when', 'terms', 'approval']) if (Object.hasOwn(spec, name)) more[name] = resolve(spec[name], ctx);
   if (spec.countersign) more.countersign = countersigner(spec.countersign, ctx, writer, (seen.countersign = {}));
+  if (spec.detailsAfter) more.detailsAfter = detailsAfter(spec.detailsAfter, ctx, writer, (seen.detailsAfter = {}));
   return more;
+}
+
+// "detailsAfter" of "act": further documents from what the action gave.
+// "seen" gathers what it was handed and did; "given" keeps what it gave, so
+// that the step can change it afterwards ("meddle").
+function detailsAfter(spec, ctx, writer, seen) {
+  if (Object.hasOwn(spec, 'notFunction')) return resolve(spec.notFunction, ctx);
+  return (result) => {
+    seen.asked = (seen.asked ?? 0) + 1;
+    (seen.handed ??= []).push(norm(result === undefined ? null : result, ctx));
+    if (spec.never) return new Promise(() => {});
+    const answer = async () => {
+      if (spec.inside) (seen.inside ??= []).push(await inside(spec.inside, ctx, writer));
+      // Time passes while the action's answer is read: the stub keeps the time the action began.
+      if (spec.clockAdd) ctx.clock.time += spec.clockAdd;
+      if (Object.hasOwn(spec, 'throws')) throw new Error(spec.throws);
+      const given = resolve(spec.gives ?? null, ctx);
+      Object.defineProperty(seen, 'given', { value: given, enumerable: false, configurable: true });
+      return given;
+    };
+    return answer();
+  };
 }
 
 function performer(spec, ctx, writer, seen) {
@@ -361,7 +384,12 @@ async function playStep(step, ctx) {
       }
       case 'act': {
         const r = await w.act(resolve(step.request, ctx), performer(step.perform ?? {}, ctx, w, seen), moreOf(step.more, ctx, w, seen));
-        return { done: r.done, answer: norm(r.answer, ctx), result: norm(r.result, ctx), stub: norm(r.stub, ctx), seen: norm(seen, ctx) };
+        // What "detailsAfter" gave, changed once the writer has it: the stub must not change with it.
+        const given = seen.detailsAfter?.given;
+        if (step.more?.detailsAfter?.meddle && Array.isArray(given)) for (const d of given) if (d && typeof d === 'object') d.sha256 = 'E'.repeat(43);
+        const out = { done: r.done, answer: norm(r.answer, ctx), result: norm(r.result, ctx), stub: norm(r.stub, ctx), seen: norm(seen, ctx) };
+        if (Object.hasOwn(r, 'detailsAfter')) out.detailsAfter = norm(r.detailsAfter, ctx);
+        return out;
       }
       case 'record': {
         const r = await w.record(resolve(step.request, ctx), moreOf(step.more, ctx, w, seen));

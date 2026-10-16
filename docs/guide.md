@@ -551,6 +551,77 @@ not a promise. The numbers `0` and `-0` share a fingerprint, as RFC
 though the tool has run and its stub is in the book. `recordTools`
 names no agent software, and works with any function.
 
+### Binding a stub to the platform's own record
+
+Where the other side will not countersign, a stub can still be matched
+with the other system's own log of the call: name, among its documents,
+the fingerprint of an identifier that both records hold. Document names
+that begin `provared.` are reserved for this (format description,
+section 27); any other such name is refused.
+
+| Name | The fingerprint of | Made with |
+|---|---|---|
+| `provared.arguments` | The call's arguments, in the one form of RFC 8785 | `argumentsFingerprint` |
+| `provared.http-request` | The request: its method, its address exactly as sent, and its body where it has one; no header | `httpRequestFingerprint` |
+| `provared.http-response` | The answer: its status code, and its body where it has one; no header | `httpResponseFingerprint` |
+| `provared.trace-id` | The trace-id of the W3C Trace Context `traceparent` header the agent's side sent (its form is not checked) | `identifierFingerprint` |
+| `provared.request-id` | An identifier the agent's side chose and sent with the call | `identifierFingerprint` |
+| `provared.event-id` | An identifier the platform gave for the call | `identifierFingerprint` |
+| `provared.error` | The error text the agent's software was given | `identifierFingerprint` |
+
+`DOCUMENT_NAMES` lists them, each with the exact text it stands for. An
+HTTP request or answer is written as the signature base of RFC 9421
+(nothing is signed with it): the address is taken exactly as it was
+sent, never rewritten, so give it in the form that was sent. A body is
+the bytes RFC 9530 digests: after any content coding (such as gzip),
+before any transfer coding; a body of `null` is no body. The three
+identifiers may be named more than once in a stub; every other reserved
+name once at most. A trace-id is fingerprinted as given: its form (32
+lower-case hexadecimal characters in the W3C standard) is not checked.
+
+An identifier that the platform gives only in its answer cannot be in a
+stub signed before the action. `act` takes `detailsAfter` for it:
+
+```js
+import { identifierFingerprint } from 'provared';
+
+const outcome = await recorder.act(
+  { action: 'provared.data.change', with: 'tickets' },
+  async () => updateTheTicket(),               // gives the platform's answer
+  { detailsAfter: async (answer) => [{ name: 'provared.event-id', sha256: await identifierFingerprint(answer.requestId) }] },
+);
+outcome.detailsAfter;   // { added: 1, problem: null }
+```
+
+The stub is still written and checked with the whole book before the
+action, so it is known to fit. After the action it is signed again with
+up to four further documents, within the same call, so that no other
+call comes between; it keeps the time the action began. If
+`detailsAfter` fails, gives no answer in the time the other side is
+given to countersign (`countersignWithin`), gives more than four
+documents, or gives one that would be refused, the stub is written
+without them, and `outcome.detailsAfter.problem` says why: an action
+that was taken always gets its stub. The request may then name at most
+28 documents of its own, and no approval may be given, because an
+approval covers exactly the documents the person saw. `detailsAfter`
+must not call the writer.
+
+A matching identifier shows that the two records speak of one call, not
+that the call did what either says: the platform's identifier is the
+platform's word. It binds the two only where the platform writes the
+same identifier into its own log; which one a platform keeps is for you
+to find out, so record both one you sent and one you were given where
+you can. Only an identifier picks out one call: a fingerprint of a
+request, an answer, the arguments or an error shows only that the
+content matches, since identical requests, and identical answers (many a
+`200` with the body `{}`), share one fingerprint. A platform that logs
+the decoded body of a compressed message will not match the body's
+fingerprint. An identifier that is short or easy to guess can be guessed
+from its fingerprint.
+
+`recordTools` still names the arguments `arguments` by default; a tool
+can name them `provared.arguments` through its own `details` function.
+
 ## How signing works
 
 - **The person** signs a slip with a passkey. A passkey signs a short
@@ -807,6 +878,10 @@ prepared, then `assembleSlip`; keep the disclosures it prepared.
 - A name in a record is a label. Only keys are checked. A vouching
   record shows which organisation stood behind a name, not how well it
   checked.
+- An identifier of another system's, named in a stub, shows that the
+  two records speak of one call, not that the call did what either
+  says. A fingerprint of a request, an answer, the arguments or an error
+  shows only that the content matches, not that it was the same call.
 
 And about time:
 

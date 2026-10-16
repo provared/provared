@@ -53,6 +53,44 @@
   test.
   Tests: `test/signers.test.mjs`, `test/signers-unavailable.test.mjs` and
   `python/tests/test_signers.py`.
+- **A stub bound to the platform's own record of the call, in both
+  languages** (format description, section 27). Document names that
+  begin `provared.` are now reserved: seven are listed
+  (`provared.arguments`, `provared.http-request`,
+  `provared.http-response`, `provared.trace-id`, `provared.request-id`,
+  `provared.event-id`, `provared.error`), each with the exact text its
+  fingerprint is made from, so that someone who holds another system's
+  own log can match a stub to it. Only the three identifiers
+  (`trace-id`, `request-id`, `event-id`) pick out one call; the others
+  show only that the content matches, and the request and answer
+  fingerprints cover no header. Any other name that begins `provared.`
+  is refused (`bad-field`) in a stub, an approval and the check before
+  acting; before, it was a label. So is any of the seven but the three
+  identifiers named twice in one record. **A book written before this
+  change that holds a stub, or an approval, with such a name now fails
+  its check, and the check before acting then refuses every action
+  under it** (and a stub writer will not open on it). A checker of
+  version 0.4.0 or earlier reads the reserved names as labels.
+  `DOCUMENT_NAMES`,
+  `httpRequestFingerprint`, `httpResponseFingerprint` and
+  `identifierFingerprint` (`http_request_fingerprint` and so on in
+  Python) make the fingerprints; an HTTP request or answer is written as
+  the signature base of RFC 9421, with the Content-Digest of RFC 9530
+  over the body after any content coding, and its address is taken
+  exactly as sent; a body of null (None) is no body. The stub writer's `act`
+  takes `detailsAfter` (`details_after` in Python): up to four further
+  documents, from what the action gave back, such as the identifier a
+  platform gave the call. The stub is still checked with the whole book
+  before the action; after it, the stub is signed again with them in the
+  same call, and keeps the time the action began. If they cannot go in,
+  the stub is written without them and `detailsAfter` in the answer says
+  why: an action that was taken always gets its stub (where the second
+  signing fails, it says so: `details-not-added`). It cannot be used
+  with an approval. `recordTools` and `record_function` still name the
+  arguments `arguments` by default. Shared test files: `stub-contents.json`
+  gains cases (made again; its earlier cases are unchanged), and
+  `http-fingerprints.json` and `recorder-details-after.json` are new.
+  Tests: `test/documents.test.mjs` and `python/tests/test_documents.py`.
 
 ## 0.4.0 (14 October 2026)
 

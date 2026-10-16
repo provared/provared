@@ -123,6 +123,60 @@ fingerprint.
 - The documents themselves. A stub holds fingerprints of documents, not
   the documents. Whoever keeps the documents must keep them.
 
+**A stub bound to the other system's own record of the call.** Where the
+other side will not countersign, a stub may name, under a reserved name
+(format description, section 27), the fingerprint of the identifier the
+platform gave the call (`provared.event-id`), of one the agent's side
+chose and sent (`provared.trace-id`, `provared.request-id`), of part
+of the request and the answer (`provared.http-request`: the method, the
+address and the body; `provared.http-response`: the status and the
+body; no header is covered), or of the error the agent was given
+(`provared.error`).
+
+- *What it shows.* Someone who holds the platform's own log can work the
+  fingerprint out again and match the two records, without either
+  side's help. For an identifier, the two speak of one call. An agent's
+  side that later claims another identifier for the call, or a platform
+  that later shows another, is caught by the mismatch.
+- *Only an identifier picks out one call.* A request, an answer, the
+  arguments or an error shows only that the content matches: identical
+  requests, and identical answers (many a `200` with the body `{}`),
+  share one fingerprint, so a match with one of them does not show that
+  it was the same call. Only `provared.trace-id`, `provared.request-id`
+  and `provared.event-id` are meant to pick out one call, and only they
+  may be named more than once in a stub.
+- *The body's bytes* are what RFC 9530 digests: the content after any
+  content coding (such as gzip) and before any transfer coding. A
+  platform that logs the decoded body of a message sent compressed will
+  not match.
+- *A trace-id's form is not checked.* The W3C standard writes it as 32
+  lower-case hexadecimal characters, but any text is fingerprinted as
+  given.
+- *What it does not show.* That the call did what either record says:
+  the platform's identifier is the platform's word, and the stub is
+  still the agent's side's word. That the platform keeps the identifier
+  at all: which one a platform writes into its log differs from one
+  platform to another, and is for whoever relies on it to find out. That
+  the fingerprint was made from the text the name says: a checker cannot
+  tell; only someone who holds that text can. An identifier that is
+  short or easy to guess gives no privacy through its fingerprint.
+- *Against A1 and A3* (the agent's own side). The binding is written by
+  the agent's side, so a dishonest one can leave it out, or name a
+  wrong identifier; only the match with the platform's log, made later,
+  catches the second. It adds nothing against an agent that writes no
+  stub.
+- *Two spellings of one address.* An HTTP address is taken exactly as it
+  was sent and never rewritten, so that two programs fingerprint the
+  same request the same way. A program that records a rewritten address
+  (`%2f` for `%2F`, a host in capitals) makes a fingerprint that will not
+  match: whoever writes the stub must give the address as sent.
+- *A reserved name not on the list* is refused (`bad-field`), so that a
+  name that may be given a meaning later cannot be used now with another;
+  so is one of the four once-only names named twice (two `provared.arguments`
+  fingerprints in one stub would leave unclear which was the call's). A
+  book written before this rule that holds such a name no longer passes
+  its check.
+
 ## 4a. Limits, conditions, approvals and the other side's records
 
 **Protects.** That what the person allowed is stated exactly, and that a
@@ -235,6 +289,25 @@ disagree about. Totals are added as whole numbers of any size.
   of the arguments fixes what was asked for without holding it; where
   the arguments are few and easy to guess, the fingerprint can be
   guessed.
+- **Documents named after the action** (`detailsAfter` in the stub
+  writer's `act`). The stub is first written and checked with the whole
+  book before the action, as always; after the action, it is signed
+  again with up to four further documents, still within the same call,
+  so that no other call comes between, and keeps the time the action
+  began. The room for them is kept beforehand: with today's limits the
+  largest stub, with 32 documents of the longest names, and a
+  countersignature still fits a line, and the writer checks this again
+  for each such call. If what `detailsAfter` gives cannot go in (it
+  fails, gives no answer within the time the other side is given to
+  countersign, gives more than four, or gives a document that would be
+  refused), the stub made before the action is written without them,
+  and the answer says why: an action that was taken always gets its
+  stub. What it gives is copied when it is read, so a later change to
+  it changes nothing. A call to the writer from inside it is refused at
+  once. It cannot be used with an approval, because an approval covers
+  exactly the documents the person saw. The stub is signed twice for
+  such an action, and only one of the two is written: a signer kept
+  elsewhere is asked once more.
 - **The check before acting refuses more in one case.** An action that
   would add to a period which a stub dated after it already overfills is
   refused, though a checker would report nothing new for it.

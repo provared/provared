@@ -1,0 +1,658 @@
+{
+ "about": "The reserved document names, and the texts their fingerprints are made from (format description, section 27): an HTTP request or answer written as the signature base of RFC 9421, section 2.5, and an identifier exactly as given. A body is written in hexadecimal.",
+ "function": "documentFingerprint",
+ "cases": [
+  {
+   "name": "the reserved document names and their words",
+   "kind": "names",
+   "expected": {
+    "ok": {
+     "provared.arguments": "The call's arguments, written in the one form of RFC 8785.",
+     "provared.http-request": "The request, written as the signature base of RFC 9421, section 2.5, over \"@method\", \"@target-uri\" and, where there is a body, \"content-digest\" (RFC 9530, with SHA-256). No header is covered.",
+     "provared.http-response": "The answer, written as the signature base of RFC 9421, section 2.5, over \"@status\" and, where there is a body, \"content-digest\" (RFC 9530, with SHA-256). No header is covered.",
+     "provared.trace-id": "The trace-id of the W3C Trace Context \"traceparent\" header that the agent's side sent, which that standard writes as 32 lower-case hexadecimal characters. Its form is not checked.",
+     "provared.request-id": "An identifier that the agent's side chose and sent with the call, exactly as sent.",
+     "provared.event-id": "An identifier that the platform gave for the call, exactly as it gave it.",
+     "provared.error": "The error text that the agent's software was given, exactly as given."
+    }
+   }
+  },
+  {
+   "name": "a POST with a body, as in RFC 9421, appendix B.2",
+   "kind": "request",
+   "input": {
+    "method": "POST",
+    "url": "https://example.com/foo?param=Value&Pet=dog",
+    "bodyHex": "7b2268656c6c6f223a2022776f726c64227d"
+   },
+   "expected": {
+    "ok": {
+     "base": "\"@method\": POST\n\"@target-uri\": https://example.com/foo?param=Value&Pet=dog\n\"content-digest\": sha-256=:X48E9qOokqqrvdts8nOJRJN3OWDUoyWxBf7kbu9DBPE=:\n\"@signature-params\": (\"@method\" \"@target-uri\" \"content-digest\")",
+     "fingerprint": "52BfGu1xla-6f-JJ7Rui9Fy5BAwKpkmOQIvrExPwArY"
+    }
+   }
+  },
+  {
+   "name": "a GET with no body",
+   "kind": "request",
+   "input": {
+    "method": "GET",
+    "url": "https://example.com/"
+   },
+   "expected": {
+    "ok": {
+     "base": "\"@method\": GET\n\"@target-uri\": https://example.com/\n\"@signature-params\": (\"@method\" \"@target-uri\")",
+     "fingerprint": "Hy2d_QlEtkdsKU-FHHh1pWiypbXBJfUm-QJKHYl6HLw"
+    }
+   }
+  },
+  {
+   "name": "an empty body is a body",
+   "kind": "request",
+   "input": {
+    "method": "POST",
+    "url": "https://example.com/",
+    "bodyHex": ""
+   },
+   "expected": {
+    "ok": {
+     "base": "\"@method\": POST\n\"@target-uri\": https://example.com/\n\"content-digest\": sha-256=:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=:\n\"@signature-params\": (\"@method\" \"@target-uri\" \"content-digest\")",
+     "fingerprint": "XOSawtw-Ml8-azey_Vp6-goVxO8QX14zhbvrrrZyZKE"
+    }
+   }
+  },
+  {
+   "name": "an address with a port",
+   "kind": "request",
+   "input": {
+    "method": "GET",
+    "url": "https://example.com:8443/a"
+   },
+   "expected": {
+    "ok": {
+     "base": "\"@method\": GET\n\"@target-uri\": https://example.com:8443/a\n\"@signature-params\": (\"@method\" \"@target-uri\")",
+     "fingerprint": "WcBU2e3i6Og-NEhqlIuj95ASe7EtyY1inKWGYOck0OI"
+    }
+   }
+  },
+  {
+   "name": "an address with its default port",
+   "kind": "request",
+   "input": {
+    "method": "GET",
+    "url": "https://example.com:443/a"
+   },
+   "expected": {
+    "ok": {
+     "base": "\"@method\": GET\n\"@target-uri\": https://example.com:443/a\n\"@signature-params\": (\"@method\" \"@target-uri\")",
+     "fingerprint": "hUy7ZFk1tmhNFr6ITaThQsuysStkqlp9W9PLFGSoS8I"
+    }
+   }
+  },
+  {
+   "name": "an address with a query",
+   "kind": "request",
+   "input": {
+    "method": "GET",
+    "url": "https://example.com/a?b=c&d=e"
+   },
+   "expected": {
+    "ok": {
+     "base": "\"@method\": GET\n\"@target-uri\": https://example.com/a?b=c&d=e\n\"@signature-params\": (\"@method\" \"@target-uri\")",
+     "fingerprint": "ZNiObbuEKU7KxTCSLiqveOlJaHQwqS1gvzy1lKS7lZw"
+    }
+   }
+  },
+  {
+   "name": "an address with an empty query",
+   "kind": "request",
+   "input": {
+    "method": "GET",
+    "url": "https://example.com/a?"
+   },
+   "expected": {
+    "ok": {
+     "base": "\"@method\": GET\n\"@target-uri\": https://example.com/a?\n\"@signature-params\": (\"@method\" \"@target-uri\")",
+     "fingerprint": "2Z5amMfiMduneFtuSVGMzt82EoX7lzs1tkcshnO0mYY"
+    }
+   }
+  },
+  {
+   "name": "an address with a space written as %20",
+   "kind": "request",
+   "input": {
+    "method": "GET",
+    "url": "https://example.com/a%20b"
+   },
+   "expected": {
+    "ok": {
+     "base": "\"@method\": GET\n\"@target-uri\": https://example.com/a%20b\n\"@signature-params\": (\"@method\" \"@target-uri\")",
+     "fingerprint": "ZFWjwo3iPyrNToSDrV7D26bonvGEq-N-7V24bpsPZmk"
+    }
+   }
+  },
+  {
+   "name": "the same address with %2f in place of %2F",
+   "kind": "request",
+   "input": {
+    "method": "GET",
+    "url": "https://example.com/a%2fb"
+   },
+   "expected": {
+    "ok": {
+     "base": "\"@method\": GET\n\"@target-uri\": https://example.com/a%2fb\n\"@signature-params\": (\"@method\" \"@target-uri\")",
+     "fingerprint": "tPhzxPyR9FGAvOLZx9A5V6Hp7SUSZQfcmPrA0seml1M"
+    }
+   }
+  },
+  {
+   "name": "the same address with %2F",
+   "kind": "request",
+   "input": {
+    "method": "GET",
+    "url": "https://example.com/a%2Fb"
+   },
+   "expected": {
+    "ok": {
+     "base": "\"@method\": GET\n\"@target-uri\": https://example.com/a%2Fb\n\"@signature-params\": (\"@method\" \"@target-uri\")",
+     "fingerprint": "c8dQCbcJ_f-kaKZbMVJ3CIIOJhfsThDVg6k0QyysckI"
+    }
+   }
+  },
+  {
+   "name": "the host in capitals",
+   "kind": "request",
+   "input": {
+    "method": "GET",
+    "url": "https://EXAMPLE.com/a"
+   },
+   "expected": {
+    "ok": {
+     "base": "\"@method\": GET\n\"@target-uri\": https://EXAMPLE.com/a\n\"@signature-params\": (\"@method\" \"@target-uri\")",
+     "fingerprint": "osdvRYQf4moRd0oOkzaw8xPUoKmkUt-aSLct4c5VqSI"
+    }
+   }
+  },
+  {
+   "name": "plain http",
+   "kind": "request",
+   "input": {
+    "method": "GET",
+    "url": "http://localhost:8080/x"
+   },
+   "expected": {
+    "ok": {
+     "base": "\"@method\": GET\n\"@target-uri\": http://localhost:8080/x\n\"@signature-params\": (\"@method\" \"@target-uri\")",
+     "fingerprint": "MMWJy1geM91Ga2HcgRGA7Yqj95tTcEOk9S1IXg0tobY"
+    }
+   }
+  },
+  {
+   "name": "a method in small letters, kept as given",
+   "kind": "request",
+   "input": {
+    "method": "get",
+    "url": "https://example.com/"
+   },
+   "expected": {
+    "ok": {
+     "base": "\"@method\": get\n\"@target-uri\": https://example.com/\n\"@signature-params\": (\"@method\" \"@target-uri\")",
+     "fingerprint": "eHKtnrThWsZeO16Wqn_XHPmRXQnA3Ohi4IOU54Iq2Jg"
+    }
+   }
+  },
+  {
+   "name": "a method of its own",
+   "kind": "request",
+   "input": {
+    "method": "X-REPORT",
+    "url": "https://example.com/"
+   },
+   "expected": {
+    "ok": {
+     "base": "\"@method\": X-REPORT\n\"@target-uri\": https://example.com/\n\"@signature-params\": (\"@method\" \"@target-uri\")",
+     "fingerprint": "Y3ezazCZYpaxZ4PpkqKWSL_m1V00j0aWBQdqxFF8v2I"
+    }
+   }
+  },
+  {
+   "name": "an address with a fragment",
+   "kind": "request",
+   "input": {
+    "method": "GET",
+    "url": "https://example.com/a#b"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "url: must be the address of the request as sent: an absolute http or https address of visible ASCII characters, with no fragment."
+    }
+   }
+  },
+  {
+   "name": "an address with a space",
+   "kind": "request",
+   "input": {
+    "method": "GET",
+    "url": "https://example.com/a b"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "url: must be the address of the request as sent: an absolute http or https address of visible ASCII characters, with no fragment."
+    }
+   }
+  },
+  {
+   "name": "an address with a letter outside ASCII",
+   "kind": "request",
+   "input": {
+    "method": "GET",
+    "url": "https://example.com/café"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "url: must be the address of the request as sent: an absolute http or https address of visible ASCII characters, with no fragment."
+    }
+   }
+  },
+  {
+   "name": "an address with a line feed",
+   "kind": "request",
+   "input": {
+    "method": "GET",
+    "url": "https://example.com/a\n"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "url: must be the address of the request as sent: an absolute http or https address of visible ASCII characters, with no fragment."
+    }
+   }
+  },
+  {
+   "name": "a relative address",
+   "kind": "request",
+   "input": {
+    "method": "GET",
+    "url": "/foo"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "url: must be the address of the request as sent: an absolute http or https address of visible ASCII characters, with no fragment."
+    }
+   }
+  },
+  {
+   "name": "an address with the scheme in capitals",
+   "kind": "request",
+   "input": {
+    "method": "GET",
+    "url": "HTTPS://example.com/"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "url: must be the address of the request as sent: an absolute http or https address of visible ASCII characters, with no fragment."
+    }
+   }
+  },
+  {
+   "name": "another scheme",
+   "kind": "request",
+   "input": {
+    "method": "GET",
+    "url": "ftp://example.com/"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "url: must be the address of the request as sent: an absolute http or https address of visible ASCII characters, with no fragment."
+    }
+   }
+  },
+  {
+   "name": "an address that is not text",
+   "kind": "request",
+   "input": {
+    "method": "GET",
+    "url": 5
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "url: must be the address of the request as sent: an absolute http or https address of visible ASCII characters, with no fragment."
+    }
+   }
+  },
+  {
+   "name": "a method with a space",
+   "kind": "request",
+   "input": {
+    "method": "GET X",
+    "url": "https://example.com/"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "method: must be the method of the request as sent, a token such as GET or POST."
+    }
+   }
+  },
+  {
+   "name": "an empty method",
+   "kind": "request",
+   "input": {
+    "method": "",
+    "url": "https://example.com/"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "method: must be the method of the request as sent, a token such as GET or POST."
+    }
+   }
+  },
+  {
+   "name": "no method",
+   "kind": "request",
+   "input": {
+    "url": "https://example.com/"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "method: must be the method of the request as sent, a token such as GET or POST."
+    }
+   }
+  },
+  {
+   "name": "a body that is text",
+   "kind": "request",
+   "input": {
+    "method": "POST",
+    "url": "https://example.com/",
+    "bodyText": "hello"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "body: must be the bytes of the body, as sent."
+    }
+   }
+  },
+  {
+   "name": "a body of null is no body",
+   "kind": "request",
+   "input": {
+    "method": "POST",
+    "url": "https://example.com/",
+    "body": null
+   },
+   "expected": {
+    "ok": {
+     "base": "\"@method\": POST\n\"@target-uri\": https://example.com/\n\"@signature-params\": (\"@method\" \"@target-uri\")",
+     "fingerprint": "55mlFviBrdcjkX9sD0_YWKtg-6J1x9Xc4i0a2qpL4KI"
+    }
+   }
+  },
+  {
+   "name": "a body that is a number",
+   "kind": "request",
+   "input": {
+    "method": "POST",
+    "url": "https://example.com/",
+    "body": 5
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "body: must be the bytes of the body, as sent."
+    }
+   }
+  },
+  {
+   "name": "a request that is not an object",
+   "kind": "request",
+   "input": "GET /",
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "The request must be an object."
+    }
+   }
+  },
+  {
+   "name": "a 200 answer with a body",
+   "kind": "response",
+   "input": {
+    "status": 200,
+    "bodyHex": "7b2268656c6c6f223a2022776f726c64227d"
+   },
+   "expected": {
+    "ok": {
+     "base": "\"@status\": 200\n\"content-digest\": sha-256=:X48E9qOokqqrvdts8nOJRJN3OWDUoyWxBf7kbu9DBPE=:\n\"@signature-params\": (\"@status\" \"content-digest\")",
+     "fingerprint": "f0K-xbqEaIcbmWFe-MFwAaXwblW9uwEc_RxCYMKrRXE"
+    }
+   }
+  },
+  {
+   "name": "a 204 answer with no body",
+   "kind": "response",
+   "input": {
+    "status": 204
+   },
+   "expected": {
+    "ok": {
+     "base": "\"@status\": 204\n\"@signature-params\": (\"@status\")",
+     "fingerprint": "AthHyCOs3JVzeXAYvnKqY4yiA8iUcQr1PYxJAgytXqo"
+    }
+   }
+  },
+  {
+   "name": "a 200 answer with an empty body",
+   "kind": "response",
+   "input": {
+    "status": 200,
+    "bodyHex": ""
+   },
+   "expected": {
+    "ok": {
+     "base": "\"@status\": 200\n\"content-digest\": sha-256=:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=:\n\"@signature-params\": (\"@status\" \"content-digest\")",
+     "fingerprint": "J3rZE5e7LxIdypGaIsQEQrlklNxhZ81VzQKBYp76W_g"
+    }
+   }
+  },
+  {
+   "name": "the lowest status",
+   "kind": "response",
+   "input": {
+    "status": 100
+   },
+   "expected": {
+    "ok": {
+     "base": "\"@status\": 100\n\"@signature-params\": (\"@status\")",
+     "fingerprint": "gz3XEXp9d1coxCUupAgY0HCyC31Gg0PfacvZs92Bz4w"
+    }
+   }
+  },
+  {
+   "name": "the highest status",
+   "kind": "response",
+   "input": {
+    "status": 599
+   },
+   "expected": {
+    "ok": {
+     "base": "\"@status\": 599\n\"@signature-params\": (\"@status\")",
+     "fingerprint": "Px-ufujgq5kuEc8HB3O1EkHE3te3a9HWboRdqZInUUQ"
+    }
+   }
+  },
+  {
+   "name": "a status below 100",
+   "kind": "response",
+   "input": {
+    "status": 99
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "status: must be the status code of the answer, a whole number from 100 to 599."
+    }
+   }
+  },
+  {
+   "name": "a status above 599",
+   "kind": "response",
+   "input": {
+    "status": 600
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "status: must be the status code of the answer, a whole number from 100 to 599."
+    }
+   }
+  },
+  {
+   "name": "a status written as text",
+   "kind": "response",
+   "input": {
+    "status": "200"
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "status: must be the status code of the answer, a whole number from 100 to 599."
+    }
+   }
+  },
+  {
+   "name": "a status with a fraction",
+   "kind": "response",
+   "input": {
+    "status": 200.5
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "status: must be the status code of the answer, a whole number from 100 to 599."
+    }
+   }
+  },
+  {
+   "name": "no status",
+   "kind": "response",
+   "input": {},
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "status: must be the status code of the answer, a whole number from 100 to 599."
+    }
+   }
+  },
+  {
+   "name": "a status of true",
+   "kind": "response",
+   "input": {
+    "status": true
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "status: must be the status code of the answer, a whole number from 100 to 599."
+    }
+   }
+  },
+  {
+   "name": "a 404 answer whose body is null",
+   "kind": "response",
+   "input": {
+    "status": 404,
+    "body": null
+   },
+   "expected": {
+    "ok": {
+     "base": "\"@status\": 404\n\"@signature-params\": (\"@status\")",
+     "fingerprint": "zjKVNovXVbynb6qsbStX3cC2DkPXa5-Z2gume6ZzB_A"
+    }
+   }
+  },
+  {
+   "name": "a trace-id",
+   "kind": "identifier",
+   "input": "4bf92f3577b34da6a3ce929d0e0e4736",
+   "expected": {
+    "ok": {
+     "fingerprint": "OYrK7mXE5TPOokmGWrHO5XZEXcIxePiznV79zt1XqCk"
+    }
+   }
+  },
+  {
+   "name": "an identifier a platform gave",
+   "kind": "identifier",
+   "input": "toolu_01AbCdEf",
+   "expected": {
+    "ok": {
+     "fingerprint": "oALmjFU8fnArvLb6XRRngyYxcbg8lwhQvvB-uIkqqA4"
+    }
+   }
+  },
+  {
+   "name": "an error text with a line feed and a letter outside ASCII",
+   "kind": "identifier",
+   "input": "Tool failed:\nfichier introuvable é 😀",
+   "expected": {
+    "ok": {
+     "fingerprint": "AKlABZIB1eeyyGAXe_CkLwWUZ7BODBTEoMKZgTXNygM"
+    }
+   }
+  },
+  {
+   "name": "one character",
+   "kind": "identifier",
+   "input": "x",
+   "expected": {
+    "ok": {
+     "fingerprint": "LXEWQrcmsEQBYnyp-6wy9chTD7GQPMTbAiWHF5IaSIE"
+    }
+   }
+  },
+  {
+   "name": "an empty identifier",
+   "kind": "identifier",
+   "input": "",
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "The identifier must be text of one character or more."
+    }
+   }
+  },
+  {
+   "name": "a lone surrogate",
+   "kind": "identifier",
+   "input": "a\ud800b",
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "The identifier holds text that is not well-formed Unicode."
+    }
+   }
+  },
+  {
+   "name": "a number",
+   "kind": "identifier",
+   "input": 42,
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "The identifier must be text of one character or more."
+    }
+   }
+  }
+ ]
+}

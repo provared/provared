@@ -1,6 +1,7 @@
 // The Stub (the receipt for one action) and the countersignature.
 // Format description, sections 5 and 6.
 
+import { DOCUMENT_NAMES, REPEATABLE_DOCUMENT_NAMES, isUnknownReservedDocument } from './documents.js';
 import { fingerprint, formatTime, randomId, toBase64url } from './encoding.js';
 import * as f from './fields.js';
 import { encodeContent, parseRecord, protectedHeaders, signingInput, withinSize, KINDS } from './jws.js';
@@ -48,9 +49,17 @@ export function validateRequest(c) {
   if (Object.hasOwn(c, 'with')) f.shortName(c.with, 'with');
   if (Object.hasOwn(c, 'details')) {
     f.list(c.details, 1, 32, 'details');
+    const once = new Set();
     c.details.forEach((d, i) => {
       f.members(d, ['name', 'sha256'], [], `details[${i}]`);
       f.label(d.name, `details[${i}].name`);
+      if (isUnknownReservedDocument(d.name)) throw f.fail(`details[${i}].name`, 'names that begin "provared." are reserved, and this one is not on the list of document names.');
+      if (Object.hasOwn(DOCUMENT_NAMES, d.name) && !REPEATABLE_DOCUMENT_NAMES.includes(d.name)) {
+        if (once.has(d.name)) {
+          throw f.fail(`details[${i}].name`, 'this reserved name is named twice. Only provared.trace-id, provared.request-id and provared.event-id may be named more than once.');
+        }
+        once.add(d.name);
+      }
       f.fingerprintText(d.sha256, `details[${i}].sha256`);
     });
   }

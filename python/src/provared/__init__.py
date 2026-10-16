@@ -27,13 +27,17 @@
 #            key_set_fingerprint, signer_from_key and Signer (wherever
 #            "private_keys" is taken, each item may be a key or a signer, an
 #            object with "key" and "sign", for a key held elsewhere)
-# Names:     the shared list of actions, the kinds of action, the rules of conduct
+# Names:     the shared list of actions, the kinds of action, the rules of conduct;
+#            the reserved document names (DOCUMENT_NAMES), and the fingerprints
+#            they stand for (http_request_fingerprint, http_response_fingerprint,
+#            identifier_fingerprint)
 
 from .actions import ACTION_KINDS, CONDUCT_RULES, RESERVED_PREFIX, SHARED_ACTIONS, action_kind
 from .approval import assemble_approval, prepare_approval
 from .blockstamp import block_fingerprint, block_stamp_item
 from .book import LIMITS, check_book, check_show, entry_line, make_show, open_checker, write_book
 from .compare import condition_words, limit_words, never_words
+from .documents import DOCUMENT_NAMES, RESERVED_DOCUMENT_PREFIX, http_request_fingerprint, http_response_fingerprint, identifier_fingerprint
 from .encoding import Refusal, fingerprint, format_time, from_base64url, random_id, sha256, to_base64url, utf8
 from .guard import check_before
 from .headers import MIN_BLOCKS_AFTER, blocks_in_chain, check_header_chain
@@ -54,6 +58,7 @@ __all__ = [
     'SIGN_WITHIN_MS', 'Signer', 'signer_from_key',
     'record_function', 'record_tools',
     'ACTION_KINDS', 'CONDUCT_RULES', 'COVERABLE', 'LIMITS', 'REFUSAL_REASONS', 'RESERVED_PREFIX', 'SHARED_ACTIONS', 'VOUCHED_KINDS',
+    'DOCUMENT_NAMES', 'RESERVED_DOCUMENT_PREFIX', 'http_request_fingerprint', 'http_response_fingerprint', 'identifier_fingerprint',
     'Refusal', 'action_kind', 'assemble_approval', 'assemble_cancellation', 'assemble_slip', 'block_fingerprint', 'block_stamp_item',
     'check_before', 'check_book', 'check_show', 'check_slip', 'condition_words', 'countersign', 'entry_line', 'fingerprint',
     'format_time', 'from_base64url', 'generate_key_set', 'key_set_fingerprint', 'limit_words', 'make_show', 'method_available',

@@ -50,13 +50,13 @@ from collections.abc import Mapping
 
 from . import _js
 from .book import _SNAKE, MAX_LINE_BYTES, answer_of, carry_on, check_countersignature, entry_line, fixed_options, fork_carried, latest_when, promote_carried, start_carried
-from .encoding import Refusal, canonical_json, fingerprint, from_base64url, nan_time, now_ms, problem_from, utf8
-from .guard import check_before_read
+from .encoding import Refusal, canonical_json, fingerprint, format_time, from_base64url, nan_time, now_ms, problem_from, utf8
+from .guard import _line_bound, check_before_read
 from .keys import KEY_SET_METHODS
 from .seal import CLOCK_ALLOWANCE_MS, MAX_STAMPS
 from .signatures import answer_within, hold_signing_keys
 from .standing import write_acknowledgement
-from .stub import write_stub
+from .stub import validate_request, write_stub
 
 COUNTERSIGN_WITHIN_MS = 30000
 """How long the other side is given to hand back its countersignature, unless the caller says otherwise: 30 seconds."""
@@ -69,6 +69,18 @@ _MAX_WAIT_MS = 2**31 - 1
 _MAX_HANDED = 16
 # The deepest a copied value may nest: far more than a line of a book can hold.
 _MAX_COPY_DEPTH = 64
+# "details_after" in "act": the most documents it may add, and the most the
+# request may name beside them, so that a stub never names more than 32.
+_MAX_DETAILS_AFTER = 4
+_MAX_DETAILS_BEFORE = 32 - _MAX_DETAILS_AFTER
+# The room kept for them: the largest documents a stub may name, a name of
+# 200 characters that are each written as six (a control character, which
+# the one form of RFC 8785 writes as "\u00XX"), with a fingerprint.
+_ROOM_DOCUMENT = {'name': '\u0001' * 200, 'sha256': 'A' * 43}
+
+
+class _NotAdded(Exception):
+    """The stub with the further documents could not be made or signed."""
 
 _INSIDE_MESSAGE = 'The stub writer was called from inside an action it is taking. Call it once the action has ended.'
 
@@ -642,6 +654,50 @@ class Recorder:
         finally:
             mark.running = False
 
+    # "details_after" is asked in the same way as the other side: in a thread
+    # of its own, under the mark, given "countersign_within" milliseconds.
+    def _ask_details_after(self, details_after, result):
+        mark = _Mark(self)
+        context = contextvars.copy_context()
+        context.run(_INSIDE.set, mark)
+        answer = concurrent.futures.Future()
+
+        def job():
+            try:
+                value = details_after(result)
+                if inspect.isawaitable(value):
+                    _refuse_awaitable(value, 'details_after: must be an ordinary function that gives the documents. It gave a coroutine, which was not run.')
+                answer.set_result(value)
+            except Exception as e:  # handed on to the writer, which decides
+                answer.set_exception(e)
+            except BaseException as e:  # noqa: BLE001
+                answer.set_exception(RuntimeError(f'the details_after function raised {type(e).__name__}'))
+
+        threading.Thread(target=context.run, args=(job,), daemon=True, name='provared-details-after').start()
+        try:
+            return answer.result(timeout=self._within / 1000)
+        except concurrent.futures.TimeoutError:
+            raise RuntimeError('no answer in time') from None
+        finally:
+            mark.running = False
+
+    # Whether the stub for this request, with the countersignature the check
+    # before acting keeps room for, would still fit a line with the largest
+    # further documents that "details_after" may add: the same bound as the
+    # check before acting uses, over the request with those documents.
+    @staticmethod
+    def _room_for_more(request, when):
+        try:
+            c = {'action': request.get('action'), 'when': format_time(when)}
+            for name in ('amount', 'with'):
+                if name in request:
+                    c[name] = request[name]
+            named = request.get('details') if isinstance(request.get('details'), list) else []
+            c['details'] = [*named, *([_ROOM_DOCUMENT] * _MAX_DETAILS_AFTER)]
+            return _line_bound(c, None, False) <= MAX_LINE_BYTES
+        except Exception:
+            return False
+
     # A signer is asked in a thread of its own, under the same mark as an
     # action, so that a signer that calls the writer is refused at once,
     # and given "sign_within" milliseconds for each signature. After that
@@ -667,6 +723,8 @@ class Recorder:
             'when': _ABSENT if more.get('when') is None else _time_value(more['when']),
             'terms': more.get('terms', _ABSENT),
             'countersign': more.get('countersign', _ABSENT),
+            # The Python name first; the JavaScript name is taken too, as for the options.
+            'detailsAfter': more['details_after'] if 'details_after' in more else more.get('detailsAfter', _ABSENT),
             'hasApproval': more.get('approval') is not None,
             'approval': _ABSENT,
         }
@@ -1099,9 +1157,27 @@ class Recorder:
         its result. It must not call this writer: such a call is refused at
         once. It must be an ordinary function, not a coroutine function.
         more: as for "record"; "when" defaults to the clock and must be
-        within 300 seconds of it.
+        within 300 seconds of it. And "details_after" (also taken by its
+        JavaScript name, "detailsAfter"): where an identifier or a document
+        comes only with what the action gives back (the identifier a
+        platform gave the call, say), a function of what perform gave that
+        gives up to four further documents ({"name", "sha256"} each). The
+        stub is then signed again after the action, with them, still in
+        this call's turn, so that no other call comes between; it keeps the
+        time the action began. The request may then name at most 28
+        documents, and no approval may be given (an approval covers exactly
+        the documents the person saw). It is asked in a thread of its own,
+        must not call this writer, must be an ordinary function, and is
+        given as long as the other side is given to countersign. If it
+        fails, gives no answer in time, gives something that is not a list
+        of at most four documents, or gives documents with which the stub
+        would not pass the check of the book, the stub made before the
+        action is written, without them: an action that was taken always
+        gets its stub.
         Returns {"done", "answer"} and, where the action was taken,
-        "result" (what perform gave) and "stub" (as "record" gives it)."""
+        "result" (what perform gave) and "stub" (as "record" gives it);
+        where "details_after" was given, "detailsAfter": {"added": the
+        number of documents added, "problem": why none were, or None}."""
 
         def work(call):
             self._write_waiting(self._now())
@@ -1127,6 +1203,22 @@ class Recorder:
                     'code': 'countersignature-missing',
                     'message': 'The slip asks for the other side to countersign this action, and the stub writer was given no way to ask for a countersignature.',
                 })
+            later = call['detailsAfter']
+            has_later = later is not _ABSENT and later is not None
+            request = call['request'] if isinstance(call['request'], dict) else {}
+            if has_later:
+                named = len(request['details']) if isinstance(request.get('details'), list) else 0
+                if not callable(later):
+                    stop({'code': 'bad-field', 'message': 'detailsAfter: must be a function of what the action gives.'})
+                elif call['hasApproval']:
+                    stop({
+                        'code': 'bad-field',
+                        'message': 'detailsAfter: cannot be used with an approval. An approval covers exactly the documents the person saw, so no document may be added to the stub after the action.',
+                    })
+                elif named > _MAX_DETAILS_BEFORE:
+                    stop({'code': 'bad-field', 'message': f'detailsAfter: the request may then name at most {_MAX_DETAILS_BEFORE} documents, so that there is room for {_MAX_DETAILS_AFTER} more.'})
+                elif answer['allowed'] and not self._room_for_more(request, when):
+                    stop({'code': 'too-large', 'message': 'With room for the documents that "detailsAfter" may add, the record of this action would be longer than a line of a book may be.'})
             made = None
             tried = None
             if answer['allowed']:
@@ -1138,8 +1230,50 @@ class Recorder:
             if not answer['allowed']:
                 return {'done': False, 'answer': answer}
             outcome = self._run_inside(perform)
-            stub = self._commit(self._countersigned(made, call), made, tried)
-            return {'done': True, 'answer': answer, 'result': outcome, 'stub': stub}
+            if not has_later:
+                stub = self._commit(self._countersigned(made, call), made, tried)
+                return {'done': True, 'answer': answer, 'result': outcome, 'stub': stub}
+            # The further documents, from what the action gave back. The stub
+            # with them is signed now, still in this turn, and keeps the time
+            # the action began. If anything about them fails, the stub made
+            # before the action, which is known to fit, is the one written: an
+            # action that was taken always gets its stub.
+            further = {'added': 0, 'problem': None}
+            chosen, chosen_tried = made, tried
+            try:
+                given = self._ask_details_after(later, outcome)
+                try:
+                    documents = [] if given is None else _clone(given)
+                except Exception:
+                    raise Refusal('bad-field', 'detailsAfter: must give a list of documents, as plain data.') from None
+                if not isinstance(documents, list):
+                    raise Refusal('bad-field', 'detailsAfter: must give a list of documents.')
+                if len(documents) > _MAX_DETAILS_AFTER:
+                    raise Refusal('bad-field', f'detailsAfter: gave {len(documents)} documents; it may give {_MAX_DETAILS_AFTER} at most.')
+                if documents:
+                    base = request['details'] if isinstance(request.get('details'), list) else []
+                    every = [*base, *documents]
+                    # The documents are checked first, so that a refusal of them says why in its own words.
+                    validate_request({'action': request.get('action'), 'details': every})
+                    with_them = {**call, 'request': {**request, 'details': every}}
+                    try:
+                        following = self._compose_stub(with_them, when)
+                    except Exception:
+                        # The stub made before the action is the one written: say so, whatever failed.
+                        raise _NotAdded('The stub with the further documents could not be made or signed, so the stub made before the action was written, without them.') from None
+                    chosen_tried = self._fits_book(following, 'With the documents that "detailsAfter" gave, the stub would not pass the check of the book.')
+                    chosen = following
+                    further['added'] = len(documents)
+            except Exception as e:
+                chosen, chosen_tried = made, tried
+                if isinstance(e, _NotAdded):
+                    further['problem'] = {'code': 'details-not-added', 'message': str(e)}
+                elif isinstance(e, Refusal):
+                    further['problem'] = problem_from(e)
+                else:
+                    further['problem'] = {'code': 'details-not-added', 'message': 'detailsAfter failed, or gave no answer in time, so the stub was written without further documents.'}
+            stub = self._commit(self._countersigned(chosen, call), chosen, chosen_tried)
+            return {'done': True, 'answer': answer, 'result': outcome, 'stub': stub, 'detailsAfter': further}
 
         return self._calling(request, more, work)
 

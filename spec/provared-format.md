@@ -440,7 +440,10 @@ checker keeps no state.
 | `pass` | For a helper agent: the pass it acts under. Optional | The fingerprint of the pass (section 25) |
 | `when` | When it was done | A time |
 
-A stub holds fingerprints of documents, never the documents.
+A stub holds fingerprints of documents, never the documents. A document
+`name` is a label chosen by whoever wrote the stub, except that names
+that begin `provared.` are reserved (section 27). The same label MAY
+appear more than once; section 27 says which reserved names may.
 
 ### 5.2 Signing and checking
 
@@ -658,6 +661,11 @@ the seal's own date (section 21.1, rule 4).
   that the organisation checked well.
 - The fingerprints of an agent's software in a slip are a statement of
   what the person approved, not proof of what ran.
+- A reserved identifier that binds a stub to another system's own
+  record of the call (section 27) shows that the two records speak of
+  one call, not that the call did what either says. A matching
+  fingerprint of a request, an answer, arguments or an error shows only
+  that the content matches, not that it was the same call.
 
 ## 14. Standards used
 
@@ -679,6 +687,8 @@ the seal's own date (section 21.1, rule 4).
 | RFC 3161; RFC 5652; RFC 5280; ITU-T X.690 | Time-stamps: the statement, its signed wrapper, the certificate, and the byte layout (DER) |
 | The OpenTimestamps proof file, version 1 (an open format; not the work of a standards body) | Block time-stamps: the steps from a fingerprint to the Merkle root of a block |
 | RFC 9901 (Selective Disclosure for JSON Web Tokens) | Covered fields |
+| RFC 9421 (HTTP Message Signatures), section 2.5, only its way of writing a message as text; RFC 9530 (Digest Fields); RFC 9110, section 5.6.2 | The texts that the reserved document names `provared.http-request` and `provared.http-response` stand for (section 27). Nothing is signed with RFC 9421 |
+| W3C Trace Context (a W3C Recommendation) | The trace-id that `provared.trace-id` stands for (section 27) |
 
 ## 15. Choices that go beyond the standards
 
@@ -735,6 +745,12 @@ is frozen.
     pass.
 18. The acknowledgement of section 26 and its label
     `vnd.provared.acknowledgement.v0+json`.
+19. The reserved document names of section 27, and the exact texts their
+    fingerprints are made from: an HTTP address taken exactly as it was
+    sent, never rewritten; a body that is present but empty given a
+    Content-Digest, and an absent body none; no header covered; SHA-256
+    only; only the three identifiers may be named more than once; the
+    form of a trace-id not checked.
 
 ## 16. The shared list: actions, kinds of action, rules of conduct
 
@@ -1717,6 +1733,112 @@ its stubs escapes rule 2, and is caught only by the time-stamp rule of
 section 22. Nothing obliges an agent's side to acknowledge: a
 cancellation with no acknowledgement shows nothing about whether the
 agent's side was told.
+
+## 27. Reserved document names
+
+Where the other side of an action will not countersign, the next best
+binding is the other system's own identifier for the call, named in the
+stub by its fingerprint. An investigator who holds that system's own log
+can then work out the fingerprint again and match the two records,
+without either side's help. Only an identifier is meant to pick out one
+call. A stub may also name fingerprints of some of what was sent and
+received (the arguments; an HTTP request's method, address and body; an
+answer's status and body); those show that the content matches, not
+that it was the same call.
+
+So document names (section 5.1) that begin `provared.` are reserved. A
+document name that begins `provared.` and is not in this list MUST be
+refused (`bad-field`), in a stub, an approval (section 17) and the
+check before acting (section 20). The comparison is exact: a name in
+other letters, such as `Provared.invoice`, is a label like any other.
+`provared.trace-id`, `provared.request-id` and `provared.event-id` MAY
+each appear more than once in one stub (identifiers from two systems,
+say); every other name in the list MUST appear at most once, and a
+record that names one of them twice MUST be refused (`bad-field`), in
+the same places. The `sha256` of each is the SHA-256, in base64url, of
+exactly this text, in UTF-8:
+
+| Name | The text whose SHA-256 is given |
+|---|---|
+| `provared.arguments` | The call's arguments, written in the one form of RFC 8785 |
+| `provared.http-request` | The request, written as below, over `"@method"`, `"@target-uri"` and, where there is a body, `"content-digest"` |
+| `provared.http-response` | The answer, written as below, over `"@status"` and, where there is a body, `"content-digest"` |
+| `provared.trace-id` | The trace-id of the W3C Trace Context `traceparent` header that the agent's side sent, exactly as sent. That standard writes it as 32 lower-case hexadecimal characters; this format does not check the form, and a checker cannot |
+| `provared.request-id` | An identifier that the agent's side chose and sent with the call, exactly as sent |
+| `provared.event-id` | An identifier that the platform gave for the call, exactly as it gave it |
+| `provared.error` | The error text that the agent's software was given, exactly as given |
+
+An identifier or an error text MUST be one character or more, and
+well-formed Unicode.
+
+**How a request or an answer is written.** As the signature base of RFC
+9421 (HTTP Message Signatures), section 2.5, with no signature
+parameters. RFC 9421 is used only for this exact way of writing a
+message as text; nothing is signed with it. For each component, in the
+order given: a line `"<component>": <value>` and a line feed (0x0A);
+then the line `"@signature-params": (` with the components, each in
+double quotation marks and separated by one space, and `)`, with no line
+feed after it. The values:
+
+- `"@method"`: the method exactly as sent, a token of RFC 9110, section
+  5.6.2. Its letters are not changed, as RFC 9421, section 2.2.1, sets
+  out.
+- `"@target-uri"`: the absolute address exactly as sent. It MUST begin
+  `http://` or `https://`, hold only the visible characters of ASCII
+  (0x21 to 0x7E), and hold no fragment (`#`). It is never rewritten:
+  two spellings of one address (`%2F` and `%2f`, a host in capitals, a
+  port written or left out) give two fingerprints. Whoever writes the
+  stub MUST give the address in the form that was sent.
+- `"@status"`: the status code of the answer, a whole number from 100 to
+  599, written in digits.
+- `"content-digest"`: present only where the message has a body; a body
+  that is present and empty has one. The value is the field value of RFC
+  9530 with SHA-256 only: `sha-256=:`, the SHA-256 of the body's bytes,
+  in base64 with padding (RFC 4648, section 4), and `:`. The body's
+  bytes are what RFC 9530 digests: the content after any content coding
+  (such as gzip) and before any transfer coding. A system that keeps
+  the decoded body, where the body was sent compressed, will not match.
+
+No header is covered, and nothing else of the message: two messages
+that differ only in their headers give one fingerprint.
+
+For example, the request `POST https://example.com/foo?param=Value&Pet=dog`
+with the body `{"hello": "world"}` is written as these four lines:
+
+```
+"@method": POST
+"@target-uri": https://example.com/foo?param=Value&Pet=dog
+"content-digest": sha-256=:X48E9qOokqqrvdts8nOJRJN3OWDUoyWxBf7kbu9DBPE=:
+"@signature-params": ("@method" "@target-uri" "content-digest")
+```
+
+**What a binding shows, and what it does not.**
+
+- An identifier binds the two records only where the other system writes
+  the same identifier into its own log. Which one a system keeps differs
+  from one system to another, and is for whoever relies on it to find
+  out. Recording both kinds, one the agent's side chose and sent
+  (`provared.trace-id`, `provared.request-id`) and one the platform gave
+  back (`provared.event-id`), gives the better chance of a match.
+- The platform's identifier is the platform's word. A matching
+  identifier shows that the two records speak of one call, not that the
+  call did what either says.
+- Only `provared.trace-id`, `provared.request-id` and `provared.event-id`
+  are meant to pick out one call. `provared.arguments`,
+  `provared.http-request`, `provared.http-response` and `provared.error`
+  show only that the content matches: identical requests, and identical
+  answers (many a `200` with the body `{}`), share one fingerprint, so a
+  match with one of them does not show that it was the same call.
+- A fingerprint of an identifier, or of arguments, that is short or easy
+  to guess can be guessed: it hides nothing from someone who can try
+  the likely values.
+- A checker cannot see whether a fingerprint was made from the text this
+  section names: only someone who holds that text can work it out again.
+- Records written before this section was added may use names that
+  begin `provared.` that are not in the list, or name one of the four
+  once-only names twice; such records are refused, so a book that holds
+  one no longer passes its check. A checker that does not know this
+  section reads a reserved name as a label.
 
 ---
 

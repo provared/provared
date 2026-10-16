@@ -32,13 +32,13 @@
 // objects changes nothing.
 
 import { MAX_LINE_BYTES, answerOf, carryOn, checkCountersignature, entryLine, fixedOptions, forkCarried, latestWhen, promoteCarried, startCarried } from './book.js';
-import { Refusal, canonicalJson, fingerprint, fromBase64url, parseTime, problemFrom, utf8 } from './encoding.js';
-import { checkBeforeRead } from './guard.js';
+import { Refusal, canonicalJson, fingerprint, formatTime, fromBase64url, parseTime, problemFrom, utf8 } from './encoding.js';
+import { checkBeforeRead, lineBound } from './guard.js';
 import { KEY_SET_METHODS } from './keys.js';
 import { CLOCK_ALLOWANCE_MS, MAX_STAMPS } from './seal.js';
 import { holdSigningKeys } from './signatures.js';
 import { writeAcknowledgement } from './standing.js';
-import { writeStub } from './stub.js';
+import { validateRequest, writeStub } from './stub.js';
 
 /** How long the other side is given to hand back its countersignature, unless the caller says otherwise: 30 seconds. */
 export const COUNTERSIGN_WITHIN_MS = 30000;
@@ -46,6 +46,16 @@ export const COUNTERSIGN_WITHIN_MS = 30000;
 export const SIGN_WITHIN_MS = 30000;
 // The longest wait a timer can hold.
 const MAX_WAIT_MS = 2 ** 31 - 1;
+// "detailsAfter" in "act": the most documents it may add, and the most the
+// request may name beside them, so that a stub never names more than 32.
+const MAX_DETAILS_AFTER = 4;
+const MAX_DETAILS_BEFORE = 32 - MAX_DETAILS_AFTER;
+// The room kept for them: the largest documents a stub may name, a name of
+// 200 characters that are each written as six (a control character, which
+// the one form of RFC 8785 writes as "\u00XX"), with a fingerprint.
+const ROOM_DOCUMENT = Object.freeze({ name: '\u0001'.repeat(200), sha256: 'A'.repeat(43) });
+// The stub with the further documents could not be made or signed.
+class NotAdded extends Error {}
 // The most cancellations a check may be handed beside a book (book.js).
 const MAX_HANDED = 16;
 
@@ -433,6 +443,7 @@ export async function openRecorder({ book, slip, privateKeys, issuerKeys, pass, 
       when: more.when === undefined || more.when === null ? undefined : timeOf(more.when),
       terms: more.terms,
       countersign: more.countersign,
+      detailsAfter: more.detailsAfter,
       hasApproval: more.approval !== undefined && more.approval !== null,
       approval: undefined,
     };
@@ -468,6 +479,20 @@ export async function openRecorder({ book, slip, privateKeys, issuerKeys, pass, 
     if (call.terms !== undefined) proposal.terms = call.terms;
     if (call.hasApproval) proposal.approval = call.approval;
     return proposal;
+  };
+  // Whether the stub for this request, with the countersignature the check
+  // before acting keeps room for, would still fit a line with the largest
+  // further documents that "detailsAfter" may add: the same bound as the
+  // check before acting uses, over the request with those documents.
+  const roomForMore = (request, when) => {
+    try {
+      const c = { action: request.action, when: formatTime(when) };
+      for (const name of ['amount', 'with']) if (request[name] !== undefined) c[name] = request[name];
+      c.details = [...(Array.isArray(request.details) ? request.details : []), ...Array(MAX_DETAILS_AFTER).fill(ROOM_DOCUMENT)];
+      return lineBound(c, undefined) <= MAX_LINE_BYTES;
+    } catch {
+      return false;
+    }
   };
   const aheadOfClock = (when) => when > now() + CLOCK_ALLOWANCE_MS;
   const behindClock = (when) => when < now() - CLOCK_ALLOWANCE_MS;
@@ -829,10 +854,28 @@ export async function openRecorder({ book, slip, privateKeys, issuerKeys, pass, 
      * If taking the action never ends, the writer waits: it cannot know
      * what happened.
      *
+     * Where an identifier or a document comes only with what the action
+     * gives back (the identifier a platform gave the call, say), "detailsAfter"
+     * names it: a function of what the action gave, that gives up to four
+     * further documents ({name, sha256} each). The stub is then signed again
+     * after the action, with them, still in this call's turn, so that no
+     * other call comes between; it keeps the time the action began. The
+     * request may then name at most 28 documents, and no approval may be
+     * given (an approval covers exactly the documents the person saw).
+     * "detailsAfter" is given as long as the other side is given to
+     * countersign. If it fails, gives no answer in time, gives something
+     * that is not a list of at most four documents, or gives documents with
+     * which the stub would not pass the check of the book, the stub made
+     * before the action is written, without them: an action that was taken
+     * always gets its stub. "detailsAfter" in the answer says what was added
+     * and, where nothing was, why.
+     *
      * @param {{action: string, amount?: object, with?: string, details?: object[]}} request
      * @param {() => Promise<any>} perform takes the action; it must not call this writer
      * @param {object} [more] as for "record"; "when" defaults to the clock and must be within 300 seconds of it
-     * @returns {Promise<{done: boolean, answer: object, result?: any, stub?: object}>}
+     * @param {(result: any) => object[]|Promise<object[]>} [more.detailsAfter] further documents, from what the action gave; it must not call this writer
+     * @returns {Promise<{done: boolean, answer: object, result?: any, stub?: object, detailsAfter?: {added: number, problem: object|null}}>}
+     *   "detailsAfter" is there only where it was given and the action was taken
      */
     act(request, perform, more = {}) {
       return calling(request, more, async (call) => {
@@ -858,6 +901,19 @@ export async function openRecorder({ book, slip, privateKeys, issuerKeys, pass, 
             message: 'The slip asks for the other side to countersign this action, and the stub writer was given no way to ask for a countersignature.',
           });
         }
+        const later = call.detailsAfter;
+        const hasLater = later !== undefined && later !== null;
+        if (hasLater) {
+          const named = Array.isArray(call.request.details) ? call.request.details.length : 0;
+          if (typeof later !== 'function') stop({ code: 'bad-field', message: 'detailsAfter: must be a function of what the action gives.' });
+          else if (call.hasApproval) {
+            stop({ code: 'bad-field', message: 'detailsAfter: cannot be used with an approval. An approval covers exactly the documents the person saw, so no document may be added to the stub after the action.' });
+          } else if (named > MAX_DETAILS_BEFORE) {
+            stop({ code: 'bad-field', message: `detailsAfter: the request may then name at most ${MAX_DETAILS_BEFORE} documents, so that there is room for ${MAX_DETAILS_AFTER} more.` });
+          } else if (answer.allowed && !roomForMore(call.request, when)) {
+            stop({ code: 'too-large', message: 'With room for the documents that "detailsAfter" may add, the record of this action would be longer than a line of a book may be.' });
+          }
+        }
         let made;
         let tried;
         if (answer.allowed) {
@@ -870,8 +926,57 @@ export async function openRecorder({ book, slip, privateKeys, issuerKeys, pass, 
         }
         if (!answer.allowed) return { done: false, answer };
         const outcome = await runInside(perform);
-        const stub = await commit(await countersigned(made, call), made, tried);
-        return { done: true, answer, result: outcome, stub };
+        if (!hasLater) {
+          const stub = await commit(await countersigned(made, call), made, tried);
+          return { done: true, answer, result: outcome, stub };
+        }
+        // The further documents, from what the action gave back. The stub
+        // with them is signed now, still in this turn, and keeps the time
+        // the action began. If anything about them fails, the stub made
+        // before the action, which is known to fit, is the one written: an
+        // action that was taken always gets its stub.
+        const further = { added: 0, problem: null };
+        let chosen = made;
+        let chosenTried = tried;
+        try {
+          const given = await runInside(() => within(Promise.resolve(later(outcome)), countersignWithin));
+          let documents;
+          try {
+            documents = given === undefined || given === null ? [] : clone(given);
+          } catch {
+            throw new Refusal('bad-field', 'detailsAfter: must give a list of documents, as plain data.');
+          }
+          if (!Array.isArray(documents)) throw new Refusal('bad-field', 'detailsAfter: must give a list of documents.');
+          if (documents.length > MAX_DETAILS_AFTER) throw new Refusal('bad-field', `detailsAfter: gave ${documents.length} documents; it may give ${MAX_DETAILS_AFTER} at most.`);
+          if (documents.length > 0) {
+            const base = Array.isArray(call.request.details) ? call.request.details : [];
+            const all = [...base, ...documents];
+            // The documents are checked first, so that a refusal of them says why in its own words.
+            validateRequest({ action: call.request.action, details: all });
+            const withThem = { ...call, request: { ...call.request, details: all } };
+            let next;
+            try {
+              next = await composeStub(withThem, when);
+            } catch {
+              // The stub made before the action is the one written: say so, whatever failed.
+              throw new NotAdded('The stub with the further documents could not be made or signed, so the stub made before the action was written, without them.');
+            }
+            chosenTried = await fitsBook(next, 'With the documents that "detailsAfter" gave, the stub would not pass the check of the book.');
+            chosen = next;
+            further.added = documents.length;
+          }
+        } catch (e) {
+          chosen = made;
+          chosenTried = tried;
+          further.problem =
+            e instanceof NotAdded
+              ? { code: 'details-not-added', message: e.message }
+              : e instanceof Refusal
+                ? problemFrom(e)
+                : { code: 'details-not-added', message: 'detailsAfter failed, or gave no answer in time, so the stub was written without further documents.' };
+        }
+        const stub = await commit(await countersigned(chosen, call), chosen, chosenTried);
+        return { done: true, answer, result: outcome, stub, detailsAfter: further };
       });
     },
 

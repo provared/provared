@@ -181,6 +181,46 @@ are dicts and lists, with the same member names as in the format.
 `provared.check` holds the checker alone, for anyone who audits the
 checking.
 
+Where the other side will not countersign, a stub can name the
+fingerprint of the other system's own identifier for the call, so that
+someone who holds that system's log can match the two. Document names
+that begin `provared.` are reserved for this (`DOCUMENT_NAMES`; format
+description, section 27), and any other such name is refused.
+`identifier_fingerprint`, `http_request_fingerprint` and
+`http_response_fingerprint` make the fingerprints (a body is bytes, a
+bytearray or a memoryview, after any content coding such as gzip; None
+is no body; a status may be an int, or a float equal to a whole number;
+no header is covered; a trace-id's form is not checked). Only
+`provared.trace-id`, `provared.request-id` and `provared.event-id` may
+be named more than once in a stub. An identifier that the platform gives only
+in its answer goes in through `details_after` (the JavaScript name
+`detailsAfter` is taken too):
+
+```python
+from provared import identifier_fingerprint
+
+result = writer.act(
+    {'action': 'provared.data.change', 'with': 'tickets'},
+    lambda: update_the_ticket(),
+    {'details_after': lambda answer: [{'name': 'provared.event-id', 'sha256': identifier_fingerprint(answer['request_id'])}]},
+)
+result['detailsAfter']   # {'added': 1, 'problem': None}
+```
+
+The stub is checked with the whole book before the action, and signed
+again after it with up to four further documents, in the same call; it
+keeps the time the action began. `details_after` is asked in a thread
+of its own, must be an ordinary function, and is given as long as the
+other side is given to countersign. If it fails, gives no answer in
+time, or gives what cannot go in, the stub is written without the
+further documents and `result['detailsAfter']['problem']` says why. It
+cannot be used with an approval. A matching identifier shows that the
+two records speak of one call, not that the call did what either says;
+a fingerprint of a request, an answer, the arguments or an error shows
+only that the content matches, not that it was the same call.
+`record_tools` and `record_function` still name the arguments
+`arguments` by default.
+
 ## Keys held elsewhere: signers
 
 The keys of an agent, a service or an organisation need not sit in the

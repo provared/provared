@@ -21,7 +21,7 @@ const notSound = (why) => new Refusal('record-not-sound', why);
 // 131,072 bytes, and an action whose record would not fit is not allowed.
 const STUB_BOUND = 6700 + 600;
 const COUNTERSIGNATURE_BOUND = 6900;
-function lineBound(c, approval) {
+export function lineBound(c, approval) {
   let approvalBytes = 0;
   if (approval !== undefined) {
     try {

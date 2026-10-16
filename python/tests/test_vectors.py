@@ -11,6 +11,7 @@ import answers_recorder
 import answers_records
 import answers_stamps
 from provared import _js
+from provared.documents import DOCUMENT_NAMES, http_request_base, http_request_fingerprint, http_response_base, http_response_fingerprint, identifier_fingerprint
 from provared.encoding import count_characters, from_base64url, parse_canonical, parse_time, problem_from
 from provared.jws import parse_record
 from provared.keys import check_key, thumbprint
@@ -41,6 +42,23 @@ def _record(c):
     return {'kind': p.kind, 'fingerprint': p.fingerprint, 'content': p.content, 'signatures': len(p.signatures)}
 
 
+def _document_fingerprint(c):
+    if c['kind'] == 'names':
+        return dict(DOCUMENT_NAMES)
+    if c['kind'] == 'identifier':
+        return {'fingerprint': identifier_fingerprint(c['input'])}
+    r = c['input']
+    if isinstance(r, dict):
+        r = dict(r)
+        if 'bodyHex' in r:
+            r['body'] = bytes.fromhex(r.pop('bodyHex'))
+        if 'bodyText' in r:
+            r['body'] = r.pop('bodyText')
+    if c['kind'] == 'request':
+        return {'base': http_request_base(r), 'fingerprint': http_request_fingerprint(r)}
+    return {'base': http_response_base(r), 'fingerprint': http_response_fingerprint(r)}
+
+
 def _key(c):
     alg = check_key(c['key'], c['allowed'], 'key')
     return {'alg': alg, 'thumbprint': thumbprint(c['key'])}
@@ -56,6 +74,7 @@ ANSWER = {
     'parseRecord': lambda c: _answer(lambda: _record(c)),
     'validateStubContent': lambda c: _answer(lambda: _true(validate_stub_content)(c['content'])),
     'validateCountersignatureContent': lambda c: _answer(lambda: _true(validate_countersignature_content)(c['content'])),
+    'documentFingerprint': lambda c: _answer(lambda: _document_fingerprint(c)),
     'checkOrigin': lambda c: _answer(lambda: _true(lambda _: _check_origin(c['text'], c['rpId']))(None)),
     'checkSlip': lambda c: {'ok': check_slip(c['record'], c.get('options'), c['disclosures'] if 'disclosures' in c else _UNDEFINED)},
     **answers_stamps.ANSWER,

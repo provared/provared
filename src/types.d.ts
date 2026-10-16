@@ -466,8 +466,20 @@ export interface Recorder {
   act<T>(
     request: Request,
     perform: () => Promise<T>,
-    more?: { when?: number | Date; terms?: Fingerprint; approval?: { record: SignedRecord }; countersign?: (stub: SignedRecord) => Promise<SignedRecord | null> },
-  ): Promise<{ done: boolean; answer: BeforeAnswer; result?: T; stub?: WrittenStub }>;
+    more?: {
+      when?: number | Date;
+      terms?: Fingerprint;
+      approval?: { record: SignedRecord };
+      countersign?: (stub: SignedRecord) => Promise<SignedRecord | null>;
+      /**
+       * Up to four further documents, from what the action gave back. The stub is then signed after the action,
+       * in the same turn, and keeps the time the action began. The request may then name at most 28 documents,
+       * and no approval may be given. If it fails, the stub is written without them, and "detailsAfter" in the
+       * answer says why.
+       */
+      detailsAfter?: (result: T) => DocumentRef[] | null | undefined | Promise<DocumentRef[] | null | undefined>;
+    },
+  ): Promise<{ done: boolean; answer: BeforeAnswer; result?: T; stub?: WrittenStub; detailsAfter?: { added: number; problem: Finding | null } }>;
   book(): string;
   /**
    * What the record shows as it stands: the answer a whole check of the book gives, with the cancellations
@@ -647,6 +659,16 @@ export function utf8(text: string): Uint8Array;
 // --- the shared list ---
 
 export const RESERVED_PREFIX: 'provared.';
+/** Document names that begin with this are reserved: only those in DOCUMENT_NAMES may be used. */
+export const RESERVED_DOCUMENT_PREFIX: 'provared.';
+/** The reserved document names, and the exact text whose SHA-256 each one gives (format description, section 27). */
+export const DOCUMENT_NAMES: Readonly<Record<string, string>>;
+/** For "provared.http-request": the method and the address exactly as sent, and the body's bytes where there is a body. */
+export function httpRequestFingerprint(r: { method: string; url: string; body?: Uint8Array }): Promise<Fingerprint>;
+/** For "provared.http-response": the status code, and the body's bytes where there is a body. */
+export function httpResponseFingerprint(r: { status: number; body?: Uint8Array }): Promise<Fingerprint>;
+/** For "provared.trace-id", "provared.request-id", "provared.event-id" and "provared.error": SHA-256 of the text's UTF-8 bytes, exactly as given. */
+export function identifierFingerprint(id: string): Promise<Fingerprint>;
 export const ACTION_KINDS: Record<string, string>;
 export const SHARED_ACTIONS: Record<string, [kind: string, meaning: string]>;
 export const CONDUCT_RULES: Record<string, string>;

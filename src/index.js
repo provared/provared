@@ -20,7 +20,8 @@
 //            signerFromKey (a key in memory as a signer: wherever "privateKeys"
 //            is taken, each item may be a key or a signer, an object with
 //            "key" and "sign", for a key held elsewhere)
-// Names:     the shared list of actions, the kinds of action, the rules of conduct
+// Names:     the shared list of actions, the kinds of action, the rules of conduct;
+//            the reserved document names, and the fingerprints they stand for
 
 export * from './check.js';
 export { checkBefore } from './guard.js';
@@ -37,4 +38,5 @@ export { prepareCancellation, assembleCancellation, writeAcknowledgement, writeV
 export { entryLine, writeBook, makeShow } from './book.js';
 export { generateKeySet, generateSealKeySet, signerFromKey } from './signatures.js';
 export { ACTION_KINDS, SHARED_ACTIONS, CONDUCT_RULES, RESERVED_PREFIX, actionKind } from './actions.js';
+export { DOCUMENT_NAMES, RESERVED_DOCUMENT_PREFIX, httpRequestFingerprint, httpResponseFingerprint, identifierFingerprint } from './documents.js';
 export { fingerprint, formatTime, randomId, toBase64url, fromBase64url, utf8, sha256 } from './encoding.js';

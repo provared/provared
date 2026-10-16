@@ -9,7 +9,7 @@
 // seal is used ("withoutMethods"), so that an implementation without
 // SLH-DSA can be held to every answer.
 
-import { argumentsFingerprint, countersign, fromBase64url, toBase64url, writeAcknowledgement, writeBook, writeStub, writeVouching, writeWithdrawal } from '../../src/index.js';
+import { argumentsFingerprint, countersign, fromBase64url, identifierFingerprint, toBase64url, writeAcknowledgement, writeBook, writeStub, writeVouching, writeWithdrawal } from '../../src/index.js';
 import { thumbprint } from '../../src/keys.js';
 import { playScenario, seededKeySet } from './scenarios.mjs';
 import { makeStampService } from './stamp.mjs';
@@ -1227,7 +1227,90 @@ async function fingerprints() {
   return s.done();
 }
 
+// --- "detailsAfter": documents from what the action gave (format description, section 27) ---
+
+async function detailsAfterScenarios() {
+  const fp = 'A'.repeat(43);
+  const event = await identifierFingerprint('evt-1');
+  const doc = (name, sha256 = event) => ({ name, sha256 });
+  const later = (o) => ({ detailsAfter: o });
+  const big = { name: '\u0001'.repeat(200), sha256: fp };
+  const cases = [];
+
+  const s = await setUp('detailsAfter: the platform\'s identifier from what the action gave, signed into the stub after the action');
+  s.open('a');
+  s.step(
+    act('a', order(10), later({ gives: [doc('provared.event-id')] }), { gives: { id: 'evt-1' } }),
+    act('a', { ...order(11), details: [doc('order.pdf', fp)] }, later({ gives: [doc('provared.event-id'), doc('provared.request-id', fp)] }), { gives: 'two more' }),
+    act('a', order(12), later({ gives: [] }), { gives: 'none' }),
+    act('a', order(13), later({ gives: null }), { gives: 'nothing' }),
+    act('a', order(14), later({ gives: [doc('provared.event-id'), doc('provared.event-id', fp)] }), { gives: 'the same name twice' }),
+    act('a', order(15), later({ gives: [doc('provared.error'), doc('provared.trace-id'), doc('provared.http-request'), doc('provared.http-response')] }), { gives: 'four' }),
+    act('a', order(16), later({ gives: [doc('provared.event-id')], clockAdd: 200 * 1000 }), { gives: 'slow' }),
+    act('a', order(17), { detailsAfter: { gives: [doc('provared.event-id')] }, countersign: SIGN }, { gives: 'countersigned' }),
+    act('a', order(18), later({ gives: [doc('provared.event-id')], meddle: true }), { gives: 'changed afterwards' }),
+    check('a'),
+    book('a'),
+  );
+  cases.push(s.done());
+
+  const f = await setUp('detailsAfter: when it fails, the stub is written without further documents, and the answer says why');
+  f.open('a', { countersignWithin: 50 });
+  f.step(
+    act('a', order(1), later({ throws: 'the platform gave no identifier' }), { gives: 1 }),
+    act('a', order(2), later({ gives: [doc('provared.event-id'), doc('a'), doc('b'), doc('c'), doc('d')] }), { gives: 2 }),
+    act('a', order(3), later({ gives: { name: 'provared.event-id', sha256: event } }), { gives: 3 }),
+    act('a', order(4), later({ gives: [doc('provared.invoice')] }), { gives: 4 }),
+    act('a', order(5), later({ gives: [doc('provared.event-id', 'short')] }), { gives: 5 }),
+    act('a', order(6), later({ gives: [{ name: 'provared.event-id' }] }), { gives: 6 }),
+    act('a', order(7), later({ gives: [doc('provared.event-id'), 'x'] }), { gives: 7 }),
+    act('a', order(8), later({ gives: 'provared.event-id' }), { gives: 8 }),
+    act('a', order(9), later({ never: true }), { gives: 9 }),
+    act('a', order(10), later({ inside: ['book', 'before', 'act', 'record'], gives: [doc('provared.event-id')] }), { gives: 10 }),
+    act('a', order(11), later({ gives: [doc('provared.event-id')] }), { throws: 'the action failed' }),
+    act('a', order(12), later({ gives: [doc('provared.arguments'), doc('provared.arguments', fp)] }), { gives: 12 }),
+    act('a', { ...order(13), details: [doc('provared.error')] }, later({ gives: [doc('provared.error', fp)] }), { gives: 13 }),
+    act('a', { ...order(14), details: [doc('provared.event-id')] }, later({ gives: [doc('provared.event-id', fp), doc('provared.trace-id'), doc('provared.trace-id', fp)] }), { gives: 14 }),
+    check('a'),
+  );
+  cases.push(f.done());
+
+  const n = await setUp('detailsAfter: refused before the action, which is then not taken', {
+    fields: { requires: [{ above: 50, action: ORDER, need: 'approval', unit: 'GBP' }] },
+  });
+  const approval = n.ref(null, await n.w.approve({ slip: n.w.slipFingerprint, ...order(60), when: n.start - MINUTE }));
+  const many = Array.from({ length: 29 }, (_, i) => doc(`d${i}`, fp));
+  n.open('a');
+  n.step(
+    act('a', order(1), later({ notFunction: 'provared.event-id' }), { gives: 1 }),
+    act('a', order(60), { approval, detailsAfter: { gives: [doc('provared.event-id')] } }, { gives: 60 }),
+    act('a', { ...order(2), details: many }, later({ gives: [] }), { gives: 2 }),
+    act('a', { ...order(3), details: many.slice(0, 28) }, later({ gives: [doc('provared.event-id')] }), { gives: 3 }),
+    act('a', order(1000), later({ gives: [doc('provared.event-id')] }), { gives: 1000 }),
+    act('a', order(4), { detailsAfter: null }, { gives: 4 }),
+    check('a'),
+  );
+  cases.push(n.done());
+
+  const l = await setUp('detailsAfter: the largest documents allowed still fit the line, with a countersignature');
+  l.open('a');
+  l.step(
+    act('a', { ...order(1), details: Array(28).fill(big) }, { detailsAfter: { gives: Array(4).fill(big) }, countersign: SIGN }, { gives: 'largest' }),
+    act('a', { ...order(2), details: Array(28).fill(big) }, later({ gives: Array(4).fill(big) }), { gives: 'largest, one-sided' }),
+    check('a'),
+  );
+  cases.push(l.done());
+  return cases;
+}
+
 export const CASES = {
+  'recorder-details-after': async () =>
+    finish(
+      'The stub writer\'s "detailsAfter" (openRecorder, "act"): further documents from what the action gave, signed into the stub after the action (format description, section 27). Scenarios played step by step, each with its transcript (test/helpers/scenarios.mjs).',
+      'recorderScenario',
+      await detailsAfterScenarios(),
+      ANSWER,
+    ),
   'recorder-scenarios': async () => {
     const cases = [];
     for (const make of [actions, chainCarriedOn, openings, helper, approvals, terms, countersignatures, countersignatureAsked, clocks, requests, inside, cancelled, keptAhead, shapes, notCancellations, otherSlips, alreadyInBook, farAndNear, stampLater, stampRoutes, clockFails, acknowledgementDates, openedAgain, strangerKeys, forgedAcknowledgements, helperAcknowledgements, crowding, emptyList, sizes, others, afterEveryCall]) {

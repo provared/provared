@@ -4,6 +4,7 @@
 
 import { checkSlip, assembleSlip, generateKeySet } from '../../src/index.js';
 import { coverMembers } from '../../src/cover.js';
+import { DOCUMENT_NAMES, httpRequestBase, httpRequestFingerprint, httpResponseBase, httpResponseFingerprint, identifierFingerprint } from '../../src/documents.js';
 import { countCharacters, fromBase64url, parseCanonical, parseTime, sha256, toBase64url, utf8 } from '../../src/encoding.js';
 import { encodeContent, parseRecord, protectedHeaders, signingInput } from '../../src/jws.js';
 import { PASSKEY_METHODS, checkKey, thumbprint } from '../../src/keys.js';
@@ -44,6 +45,21 @@ export const ANSWER = {
     answer(() => {
       validateStubContent(c.content);
       return true;
+    }),
+  documentFingerprint: (c) =>
+    answer(async () => {
+      if (c.kind === 'names') return DOCUMENT_NAMES;
+      if (c.kind === 'identifier') return { fingerprint: await identifierFingerprint(c.input) };
+      let r = c.input;
+      if (r !== null && typeof r === 'object' && !Array.isArray(r)) {
+        r = { ...r };
+        if (Object.hasOwn(r, 'bodyHex')) r.body = Uint8Array.from(Buffer.from(r.bodyHex, 'hex'));
+        if (Object.hasOwn(r, 'bodyText')) r.body = r.bodyText;
+        delete r.bodyHex;
+        delete r.bodyText;
+      }
+      if (c.kind === 'request') return { base: await httpRequestBase(r), fingerprint: await httpRequestFingerprint(r) };
+      return { base: await httpResponseBase(r), fingerprint: await httpResponseFingerprint(r) };
     }),
   validateCountersignatureContent: (c) =>
     answer(() => {
@@ -548,7 +564,90 @@ function stubContents() {
     ['a service with a capital', { ...base, with: 'Supplier' }],
     ['a time with an offset', { ...base, when: '2026-10-05T09:00:00+01:00' }],
     ['a list', [base]],
+    // The reserved document names (format description, section 27).
+    ...['provared.arguments', 'provared.http-request', 'provared.http-response', 'provared.trace-id', 'provared.request-id', 'provared.event-id', 'provared.error'].map((name) => [
+      `the reserved document name ${name}`,
+      { ...base, details: [{ name, sha256: fp }] },
+    ]),
+    ['a reserved document name not on the list', { ...base, details: [{ name: 'order.pdf', sha256: fp }, { name: 'provared.invoice', sha256: fp }] }],
+    ['the reserved prefix alone as a document name', { ...base, details: [{ name: 'provared.', sha256: fp }] }],
+    ['a reserved document name with a capital', { ...base, details: [{ name: 'provared.Event-id', sha256: fp }] }],
+    ['a reserved document name with a space after it', { ...base, details: [{ name: 'provared.event-id ', sha256: fp }] }],
+    ['a document name that begins with the prefix in capitals', { ...base, details: [{ name: 'Provared.invoice', sha256: fp }] }],
+    ['a document name that holds the prefix later', { ...base, details: [{ name: 'my provared.invoice', sha256: fp }] }],
+    ['a reserved document name twice', { ...base, details: [{ name: 'provared.event-id', sha256: fp }, { name: 'provared.event-id', sha256: id + 'AAAAAAAAAAAAAAAAAAAAA' }] }],
+    // Only the three identifiers may be named more than once.
+    ...['provared.trace-id', 'provared.request-id', 'provared.event-id'].map((name) => [`${name} three times`, { ...base, details: [{ name, sha256: fp }, { name, sha256: fp }, { name, sha256: fp }] }]),
+    ...['provared.arguments', 'provared.http-request', 'provared.http-response', 'provared.error'].map((name) => [
+      `${name} twice`,
+      { ...base, details: [{ name, sha256: fp }, { name: 'order.pdf', sha256: fp }, { name, sha256: fp }] },
+    ]),
+    ['every reserved name once, and the identifiers twice', { ...base, details: ['provared.arguments', 'provared.http-request', 'provared.http-response', 'provared.error', 'provared.trace-id', 'provared.request-id', 'provared.event-id', 'provared.trace-id', 'provared.request-id', 'provared.event-id'].map((name) => ({ name, sha256: fp })) }],
+    ['a label named twice', { ...base, details: [{ name: 'order.pdf', sha256: fp }, { name: 'order.pdf', sha256: fp }] }],
+    ['the old name "arguments" beside the reserved one', { ...base, details: [{ name: 'arguments', sha256: fp }, { name: 'provared.arguments', sha256: fp }] }],
+    ['an unknown reserved document name with a bad fingerprint', { ...base, details: [{ name: 'provared.x', sha256: 'short' }] }],
   ].map(([name, content]) => ({ name, content }));
+}
+
+// The reserved document names and the fingerprints they stand for (format
+// description, section 27). A body is written in hexadecimal ("bodyHex");
+// "names" asks for the list of reserved names and their words.
+function documentCases() {
+  const hello = Buffer.from('{"hello": "world"}').toString('hex');
+  const request = (name, r) => ({ name, kind: 'request', input: r });
+  const response = (name, r) => ({ name, kind: 'response', input: r });
+  const identifier = (name, id) => ({ name, kind: 'identifier', input: id });
+  return [
+    { name: 'the reserved document names and their words', kind: 'names' },
+    // The test request of RFC 9421, appendix B.2, with its body, whose Content-Digest RFC 9530 gives.
+    request('a POST with a body, as in RFC 9421, appendix B.2', { method: 'POST', url: 'https://example.com/foo?param=Value&Pet=dog', bodyHex: hello }),
+    request('a GET with no body', { method: 'GET', url: 'https://example.com/' }),
+    request('an empty body is a body', { method: 'POST', url: 'https://example.com/', bodyHex: '' }),
+    request('an address with a port', { method: 'GET', url: 'https://example.com:8443/a' }),
+    request('an address with its default port', { method: 'GET', url: 'https://example.com:443/a' }),
+    request('an address with a query', { method: 'GET', url: 'https://example.com/a?b=c&d=e' }),
+    request('an address with an empty query', { method: 'GET', url: 'https://example.com/a?' }),
+    request('an address with a space written as %20', { method: 'GET', url: 'https://example.com/a%20b' }),
+    request('the same address with %2f in place of %2F', { method: 'GET', url: 'https://example.com/a%2fb' }),
+    request('the same address with %2F', { method: 'GET', url: 'https://example.com/a%2Fb' }),
+    request('the host in capitals', { method: 'GET', url: 'https://EXAMPLE.com/a' }),
+    request('plain http', { method: 'GET', url: 'http://localhost:8080/x' }),
+    request('a method in small letters, kept as given', { method: 'get', url: 'https://example.com/' }),
+    request('a method of its own', { method: 'X-REPORT', url: 'https://example.com/' }),
+    request('an address with a fragment', { method: 'GET', url: 'https://example.com/a#b' }),
+    request('an address with a space', { method: 'GET', url: 'https://example.com/a b' }),
+    request('an address with a letter outside ASCII', { method: 'GET', url: 'https://example.com/café' }),
+    request('an address with a line feed', { method: 'GET', url: 'https://example.com/a\n' }),
+    request('a relative address', { method: 'GET', url: '/foo' }),
+    request('an address with the scheme in capitals', { method: 'GET', url: 'HTTPS://example.com/' }),
+    request('another scheme', { method: 'GET', url: 'ftp://example.com/' }),
+    request('an address that is not text', { method: 'GET', url: 5 }),
+    request('a method with a space', { method: 'GET X', url: 'https://example.com/' }),
+    request('an empty method', { method: '', url: 'https://example.com/' }),
+    request('no method', { url: 'https://example.com/' }),
+    request('a body that is text', { method: 'POST', url: 'https://example.com/', bodyText: 'hello' }),
+    request('a body of null is no body', { method: 'POST', url: 'https://example.com/', body: null }),
+    request('a body that is a number', { method: 'POST', url: 'https://example.com/', body: 5 }),
+    { name: 'a request that is not an object', kind: 'request', input: 'GET /' },
+    response('a 200 answer with a body', { status: 200, bodyHex: hello }),
+    response('a 204 answer with no body', { status: 204 }),
+    response('a 200 answer with an empty body', { status: 200, bodyHex: '' }),
+    response('the lowest status', { status: 100 }),
+    response('the highest status', { status: 599 }),
+    response('a status below 100', { status: 99 }),
+    response('a status above 599', { status: 600 }),
+    response('a status written as text', { status: '200' }),
+    response('a status with a fraction', { status: 200.5 }),
+    response('no status', {}),
+    response('a status of true', { status: true }),
+    response('a 404 answer whose body is null', { status: 404, body: null }),    identifier('a trace-id', '4bf92f3577b34da6a3ce929d0e0e4736'),
+    identifier('an identifier a platform gave', 'toolu_01AbCdEf'),
+    identifier('an error text with a line feed and a letter outside ASCII', 'Tool failed:\nfichier introuvable é \u{1F600}'),
+    identifier('one character', 'x'),
+    identifier('an empty identifier', ''),
+    identifier('a lone surrogate', 'a\ud800b'),
+    identifier('a number', 42),
+  ];
 }
 
 function countersignatureContents() {
@@ -622,6 +721,12 @@ export const CASES = {
   'ecdsa-der': () => set("Reading a passkey's ES256 signature from its DER form (format description, section 4.4).", 'ecdsaDerToRaw', derCases()),
   records: async () => set('Reading the envelope of a record as a given kind (format description, sections 3.1 to 3.5).', 'parseRecord', await recordCases()),
   'stub-contents': () => set("Confirming the members of a stub's content (format description, section 5.1).", 'validateStubContent', stubContents()),
+  'http-fingerprints': () =>
+    set(
+      'The reserved document names, and the texts their fingerprints are made from (format description, section 27): an HTTP request or answer written as the signature base of RFC 9421, section 2.5, and an identifier exactly as given. A body is written in hexadecimal.',
+      'documentFingerprint',
+      documentCases(),
+    ),
   'countersignature-contents': () => set("Confirming the members of a countersignature's content (format description, section 6).", 'validateCountersignatureContent', countersignatureContents()),
   origins: () => set('Whether a slip\'s "issuer.origin" is a page address as the format allows, on the website its "issuer.rpId" names (format description, section 4.1).', 'checkOrigin', originCases()),
   slips: async () => set('Checking one slip (format description, section 4.4), with what the checker is told to trust.', 'checkSlip', await slipCases()),
