@@ -24,7 +24,9 @@
 #            the receipt), record_tools (an agent's tools behind the stub
 #            writer), arguments_fingerprint, NotTaken
 # Keys:      generate_key_set, key_set_from_seeds, key_set_seeds, thumbprint,
-#            key_set_fingerprint
+#            key_set_fingerprint, signer_from_key and Signer (wherever
+#            "private_keys" is taken, each item may be a key or a signer, an
+#            object with "key" and "sign", for a key held elsewhere)
 # Names:     the shared list of actions, the kinds of action, the rules of conduct
 
 from .actions import ACTION_KINDS, CONDUCT_RULES, RESERVED_PREFIX, SHARED_ACTIONS, action_kind
@@ -37,10 +39,10 @@ from .guard import check_before
 from .headers import MIN_BLOCKS_AFTER, blocks_in_chain, check_header_chain
 from .keys import thumbprint
 from .pass_ import write_pass
-from .recorder import COUNTERSIGN_WITHIN_MS, Recorder, open_recorder
+from .recorder import COUNTERSIGN_WITHIN_MS, SIGN_WITHIN_MS, Recorder, open_recorder
 from .seal import key_set_fingerprint
 from .service import REFUSAL_REASONS, write_refusal, write_terms
-from .signatures import generate_key_set, key_set_from_seeds, key_set_seeds, method_available
+from .signatures import Signer, generate_key_set, key_set_from_seeds, key_set_seeds, method_available, signer_from_key
 from .slip import COVERABLE, assemble_slip, check_slip, prepare_slip
 from .standing import VOUCHED_KINDS, assemble_cancellation, prepare_cancellation, write_acknowledgement, write_vouching, write_withdrawal
 from .stub import countersign, write_stub
@@ -49,6 +51,7 @@ from .tools import NotTaken, arguments_fingerprint, record_function, record_tool
 __all__ = [
     'MIN_BLOCKS_AFTER', 'blocks_in_chain', 'check_header_chain',
     'COUNTERSIGN_WITHIN_MS', 'NotTaken', 'Recorder', 'arguments_fingerprint', 'key_set_from_seeds', 'key_set_seeds', 'open_recorder',
+    'SIGN_WITHIN_MS', 'Signer', 'signer_from_key',
     'record_function', 'record_tools',
     'ACTION_KINDS', 'CONDUCT_RULES', 'COVERABLE', 'LIMITS', 'REFUSAL_REASONS', 'RESERVED_PREFIX', 'SHARED_ACTIONS', 'VOUCHED_KINDS',
     'Refusal', 'action_kind', 'assemble_approval', 'assemble_cancellation', 'assemble_slip', 'block_fingerprint', 'block_stamp_item',

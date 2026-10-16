@@ -6,7 +6,7 @@ import { Refusal, fingerprint, formatTime, fromBase64url, randomId, toBase64url,
 import * as f from './fields.js';
 import { KINDS, encodeContent, protectedHeaders, signingInput, withinSize } from './jws.js';
 import { SEAL_METHODS, checkSealKeySet } from './keys.js';
-import { sign } from './signatures.js';
+import { signingKeys } from './signatures.js';
 import { MAX_STAMP_BYTES } from './timestamp.js';
 import { treeRoot } from './tree.js';
 
@@ -104,7 +104,7 @@ export async function keySetFingerprint(keys) {
  * @param {{keys: object[], name: string}} fields.by the recorder's public key set and its name (a label)
  * @param {string} [fields.previous] the fingerprint of the seal before this one in the book, if there is one
  * @param {number|Date} [fields.when] defaults to now
- * @param {any[]} privateKeys the recorder's private keys, in the order of the key set
+ * @param {any[]} privateKeys the recorder's private keys, or signers (signatures.js), in the order of the key set. A signer must hold the key "by" names in its place
  * @returns {Promise<{record: object, fingerprint: string, fingerprintBytes: Uint8Array}>}
  *   "fingerprintBytes" is what a time-stamp service is asked to stamp
  */
@@ -123,9 +123,10 @@ export async function writeSeal(book, fields, privateKeys) {
   validateSealContent(content);
   const { contentBytes, payloadB64 } = encodeContent(content);
   const headers = protectedHeaders('seal');
+  const signers = await signingKeys(privateKeys, SEAL_METHODS, content.by.keys);
   const signatures = [];
   for (let i = 0; i < SEAL_METHODS.length; i++) {
-    const signature = await sign(SEAL_METHODS[i], privateKeys[i], signingInput(headers[i], payloadB64));
+    const signature = await signers[i](signingInput(headers[i], payloadB64));
     signatures.push({ protected: headers[i], signature: toBase64url(signature) });
   }
   const name = await fingerprint(contentBytes);

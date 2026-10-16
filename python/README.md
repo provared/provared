@@ -181,6 +181,75 @@ are dicts and lists, with the same member names as in the format.
 `provared.check` holds the checker alone, for anyone who audits the
 checking.
 
+## Keys held elsewhere: signers
+
+The keys of an agent, a service or an organisation need not sit in the
+memory of the program that writes the records. Wherever a writer takes
+`private_keys` (`open_recorder`, `write_stub`, `countersign`,
+`write_refusal`, `write_terms`, `write_pass`, `write_acknowledgement`,
+`write_vouching` and `write_withdrawal`), each item may be a key of the
+package `cryptography`, as before, or a **signer**: any object with a
+`key` attribute, the public key as a dict in one of the shapes the format
+allows (format description, section 3.8), and a `sign(data)` method that
+gives the signature over exactly those bytes (`bytes`, `bytearray` or
+`memoryview`). `provared.Signer` describes it for type checkers. Keys and
+signers may be mixed. `signer_from_key(alg, private_key, key)` wraps a
+key held in memory as a signer.
+
+```python
+from provared import open_recorder, signer_from_key
+
+class HeldSigner:
+    """The agent's ML-DSA-87 key, held in a key service."""
+    key = agent_keys[1]                      # the public key, as the slip names it
+    def sign(self, data):
+        return key_service.sign('agent-ml-dsa-87', data)   # the bytes themselves, not a fingerprint of them
+
+writer = open_recorder(book_text, slip_fingerprint,
+                       [signer_from_key('Ed25519', ed25519_private_key, agent_keys[0]), HeldSigner()],
+                       issuer_keys=[passkey_thumbprint], sign_within=10000)
+```
+
+A record made through a signer is the same record as one made with the
+key: the same content, labels and Ed25519 signature (an ML-DSA-87
+signature is made afresh each time, either way). A signer is not taken
+on trust. Its two members are read once, and its key must be exactly a
+key of the method of its place, as plain data: a `dict` whose names and
+values are plain `str`, not a kind derived from them. A signer for
+SLH-DSA is refused before any signer is asked, as `cryptography` cannot
+check SLH-DSA, so no seal is written in Python, with keys or with
+signers. Where the writer knows the key the record must be signed with
+(the agent's keys, or a helper's, in the stub writer; the keys `by`
+names in `write_refusal`, `write_terms` and `write_vouching`), a signer
+for another key is refused (`bad-key`) before any signer is asked. The
+stub writer compares when it is opened, with the slip, or the pass it
+acts under, as its book holds it; opened with a pass that its book does
+not yet hold, it compares nothing then, and refuses each action
+(`pass-missing`). `write_stub`, `countersign`, `write_pass`,
+`write_acknowledgement` and `write_withdrawal`, used by themselves,
+cannot know the key: there a signer for another key gives a record that
+fails its own check, as a wrong key always did. Every signature is
+checked against the signer's key before it is used: one of the wrong
+length, one that does not check, something other than bytes, a
+coroutine, or an error raised leaves no record (`signature-invalid`),
+and the error names the place, the method and the key's thumbprint. In
+the stub writer a signer is asked in a thread of its own and given
+`sign_within` milliseconds (30,000 by default) for each signature; after
+that the action is not taken, nothing is written, and a late answer is
+not used. The other writers set no time of their own: give the signer's
+own connection a time limit. Where no record is made, signers earlier in
+the list may already have signed, and a signer that ran out of time may
+still sign later: a key service's own log may hold signatures that match
+no record. A private key of `cryptography` of another method than its
+place's, or anything else that is neither a key nor a signer, is refused
+(`bad-field`).
+
+The library cannot know how a key held elsewhere is kept, or whether
+the service keeps it safe; it checks only that each signature fits the
+key the signer names. A record does not say where a key was kept. Each
+signature costs one more check (under a thousandth of a second for
+Ed25519 and ML-DSA-87 on one computer).
+
 ## Tests
 
 From the `python` folder:

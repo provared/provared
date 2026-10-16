@@ -50,5 +50,5 @@ export function developmentSlip(fields: DevelopmentSlipFields): Promise<Developm
 /** The stub writer opened under a development slip, in one call. */
 export function developmentRecorder(
   fields: DevelopmentSlipFields,
-  more?: { options?: CheckOptions; now?: () => number; countersignWithin?: number },
+  more?: { options?: CheckOptions; now?: () => number; countersignWithin?: number; signWithin?: number },
 ): Promise<Omit<DevelopmentSlip, 'book'> & { recorder: Recorder }>;

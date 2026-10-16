@@ -17,6 +17,42 @@
   over five rounds (faults found in the first four, the fifth clean);
   each fault is a test, 68 in all. Not on the Python Package Index yet:
   the README gives the command to install it from this repository.
+- **Signers: keys held elsewhere, in both languages.** Wherever a writer
+  takes `privateKeys` (`private_keys` in Python), each item may be a key,
+  as before, or a signer: an object with `key`, the public key, and
+  `sign(data)`, which gives the signature bytes. So a key may live in a
+  key service or a hardware module. `signerFromKey` (`signer_from_key`)
+  wraps a key held in memory as a signer. A record made through a signer
+  is the same record: the same content, labels and Ed25519 signature. A
+  signer is not taken on trust: before any signer is asked to sign, its
+  key must be plain data, of the method of its place, of a method the
+  device can check, and, where the writer knows it, the key the record
+  must be signed with (`bad-key`); every signature it gives is checked
+  against its key before it is used, and one of the wrong length, one
+  that does not check, something other than bytes or an error leaves no
+  record (`signature-invalid`), with the method and the key named. The
+  stub writer gives a signer 30 seconds for each signature (`signWithin`,
+  `sign_within`); after that nothing is written and the writer goes on.
+  In Python no seal is written, with keys or signers, as before. Every
+  private key that made a correct record before still does, in the same
+  way: in JavaScript a private Web Crypto key of the place's method for
+  Ed25519 and ML-DSA-87, and for a seal's SLH-DSA-SHA2-256s a Node.js
+  KeyObject or what Node.js's own signing call read before (PEM text,
+  DER bytes with their format, a JSON Web Key with its format); in Python
+  a private key of `cryptography` of the place's method. Refused now
+  (`bad-field`), though accepted before: in JavaScript, a private key of
+  another kind in a seal's SLH-DSA place, and in Python a private key of
+  another method or kind (such as Ed448 in the Ed25519 place); each made
+  a record that failed its own check. In Python, an object with only
+  `sign` now needs `key` as well: it is a signer. Anything else that is
+  neither a key nor a signer (a public key, a key of another method in
+  JavaScript's first two places, a value that only looks like a key) is
+  refused with `bad-field`, where before it failed with the platform's
+  own error. No record and no rule of the format changes. An independent
+  review of the first version found faults; each is fixed and is now a
+  test.
+  Tests: `test/signers.test.mjs`, `test/signers-unavailable.test.mjs` and
+  `python/tests/test_signers.py`.
 
 ## 0.4.0 (14 October 2026)
 

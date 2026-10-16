@@ -6,7 +6,7 @@ from ._js import truthy
 from .encoding import fingerprint, format_time, now_ms, random_id, to_base64url
 from .jws import KINDS, encode_content, parse_record, protected_headers, signing_input, within_size
 from .keys import KEY_SET_METHODS
-from .signatures import sign
+from .signatures import signing_keys
 
 
 def validate_stub_content(c):
@@ -64,15 +64,19 @@ def validate_countersignature_content(c):
 # --- writing ---
 
 
-def sign_with_key_set(kind, content, private_keys):
+def sign_with_key_set(kind, content, private_keys, expected=None):
     """Sign content with a key set: two signatures side by side, Ed25519 then
     ML-DSA-87, each over its own signing input (format description, 3.9).
+    Each item of "private_keys" is a key or a signer (signatures.py);
+    "expected" is the key set the record must be signed with, where the
+    writer knows it, and a signer that holds another key is refused.
     Returns the record and its fingerprint."""
     content_bytes, payload_b64 = encode_content(content)
     headers = protected_headers(kind)
+    signers = signing_keys(private_keys, KEY_SET_METHODS, expected)
     signatures = []
     for i, alg in enumerate(KEY_SET_METHODS):
-        signature = sign(alg, private_keys[i], signing_input(headers[i], payload_b64))
+        signature = signers[i](signing_input(headers[i], payload_b64))
         signatures.append({'protected': headers[i], 'signature': to_base64url(signature)})
     return within_size({'payload': payload_b64, 'signatures': signatures}), fingerprint(content_bytes)
 
@@ -86,7 +90,7 @@ def write_stub(stub_fields, private_keys):
     "value"}), "with" (the id of the service, as the slip names it),
     "details" (fingerprints of documents, never the documents), "approval",
     "terms", "pass" and "when" (milliseconds since 1970; defaults to now).
-    private_keys: the agent's private keys, Ed25519 then ML-DSA-87.
+    private_keys: the agent's private keys, or signers (provared.signatures.Signer), Ed25519 then ML-DSA-87.
     Returns {"record", "fingerprint", "seq"}.
     """
     after = stub_fields.get('after')

@@ -91,7 +91,8 @@ def write_refusal(fields, private_keys):
     "action" (what the agent asked for), "reason" (one of REFUSAL_REASONS),
     and where they apply "amount" ({"unit", "value"}) and "when"
     (milliseconds since 1970; defaults to now).
-    private_keys: the service's private keys, Ed25519 then ML-DSA-87.
+    private_keys: the service's private keys, or signers (provared.signatures.Signer), Ed25519 then
+    ML-DSA-87. A signer must hold the keys "by" names.
     Returns {"record", "fingerprint"}.
     """
     given_id = fields.get('id')
@@ -108,7 +109,7 @@ def write_refusal(fields, private_keys):
     if _truthy(fields.get('amount')):
         content['amount'] = fields['amount']
     validate_refusal_content(content)
-    record, fp = sign_with_key_set('refusal', content, private_keys)
+    record, fp = sign_with_key_set('refusal', content, private_keys, content['by']['keys'])
     return {'record': record, 'fingerprint': fp}
 
 
@@ -119,7 +120,8 @@ def write_terms(fields, private_keys):
     {"keys", "name"}), "accepts" (the actions the service accepts from
     agents), "never" (kinds of action and rules of conduct the service asks
     agents to keep; defaults to none), "validFrom" and "validUntil".
-    private_keys: the service's private keys, Ed25519 then ML-DSA-87.
+    private_keys: the service's private keys, or signers (provared.signatures.Signer), Ed25519 then
+    ML-DSA-87. A signer must hold the keys "by" names.
     Returns {"record", "fingerprint"}.
     """
     given_id = fields.get('id')
@@ -134,5 +136,5 @@ def write_terms(fields, private_keys):
         'validUntil': fields.get('validUntil'),
     }
     validate_terms_content(content)
-    record, fp = sign_with_key_set('terms', content, private_keys)
+    record, fp = sign_with_key_set('terms', content, private_keys, content['by']['keys'])
     return {'record': record, 'fingerprint': fp}

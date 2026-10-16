@@ -122,7 +122,7 @@ export function assembleCancellation(prepared, assertion) {
  * @param {string} fields.cancellation the fingerprint of the cancellation
  * @param {string} [fields.pass] for a helper agent: the fingerprint of the pass it acts under
  * @param {number|Date} [fields.when] when the cancellation was handed over; defaults to now
- * @param {CryptoKey[]} privateKeys the agent's private keys: Ed25519, then ML-DSA-87
+ * @param {any[]} privateKeys the agent's private keys, or signers: Ed25519, then ML-DSA-87
  * @returns {Promise<{record: object, fingerprint: string}>}
  */
 export async function writeAcknowledgement(fields, privateKeys) {
@@ -148,7 +148,7 @@ export async function writeAcknowledgement(fields, privateKeys) {
  * @param {string} fields.validFrom
  * @param {string} fields.validUntil
  * @param {number|Date} [fields.when] defaults to now
- * @param {CryptoKey[]} privateKeys the organisation's private keys: Ed25519, then ML-DSA-87
+ * @param {any[]} privateKeys the organisation's private keys, or signers: Ed25519, then ML-DSA-87. A signer must hold the keys "by" names
  * @returns {Promise<{record: object, fingerprint: string}>}
  */
 export async function writeVouching(fields, privateKeys) {
@@ -162,7 +162,7 @@ export async function writeVouching(fields, privateKeys) {
     when: formatTime(fields.when ?? Date.now()),
   };
   validateVouchingContent(content);
-  return signWithKeySet('vouching', content, privateKeys);
+  return signWithKeySet('vouching', content, privateKeys, content.by.keys);
 }
 
 /**
@@ -171,7 +171,7 @@ export async function writeVouching(fields, privateKeys) {
  * @param {object} fields
  * @param {string} fields.vouching the fingerprint of the vouching record
  * @param {number|Date} [fields.when] defaults to now
- * @param {CryptoKey[]} privateKeys the private keys of the organisation that made the vouching record
+ * @param {any[]} privateKeys the private keys of the organisation that made the vouching record, or signers
  * @returns {Promise<{record: object, fingerprint: string}>}
  */
 export async function writeWithdrawal(fields, privateKeys) {

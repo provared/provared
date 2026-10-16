@@ -52,12 +52,16 @@ from . import _js
 from .book import _SNAKE, MAX_LINE_BYTES, answer_of, carry_on, check_countersignature, entry_line, fixed_options, fork_carried, latest_when, promote_carried, start_carried
 from .encoding import Refusal, canonical_json, fingerprint, from_base64url, nan_time, now_ms, problem_from, utf8
 from .guard import check_before_read
+from .keys import KEY_SET_METHODS
 from .seal import CLOCK_ALLOWANCE_MS, MAX_STAMPS
+from .signatures import answer_within, hold_signing_keys
 from .standing import write_acknowledgement
 from .stub import write_stub
 
 COUNTERSIGN_WITHIN_MS = 30000
 """How long the other side is given to hand back its countersignature, unless the caller says otherwise: 30 seconds."""
+SIGN_WITHIN_MS = 30000
+"""How long a signer is given for each signature, unless the caller says otherwise: 30 seconds."""
 
 # The longest wait a timer can hold in JavaScript, kept here so that both accept the same numbers.
 _MAX_WAIT_MS = 2**31 - 1
@@ -331,12 +335,14 @@ def _time_value(value):
 # --- the writer ---
 
 
-def open_recorder(book, slip, private_keys, issuer_keys, pass_=None, options=None, now=None, countersign_within=COUNTERSIGN_WITHIN_MS):
+def open_recorder(book, slip, private_keys, issuer_keys, pass_=None, options=None, now=None, countersign_within=COUNTERSIGN_WITHIN_MS, sign_within=SIGN_WITHIN_MS):
     """Open the stub writer for one agent under one slip.
 
     book: the book so far, as text: at least the slip.
     slip: the fingerprint of the slip.
-    private_keys: the agent's private keys, Ed25519 then ML-DSA-87.
+    private_keys: the agent's private keys, or signers
+    (provared.signatures.Signer), Ed25519 then ML-DSA-87. A signer must
+    hold the keys that the slip, or the pass, names for the agent.
     issuer_keys: the thumbprints of the passkeys this agent's software
     trusts; a slip from any other key allows nothing.
     pass_: for a helper agent, the fingerprint of the pass it acts under.
@@ -349,17 +355,23 @@ def open_recorder(book, slip, private_keys, issuer_keys, pass_=None, options=Non
     nothing is written that is dated more than 300 seconds ahead of it.
     countersign_within: how long the other side is given to countersign,
     in milliseconds; 30,000 by default.
+    sign_within: how long a signer is given for each signature, in
+    milliseconds; 30,000 by default. It is asked in a thread of its own;
+    after that the action is not taken, nothing is written, and a late
+    answer is not used.
 
     Returns the writer (a Recorder). Raises a Refusal, "record-not-sound",
-    if the book so far has a problem."""
-    return Recorder(book, slip, private_keys, issuer_keys, pass_, options, now, countersign_within)
+    if the book so far has a problem; "bad-field" or "bad-key" if an item of
+    private_keys is neither a key nor a signer, or is a signer that holds
+    another key than the slip, or the pass, names."""
+    return Recorder(book, slip, private_keys, issuer_keys, pass_, options, now, countersign_within, sign_within)
 
 
 class Recorder:
     """The stub writer for one agent under one slip: before, record, act,
     book, check, cancellations, add. Made by open_recorder."""
 
-    def __init__(self, book, slip, private_keys, issuer_keys, pass_=None, options=None, now=None, countersign_within=COUNTERSIGN_WITHIN_MS):
+    def __init__(self, book, slip, private_keys, issuer_keys, pass_=None, options=None, now=None, countersign_within=COUNTERSIGN_WITHIN_MS, sign_within=SIGN_WITHIN_MS):
         if now is None:
             now = now_ms
         if not callable(now):
@@ -377,6 +389,9 @@ class Recorder:
         if not (_js.finite(countersign_within) and 1 <= countersign_within <= _MAX_WAIT_MS):
             raise Refusal('bad-field', 'countersignWithin: must be a number of milliseconds from 1 to 2,147,483,647.')
         self._within = countersign_within
+        if not (_js.finite(sign_within) and 1 <= sign_within <= _MAX_WAIT_MS):
+            raise Refusal('bad-field', 'signWithin: must be a number of milliseconds from 1 to 2,147,483,647.')
+        self._sign_within = sign_within
         self._slip = slip
         self._pass = pass_
         self._private_keys = private_keys
@@ -489,6 +504,17 @@ class Recorder:
         # The services the slip names, to check a countersignature before it goes into the book.
         slip_entry = next((e for e in result['entries'] if e['kind'] == 'slip' and e['fingerprint'] == slip), None)
         self._services = slip_entry['content']['with'] if slip_entry and slip_entry.get('content') else []
+        # The agent's keys, or signers (signatures.py). A signer is read once,
+        # here, and must hold the keys that the slip, or the pass this writer
+        # acts under, names for its agent. Each of its signatures is asked
+        # for in a thread of its own (_ask_signer). Keys are used as they
+        # always were.
+        if pass_ is not None:
+            pass_entry = next((e for e in result['entries'] if e['kind'] == 'pass' and e['fingerprint'] == pass_), None)
+            own_keys = ((pass_entry or {}).get('content') or {}).get('to', {}).get('keys')
+        else:
+            own_keys = ((slip_entry or {}).get('content') or {}).get('agent', {}).get('keys')
+        self._private_keys = hold_signing_keys(private_keys, KEY_SET_METHODS, own_keys, self._ask_signer)
 
     # --- what the writer holds beside its book ---
     #
@@ -613,6 +639,20 @@ class Recorder:
             return answer.result(timeout=self._within / 1000)
         except concurrent.futures.TimeoutError:
             raise RuntimeError('no answer in time') from None
+        finally:
+            mark.running = False
+
+    # A signer is asked in a thread of its own, under the same mark as an
+    # action, so that a signer that calls the writer is refused at once,
+    # and given "sign_within" milliseconds for each signature. After that
+    # nothing is written, the mark no longer holds, and whatever it gives
+    # later is not used.
+    def _ask_signer(self, sign_, data):
+        mark = _Mark(self)
+        context = contextvars.copy_context()
+        context.run(_INSIDE.set, mark)
+        try:
+            return answer_within(sign_, data, self._sign_within, context)
         finally:
             mark.running = False
 

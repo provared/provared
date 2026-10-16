@@ -575,6 +575,107 @@ names no agent software, and works with any function.
   signatures were not checked, and does not show a pass. Node.js checks
   all of them.
 
+### Keys held elsewhere: signers
+
+The keys of an agent, a service, an organisation or a recorder need not
+sit in the memory of the program that writes the records. Wherever a
+writer takes `privateKeys` (`openRecorder`, `writeStub`, `countersign`,
+`writeRefusal`, `writeTerms`, `writePass`, `writeAcknowledgement`,
+`writeVouching`, `writeWithdrawal` and `writeSeal`), each item may be a
+key, as before, or a **signer**: an object with two members.
+
+- `key`: the public key, as a JSON Web Key in one of the shapes the
+  format allows (format description, section 3.8).
+- `sign(data)`: a promise of the signature over exactly those bytes, as a
+  `Uint8Array` or an `ArrayBuffer`.
+
+A signer lets a key live in a key service or a hardware module. Keys and
+signers may be mixed: an agent may keep its ML-DSA-87 key in a key
+service and its Ed25519 key elsewhere. `signerFromKey(alg, privateKey,
+key)` wraps a key held in memory as a signer, so that both take one path.
+
+```js
+import { openRecorder, signerFromKey } from 'provared';
+
+// "keyService.sign" stands for the service's own call. It must sign the
+// bytes themselves, not a fingerprint of them.
+const held = {
+  key: agentKeys[1],                       // the agent's ML-DSA-87 public key, as the slip names it
+  sign: (data) => keyService.sign('agent-ml-dsa-87', data),
+};
+const recorder = await openRecorder({
+  book, slip, issuerKeys,
+  privateKeys: [signerFromKey('Ed25519', ed25519PrivateKey, agentKeys[0]), held],
+  signWithin: 10000,                       // milliseconds for each signature; 30,000 by default
+});
+```
+
+A record made through a signer is the same record as one made with the
+key itself: the same content, the same labels and the same Ed25519
+signature. ML-DSA-87 and SLH-DSA signatures are made afresh each time,
+with a key or through a signer, so those differ between any two
+signings, as they always did.
+
+A signer is not taken on trust:
+
+- Its two members are read once. Its key must be exactly a key of the
+  method of its place in the list, as plain data.
+- A signer for a method this device does not have built in is refused
+  before any signer is asked to sign, since its signatures could not be
+  checked here.
+- Where the writer knows the key the record must be signed with, the
+  signer's key must be that key: the agent's keys as the slip names them,
+  or a helper's as its pass names them, in the stub writer; the keys
+  `by` names in `writeSeal`, `writeRefusal`, `writeTerms` and
+  `writeVouching`. A signer for another key is refused (`bad-key`)
+  before any signer is asked to sign. This catches the most likely
+  fault of a key held elsewhere: a mistyped key name in its settings.
+  The stub writer compares when it is opened, with the slip, or the
+  pass it acts under, as its book holds it. Opened with a pass that its
+  book does not yet hold, it compares nothing then, and refuses each
+  action (`pass-missing`), as it always did.
+- `writeStub`, `countersign`, `writePass`, `writeAcknowledgement` and
+  `writeWithdrawal`, used by themselves, cannot know which key the
+  record must be signed with. There a signer for another key gives a
+  record that fails its own check, as a wrong key in memory always did.
+- Every signature it gives is checked against its key before it is
+  used. A signature of the wrong length, one that does not check
+  (another key used, or other bytes signed, such as a fingerprint of
+  them), something other than bytes, or a `sign` that throws: no record
+  is made (`signature-invalid`), nothing is written to a book, and the
+  error names the place in the list, the method and the key's
+  thumbprint.
+- In the stub writer, a signer is given `signWithin` milliseconds for
+  each signature (30,000 by default). After that the action is not
+  taken, nothing is written, the writer goes on to its next call, and a
+  late answer is not used. A signer that calls the writer is refused at
+  once, as an action that does so is. The other writers set no time of
+  their own: a signer that never answers leaves the call waiting, so give
+  the signer's own connection a time limit.
+
+Where no record is made, signers earlier in the list may already have
+signed, and a signer that ran out of time may still sign later. So a key
+service's own log may hold signatures that match no record.
+
+A key given as before is used exactly as before: a private Web Crypto
+`CryptoKey` of the method of its place and, in a seal's SLH-DSA place, a
+private Node.js `KeyObject`, or what Node.js reads as one (PEM text, DER
+bytes with their format, or a JSON Web Key with its format). Anything
+else that is not a signer (a public key, a key of another method or
+kind, a value that only looks like a key) is refused (`bad-field`).
+
+What a signer does not change:
+
+- **The library cannot know how a key held elsewhere is kept**, who else
+  can ask for signatures with it, or whether the service keeps it safe.
+  It checks only that each signature fits the key the signer names.
+- **A record does not say where a key was kept.** A record signed
+  through a key service reads the same as one signed with a key in
+  memory, and a key set split between two places reads as one agent.
+- **Each signature costs one more check.** Measured on one computer on
+  15 October 2026: about 0.3 thousandths of a second for Ed25519, 0.6
+  for ML-DSA-87 and 2 for SLH-DSA-SHA2-256s.
+
 ## Using the library
 
 ```js

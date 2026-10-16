@@ -46,7 +46,7 @@ export function validatePassContent(c) {
  * @param {string} fields.validFrom
  * @param {string} fields.validUntil
  * @param {number|Date} [fields.when] defaults to now
- * @param {CryptoKey[]} privateKeys the private keys of the agent that passes on: Ed25519, then ML-DSA-87
+ * @param {any[]} privateKeys the private keys of the agent that passes on, or signers: Ed25519, then ML-DSA-87
  * @returns {Promise<{record: object, fingerprint: string}>}
  */
 export async function writePass(fields, privateKeys) {

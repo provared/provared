@@ -110,7 +110,7 @@ export async function developmentSlip(fields = {}) {
  * The stub writer, opened under a development slip, in one call: the
  * shortest way to a first record. The same as developmentSlip followed by
  * openRecorder; "more" is passed to openRecorder (options, now,
- * countersignWithin).
+ * countersignWithin, signWithin).
  *
  * @param {object} fields the members of the slip; "actions" is required
  * @param {object} [more]

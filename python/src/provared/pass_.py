@@ -61,8 +61,8 @@ def write_pass(fields, private_keys):
     than the signer may); "limits" (limits for the helper, in the form a slip
     uses; defaults to none); "validFrom", "validUntil" and "when"
     (milliseconds since 1970; defaults to now).
-    private_keys: the private keys of the agent that passes on, Ed25519 then
-    ML-DSA-87.
+    private_keys: the private keys of the agent that passes on, or signers (provared.signatures.Signer),
+    Ed25519 then ML-DSA-87.
     Returns {"record", "fingerprint"}.
     """
     given_id = fields.get('id')

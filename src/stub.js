@@ -5,7 +5,7 @@ import { fingerprint, formatTime, randomId, toBase64url } from './encoding.js';
 import * as f from './fields.js';
 import { encodeContent, parseRecord, protectedHeaders, signingInput, withinSize, KINDS } from './jws.js';
 import { KEY_SET_METHODS } from './keys.js';
-import { sign } from './signatures.js';
+import { signingKeys } from './signatures.js';
 
 /**
  * Confirm every member of a stub's content (format description, section 5.1).
@@ -71,12 +71,16 @@ export function validateCountersignatureContent(c) {
 
 // Sign content with a key set: two signatures side by side, Ed25519 then
 // ML-DSA-87, each over its own signing input (format description, 3.9).
-export async function signWithKeySet(kind, content, privateKeys) {
+// Each item of "privateKeys" is a key or a signer (signatures.js);
+// "expected" is the key set the record must be signed with, where the
+// writer knows it, and a signer that holds another key is refused.
+export async function signWithKeySet(kind, content, privateKeys, expected) {
   const { contentBytes, payloadB64 } = encodeContent(content);
   const headers = protectedHeaders(kind);
+  const signers = await signingKeys(privateKeys, KEY_SET_METHODS, expected);
   const signatures = [];
   for (let i = 0; i < KEY_SET_METHODS.length; i++) {
-    const signature = await sign(KEY_SET_METHODS[i], privateKeys[i], signingInput(headers[i], payloadB64));
+    const signature = await signers[i](signingInput(headers[i], payloadB64));
     signatures.push({ protected: headers[i], signature: toBase64url(signature) });
   }
   return { record: withinSize({ payload: payloadB64, signatures }), fingerprint: await fingerprint(contentBytes) };
@@ -96,7 +100,7 @@ export async function signWithKeySet(kind, content, privateKeys) {
  * @param {string} [fields.terms] the fingerprint of the service's terms for agents that the agent relied on
  * @param {string} [fields.pass] for a helper agent: the fingerprint of the pass it acts under; "after" is then the stub before it under that pass
  * @param {number|Date} [fields.when] defaults to now
- * @param {CryptoKey[]} privateKeys the agent's private keys: Ed25519, then ML-DSA-87
+ * @param {any[]} privateKeys the agent's private keys, or signers (signatures.js): Ed25519, then ML-DSA-87
  * @returns {Promise<{record: object, fingerprint: string, seq: number}>}
  */
 export async function writeStub(fields, privateKeys) {
@@ -128,7 +132,7 @@ export async function writeStub(fields, privateKeys) {
  * reads the stub's fingerprint; it does not judge the stub.
  *
  * @param {object} stubRecord the stub as the agent sent it
- * @param {CryptoKey[]} privateKeys the service's private keys: Ed25519, then ML-DSA-87
+ * @param {any[]} privateKeys the service's private keys, or signers: Ed25519, then ML-DSA-87
  * @param {number|Date} [when] defaults to now
  * @returns {Promise<object>} the countersignature record
  */

@@ -34,12 +34,16 @@
 import { MAX_LINE_BYTES, answerOf, carryOn, checkCountersignature, entryLine, fixedOptions, forkCarried, latestWhen, promoteCarried, startCarried } from './book.js';
 import { Refusal, canonicalJson, fingerprint, fromBase64url, parseTime, problemFrom, utf8 } from './encoding.js';
 import { checkBeforeRead } from './guard.js';
+import { KEY_SET_METHODS } from './keys.js';
 import { CLOCK_ALLOWANCE_MS, MAX_STAMPS } from './seal.js';
+import { holdSigningKeys } from './signatures.js';
 import { writeAcknowledgement } from './standing.js';
 import { writeStub } from './stub.js';
 
 /** How long the other side is given to hand back its countersignature, unless the caller says otherwise: 30 seconds. */
 export const COUNTERSIGN_WITHIN_MS = 30000;
+/** How long a signer is given for each signature, unless the caller says otherwise: 30 seconds. */
+export const SIGN_WITHIN_MS = 30000;
 // The longest wait a timer can hold.
 const MAX_WAIT_MS = 2 ** 31 - 1;
 // The most cancellations a check may be handed beside a book (book.js).
@@ -204,17 +208,20 @@ function plainHeld(copy) {
  * @param {object} o
  * @param {string} o.book the book so far: at least the slip
  * @param {string} o.slip the fingerprint of the slip
- * @param {CryptoKey[]} o.privateKeys the agent's private keys: Ed25519, then ML-DSA-87
+ * @param {any[]} o.privateKeys the agent's private keys, or signers (signatures.js): Ed25519, then ML-DSA-87
  * @param {string[]} o.issuerKeys the thumbprints of the passkeys this agent's software trusts; a slip from any other key allows nothing
  * @param {string} [o.pass] for a helper agent: the fingerprint of the pass it acts under
  * @param {object} [o.options] further options for the checker (sealKeys, stampServices, blocks, vouchers, cancellations).
  *   They are read once, as a whole check reads them, and fixed
  * @param {() => number} [o.now] the clock, in milliseconds; defaults to the device's. "act" takes an action at the clock's time, and nothing is written that is dated more than 300 seconds ahead of it
  * @param {number} [o.countersignWithin] how long the other side is given to countersign, in milliseconds; defaults to 30,000
+ * @param {number} [o.signWithin] how long a signer is given for each signature, in milliseconds; defaults to 30,000.
+ *   After that the action is not taken and nothing is written; a late answer is not used
  * @returns {Promise<object>} the writer: before, record, act, book, check, cancellations, add
- * @throws {Refusal} "record-not-sound" if the book so far has a problem
+ * @throws {Refusal} "record-not-sound" if the book so far has a problem; "bad-field" or "bad-key" if an item of
+ *   privateKeys is neither a key nor a signer, or is a signer that holds another key than the slip, or the pass, names
  */
-export async function openRecorder({ book, slip, privateKeys, issuerKeys, pass, options = {}, now = Date.now, countersignWithin = COUNTERSIGN_WITHIN_MS }) {
+export async function openRecorder({ book, slip, privateKeys, issuerKeys, pass, options = {}, now = Date.now, countersignWithin = COUNTERSIGN_WITHIN_MS, signWithin = SIGN_WITHIN_MS }) {
   if (typeof now !== 'function') throw new Refusal('bad-field', 'now: must be a function that gives the time in milliseconds.');
   // A clock that gives anything but a time is a clock that failed: no comparison with it would hold.
   const device = now;
@@ -225,6 +232,9 @@ export async function openRecorder({ book, slip, privateKeys, issuerKeys, pass, 
   };
   if (!(Number.isFinite(countersignWithin) && countersignWithin >= 1 && countersignWithin <= MAX_WAIT_MS)) {
     throw new Refusal('bad-field', 'countersignWithin: must be a number of milliseconds from 1 to 2,147,483,647.');
+  }
+  if (!(Number.isFinite(signWithin) && signWithin >= 1 && signWithin <= MAX_WAIT_MS)) {
+    throw new Refusal('bad-field', 'signWithin: must be a number of milliseconds from 1 to 2,147,483,647.');
   }
   // Whom the writer trusts is fixed when it is opened: read once, as a whole
   // check reads it, and copied. The passkeys it trusts are its own
@@ -403,6 +413,17 @@ export async function openRecorder({ book, slip, privateKeys, issuerKeys, pass, 
     }
   };
 
+  // The agent's keys, or signers (signatures.js). A signer is read once,
+  // here, and must hold the keys that the slip, or the pass this writer
+  // acts under, names for its agent. Each of its signatures is waited for
+  // "signWithin" at most, under the same mark as an action, so that a
+  // signer that calls the writer is refused at once; after that nothing is
+  // written, and a late answer is not used. Keys of the platform are used
+  // as they always were.
+  const passEntry = pass ? result.entries.find((e) => e.kind === 'pass' && e.fingerprint === pass) : undefined;
+  const ownKeys = pass ? passEntry?.content?.to?.keys : slipEntry?.content?.agent?.keys;
+  const signing = await holdSigningKeys(privateKeys, KEY_SET_METHODS, ownKeys, signWithin, runInside);
+
   // What a call hands in, copied at the moment of the call.
   const asked = (request, more) => {
     if (request === null || typeof request !== 'object') throw new Refusal('bad-field', 'The request must be an object.');
@@ -491,7 +512,7 @@ export async function openRecorder({ book, slip, privateKeys, issuerKeys, pass, 
         pass,
         when,
       },
-      privateKeys,
+      signing,
     );
     const entry = { stub: stub.record };
     if (call.hasApproval) entry.approval = call.approval;
@@ -644,7 +665,7 @@ export async function openRecorder({ book, slip, privateKeys, issuerKeys, pass, 
       }
       let made;
       try {
-        made = (await writeAcknowledgement({ slip, cancellation, pass, when }, privateKeys)).record;
+        made = (await writeAcknowledgement({ slip, cancellation, pass, when }, signing)).record;
       } catch {
         return undefined;
       }

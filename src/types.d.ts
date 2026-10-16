@@ -50,6 +50,21 @@ export type KeySet = [Ed25519Key, MlDsaKey];
 export type SealKeySet = [Ed25519Key, MlDsaKey, SlhDsaKey];
 export type PublicKey = PasskeyKey | MlDsaKey | SlhDsaKey;
 
+/**
+ * A signer: a key held elsewhere (a key service, a hardware module) that signs on request. Wherever
+ * "privateKeys" is taken, each item may be a key or a signer. A signer's key must be of the method of
+ * its place, and, where the writer knows the key the record must be signed with, that key. Every
+ * signature it gives is checked against its key before it is used.
+ */
+export interface Signer {
+  /** The public key, in one of the shapes of the format description, section 3.8. */
+  key: Ed25519Key | MlDsaKey | SlhDsaKey;
+  /** The signature over exactly these bytes: 64 bytes for Ed25519, 4,627 for ML-DSA-87, 29,792 for SLH-DSA-SHA2-256s. */
+  sign(data: Uint8Array): Promise<Uint8Array | ArrayBuffer>;
+}
+/** A private key of the platform (a Web Crypto CryptoKey), or a signer. */
+export type SigningKey = CryptoKey | Signer;
+
 // --- what records hold ---
 
 export interface Amount {
@@ -481,7 +496,8 @@ export type WrittenStub = Written & { seq: number; line: string; countersignatur
 export function openRecorder(o: {
   book: string;
   slip: Fingerprint;
-  privateKeys: CryptoKey[];
+  /** The agent's private keys, or signers: Ed25519, then ML-DSA-87. A signer must hold the keys the slip, or the pass, names. */
+  privateKeys: SigningKey[];
   issuerKeys: string[];
   pass?: Fingerprint;
   options?: CheckOptions;
@@ -489,6 +505,8 @@ export function openRecorder(o: {
   now?: () => number;
   /** How long the other side is given to countersign, in milliseconds. Defaults to 30,000. */
   countersignWithin?: number;
+  /** How long a signer is given for each signature, in milliseconds. Defaults to 30,000. After that nothing is written. */
+  signWithin?: number;
 }): Promise<Recorder>;
 
 /** One of an agent's tools, as it is described to recordTools. */
@@ -564,21 +582,21 @@ export function writeStub(
     when?: number | Date;
     id?: Base64url;
   },
-  privateKeys: CryptoKey[],
+  privateKeys: SigningKey[],
 ): Promise<Written & { seq: number }>;
 /** An agent hands part of its permission to a helper agent. */
 export function writePass(
   fields: { slip: Fingerprint; from?: Fingerprint; to: Party; actions: string[]; limits?: Limit[]; validFrom: Time; validUntil: Time; when?: number | Date; id?: Base64url },
-  privateKeys: CryptoKey[],
+  privateKeys: SigningKey[],
 ): Promise<Written>;
-export function countersign(stub: SignedRecord, privateKeys: CryptoKey[], when?: number | Date): Promise<SignedRecord>;
+export function countersign(stub: SignedRecord, privateKeys: SigningKey[], when?: number | Date): Promise<SignedRecord>;
 export function writeRefusal(
   fields: { slip: Fingerprint; by: Party; action: string; amount?: Amount; reason: string; when?: number | Date; id?: Base64url },
-  privateKeys: CryptoKey[],
+  privateKeys: SigningKey[],
 ): Promise<Written>;
 export function writeTerms(
   fields: { by: Party; accepts: string[]; never?: string[]; validFrom: Time; validUntil: Time; id?: Base64url },
-  privateKeys: CryptoKey[],
+  privateKeys: SigningKey[],
 ): Promise<Written>;
 export type VouchedFor =
   | { kind: 'person'; key: PasskeyKey; name: string }
@@ -586,15 +604,19 @@ export type VouchedFor =
   | { kind: 'recorder'; keys: SealKeySet; name: string };
 export function writeVouching(
   fields: { by: Party; for: VouchedFor; validFrom: Time; validUntil: Time; when?: number | Date; id?: Base64url },
-  privateKeys: CryptoKey[],
+  privateKeys: SigningKey[],
 ): Promise<Written>;
-export function writeWithdrawal(fields: { vouching: Fingerprint; when?: number | Date; id?: Base64url }, privateKeys: CryptoKey[]): Promise<Written>;
+export function writeWithdrawal(fields: { vouching: Fingerprint; when?: number | Date; id?: Base64url }, privateKeys: SigningKey[]): Promise<Written>;
 /** The agent's side states that it was handed the person's cancellation of a slip, and when. */
 export function writeAcknowledgement(
   fields: { slip: Fingerprint; cancellation: Fingerprint; pass?: Fingerprint; when?: number | Date; id?: Base64url },
-  privateKeys: CryptoKey[],
+  privateKeys: SigningKey[],
 ): Promise<Written>;
-/** It needs Node.js: no browser has the seal's third signing method. */
+/**
+ * It needs Node.js: no browser has the seal's third signing method. "privateKeys": the recorder's three keys (two
+ * Web Crypto keys, and a Node.js KeyObject or what Node.js reads as one: PEM text, DER bytes with their format, or a
+ * JSON Web Key with its format), or signers, each holding the key "by" names in its place.
+ */
 export function writeSeal(
   book: string,
   fields: { by: { keys: SealKeySet; name: string }; previous?: Fingerprint; when?: number | Date; id?: Base64url },
@@ -612,6 +634,8 @@ export function makeShow(text: string, indexes: number[], options?: { seal?: num
 
 export function generateKeySet(): Promise<{ keys: KeySet; privateKeys: CryptoKey[] }>;
 export function generateSealKeySet(): Promise<{ keys: SealKeySet; privateKeys: unknown[] }>;
+/** A private key held in memory, wrapped as a signer: a CryptoKey, or for SLH-DSA-SHA2-256s a Node.js KeyObject. */
+export function signerFromKey(alg: 'Ed25519' | 'ML-DSA-87' | 'SLH-DSA-SHA2-256s', privateKey: unknown, key: Ed25519Key | MlDsaKey | SlhDsaKey): Signer;
 export function fingerprint(contentBytes: Uint8Array): Promise<Fingerprint>;
 export function sha256(bytes: Uint8Array): Promise<Uint8Array>;
 export function formatTime(when: number | Date): Time;

@@ -9,7 +9,7 @@ from . import fields as f
 from .encoding import Refusal, fingerprint, format_time, from_base64url, now_ms, random_id, to_base64url, utf8
 from .jws import KINDS, encode_content, protected_headers, signing_input, within_size
 from .keys import SEAL_METHODS, check_seal_key_set
-from .signatures import SLH, method_available, sign
+from .signatures import SLH, method_available, signing_keys
 from .timestamp import MAX_STAMP_BYTES
 from .tree import tree_root
 
@@ -98,7 +98,8 @@ def write_seal(book, seal_fields, private_keys):
     seal_fields: "by" (the recorder's public key set and its name, a label),
     "previous" (the fingerprint of the seal before this one in the book, if
     there is one), "when" (milliseconds since 1970; defaults to now).
-    private_keys: the recorder's private keys, in the order of the key set.
+    private_keys: the recorder's private keys, or signers (provared.signatures.Signer), in the order of
+    the key set; a signer must hold the key "by" names in its place.
 
     A seal's third signature, SLH-DSA-SHA2-256s (FIPS 205), is not yet in
     "cryptography", so on this device the seal is checked and then refused
@@ -125,9 +126,10 @@ def write_seal(book, seal_fields, private_keys):
         raise RuntimeError('SLH-DSA is not built into this device.')
     content_bytes, payload_b64 = encode_content(content)
     headers = protected_headers('seal')
+    signers = signing_keys(private_keys, SEAL_METHODS, content['by']['keys'])
     signatures = []
     for i, alg in enumerate(SEAL_METHODS):
-        signature = sign(alg, private_keys[i], signing_input(headers[i], payload_b64))
+        signature = signers[i](signing_input(headers[i], payload_b64))
         signatures.append({'protected': headers[i], 'signature': to_base64url(signature)})
     name = fingerprint(content_bytes)
     return {'record': within_size({'payload': payload_b64, 'signatures': signatures}), 'fingerprint': name, 'fingerprintBytes': from_base64url(name)}

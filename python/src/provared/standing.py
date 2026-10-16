@@ -130,7 +130,7 @@ def write_acknowledgement(fields, private_keys):
     "pass" (the fingerprint of the pass it acts under), and "when" (when the
     cancellation was handed over, in milliseconds since 1970; defaults to
     now).
-    private_keys: the agent's private keys, Ed25519 then ML-DSA-87.
+    private_keys: the agent's private keys, or signers (provared.signatures.Signer), Ed25519 then ML-DSA-87.
     Returns {"record", "fingerprint"}.
     """
     given_id = fields.get('id')
@@ -157,7 +157,8 @@ def write_vouching(fields, private_keys):
     {"keys", "name"}), "for" (whom it vouches for: {"kind", "name"} with
     "key" for a person, or "keys" otherwise), "validFrom", "validUntil" and
     "when" (milliseconds since 1970; defaults to now).
-    private_keys: the organisation's private keys, Ed25519 then ML-DSA-87.
+    private_keys: the organisation's private keys, or signers (provared.signatures.Signer), Ed25519
+    then ML-DSA-87. A signer must hold the keys "by" names.
     Returns {"record", "fingerprint"}.
     """
     given_id = fields.get('id')
@@ -172,7 +173,7 @@ def write_vouching(fields, private_keys):
         'when': format_time(now_ms() if when is None else when),
     }
     validate_vouching_content(content)
-    record, fp = sign_with_key_set('vouching', content, private_keys)
+    record, fp = sign_with_key_set('vouching', content, private_keys, content['by']['keys'])
     return {'record': record, 'fingerprint': fp}
 
 
@@ -182,7 +183,7 @@ def write_withdrawal(fields, private_keys):
     fields: "vouching" (the fingerprint of the vouching record) and "when"
     (milliseconds since 1970; defaults to now).
     private_keys: the private keys of the organisation that made the
-    vouching record.
+    vouching record, or signers (provared.signatures.Signer).
     Returns {"record", "fingerprint"}.
     """
     given_id = fields.get('id')

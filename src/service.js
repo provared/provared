@@ -79,7 +79,7 @@ export function validateTermsContent(c) {
  * @param {{unit: string, value: number}} [fields.amount]
  * @param {string} fields.reason one of REFUSAL_REASONS
  * @param {number|Date} [fields.when] defaults to now
- * @param {CryptoKey[]} privateKeys the service's private keys: Ed25519, then ML-DSA-87
+ * @param {any[]} privateKeys the service's private keys, or signers: Ed25519, then ML-DSA-87. A signer must hold the keys "by" names
  * @returns {Promise<{record: object, fingerprint: string}>}
  */
 export async function writeRefusal(fields, privateKeys) {
@@ -94,7 +94,7 @@ export async function writeRefusal(fields, privateKeys) {
   };
   if (fields.amount) content.amount = fields.amount;
   validateRefusalContent(content);
-  return signWithKeySet('refusal', content, privateKeys);
+  return signWithKeySet('refusal', content, privateKeys, content.by.keys);
 }
 
 /**
@@ -106,7 +106,7 @@ export async function writeRefusal(fields, privateKeys) {
  * @param {string[]} [fields.never] kinds of action and rules of conduct the service asks agents to keep
  * @param {string} fields.validFrom
  * @param {string} fields.validUntil
- * @param {CryptoKey[]} privateKeys the service's private keys: Ed25519, then ML-DSA-87
+ * @param {any[]} privateKeys the service's private keys, or signers: Ed25519, then ML-DSA-87. A signer must hold the keys "by" names
  * @returns {Promise<{record: object, fingerprint: string}>}
  */
 export async function writeTerms(fields, privateKeys) {
@@ -120,5 +120,5 @@ export async function writeTerms(fields, privateKeys) {
     validUntil: fields.validUntil,
   };
   validateTermsContent(content);
-  return signWithKeySet('terms', content, privateKeys);
+  return signWithKeySet('terms', content, privateKeys, content.by.keys);
 }

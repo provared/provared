@@ -16,7 +16,10 @@
 //            writeVouching, writeWithdrawal (an organisation vouches for a name),
 //            writePass (an agent hands part of its permission to a helper agent),
 //            writeBook, makeShow
-// Keys:      generateKeySet, generateSealKeySet, thumbprint, keySetFingerprint
+// Keys:      generateKeySet, generateSealKeySet, thumbprint, keySetFingerprint,
+//            signerFromKey (a key in memory as a signer: wherever "privateKeys"
+//            is taken, each item may be a key or a signer, an object with
+//            "key" and "sign", for a key held elsewhere)
 // Names:     the shared list of actions, the kinds of action, the rules of conduct
 
 export * from './check.js';
@@ -32,6 +35,6 @@ export { writeSeal } from './seal.js';
 export { blockStampItem } from './blockstamp.js';
 export { prepareCancellation, assembleCancellation, writeAcknowledgement, writeVouching, writeWithdrawal, VOUCHED_KINDS } from './standing.js';
 export { entryLine, writeBook, makeShow } from './book.js';
-export { generateKeySet, generateSealKeySet } from './signatures.js';
+export { generateKeySet, generateSealKeySet, signerFromKey } from './signatures.js';
 export { ACTION_KINDS, SHARED_ACTIONS, CONDUCT_RULES, RESERVED_PREFIX, actionKind } from './actions.js';
 export { fingerprint, formatTime, randomId, toBase64url, fromBase64url, utf8, sha256 } from './encoding.js';
