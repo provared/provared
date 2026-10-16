@@ -1,0 +1,38 @@
+name: provared
+version: 0.1.0
+description: "Checks each tool call against a permission a person signed with a passkey, runs only what it allows, and keeps a signed receipt of every call in a book anyone can check. Evidence, not a verdict. Runs only in Hermes's own process (plugins.isolation: in_process)."
+author: Pavel Izmaylov
+license: Apache-2.0
+homepage: https://prova.red
+tags: [permissions, audit-trail, evidence, passkey, receipts]
+# Tested with Hermes 0.21.7. No requires_hermes, not even a lower limit:
+# Hermes skips a plugin whose requires_hermes rejects the running version, and
+# the tools would then run unchecked. On any Hermes that is not 0.21.7 or a
+# later 0.21 version, older or newer, the plugin loads and refuses every
+# recorded tool call, unless the setting untested_hermes is "run".
+provides_tools: []
+provides_hooks:
+  - post_tool_call
+  - transform_tool_result
+# Read by "hermes plugins validate"; Hermes's loader does not list this field
+# among those it knows, and says so only at its debug level for a manifest
+# without "manifest_version".
+provides_middleware:
+  - tool_execution
+config_schema:
+  folder:
+    type: str
+    default: ""
+    description: "The folder of the agent's keys, the signed permission and the book. Empty: Hermes's data folder for this plugin, which follows the active profile."
+  actions:
+    type: dict
+    default: {}
+    description: "Your own action names for some tools, by tool name (for example: send_message: provared.message.send). They cannot stop a tool from being recorded."
+  unknown_chain:
+    type: str
+    default: "refuse"
+    description: "Where Provared cannot read Hermes's chain of tool_execution middleware, and so cannot tell whether another plugin's middleware comes after it: \"refuse\" (no recorded tool call is run) or \"run\"."
+  untested_hermes:
+    type: str
+    default: "refuse"
+    description: "Where the Hermes that is running is not 0.21.7 or a later 0.21 version, the versions Provared is made for: \"refuse\" (no recorded tool call is run) or \"run\"."

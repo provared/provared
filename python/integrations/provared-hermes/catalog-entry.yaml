@@ -1,0 +1,34 @@
+# A draft of the entry for Hermes Agent's plugin catalogue
+# (plugin-catalog/provared.yaml in NousResearch/hermes-agent). Nothing has
+# been submitted. Before a submission, by the repository's owner:
+#   - "sha" becomes the full 40-character commit of provared/provared that
+#     holds this folder as it is to be listed, and "docs_url" names it too;
+#   - provared 0.4.0 is on the Python Package Index, so that Hermes can
+#     install what pyproject.toml names;
+#   - "hermes plugins validate <this folder> --install-deps" passes, as the
+#     catalogue's own check runs it.
+# The submission is a pull request to that repository, with the disclosure
+# below in its description.
+name: provared
+repo: https://github.com/provared/provared
+sha: 0000000000000000000000000000000000000000
+subdir: python/integrations/provared-hermes
+description: "Checks each tool call against a permission a person signed with a passkey (actions, limits, an end date), runs only the calls it allows, and keeps a signed receipt of every call in a book that anyone can check with Provared's free checker. Needs plugins.isolation: in_process (the default): in the plugin host it runs no recorded tool call. Made for Hermes 0.21.7 and later 0.21 versions: on an older or a later Hermes it runs no recorded tool call until its setting untested_hermes is \"run\". Disclosure — a tool_execution middleware that refuses calls outside the permission; keeps the agent's two private signing keys, the list of the person's passkeys, the permission, any signed cancellation and the book (the tool's name and a fingerprint of its arguments, never the arguments) in plugin-data/provared; reads Hermes's post_tool_call and transform_tool_result reports and changes no result; no network access, no telemetry; adds the command hermes provared (init, use, cancel, status)."
+maintainer: provared
+tier: community
+category: tools
+# Tested with Hermes 0.21.7. No requires_hermes, as in plugin.yaml (the
+# catalogue does not require one): on an older or a later Hermes the plugin
+# loads and refuses every recorded tool call until the person says otherwise
+# (its setting untested_hermes), rather than being skipped.
+docs_url: https://github.com/provared/provared/tree/0000000000000000000000000000000000000000/python/integrations/provared-hermes
+version: "0.1.0"
+platforms: []
+capabilities:
+  provides_tools: []
+  provides_hooks:
+    - post_tool_call
+    - transform_tool_result
+  provides_middleware:
+    - tool_execution
+  requires_env: []

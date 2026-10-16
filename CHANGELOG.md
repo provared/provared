@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- **`provared-hermes` 0.1.0, a plugin for Hermes Agent**
+  (`python/integrations/provared-hermes/`): every tool call of a Hermes
+  agent is checked against the slip before it runs, and a stub is
+  written once it has run; a call the slip does not allow is not run,
+  and the model is told why. It runs no recorded call on a Hermes it was
+  not tested with (0.21.7 and later 0.21 versions) unless told to, and
+  it loads on any Hermes so that its own check can refuse. Its commands
+  are named by the same reading of the command text as the recorder
+  beside Claude Code (below), with shared test rows that both languages
+  answer alike. Checked by independent reviewers over eight rounds, the
+  last six with the shared reading of commands, the last three clean;
+  71 tests. Not on the Python Package Index yet: the README gives the
+  command to install it from this repository.
+
 ## 0.5.0 (17 October 2026)
 
 - **The README's count of review rounds: 50.** The 40 recorded by
