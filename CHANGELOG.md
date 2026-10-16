@@ -1,7 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 (17 October 2026)
 
+- **The README's count of review rounds: 50.** The 40 recorded by
+  version 0.4.0, and 10 since: five of the Agno package, three of the
+  signer interface and two of the stub bound to the platform's own
+  record, each listed below.
 - **`provared-agno` 0.1.0, an Agno tool hook**
   (`python/integrations/provared-agno/`): every tool call of an Agno
   agent is checked against the slip before it runs, and a stub is
@@ -48,9 +52,10 @@
   neither a key nor a signer (a public key, a key of another method in
   JavaScript's first two places, a value that only looks like a key) is
   refused with `bad-field`, where before it failed with the platform's
-  own error. No record and no rule of the format changes. An independent
-  review of the first version found faults; each is fixed and is now a
-  test.
+  own error. No record and no rule of the format changes. `signWithin`
+  must be 1 to 2,147,483,647 milliseconds (`bad-field`). Checked by an
+  independent reviewer over three rounds, the third clean; each fault is
+  fixed and is now a test.
   Tests: `test/signers.test.mjs`, `test/signers-unavailable.test.mjs` and
   `python/tests/test_signers.py`.
 - **A stub bound to the platform's own record of the call, in both
@@ -86,10 +91,14 @@
   the stub is written without them and `detailsAfter` in the answer says
   why: an action that was taken always gets its stub (where the second
   signing fails, it says so: `details-not-added`). It cannot be used
-  with an approval. `recordTools` and `record_function` still name the
+  with an approval. With it, the request may name at most 28 documents
+  (`bad-field`), and an action whose stub would leave no room for four
+  more is not taken (`too-large`); `detailsAfter` is given as long as the
+  other side is given to countersign. `recordTools` and `record_function` still name the
   arguments `arguments` by default. Shared test files: `stub-contents.json`
   gains cases (made again; its earlier cases are unchanged), and
   `http-fingerprints.json` and `recorder-details-after.json` are new.
+  Checked by an independent reviewer in two rounds, the second clean.
   Tests: `test/documents.test.mjs` and `python/tests/test_documents.py`.
 
 ## 0.4.0 (14 October 2026)
