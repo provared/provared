@@ -96,6 +96,102 @@ passkey yourself, add `--new-passkey`; whoever checks the book must then
 name both passkeys. This raises the bar; it does not close the gap: see
 "What the record shows, and what it does not".
 
+## A new book at 90,000 entries
+
+A book may hold at most 100,000 entries, and once it is full every tool
+call would be refused. So when the book reaches 90,000 entries, the
+recorder seals it, keeps it beside the new one as `book-1.jsonl` (then
+`book-2.jsonl`, and so on, in the order kept, after the highest number
+in the folder; the highest a kept book may have is 999,999,999, and where
+the folder holds a book at that number, no new book is started and
+`status` says why), and starts a new
+`book.jsonl` that begins with the permission in force. It does the same
+at 100 MB of text (100,000,000 bytes), whichever comes first: with
+receipts of about 7 KB each, 90,000 of them would be about 630 MB, longer
+than Node.js can hold as one text, and 100 MB stays under the size GitHub
+takes as one file. While a new book cannot be started, the book in force
+goes on growing past 100 MB and costs more with each receipt: on the
+author's computer, at about 256 MB, about 120 thousandths of a second for
+each receipt, about 1.5 GB of memory and over a minute to start, with
+every call refused meanwhile; near 76,000 entries it no longer fits in
+Node.js, and every call is refused. So check `status` when a new book is
+due. To start a new book yourself, at any time:
+
+```
+provared-claude-code new-book
+```
+
+It works whether the recorder is running or not. Recording does not
+stop: a call asked during the switch waits its turn, and a call allowed
+under the old book and finished after the switch is recorded in the old
+book, which is then sealed again after it (if the recorder stops before
+that, the kept book is sealed when it next starts). A call whose receipt
+never comes keeps the old book open for 15 minutes at most; a receipt
+that comes later goes into the book in force, under the permission it
+was allowed under where that book holds it, or else under the
+permission in force. Each book checks on its own, with the same passkeys
+and recorder named:
+
+```
+provared-claude-code check book-1.jsonl --issuer <your passkey's thumbprint>
+```
+
+The switch is three steps on disk, each whole: the seal is added to
+`book.jsonl`; `book.jsonl` is renamed `book-<n>.jsonl`; a new
+`book.jsonl` is written. If the recorder stops between the first two,
+the book is as it was, with a seal (run `new-book` again; a book that
+was full is switched at the next start); between the last two, there is
+no `book.jsonl`, and the next start begins one with the permission in
+`slip.json`, which completes the switch, even where that permission has
+ended since (the recorder then starts, refuses every call, and `status`
+and `seal` work). A switch took 1.9 seconds on a
+book of 3,000 receipts (21 MB), measured on the author's computer, most
+of it the seal's quantum-safe signature, and takes longer on a full
+book; calls asked meanwhile wait, and one that waits longer than the
+hook does (25 seconds) is refused, never let through unrecorded. Where the rename cannot be made
+(on Windows, the file held open by a program that does not allow it, for
+longer than the recorder waits), the recorder goes on with the book in
+force, tries again a minute later, and `status` says why
+(`newBookProblem`). Another program that follows `book.jsonl` (an
+uploader) sees the file start again after a switch.
+
+**The recorder enforces every limit across its books.** A new book
+starts no limit again. The recorder keeps, for each permission, the time
+and amount of every receipt in its kept books (those figures only, not
+the books' text, read again from the kept files when it starts), and its
+check before acting counts them, with the book in force and the calls
+allowed and not yet recorded, for every limit of that permission: totals,
+counts, and either within a period. So one release a day stays one
+release a day, however many new books are started, by command or by
+themselves, and across a restart. A new permission (a renewal) starts its
+own counts, as it always has. The figures are read from the kept files as
+they stand: a kept book changed by hand is not checked when the recorder
+starts (a checker shows it). A kept book moved, renamed or removed while
+the recorder is stopped is not counted at all, and nothing in the record
+shows it (the record page points out a gap in the numbers of the kept
+books, but not a missing last one); this is the same as moving
+`book.jsonl` itself, which anyone who can write the folder could always
+do.
+
+Starting the recorder reads the book in force in full. With a book near
+100 MB in force, that took about 25 seconds on the author's computer;
+the recorder answers no call until it has read the book, so tool calls
+asked meanwhile are refused, never let through unrecorded. A renewal of
+a book near that size costs about the same: calls asked meanwhile wait,
+and one that waits longer than the hook does (25 seconds) is refused.
+
+**A checker given one book counts within that book only.** It has no
+other book to count with. So around a switch the record shown to a
+checker can hold, across two books, up to twice a limit within one
+period, though the recorder held the agent to the limit; and a total for
+the whole permission is split between the books. To see the whole, check
+every book, and add up the receipts of the last of one book and the
+first of the next.
+
+Any program that can reach the recorder's port on this computer can
+start a new book, as it can ask for a seal; since a new book starts no
+limit again, this gains it nothing but another file.
+
 ## The commands
 
 | Command | What it does |
@@ -105,9 +201,10 @@ name both passkeys. This raises the bar; it does not close the gap: see
 | `renew <file>` | Take a new signed permission into the book, while the recorder runs or not; `--new-passkey` where you signed it with a passkey of yours that signed none before |
 | `start` | Run the recorder in this terminal, and see what it says |
 | `ensure` | Start the recorder in the background if it is not running (the hooks run this when a session starts) |
-| `status` | What the recorder holds: the permission, until when, the number of entries |
+| `status` | What the recorder holds: the permission, until when, the number of entries, the calls allowed and not yet recorded (`callsNotYetRecorded`), the books kept (`keptBooks`) and when a new one is started (`newBookAt`) |
 | `seal` | Seal the book now, with the recorder's three keys |
-| `check` | The checker's answer for the book. Name your passkey with `--issuer <its thumbprint>`, once for each passkey of yours; without it, `check` lists the passkeys the book's permissions name, as read from the book, and the checker takes none of them as one you trust |
+| `new-book` | Seal the book, keep it as `book-<n>.jsonl`, and start a new one that begins with the permission in force (done by itself at 90,000 entries, or at 100 MB of text) |
+| `check [file]` | The checker's answer for the book, or, given a name such as `book-1.jsonl`, for a book kept before it. Name your passkey with `--issuer <its thumbprint>`, once for each passkey of yours; without it, `check` lists the passkeys the book's permissions name, as read from the book, and the checker takes none of them as one you trust |
 | `stop` | Stop the recorder |
 | `keys` | Make the keys, and print the agent's public keys |
 
@@ -310,8 +407,9 @@ The recorder keeps everything in one folder, `~/.provared/claude-code`
 (in your home folder) unless you name another: the agent's private keys
 (`agent-keys.jwk`), the recorder's private keys (`recorder-keys.jwk`),
 the permission it acts under (`slip.json`) and those before it, the list
-of passkeys whose permissions it takes (`trusted-passkeys.json`), and
-the book (`book.jsonl`). Never share the files that end in `.jwk`.
+of passkeys whose permissions it takes (`trusted-passkeys.json`), the
+book (`book.jsonl`), and the books kept before it (`book-1.jsonl` and
+so on). Never share the files that end in `.jwk`.
 After each receipt the new lines are added to the end of the book: the
 cost does not grow with the book, where the file is as the recorder left
 it; where someone else changed it, the recorder compares the whole file
@@ -330,7 +428,8 @@ along with everything else. To keep the record on another disk:
   (or a path on your other disk) to your shell's start-up file.
 - Keep copies of the book somewhere else as well, on another disk or
   another computer. A book only grows, so a copy is a plain copy of
-  `book.jsonl`, with the `slip*.json` files beside it.
+  `book.jsonl`, with the `slip*.json` files and the kept `book-*.jsonl`
+  beside it.
 - A seal shows only that the book was whole when it was sealed, by the
   recorder's own word, with keys kept in the same folder. It helps
   against a book cut short or rewritten only once its fingerprint is
@@ -371,10 +470,33 @@ along with everything else. To keep the record on another disk:
   same.
 - Calls asked at the same moment (Claude Code can run several tools side
   by side, and helper agents run in parallel) are each checked against
-  the book as it stands, before any of them is recorded. Near a limit
-  they can together go over it: with room for two runs, five asked at
-  once are all allowed, and the book then shows the last three as
-  outside the permission.
+  the book as it stands, and against the calls already allowed and not
+  yet recorded: where the permission limits how many of an action may be
+  taken, a call is allowed only while the receipts of that action in the
+  period, the calls of that action allowed and not yet recorded, and
+  this one fit. With room for two runs, of five asked at once two are
+  allowed and three refused. A call allowed and not yet recorded counts
+  for 15 minutes at most, so that one refused at the person's prompt
+  after the hook allowed it, which never comes back for its receipt,
+  does not hold the count for ever; a call that runs longer than that
+  (a long command, a helper agent) stops counting after it, and calls
+  asked then can together go over a limit, as the book then shows. The
+  calls allowed and not yet recorded are held in the recorder's memory
+  only: a restart of the recorder forgets them, so calls asked just
+  after a restart can, with those still running, go over a limit, as
+  the book then shows. Only calls that Claude Code names (`tool_use_id`)
+  are counted, and only limits on how many may be taken, not limits on
+  an amount (the hook gives no amount). A call is still recorded under
+  the permission it was allowed under however long it ran, within one
+  book (see "A new book at 90,000 entries" for a call that outlasts a
+  switch).
+- The recorder enforces every limit across its books, but a checker
+  given one book counts within that book only (see "A new book at 90,000
+  entries"): around a new book, the record a checker is shown can hold up
+  to twice a limit within one period across two books, though the agent
+  was held to the limit. A kept book moved, renamed or removed while the
+  recorder is stopped is not counted, and nothing in the record shows it,
+  as with `book.jsonl` itself.
 - Every stub is one-sided: there is no other party to countersign a tool
   call. The checker says so.
 - The naming of a command (a deletion, a release, a run) is this hook's

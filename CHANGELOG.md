@@ -106,6 +106,27 @@
   file can keep the service waiting about 40 seconds, during which calls
   are refused, never let through. Checked by an independent reviewer
   over six rounds, the last three clean; 60 tests.
+- **The recorder beside Claude Code starts a new book at 90,000 entries
+  or 100 MB** (`integrations/claude-code/`, not published). A book holds
+  at most 100,000 entries, and once full every call would be refused. At
+  90,000 entries or 100,000,000 bytes of text, whichever comes first, or
+  on the command `new-book`, the recorder seals the book, keeps it beside
+  the new one as `book-1.jsonl`, then `book-2.jsonl` and so on, and
+  starts a new `book.jsonl` that begins with the permission in force,
+  with no gap in recording; a call that ends during the switch is written
+  into the kept book, which is then sealed again. Every limit is counted
+  across the books, from the kept books' receipts and the calls still
+  running, so a new book, by command, by size or after a restart, starts
+  no limit afresh. A checker given one book still counts limits within
+  that book only, so around a switch the record shown to a checker can
+  hold up to twice a limit within one period across two books, though the
+  agent was held to it. The README states what this does not close: a
+  kept book moved, renamed or removed while the recorder is stopped is
+  no longer counted, and nothing in the record shows it. The record page
+  (`tools/make-record-page.mjs`) lists each kept book with its own
+  checker's answer, and points out a gap in their numbers; the site's
+  publishing run fetches them from the release "record". Checked by an
+  independent reviewer over four rounds; 93 tests.
 
 ## 0.5.0 (17 October 2026)
 

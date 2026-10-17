@@ -174,18 +174,23 @@ test('a call allowed under one permission and taken while a renewal switched to 
   }
 });
 
-test('calls asked at the same moment are each checked against the book as it stands: near a count limit they can together go over, and the book shows it', async () => {
+test('calls asked at the same moment count against a limit while they are allowed and not yet recorded: near a count limit no more are allowed than fit', async () => {
+  // Before the change of F-112's round, all five were allowed (none was recorded yet), and the book showed three outside the permission.
   const { folder, passkey } = await world([{ action: 'provared.code.run', count: 2 }]);
   const service = await startService({ folder, port: 0 });
   try {
     const asked = await Promise.all([1, 2, 3, 4, 5].map((i) => runHook(service.port, 'PreToolUse', 'Bash', { command: `npm run t${i}` }, { more: { tool_use_id: `t${i}` } })));
-    assert.equal(asked.filter((r) => r.out === '').length, 5, 'all five allowed: none was recorded yet');
-    for (let i = 1; i <= 5; i++) await runHook(service.port, 'PostToolUse', 'Bash', { command: `npm run t${i}` }, { more: { tool_use_id: `t${i}` } });
+    const allowed = asked.flatMap((r, i) => (r.out === '' ? [i + 1] : []));
+    assert.equal(allowed.length, 2, 'two allowed: the limit has room for two');
+    for (const r of asked.filter((x) => x.out !== '')) {
+      assert.equal(r.decision.permissionDecision, 'deny');
+      assert.match(r.decision.permissionDecisionReason, /\[over-count-limit\] 2 calls of this action \(provared\.code\.run\) allowed and not yet recorded would use the rest of what the permission allows \(2 in all\)/);
+    }
+    for (const i of allowed) await runHook(service.port, 'PostToolUse', 'Bash', { command: `npm run t${i}` }, { more: { tool_use_id: `t${i}` } });
     const result = await book(folder, [await thumbprint(passkey.key)]);
     assert.equal(result.summary.intact, true);
-    assert.equal(result.summary.withinSlips, false);
-    const over = result.entries.filter((e) => (e.breaches ?? []).some((b) => b.code === 'over-count-limit'));
-    assert.equal(over.length, 3, 'the third, fourth and fifth are shown outside the permission');
+    assert.equal(result.summary.withinSlips, true, 'nothing outside the permission');
+    assert.equal(result.summary.counts.stubs, 2);
   } finally {
     await service.close();
   }

@@ -17,7 +17,9 @@
 //   provared-claude-code ensure        start the service in the background if it is not running
 //   provared-claude-code status        what the service holds
 //   provared-claude-code seal          seal the book now, with the recorder's three keys
-//   provared-claude-code check         the checker's answer for the book
+//   provared-claude-code new-book      seal the book, keep it, and start a new one that begins with the
+//                                      permission in force (done by itself at 90,000 entries or 100 MB)
+//   provared-claude-code check [file]  the checker's answer for the book, or for a book kept before it
 //   provared-claude-code stop          stop the service
 //   provared-claude-code keys          make the keys, and print the agent's public keys
 //
@@ -32,6 +34,7 @@
 //   trusted-passkeys.json    the thumbprints of the passkeys whose slips the recorder takes:
 //                            written at the first "use", changed only by "renew --new-passkey"
 //   book.jsonl               the book: the slips, a stub for each tool call, and seals
+//   book-<n>.jsonl           each book kept before it, sealed, numbered from 1 in the order kept
 //
 // It listens on 127.0.0.1 only. Any program on this computer could ask it
 // to write a stub, or to take a new slip, and could change the files in its
@@ -41,7 +44,7 @@
 
 import { spawn, spawnSync } from 'node:child_process';
 import nodeCrypto from 'node:crypto';
-import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, realpathSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, realpathSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { homedir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
@@ -73,6 +76,78 @@ const files = (folder) => ({
 });
 const keptSlip = (folder, slipFingerprint) => join(folder, `slip-${slipFingerprint}.json`);
 const THUMBPRINT = /^[A-Za-z0-9_-]{43}$/;
+
+// --- new books ---
+//
+// The format allows at most 100,000 entries in a book, and the check
+// before acting refuses every call once a book is full. So at 90,000
+// entries the recorder seals the book, keeps it as book-<n>.jsonl, and
+// starts a new book.jsonl that begins with the permission in force. A
+// book of 90,000 receipts (about 7 KB each, for the quantum-safe
+// signature) would be longer than Node.js can hold as one text (about
+// 537 million characters), so a new book is started at 100 MB of text
+// (100,000,000 bytes) too, whichever comes first: under the 100 MB that
+// GitHub takes as one file, and a fifth of what Node.js can hold.
+//
+// Every limit of a permission is enforced across the books: the recorder
+// keeps, for each permission, the time and amount of every receipt in its
+// kept books (the figures only, not their text), and the check before
+// acting counts them with the book in force and the calls not yet
+// recorded. A checker given one book still counts within that book only.
+export const NEW_BOOK_ENTRIES = 90000;
+export const NEW_BOOK_BYTES = 100000000;
+// A call allowed and not yet recorded counts against the permission's
+// limits on how many of its action may be taken, for 15 minutes at most:
+// a call refused at the person's prompt after it was allowed never comes
+// back for its stub, and must not hold the count for ever.
+export const IN_FLIGHT_MS = 15 * 60 * 1000;
+// A kept book is book-<n>.jsonl, <n> a whole number from 1 to 999,999,999 written with no leading
+// zero. The record page (tools/make-record-page.mjs) reads kept books by the same rule, and the
+// recorder keeps no book under a name this rule would not read: where the next number would pass
+// the highest, it starts no new book and says why.
+export const KEPT_BOOK = /^book-([1-9][0-9]{0,8})\.jsonl$/;
+export const KEPT_BOOK_HIGHEST = 999999999;
+
+const STUB_AT = '{"stub":{"payload":"';
+/**
+ * Read the whole lines of a book's text from "at" on: count them, and their
+ * bytes, into "counts", and put the time and amount of each stub into
+ * "times", by its slip and action. Gives back where it stopped.
+ */
+function readFigures(text, at, times, counts) {
+  for (let end = text.indexOf('\n', at); end >= 0; end = text.indexOf('\n', at)) {
+    counts.entries++;
+    counts.bytes += Buffer.byteLength(text.slice(at, end + 1));
+    // A stub of this recorder: its line starts with the stub, whose payload comes first.
+    if (text.startsWith(STUB_AT, at)) {
+      const from = at + STUB_AT.length;
+      const to = text.indexOf('"', from);
+      try {
+        const c = JSON.parse(new TextDecoder().decode(fromBase64url(text.slice(from, to))));
+        const when = Date.parse(c.when);
+        if (typeof c.slip === 'string' && typeof c.action === 'string' && Number.isFinite(when)) {
+          const key = `${c.slip}\n${c.action}`;
+          if (!times.has(key)) times.set(key, []);
+          times.get(key).push({ when, unit: c.amount?.unit, value: c.amount?.value });
+        }
+      } catch {
+        // Not a stub that can be read: the checker reports it.
+      }
+    }
+    at = end + 1;
+  }
+  return at;
+}
+
+/** The books kept in the folder, oldest first: {number, file, path}. */
+export function keptBooks(folder) {
+  let names = [];
+  try { names = readdirSync(folder); } catch { /* no folder yet */ }
+  return names.flatMap((file) => {
+    const m = KEPT_BOOK.exec(file);
+    return m ? [{ number: Number(m[1]), file, path: join(folder, file) }] : [];
+  }).sort((a, b) => a.number - b.number);
+}
 
 // --- keys kept between runs, as JSON Web Keys in a file the person keeps ---
 
@@ -162,9 +237,9 @@ export function replaceFile(path, text, { write = writeFileSync, rename = rename
 // A book only grows, so the new lines are appended to the file: that
 // works while another program (an uploader, a virus scanner) is reading
 // it. Where the file does not match the book's start (it was edited by
-// hand), the whole file is replaced.
-export function saveBook(folder, text) {
-  const path = files(folder).book;
+// hand), the whole file is replaced. "path" names a book kept before
+// (book-<n>.jsonl), which a call allowed under it may still add to.
+export function saveBook(folder, text, path = files(folder).book) {
   let existing = '';
   try { existing = readFileSync(path, 'utf8'); } catch { /* no book yet */ }
   if (existing.length > 0 && text.startsWith(existing)) {
@@ -183,10 +258,12 @@ export function saveBook(folder, text) {
  * Otherwise, the first time, or where someone else changed the file, or
  * the book is not the one last saved (a renewal that failed), it is
  * compared whole, as saveBook does.
+ * @param {string} folder
+ * @param {{path?: string, saved?: string}} [o] path: another book file (a kept book); saved: the
+ *   text known to be in the file already, so that the first save need not read it
  * @returns {(text: string) => void}
  */
-export function bookSaver(folder) {
-  const path = files(folder).book;
+export function bookSaver(folder, { path = files(folder).book, saved } = {}) {
   /** @type {{chars: number, bytes: number, tail: Buffer, tailText: string}|null} */
   let left = null;
   const TAIL = 4096;
@@ -211,6 +288,7 @@ export function bookSaver(folder) {
       return false;
     }
   };
+  if (typeof saved === 'string') remember(saved, Buffer.byteLength(saved));
   return (text) => {
     if (left && text.length >= left.chars && text.startsWith(left.tailText, left.chars - left.tailText.length) && asLeft()) {
       const more = text.slice(left.chars);
@@ -218,7 +296,7 @@ export function bookSaver(folder) {
       remember(text, left.bytes + Buffer.byteLength(more));
       return;
     }
-    saveBook(folder, text);
+    saveBook(folder, text, path);
     remember(text, Buffer.byteLength(text));
   };
 }
@@ -422,11 +500,16 @@ async function slipsIn(text) {
  *
  * The writer acts under slip.json. Where the book does not hold that slip
  * yet (a slip put in place while the service was not running), it is
- * checked and taken into the book first.
- * @param {{folder?: string, port?: number, name?: string}} o port 0 takes any free port
- * @returns {Promise<{port: number, close: () => Promise<void>, recorder: object, seal: () => Promise<object>, renew: (slip: object, o?: {newPasskey?: boolean}) => Promise<object>}>}
+ * checked and taken into the book first. Where the folder has no book.jsonl,
+ * a new book begins with that slip: the first book, or the rest of a new
+ * book that a switch had begun when the recorder stopped.
+ * @param {{folder?: string, port?: number, name?: string, newBookAt?: {entries?: number, bytes?: number}, inFlightMs?: number, faults?: (step: string) => void, clock?: () => number}} o
+ *   port 0 takes any free port; newBookAt and inFlightMs are for tests (90,000 entries, 100,000,000 bytes and
+ *   15 minutes by default); faults is called at each step of a new book ("sealed", "kept", "written"), for tests;
+ *   clock gives the time the waiting calls and the retry of a new book are measured by (Date.now), for tests
+ * @returns {Promise<{port: number, close: () => Promise<void>, recorder: object, seal: () => Promise<object>, renew: (slip: object, o?: {newPasskey?: boolean}) => Promise<object>, newBook: () => Promise<object>}>}
  */
-export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_PORT, name = 'The recorder beside the coding agent' } = {}) {
+export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_PORT, name = 'The recorder beside the coding agent', newBookAt = {}, inFlightMs = IN_FLIGHT_MS, faults = () => {}, clock = Date.now } = {}) {
   const f = files(folder);
   if (!existsSync(f.slip)) throw new Error(`There is no signed slip at ${f.slip}. Sign one on the signing page and put it in place: ${RUN} use <the saved file>`);
   const placed = await loadSlip(folder);
@@ -435,6 +518,7 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
   if (JSON.stringify(placed.content.agent.keys) !== JSON.stringify(agent.keys)) {
     throw new Error('The slip names other keys than the agent\'s keys in this folder. Sign a slip with the keys that "keys" prints.');
   }
+  const newAt = { entries: newBookAt.entries ?? NEW_BOOK_ENTRIES, bytes: newBookAt.bytes ?? NEW_BOOK_BYTES };
   const sealKeys = [await keySetFingerprint(sealer.keys)];
   const options = { sealKeys };
   // Each writer opened reads the whole book once; "readings" counts them.
@@ -443,7 +527,33 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
     readings++;
     return openRecorder({ book, slip: slipFingerprint, privateKeys: agent.privateKeys, issuerKeys, options });
   };
-  const save = bookSaver(folder);
+
+  // A book the service writes to: the one in force, at book.jsonl, and,
+  // after a new book was started, the one kept before it, while a call
+  // allowed under it may still come back for its stub. Each holds its
+  // writer, the slip that writer acts under, the writers of the slips
+  // before it that a call may still come back to ("before"), and what the
+  // service has read of its lines: how many entries it holds, its size in
+  // bytes, and the time and amount of each stub by its slip and action
+  // ("times"). A kept book's figures go into the figures of all the kept
+  // books ("keptFigures"), which every limit is counted with.
+  let bookIds = 0;
+  const keptFigures = new Map();
+  const bookAt = (path, writer, about, saved) => {
+    const b = { id: ++bookIds, path, save: bookSaver(folder, { path, saved }), writer, slip: about.slip, fingerprint: about.fingerprint, issuerKey: about.issuerKey, content: about.content, before: new Map(), seen: 0, entries: 0, bytes: 0, times: new Map() };
+    follow(b);
+    return b;
+  };
+  // Read the lines a book gained since it was last read, once each.
+  function follow(b) {
+    const text = b.writer.book();
+    if (text.length < b.seen) Object.assign(b, { seen: 0, entries: 0, bytes: 0, times: new Map() });
+    b.seen = readFigures(text, b.seen, b.times, b);
+  }
+  const endsWithSeal = (b) => {
+    const text = b.writer.book();
+    return text.startsWith('{"seal":', text.lastIndexOf('\n', text.length - 2) + 1);
+  };
 
   let text = existsSync(f.book) ? readFileSync(f.book, 'utf8') : '';
   if (text !== '' && !text.endsWith('\n')) text += '\n';
@@ -452,41 +562,136 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
   // passkey not on it.
   let trusted = await trustFor(folder, text, placed);
   const taken = text === '' || !(await slipsIn(text)).has(placed.fingerprint);
+  const kept = keptBooks(folder);
   if (taken) {
     // A new book, or a slip put in place while the service was not running:
-    // taken in after the same checks as a renewal.
-    await checkNewSlip(placed.slip, { agentKeys: agent.keys, trusted });
+    // taken in after the same checks as a renewal. Where the folder has no
+    // book and the last kept book holds this slip, a new book that a switch
+    // had begun is completed: the slip was taken in after those checks, and
+    // is not checked again, so that a permission that has ended since does
+    // not keep the recorder from starting (it then refuses every call, and
+    // "status" and "seal" still work).
+    const completing = text === '' && kept.length > 0 && (await slipsIn(readFileSync(kept.at(-1).path, 'utf8'))).has(placed.fingerprint);
+    if (!completing) await checkNewSlip(placed.slip, { agentKeys: agent.keys, trusted });
     text += entryLine({ slip: placed.slip }) + '\n';
   }
-  /** What the service acts under: the writer, and the slip it was opened under. */
-  let current = { writer: await open(text, placed.fingerprint, trusted), ...placed };
-  save(current.writer.book());
+  /** The book in force, at book.jsonl. */
+  let current = bookAt(f.book, await open(text, placed.fingerprint, trusted), placed);
+  current.save(current.writer.book());
   const started = new Date().toISOString();
   let count = 0;
 
-  // One request at a time, so that a renewal never falls between a call
-  // and its stub, and the writer is switched between two requests.
+  // One request at a time, so that a renewal or a new book never falls
+  // between a call and its stub, and the writer is switched between two
+  // requests.
   let turn = Promise.resolve();
   const inTurn = (work) => {
     const run = turn.then(work);
     turn = run.catch(() => {});
     return run;
   };
-  const entries = () => current.writer.book().split('\n').filter(Boolean).length;
+  const entries = () => {
+    follow(current);
+    return current.entries;
+  };
 
-  // The slip each call was allowed under, by Claude Code's identifier of
+  // The calls allowed and not yet recorded, by Claude Code's identifier of
   // the call (tool_use_id, which the hook hands over before and after the
-  // call). A call allowed under one slip and taken while a renewal
-  // switched to the next is recorded under the slip it was allowed under.
-  // The last 1,000 are kept: a call refused after it was allowed (at the
-  // person's prompt) never comes back for its stub.
-  const allowedUnder = new Map();
+  // call): the book and the slip each was allowed under, its action, and
+  // when. A call allowed under one slip and taken while a renewal switched
+  // to the next is recorded under the one it was allowed under, however
+  // long it ran. A call allowed under one book and taken after a new book
+  // began is recorded in that book, for 15 minutes (IN_FLIGHT_MS); after
+  // that the kept book is sealed, and the stub goes into the book in force,
+  // under its slip where that book holds it, or else under the slip in force.
+  // These calls are held in memory only: a restart forgets them.
+  // Each call counts against the permission's limits on how many of its
+  // action may be taken until its stub is written, or for 15 minutes at
+  // most: a call refused after it was allowed (at the person's prompt)
+  // never comes back for its stub. At most 1,000 are kept, the oldest
+  // giving way (as before).
+  const inFlight = new Map();
   const KEPT_CALLS = 1000;
   const callId = (given) => (typeof given.toolUseId === 'string' && given.toolUseId.length > 0 && given.toolUseId.length <= 200 ? given.toolUseId : null);
+  const counting = (c, now = clock()) => now - c.at < inFlightMs;
+  // A call allowed under this book (and slip) that may still come back: for the writers kept for the slips before.
+  const pending = (bookId, slip) => [...inFlight.values()].some((c) => c.book === bookId && (slip === undefined || c.slip === slip));
+  // One that still counts: for a kept book, held open while one does.
+  const holding = (bookId) => [...inFlight.values()].some((c) => c.book === bookId && counting(c));
+  // The books kept at a switch while a call allowed under them may still come back.
+  const keptOpen = new Map();
+  let bookProblem = null;
+  // A kept book that no counting call can come back to any more is sealed,
+  // if anything came after its seal.
+  async function tidy() {
+    for (const [id, b] of keptOpen) {
+      if (holding(id)) continue;
+      keptOpen.delete(id);
+      try {
+        if (!endsWithSeal(b)) await sealIn(b);
+      } catch (e) {
+        bookProblem = `The book kept as ${b.path} could not be sealed after the last call allowed under it: ${e.message}`;
+      }
+    }
+  }
 
-  // The writer of each slip before the one in force, kept at the switch
-  // while a call allowed under that slip may still come back for its stub.
-  const writersBefore = new Map();
+  // A call is allowed only while, for each limit of the permission on its
+  // action (a total, a count, either within a period), the stubs under the
+  // permission in the books kept before this one, the stubs in this book,
+  // the calls of that action allowed and not yet recorded (in any book), and
+  // this one fit, as the Hermes plugin does for the calls not yet recorded.
+  // The check before acting of the book in force counts that book's stubs
+  // alone. A limit on the largest single action needs nothing across books.
+  const periodWords = (seconds) => {
+    if (seconds === null) return 'in all';
+    for (const [size, word] of [[86400, 'day'], [3600, 'hour'], [60, 'minute']]) {
+      if (seconds % size === 0) return seconds === size ? `in any ${word}` : `in any ${seconds / size} ${word}s`;
+    }
+    return `in any ${seconds} seconds`;
+  };
+  function limitRefusal(request) {
+    const { action, amount } = request;
+    const now = clock();
+    const key = `${current.fingerprint}\n${action}`;
+    const kept = keptFigures.get(key) ?? [];
+    const waiting = [...inFlight.values()].filter((c) => c.slip === current.fingerprint && c.action === action && counting(c, now));
+    if (kept.length === 0 && waiting.length === 0) return null;
+    follow(current);
+    const here = current.times.get(key) ?? [];
+    for (const limit of Array.isArray(current.content.limits) ? current.content.limits : []) {
+      if (!limit || limit.action !== action) continue;
+      const per = Number.isInteger(limit.per) ? limit.per : null;
+      // Stubs dated later than now are counted too, as the check before acting counts them
+      // (while one is, the check before acting refuses every call in any case: time-went-backwards).
+      const inPeriod = (x) => per === null || x.when > now - per * 1000;
+      let used;
+      let total;
+      let allowed;
+      let unit = '';
+      if (Number.isInteger(limit.count)) {
+        used = [kept.filter(inPeriod).length, here.filter(inPeriod).length, waiting.length];
+        total = used[0] + used[1] + used[2] + 1;
+        allowed = limit.count;
+      } else if (Number.isInteger(limit.max)) {
+        // An action with no amount, or one in another unit, is refused by the check before acting.
+        if (!amount || amount.unit !== limit.unit || !Number.isInteger(amount.value)) continue;
+        const sum = (xs) => xs.reduce((s, x) => s + (x.unit === limit.unit && Number.isInteger(x.value) ? x.value : 0), 0);
+        used = [sum(kept.filter(inPeriod)), sum(here.filter(inPeriod)), sum(waiting)];
+        total = used[0] + used[1] + used[2] + amount.value;
+        allowed = limit.max;
+        unit = ` ${limit.unit}`;
+      } else continue;
+      if (total <= allowed) continue;
+      const code = per !== null ? 'over-period-limit' : Number.isInteger(limit.count) ? 'over-count-limit' : 'over-limit';
+      const running = waiting.length;
+      const message = used[0] === 0
+        ? `${running === 1 ? 'A call' : `${running} calls`} of this action (${action}) allowed and not yet recorded would use the rest of what the permission allows (${allowed}${unit} ${periodWords(per)}), so this one is not taken now. Make it again once ${running === 1 ? 'it has' : 'they have'} ended.`
+        : `With this action (${action}), the receipts under this permission in the books kept before this one (${used[0]}${unit}), in this book (${used[1]}${unit}) and the calls allowed and not yet recorded (${used[2]}${unit}) would come to ${total}${unit}, where the permission allows ${allowed}${unit} ${periodWords(per)}, so this one is not taken. A new book starts no limit again.`;
+      return { allowed: false, problems: [], breaches: [{ code, message }], needs: [] };
+    }
+    return null;
+  }
+
   // Bring a writer up to a book that holds its own book and more lines after
   // it: each line is taken with "add", at the cost of one line's check, not
   // a reading of the whole book.
@@ -497,19 +702,16 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
     if (writer.book() !== book) throw new Error('The two books differ.');
   }
 
-  async function record(given) {
-    const id = callId(given);
-    const under = id ? allowedUnder.get(id) : undefined;
-    if (id) allowedUnder.delete(id);
-    const more = given.when ? { when: given.when } : {};
-    if (under === undefined || under === current.fingerprint) return current.writer.record(requestFrom(given), more);
+  // Write a stub in book "b", under the slip the call was allowed under.
+  async function recordUnder(b, under, request, more) {
+    if (under === undefined || under === b.fingerprint) return b.writer.record(request, more);
     // Under the slip before: the writer kept for it at the switch, brought
     // up to the book as it stands, writes the stub, and the writer for the
     // slip in force takes that one line. Where no such writer is kept (it
     // could not be brought up to date), one is opened: one reading of the
     // book.
-    const book = current.writer.book();
-    let before = writersBefore.get(under);
+    const book = b.writer.book();
+    let before = b.before.get(under);
     if (before) {
       try {
         await catchUp(before, book);
@@ -518,31 +720,117 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
       }
     }
     if (!before) {
-      if (!(await slipsIn(book)).has(under)) return current.writer.record(requestFrom(given), more);
+      if (!(await slipsIn(book)).has(under)) return b.writer.record(request, more);
       before = await open(book, under, trusted);
-      writersBefore.set(under, before);
+      b.before.set(under, before);
     }
-    const stub = await before.record(requestFrom(given), more);
+    const stub = await before.record(request, more);
     try {
-      await catchUp(current.writer, before.book());
+      await catchUp(b.writer, before.book());
     } catch {
-      current = { ...current, writer: await open(before.book(), current.fingerprint, trusted) };
+      b.writer = await open(before.book(), b.fingerprint, trusted);
     }
-    if (![...allowedUnder.values()].includes(under)) writersBefore.delete(under);
+    if (!pending(b.id, under)) b.before.delete(under);
     return stub;
   }
 
-  async function seal() {
-    const book = current.writer.book();
+  async function record(given) {
+    await tidy();
+    const id = callId(given);
+    const call = id ? inFlight.get(id) : undefined;
+    if (id) inFlight.delete(id);
+    const more = given.when ? { when: given.when } : {};
+    const request = requestFrom(given);
+    // Allowed under a book kept since: the stub goes into that book, and
+    // the book is sealed once no call allowed under it can come back.
+    const kept = call ? keptOpen.get(call.book) : undefined;
+    if (kept) {
+      const stub = await recordUnder(kept, call.slip, request, more);
+      kept.save(kept.writer.book());
+      follow(kept);
+      await tidy();
+      return stub;
+    }
+    const stub = await recordUnder(current, call?.slip, request, more);
+    current.save(current.writer.book());
+    return stub;
+  }
+
+  async function sealIn(b) {
+    const book = b.writer.book();
     // The seal before, from the writer's own answer for its book: nothing is read again.
-    const result = await current.writer.check();
+    const result = await b.writer.check();
     const seals = result.entries.filter((e) => e.kind === 'seal' && e.problems.length === 0);
     const previous = seals.length ? seals[seals.length - 1].fingerprint : undefined;
     const sealed = await writeSeal(book, { by: { keys: sealer.keys, name }, previous, when: Date.now() }, sealer.privateKeys);
     // No outside time-stamp is put beside the seal here (a seal without one has no "stamps" member).
-    await current.writer.add({ seal: sealed.record });
-    save(current.writer.book());
-    return { fingerprint: sealed.fingerprint, entries: entries() };
+    await b.writer.add({ seal: sealed.record });
+    b.save(b.writer.book());
+    follow(b);
+    return { fingerprint: sealed.fingerprint, entries: b.entries };
+  }
+  const seal = () => sealIn(current);
+
+  // A new book: seal the book in force (unless it ends with a seal), keep
+  // it as book-<n>.jsonl, and start book.jsonl again with the permission in
+  // force. The file steps, in order, each one whole: the seal is added to
+  // book.jsonl; book.jsonl is renamed book-<n>.jsonl; the new book.jsonl is
+  // written. A stop between the first two leaves the book as it was, with a
+  // seal, and the next start makes the new book as it would have; a stop
+  // between the last two leaves no book.jsonl, and the next start begins
+  // one with the permission in force (slip.json), which completes the
+  // switch. The service acts under the new book only once the old one is
+  // kept; a call allowed under the old one is still recorded in it.
+  async function newBook() {
+    const old = current;
+    // Before anything is changed: a kept book must be numbered by a name the rule reads again.
+    const highest = keptBooks(folder).at(-1)?.number ?? 0;
+    if (highest >= KEPT_BOOK_HIGHEST) {
+      throw new Error(`The folder holds book-${highest}.jsonl, the highest number a kept book may have, so no new book is started: a book kept after it could not be found again. If the recorder did not keep that file, move it out of the folder.`);
+    }
+    if (!endsWithSeal(old)) await sealIn(old);
+    faults('sealed');
+    const writer = await open(entryLine({ slip: old.slip }) + '\n', old.fingerprint, trusted);
+    // The file must hold the old book exactly before it is kept.
+    old.save(old.writer.book());
+    const number = (keptBooks(folder).at(-1)?.number ?? 0) + 1;
+    if (number > KEPT_BOOK_HIGHEST) throw new Error(`A kept book would be numbered ${number}, past the highest a kept book may have (${KEPT_BOOK_HIGHEST}), so no new book is started.`);
+    const keptPath = join(folder, `book-${number}.jsonl`);
+    untilFree(() => renameSync(f.book, keptPath));
+    faults('kept');
+    follow(old);
+    for (const [key, list] of old.times) {
+      if (!keptFigures.has(key)) keptFigures.set(key, []);
+      keptFigures.get(key).push(...list);
+    }
+    old.times = keptFigures;
+    current = bookAt(f.book, writer, old);
+    Object.assign(old, { path: keptPath, save: bookSaver(folder, { path: keptPath, saved: old.writer.book() }) });
+    if (holding(old.id)) keptOpen.set(old.id, old);
+    bookProblem = null;
+    try {
+      current.save(current.writer.book());
+    } catch (e) {
+      // The switch is made: the file is written with the next entry, or at the next start.
+      bookProblem = `The new book was started, and its file ${f.book} could not be written yet: ${e.message}`;
+    }
+    faults('written');
+    return { kept: `book-${number}.jsonl`, keptEntries: old.entries, entries: entries(), ...(bookProblem ? { warning: bookProblem } : {}) };
+  }
+  // After each entry: a new book once the book in force is full. Where the
+  // switch cannot be made (the book file held open by another program for
+  // longer than the recorder waits), the book in force goes on, and the
+  // switch is tried again a minute later; "status" says why.
+  let retryAt = 0;
+  async function whenFull() {
+    if (entries() < newAt.entries && current.bytes < newAt.bytes) return;
+    if (clock() < retryAt) return;
+    try {
+      await newBook();
+    } catch (e) {
+      retryAt = clock() + 60000;
+      bookProblem = `A new book could not be started: ${e.message}`;
+    }
   }
 
   // Take a new slip: check it, open a second writer on the book with the
@@ -568,26 +856,48 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
     // start-up checks refuse a slip from a passkey not on the list.
     replaceFile(f.slip, JSON.stringify(next.slip));
     try {
-      save(writer.book());
+      current.save(writer.book());
       if (issuerKeys !== trusted) writeTrusted(folder, issuerKeys);
     } catch (e) {
       try { replaceFile(f.slip, JSON.stringify(current.slip)); } catch { /* left to the start-up checks */ }
       // The book file too, which may already hold the new permission's line.
-      try { saveBook(folder, current.writer.book()); } catch { /* the saver puts the file right with the next entry */ }
+      try { saveBook(folder, current.writer.book(), current.path); } catch { /* the saver puts the file right with the next entry */ }
       throw e;
     }
     trusted = issuerKeys;
     // The writer before is kept while a call allowed under its slip may still come back for its stub.
-    if ([...allowedUnder.values()].includes(before)) writersBefore.set(before, current.writer);
-    current = { writer, slip: next.slip, fingerprint: next.fingerprint, issuerKey: next.issuerKey, content: next.content };
+    if (pending(current.id, before)) current.before.set(before, current.writer);
+    Object.assign(current, { writer, slip: next.slip, fingerprint: next.fingerprint, issuerKey: next.issuerKey, content: next.content });
     return { slip: next.fingerprint, previous: before, issuer: next.issuerKey, entries: entries(), validUntil: next.content.validUntil, warnings: next.warnings };
   }
 
+  // Each kept book is read once: the time and amount of its stubs go into
+  // the kept books' figures, so that a restart after a new book restarts no
+  // limit; its text is not kept. One that does not end with a seal (the
+  // recorder stopped after a late stub was written into it, before it was
+  // sealed again) is sealed now, under the last permission it holds. The
+  // figures are read from the files as they stand: a kept book changed by
+  // hand is not checked here (a checker shows it).
+  for (const k of kept) {
+    const keptText = readFileSync(k.path, 'utf8');
+    readFigures(keptText, 0, keptFigures, { entries: 0, bytes: 0 });
+    if (keptText.startsWith('{"seal":', keptText.lastIndexOf('\n', keptText.length - 2) + 1)) continue;
+    try {
+      const under = [...(await slipsIn(keptText))].at(-1);
+      const b = { path: k.path, save: bookSaver(folder, { path: k.path, saved: keptText }), writer: await open(keptText, under, trusted), seen: 0, entries: 0, bytes: 0, times: new Map() };
+      await sealIn(b);
+    } catch (e) {
+      bookProblem = `The book kept as ${k.path} does not end with a seal, and could not be sealed: ${e.message}`;
+    }
+  }
+  // A book already full when the service starts is kept, and a new one begun, before any call.
+  await whenFull();
+
   // A caller that has gone (it gave up waiting) is not answered. Its
-  // question before a call, a seal or a renewal it asked for, still waiting
-  // its turn, is not done. The stub of a call that was taken is always
-  // written, whether or not the hook still waits for it: the hook has said
-  // that it was not confirmed, not that it was not written.
+  // question before a call, a seal, a renewal or a new book it asked for,
+  // still waiting its turn, is not done. The stub of a call that was taken
+  // is always written, whether or not the hook still waits for it: the
+  // hook has said that it was not confirmed, not that it was not written.
   class Gone extends Error {}
   const server = createServer(async (req, res) => {
     let gone = false;
@@ -615,6 +925,10 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
           trusted,
           entries: entries(),
           recordedSinceStart: count,
+          callsNotYetRecorded: [...inFlight.values()].filter((c) => counting(c)).length,
+          newBookAt: newAt,
+          keptBooks: keptBooks(folder).map((k) => k.file),
+          ...(bookProblem ? { newBookProblem: bookProblem } : {}),
           started,
           folder,
         });
@@ -628,11 +942,16 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
       const given = body ? JSON.parse(body) : {};
       if (req.url === '/before') {
         const answer = await unlessGone(async () => {
-          const said = await current.writer.before(requestFrom(given));
+          await tidy();
+          const request = requestFrom(given);
+          const refused = limitRefusal(request);
+          if (refused) return refused;
+          const said = await current.writer.before(request);
           const id = callId(given);
           if (said.allowed && id) {
-            allowedUnder.set(id, current.fingerprint);
-            if (allowedUnder.size > KEPT_CALLS) allowedUnder.delete(allowedUnder.keys().next().value);
+            inFlight.delete(id);
+            inFlight.set(id, { book: current.id, slip: current.fingerprint, action: request.action, at: clock(), unit: request.amount?.unit, value: request.amount?.value });
+            if (inFlight.size > KEPT_CALLS) inFlight.delete(inFlight.keys().next().value);
           }
           return said;
         });
@@ -644,7 +963,7 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
           const written = await inTurn(async () => {
             const stub = await record(given);
             count++;
-            save(current.writer.book());
+            await whenFull();
             return stub;
           });
           return send(200, { seq: written.seq, fingerprint: written.fingerprint });
@@ -653,10 +972,21 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
           return send(409, { error: e.message, code: e.code });
         }
       }
-      if (req.url === '/seal') return send(200, await unlessGone(seal));
-      if (req.url === '/renew') {
+      if (req.url === '/seal') {
+        return send(200, await unlessGone(async () => {
+          const sealed = await seal();
+          await whenFull();
+          return sealed;
+        }));
+      }
+      if (req.url === '/renew' || req.url === '/new-book') {
         try {
-          return send(200, await unlessGone(() => renew(given.slip, given.newPasskey === true)));
+          return send(200, await unlessGone(async () => {
+            if (req.url === '/new-book') return newBook();
+            const renewed = await renew(given.slip, given.newPasskey === true);
+            await whenFull();
+            return renewed;
+          }));
         } catch (e) {
           if (e instanceof Gone) return undefined;
           return send(409, { error: e.message, code: e.code });
@@ -681,8 +1011,17 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
     port: server.address().port,
     get recorder() { return current.writer; },
     get readings() { return readings; },
-    seal: () => inTurn(seal),
-    renew: (slip, { newPasskey = false } = {}) => inTurn(() => renew(slip, newPasskey)),
+    seal: () => inTurn(async () => {
+      const sealed = await seal();
+      await whenFull();
+      return sealed;
+    }),
+    renew: (slip, { newPasskey = false } = {}) => inTurn(async () => {
+      const renewed = await renew(slip, newPasskey);
+      await whenFull();
+      return renewed;
+    }),
+    newBook: () => inTurn(newBook),
     close: () => new Promise((resolve) => server.close(resolve)),
   };
 }
@@ -984,8 +1323,12 @@ const USAGE = `Usage: ${RUN} <command>
   ensure        start the recorder in the background, if it is not running
   status        what the recorder holds
   seal          seal the book now, with the recorder's three keys
-  check         the checker's answer for the book; name your own passkey with
-                --issuer <its thumbprint> (once for each), or see the passkeys the book names
+  new-book      seal the book, keep it as book-<n>.jsonl, and start a new one that begins with
+                the permission in force (the recorder does this by itself at 90,000 entries,
+                or at 100 MB of text)
+  check [file]  the checker's answer for the book, or for a book kept before it (book-1.jsonl);
+                name your own passkey with --issuer <its thumbprint> (once for each), or see the
+                passkeys the book names
   stop          stop the recorder
   keys          make the keys, and print the agent's public keys`;
 
@@ -1063,8 +1406,14 @@ async function main(argv) {
   }
   if (command === 'ensure') return ensure(folder, port);
   if (command === 'check') {
-    if (!existsSync(f.book)) {
-      console.error(`There is no book yet at ${f.book}.`);
+    // A first word that is not an option names a book: one kept in the folder by its name (book-1.jsonl), or any file.
+    let bookFile = f.book;
+    if (rest.length > 0 && !rest[0].startsWith('-')) {
+      const named = rest.shift();
+      bookFile = KEPT_BOOK.test(named) && existsSync(join(folder, named)) ? join(folder, named) : resolve(named);
+    }
+    if (!existsSync(bookFile)) {
+      console.error(bookFile === f.book ? `There is no book yet at ${f.book}.` : `There is no book at ${bookFile}.`);
       return 2;
     }
     // The command-line checker of the library this recorder runs on, so that
@@ -1080,12 +1429,12 @@ async function main(argv) {
     }
     if (!rest.includes('--issuer')) {
       console.error('You named no passkey (--issuer), so the checker does not take any as one you trust. The book holds permissions signed by these passkeys, read from the book itself, not named by you:');
-      for (const s of await slipsListed(readFileSync(f.book, 'utf8'))) {
+      for (const s of await slipsListed(readFileSync(bookFile, 'utf8'))) {
         console.error(`  passkey ${s.issuerKey}: the permission ${s.fingerprint}, from ${s.from} until ${s.until}, signed as "${s.name.toWellFormed().replace(/[\u0000-\u001f\u007f-\u009f]/g, '�')}" (a label)`);
       }
       console.error(`Compare each with your own passkey's thumbprint, which the signing page shows when you sign, and run again with --issuer <thumbprint> for each that is yours: ${RUN} check --issuer <thumbprint>\n`);
     }
-    const ran = spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', checker, f.book, ...rest, ...extra], { stdio: 'inherit' });
+    const ran = spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', checker, bookFile, ...rest, ...extra], { stdio: 'inherit' });
     return ran.status ?? 2;
   }
   const status = await running(port);
@@ -1111,6 +1460,33 @@ async function main(argv) {
     const sealed = await service.seal();
     await service.close();
     console.log(`Sealed (the service was not running, so the book was opened here): entry ${sealed.entries} is the seal ${sealed.fingerprint}.`);
+    return 0;
+  }
+  if (command === 'new-book') {
+    let made;
+    if (status) {
+      made = await ask(port, '/new-book', 'POST', {});
+      if (made.error === 'not found') {
+        console.error(`The recorder that is running is an earlier version, which cannot start a new book. Restart it once, with both commands on one line so that no tool call falls between them, then run new-book again: ${RUN} stop; ${RUN} ensure`);
+        return 1;
+      }
+    } else {
+      // Not running: the book is opened here, as "seal" opens it.
+      const service = await startService({ folder, port: 0 });
+      try {
+        made = await service.newBook();
+      } catch (e) {
+        made = { error: e.message };
+      } finally {
+        await service.close();
+      }
+    }
+    if (made.error || typeof made.kept !== 'string') {
+      console.error(`No new book was started: ${made.error ?? 'the recorder gave no answer.'}`);
+      return 1;
+    }
+    if (made.warning) console.log(`Warning: ${made.warning}`);
+    console.log(`The book was sealed and kept as ${join(folder, made.kept)} (${made.keptEntries} entries). A new book.jsonl begins with the permission in force; each book checks on its own.`);
     return 0;
   }
   if (command === 'stop') {
