@@ -2,12 +2,12 @@
 #
 # The cases are those of test/helpers/vectors-records.mjs: the approval, the
 # refusal, a service's terms, the cancellation, the acknowledgement, the
-# vouching record, the withdrawal and the pass. Each answer has the shape the
+# vouching record, the withdrawal, the pass and the denial. Each answer has the shape the
 # JavaScript answer has.
 
 from cryptography.hazmat.primitives.asymmetric import ed25519, mldsa
 
-from provared import approval, pass_, service, standing
+from provared import approval, denial, pass_, service, standing
 from provared.encoding import from_base64url, problem_from, to_base64url
 from provared.jws import signing_input
 from provared.signatures import verify_signature
@@ -94,4 +94,8 @@ ANSWER = {
     'validatePassContent': _valid(pass_.validate_pass_content),
     'writePass': _written(pass_.write_pass),
     'recordConstants': lambda c: _answer(lambda: {'REFUSAL_REASONS': service.REFUSAL_REASONS, 'VOUCHED_KINDS': standing.VOUCHED_KINDS, 'MAX_PASSES': pass_.MAX_PASSES}),
+    'validateDenialContent': _valid(denial.validate_denial_content),
+    'writeDenial': _written(denial.write_denial),
+    'denialCodes': lambda c: _answer(lambda: denial.denial_codes(c['answer'])),
+    'denialConstants': lambda c: _answer(lambda: {'DENIAL_SOURCES': denial.DENIAL_SOURCES, 'FINDING_CODES': list(denial.FINDING_CODES), 'MAX_DENIAL_CODES': denial.MAX_DENIAL_CODES}),
 }

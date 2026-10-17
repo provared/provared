@@ -270,6 +270,7 @@
        "seals": 0,
        "cancellations": 0,
        "acknowledgements": 0,
+       "denials": 0,
        "vouchings": 0,
        "passes": 0
       },
@@ -557,6 +558,7 @@
        "seals": 0,
        "cancellations": 0,
        "acknowledgements": 0,
+       "denials": 0,
        "vouchings": 0,
        "passes": 0
       },
@@ -813,6 +815,7 @@
        "seals": 0,
        "cancellations": 0,
        "acknowledgements": 0,
+       "denials": 0,
        "vouchings": 0,
        "passes": 0
       },
@@ -896,6 +899,7 @@
        "seals": 0,
        "cancellations": 0,
        "acknowledgements": 0,
+       "denials": 0,
        "vouchings": 0,
        "passes": 0
       },
@@ -979,6 +983,7 @@
        "seals": 0,
        "cancellations": 0,
        "acknowledgements": 0,
+       "denials": 0,
        "vouchings": 0,
        "passes": 0
       },
@@ -1092,6 +1097,7 @@
        "seals": 0,
        "cancellations": 0,
        "acknowledgements": 0,
+       "denials": 0,
        "vouchings": 0,
        "passes": 0
       },
@@ -1180,6 +1186,7 @@
        "seals": 0,
        "cancellations": 0,
        "acknowledgements": 0,
+       "denials": 0,
        "vouchings": 0,
        "passes": 0
       },
@@ -1243,6 +1250,7 @@
        "seals": 0,
        "cancellations": 0,
        "acknowledgements": 0,
+       "denials": 0,
        "vouchings": 0,
        "passes": 0
       },
@@ -1301,6 +1309,7 @@
        "seals": 0,
        "cancellations": 0,
        "acknowledgements": 0,
+       "denials": 0,
        "vouchings": 0,
        "passes": 0
       },
@@ -1591,6 +1600,7 @@
        "seals": 0,
        "cancellations": 0,
        "acknowledgements": 0,
+       "denials": 0,
        "vouchings": 0,
        "passes": 0
       },
@@ -2008,6 +2018,7 @@
        "seals": 1,
        "cancellations": 0,
        "acknowledgements": 0,
+       "denials": 0,
        "vouchings": 0,
        "passes": 0
       },

@@ -12,6 +12,7 @@
 //
 // It names no agent software and depends on none: a tool is any function.
 
+import { denialCodes } from './denial.js';
 import { Refusal, fingerprint, utf8 } from './encoding.js';
 import * as f from './fields.js';
 
@@ -27,18 +28,22 @@ const NOT_A_GENERATOR = 'must not be a generator function: calling one does not 
  * A call through a recorded tool that was not run: the check before acting
  * did not allow it, or the record so far has a problem. "answer" is what
  * the check before acting said (allowed, problems, breaches, needs).
+ * "denial", where the stub writer was opened with "denials: true", is what
+ * it said of the denial it wrote, or did not write, for the call.
  */
 export class NotTaken extends Error {
   /**
    * @param {string} tool the name of the tool
    * @param {{allowed: boolean, problems: object[], breaches: object[], needs: string[]}} answer
+   * @param {object} [denial]
    */
-  constructor(tool, answer) {
+  constructor(tool, answer, denial) {
     const first = [...answer.problems, ...answer.breaches][0];
     super(`The tool "${tool}" was not run. ${first ? first.message : 'The check before acting did not allow it.'}`);
     this.name = 'NotTaken';
     this.tool = tool;
     this.answer = answer;
+    if (denial !== undefined) this.denial = denial;
   }
 }
 
@@ -139,6 +144,8 @@ export function recordTools(recorder, tools, options = {}) {
   if (options === null || typeof options !== 'object') options = {};
   // What the tools are put behind is fixed here too.
   const act = recorder.act.bind(recorder);
+  // Whether the writer writes denials, read once: only then are denials asked for.
+  const deny = recorder.denials === true && typeof recorder.deny === 'function' ? recorder.deny.bind(recorder) : null;
   const onStub = typeof options.onStub === 'function' ? options.onStub : null;
   const recorded = {};
   for (const name of Object.keys(tools)) {
@@ -157,12 +164,12 @@ export function recordTools(recorder, tools, options = {}) {
     for (const member of ['amount', 'with']) if (typeof fixed[member] !== 'function') fixed[member] = copied(fixed[member], `tools.${name}.${member}`);
     for (const member of ['amount', 'with']) if (fixed[member] !== null && typeof fixed[member] === 'object') Object.freeze(fixed[member]);
     Object.freeze(fixed);
-    Object.defineProperty(recorded, name, { enumerable: true, value: (args) => call(act, onStub, name, fixed, args) });
+    Object.defineProperty(recorded, name, { enumerable: true, value: (args) => call(act, deny, onStub, name, fixed, args) });
   }
   return recorded;
 }
 
-async function call(act, onStub, name, spec, args) {
+async function call(act, deny, onStub, name, spec, args) {
   // The arguments are copied when the call is made. The fingerprint is made
   // from that copy, and the tool is run with a copy of it. Each of the
   // tool's other functions is handed a copy of its own.
@@ -185,14 +192,22 @@ async function call(act, onStub, name, spec, args) {
   const more = {};
   if (typeof spec.countersign === 'function') more.countersign = (stub) => (0, spec.countersign)(stub, structuredClone(given));
   const perform = () => (0, spec.run)(structuredClone(given));
-  let outcome = await act(request, perform, more);
+  // Where the person may be asked for their approval, the first call
+  // writes no denial: the action may yet be taken. A denial is written once
+  // it is known that it will not be, so that one call never leaves both a
+  // stub and a denial.
+  const asking = typeof spec.approve === 'function' && deny !== null;
+  let outcome = await act(request, perform, asking ? { ...more, denial: false } : more);
   // Where the slip asks for the person's own approval of this action, and
   // that is the one thing missing, the person is asked, once.
   if (!outcome.done && typeof spec.approve === 'function' && needsOnlyApproval(outcome.answer)) {
     const approval = await (0, spec.approve)(structuredClone(request), structuredClone(given));
     if (approval) outcome = await act(request, perform, { ...more, approval });
+    else if (asking) outcome = { ...outcome, denial: await deny(request, { source: 'person' }) };
+  } else if (!outcome.done && asking) {
+    outcome = { ...outcome, denial: await deny(request, { source: 'check', codes: denialCodes(outcome.answer) }) };
   }
-  if (!outcome.done) throw new NotTaken(name, outcome.answer);
+  if (!outcome.done) throw new NotTaken(name, outcome.answer, outcome.denial);
   if (onStub) await onStub(outcome.stub, name);
   return outcome.result;
 }

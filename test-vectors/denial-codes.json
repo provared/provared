@@ -1,0 +1,263 @@
+{
+ "about": "The reasons a denial by the check before acting names, from its answer (format description, section 28).",
+ "function": "denialCodes",
+ "cases": [
+  {
+   "name": "a finding",
+   "answer": {
+    "problems": [],
+    "breaches": [
+     {
+      "code": "over-limit",
+      "message": "m"
+     }
+    ]
+   },
+   "expected": {
+    "ok": [
+     "over-limit"
+    ]
+   }
+  },
+  {
+   "name": "problems come before findings",
+   "answer": {
+    "problems": [
+     {
+      "code": "record-not-sound",
+      "message": "m"
+     }
+    ],
+    "breaches": [
+     {
+      "code": "over-limit",
+      "message": "m"
+     },
+     {
+      "code": "prohibited",
+      "message": "m"
+     }
+    ]
+   },
+   "expected": {
+    "ok": [
+     "record-not-sound",
+     "over-limit",
+     "prohibited"
+    ]
+   }
+  },
+  {
+   "name": "a code twice is named once",
+   "answer": {
+    "problems": [
+     {
+      "code": "bad-field",
+      "message": "m"
+     }
+    ],
+    "breaches": [
+     {
+      "code": "over-limit",
+      "message": "m"
+     },
+     {
+      "code": "over-limit",
+      "message": "m"
+     },
+     {
+      "code": "bad-field",
+      "message": "m"
+     }
+    ]
+   },
+   "expected": {
+    "ok": [
+     "bad-field",
+     "over-limit"
+    ]
+   }
+  },
+  {
+   "name": "a code not on the list is left out",
+   "answer": {
+    "problems": [
+     {
+      "code": "details-not-added",
+      "message": "m"
+     }
+    ],
+    "breaches": [
+     {
+      "code": "over-limit",
+      "message": "m"
+     }
+    ]
+   },
+   "expected": {
+    "ok": [
+     "over-limit"
+    ]
+   }
+  },
+  {
+   "name": "no code on the list: check-failed",
+   "answer": {
+    "problems": [
+     {
+      "code": "details-not-added",
+      "message": "m"
+     }
+    ],
+    "breaches": []
+   },
+   "expected": {
+    "ok": [
+     "check-failed"
+    ]
+   }
+  },
+  {
+   "name": "nothing at all: check-failed",
+   "answer": {
+    "problems": [],
+    "breaches": []
+   },
+   "expected": {
+    "ok": [
+     "check-failed"
+    ]
+   }
+  },
+  {
+   "name": "at most 16",
+   "answer": {
+    "problems": [],
+    "breaches": [
+     {
+      "code": "not-json",
+      "message": "m"
+     },
+     {
+      "code": "bad-envelope",
+      "message": "m"
+     },
+     {
+      "code": "bad-base64url",
+      "message": "m"
+     },
+     {
+      "code": "too-large",
+      "message": "m"
+     },
+     {
+      "code": "unknown-type",
+      "message": "m"
+     },
+     {
+      "code": "bad-signatures-layout",
+      "message": "m"
+     },
+     {
+      "code": "payload-not-canonical",
+      "message": "m"
+     },
+     {
+      "code": "payload-type-mismatch",
+      "message": "m"
+     },
+     {
+      "code": "bad-field",
+      "message": "m"
+     },
+     {
+      "code": "bad-key",
+      "message": "m"
+     },
+     {
+      "code": "signature-invalid",
+      "message": "m"
+     },
+     {
+      "code": "passkey-wrong-type",
+      "message": "m"
+     },
+     {
+      "code": "passkey-challenge-mismatch",
+      "message": "m"
+     },
+     {
+      "code": "passkey-origin-mismatch",
+      "message": "m"
+     },
+     {
+      "code": "passkey-rpid-mismatch",
+      "message": "m"
+     },
+     {
+      "code": "passkey-user-not-present",
+      "message": "m"
+     },
+     {
+      "code": "passkey-user-not-verified",
+      "message": "m"
+     },
+     {
+      "code": "passkey-bad-data",
+      "message": "m"
+     },
+     {
+      "code": "issuer-not-expected",
+      "message": "m"
+     },
+     {
+      "code": "slip-missing",
+      "message": "m"
+     }
+    ]
+   },
+   "expected": {
+    "ok": [
+     "not-json",
+     "bad-envelope",
+     "bad-base64url",
+     "too-large",
+     "unknown-type",
+     "bad-signatures-layout",
+     "payload-not-canonical",
+     "payload-type-mismatch",
+     "bad-field",
+     "bad-key",
+     "signature-invalid",
+     "passkey-wrong-type",
+     "passkey-challenge-mismatch",
+     "passkey-origin-mismatch",
+     "passkey-rpid-mismatch",
+     "passkey-user-not-present"
+    ]
+   }
+  },
+  {
+   "name": "a code that is not text is left out",
+   "answer": {
+    "problems": [
+     {
+      "code": 1
+     },
+     null
+    ],
+    "breaches": [
+     {
+      "code": "prohibited",
+      "message": "m"
+     }
+    ]
+   },
+   "expected": {
+    "ok": [
+     "prohibited"
+    ]
+   }
+  }
+ ]
+}

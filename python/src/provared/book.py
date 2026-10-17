@@ -27,6 +27,7 @@ from .service import validate_refusal_content, validate_terms_content
 from .signatures import verify_signature
 from .slip import _UNDEFINED, check_passkey_signature, check_slip
 from .standing import validate_acknowledgement_content, validate_cancellation_content, validate_vouching_content, validate_withdrawal_content
+from .denial import validate_denial_content
 from .stub import validate_countersignature_content, validate_stub_content
 from .timestamp import check_stamp
 from .tree import inclusion_path, tree_builder, tree_root, verify_inclusion
@@ -227,8 +228,9 @@ def _read_line(reader, index, line, disclosures=_UNDEFINED):
         names = ','.join(_js.sort_strings(value.keys())) if isinstance(value, dict) else ''
         # A reader split off to try one more stub reads nothing else: a stub
         # is the one kind of entry that changes nothing read before it.
-        if reader.forked and names not in _STUB_ENTRIES:
-            raise RuntimeError('only a stub may be tried')
+        # A denial changes nothing read before it either.
+        if reader.forked and names not in _STUB_ENTRIES and names != 'denial':
+            raise RuntimeError('only a stub or a denial may be tried')
         if names == 'slip':
             entry['kind'] = 'slip'
             check = check_slip(value.get('slip'), options, disclosures)
@@ -315,6 +317,9 @@ def _read_line(reader, index, line, disclosures=_UNDEFINED):
         elif names == 'acknowledgement':
             entry['kind'] = 'acknowledgement'
             _check_acknowledgement_entry(entry, value, reader.slips, reader.passes, reader.ids, entries, without, whole)
+        elif names == 'denial':
+            entry['kind'] = 'denial'
+            _check_denial_entry(entry, value, reader.slips, reader.passes, reader.ids, without, whole)
         elif names == 'pass':
             entry['kind'] = 'pass'
             _check_pass_entry(entry, value, reader.slips, reader.passes, reader.ids, without, whole)
@@ -840,6 +845,41 @@ def _check_cancellation_entry(entry, value, slips, ids, options, whole):
         return
     slip['cancelled']['time'] = made
     _mark_not_shown_earlier(slip, made, 'This stub is not shown to have existed before the person cancelled the slip: no outside time-stamp from before the cancellation covers it.')
+
+
+_DENIED = "The agent's side states that it did not take this action, and why. That is its own word: it is not counted against the agent, and it does not show that the action was not taken in some other way."
+
+
+def _check_denial_entry(entry, value, slips, passes, ids, without, whole):
+    """A denial: the agent's side states that it did not take an action that
+    was asked for, and why. It is signed as an acknowledgement is, with the
+    keys of the agent the slip names or of the helper agent its pass names.
+    It is in no chain and is compared with nothing: a checker does not judge
+    whether the refusal was right, and never counts it against the agent."""
+    entry['signatures'] = []
+    parsed = parse_record(value.get('denial'), 'denial')
+    entry['fingerprint'] = parsed.fingerprint
+    validate_denial_content(parsed.content)
+    c = parsed.content
+    entry['content'] = c
+    entry['slip'] = c['slip']
+    _note_id(entry, ids, c['id'])
+    slip = _find_slip(slips, c['slip'], whole)
+    p = _find_pass(passes, c['pass'], c['slip'], whole) if 'pass' in c else None
+    if p:
+        entry['pass'] = c['pass']
+    entry['signatures'] = _check_key_set_signatures(parsed, p['content']['to']['keys'] if p else slip['content']['agent']['keys'], without)
+    if _overall(entry['signatures']) == 'invalid':
+        entry['problems'].append({
+            'code': 'signature-invalid',
+            'message': 'A signature on the denial does not fit the keys of the helper agent the pass names.'
+            if p
+            else "A signature on the denial does not fit the agent's keys.",
+        })
+    entry['verified'] = _verified_by(entry['signatures'])
+    _under_confirmed_slip(entry, slip)
+    if not entry['problems'] and entry['verified'] != 'none':
+        entry['notes'].append(_DENIED)
 
 
 def _check_acknowledgement_entry(entry, value, slips, passes, ids, entries, without, whole):
@@ -1717,7 +1757,7 @@ def _summarise(entries, book_problems, sealed=None, held=()):
     skipped = len(book_problems) > 0 or len(entries) == 0
     counts = {
         'slips': 0, 'stubs': 0, 'countersigned': 0, 'oneSided': 0, 'approved': 0, 'refusals': 0,
-        'terms': 0, 'seals': 0, 'cancellations': 0, 'acknowledgements': 0, 'vouchings': 0, 'passes': 0,
+        'terms': 0, 'seals': 0, 'cancellations': 0, 'acknowledgements': 0, 'denials': 0, 'vouchings': 0, 'passes': 0,
     }
 
     def note(signatures):
@@ -1770,9 +1810,11 @@ def _summarise(entries, book_problems, sealed=None, held=()):
             for s in e.get('stamps') or []:
                 if s['state'] == 'unavailable':
                     missing.add("the time-stamp service's method")
-        elif kind in ('vouching', 'withdrawal', 'pass', 'acknowledgement'):
+        elif kind in ('vouching', 'withdrawal', 'pass', 'acknowledgement', 'denial'):
             if kind == 'vouching':
                 counts['vouchings'] += 1
+            if kind == 'denial':
+                counts['denials'] += 1
             if kind == 'pass':
                 counts['passes'] += 1
             if kind == 'acknowledgement':

@@ -7,7 +7,7 @@
 // is kept inside its own box, so that a record cannot hide, reorder or
 // draw over the words around it.
 
-import { REFUSAL_REASONS, conditionWords, limitWords, neverWords } from '../src/check.js';
+import { DENIAL_SOURCES, REFUSAL_REASONS, conditionWords, limitWords, neverWords } from '../src/check.js';
 
 // The same holds for characters that cannot be seen (zero-width characters,
 // soft hyphens, line separators, fillers), with which two different labels
@@ -365,6 +365,29 @@ function refusalCard(e) {
   return card;
 }
 
+// A denial: the agent's own side says it did not take an action, and why.
+function denialCard(e) {
+  const card = el('div', `card refusal${e.problems.length ? ' broken' : ''}`);
+  card.append(el('h3', 'kind', `Entry ${e.index}: Denial (the agent's side says it did not take an action)`));
+  if (hidden(e)) {
+    card.append(el('p', 'quiet', hidden(e)));
+    return card;
+  }
+  const c = e.content;
+  const list = el('dl');
+  row(list, 'From', c.pass ? `the helper agent of pass ${c.pass}` : 'the slip\'s own agent');
+  row(list, 'When', `${showTime(c.when)} (the agent's side's own word)`);
+  row(list, 'Not taken', c.action + (c.amount ? `, ${c.amount.value} ${c.amount.unit}` : '') + (c.with ? `, with [${c.with}]` : ''));
+  if (c.details) row(list, 'Documents named', `${c.details.length}, by their fingerprints only`);
+  row(list, 'Who said no', DENIAL_SOURCES[c.source]);
+  if (c.codes) row(list, 'Reasons given', c.codes.join(', '));
+  row(list, 'Agent\'s signatures', signatureWords(e.signatures));
+  row(list, 'Fingerprint', e.fingerprint, true);
+  card.append(list);
+  flag(card, 'onesided', 'This shows what the agent\'s side said. It is not counted against the agent, and it does not show that the action was not taken in some other way.');
+  return card;
+}
+
 function sealCard(e) {
   const card = el('div', `card seal${e.problems.length ? ' broken' : ''}`);
   card.append(el('h3', 'kind', `Entry ${e.index}: Seal (the book, signed by whoever keeps it)`));
@@ -510,6 +533,7 @@ export function renderResult(target, result, { isShow = false, checkedBy = 'Chec
     else if (e.kind === 'seal') card = sealCard(e);
     else if (e.kind === 'cancellation') card = cancellationCard(e);
     else if (e.kind === 'acknowledgement') card = acknowledgementCard(e);
+    else if (e.kind === 'denial') card = denialCard(e);
     else if (e.kind === 'pass') card = passCard(e);
     else if (e.kind === 'vouching') card = vouchingCard(e);
     else if (e.kind === 'withdrawal') card = withdrawalCard(e);

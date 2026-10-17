@@ -56,12 +56,18 @@ from .keys import KEY_SET_METHODS
 from .seal import CLOCK_ALLOWANCE_MS, MAX_STAMPS
 from .signatures import answer_within, hold_signing_keys
 from .standing import write_acknowledgement
+from .denial import denial_codes, write_denial
 from .stub import validate_request, write_stub
 
 COUNTERSIGN_WITHIN_MS = 30000
 """How long the other side is given to hand back its countersignature, unless the caller says otherwise: 30 seconds."""
 SIGN_WITHIN_MS = 30000
 """How long a signer is given for each signature, unless the caller says otherwise: 30 seconds."""
+DENIALS_PER_HOUR = 600
+"""The most denials a writer writes in any hour, unless the caller says otherwise: 600."""
+# The most a caller may set it to: as many as a book may hold entries.
+_MAX_DENIALS_PER_HOUR = 100000
+_HOUR_MS = 3600000
 
 # The longest wait a timer can hold in JavaScript, kept here so that both accept the same numbers.
 _MAX_WAIT_MS = 2**31 - 1
@@ -347,7 +353,19 @@ def _time_value(value):
 # --- the writer ---
 
 
-def open_recorder(book, slip, private_keys, issuer_keys, pass_=None, options=None, now=None, countersign_within=COUNTERSIGN_WITHIN_MS, sign_within=SIGN_WITHIN_MS):
+def open_recorder(
+    book,
+    slip,
+    private_keys,
+    issuer_keys,
+    pass_=None,
+    options=None,
+    now=None,
+    countersign_within=COUNTERSIGN_WITHIN_MS,
+    sign_within=SIGN_WITHIN_MS,
+    denials=False,
+    denials_per_hour=DENIALS_PER_HOUR,
+):
     """Open the stub writer for one agent under one slip.
 
     book: the book so far, as text: at least the slip.
@@ -371,19 +389,41 @@ def open_recorder(book, slip, private_keys, issuer_keys, pass_=None, options=Non
     milliseconds; 30,000 by default. It is asked in a thread of its own;
     after that the action is not taken, nothing is written, and a late
     answer is not used.
+    denials: True to write a denial (format description, section 28)
+    whenever "act" does not take an action, and to let "deny" write one;
+    False by default, and then no denial is written.
+    denials_per_hour: the most denials written in any hour, by the clock;
+    600 by default. Each denial this writer writes, or is handed through
+    "add", counts at the clock's time when it joins the book, whatever date
+    it states; those the book held when the writer was opened count at the
+    dates they state. Past the limit, a denial is not written, and the
+    answers count those not written.
 
     Returns the writer (a Recorder). Raises a Refusal, "record-not-sound",
     if the book so far has a problem; "bad-field" or "bad-key" if an item of
     private_keys is neither a key nor a signer, or is a signer that holds
     another key than the slip, or the pass, names."""
-    return Recorder(book, slip, private_keys, issuer_keys, pass_, options, now, countersign_within, sign_within)
+    return Recorder(book, slip, private_keys, issuer_keys, pass_, options, now, countersign_within, sign_within, denials, denials_per_hour)
 
 
 class Recorder:
     """The stub writer for one agent under one slip: before, record, act,
-    book, check, cancellations, add. Made by open_recorder."""
+    deny, book, check, cancellations, add. Made by open_recorder."""
 
-    def __init__(self, book, slip, private_keys, issuer_keys, pass_=None, options=None, now=None, countersign_within=COUNTERSIGN_WITHIN_MS, sign_within=SIGN_WITHIN_MS):
+    def __init__(
+        self,
+        book,
+        slip,
+        private_keys,
+        issuer_keys,
+        pass_=None,
+        options=None,
+        now=None,
+        countersign_within=COUNTERSIGN_WITHIN_MS,
+        sign_within=SIGN_WITHIN_MS,
+        denials=False,
+        denials_per_hour=DENIALS_PER_HOUR,
+    ):
         if now is None:
             now = now_ms
         if not callable(now):
@@ -404,6 +444,12 @@ class Recorder:
         if not (_js.finite(sign_within) and 1 <= sign_within <= _MAX_WAIT_MS):
             raise Refusal('bad-field', 'signWithin: must be a number of milliseconds from 1 to 2,147,483,647.')
         self._sign_within = sign_within
+        if not isinstance(denials, bool):
+            raise Refusal('bad-field', 'denials: must be true or false.')
+        if not (_js.is_safe_integer(denials_per_hour) and not isinstance(denials_per_hour, bool) and 1 <= denials_per_hour <= _MAX_DENIALS_PER_HOUR):
+            raise Refusal('bad-field', 'denialsPerHour: must be a whole number from 1 to 100,000.')
+        self._denials = denials
+        self._denials_per_hour = denials_per_hour
         self._slip = slip
         self._pass = pass_
         self._private_keys = private_keys
@@ -477,6 +523,15 @@ class Recorder:
         if result['summary']['problemFound']:
             raise _not_written('A problem was found in the record so far. It must be looked at before the agent acts again.')
         self._after = self._last_stub(result['entries'])
+        # The times of the denials of this writer's own chain, which the hourly
+        # limit counts: those the book held when the writer was opened, at the
+        # dates they state; and each one that joins the book since, at the
+        # clock's time when it joined, whatever date it states (a denial may be
+        # dated up to 300 seconds back, and counting it there would let more
+        # than the limit be written in an hour of the clock).
+        self._denial_times = [nan_time(e['content']['when']) for e in result['entries'] if self._own_denial(e)]
+        # How many denials were not written because of the hourly limit, since the writer was opened.
+        self._not_written_denials = 0
         # What was given at opening: the first sound acknowledgement of this
         # writer's own agent that came with a cancellation is the one it
         # goes on handing back; a cancellation that the book does not hold
@@ -589,6 +644,14 @@ class Recorder:
             if e['kind'] == 'stub' and e.get('slip') == self._slip and e.get('pass') == self._pass:
                 last = {'seq': e['content']['seq'], 'fingerprint': e['fingerprint']}
         return last
+
+    def _own_denial(self, e):
+        return e['kind'] == 'denial' and not e['problems'] and e.get('slip') == self._slip and e.get('pass') == self._pass
+
+    @property
+    def denials(self):
+        """Whether this writer writes denials, as it was opened. It cannot be changed."""
+        return self._denials
 
     # The answer for the book as it stands, or for a reader split off it, with the cancellations held beside the book.
     def _standing(self, of=None):
@@ -727,6 +790,10 @@ class Recorder:
             'detailsAfter': more['details_after'] if 'details_after' in more else more.get('detailsAfter', _ABSENT),
             'hasApproval': more.get('approval') is not None,
             'approval': _ABSENT,
+            # For "act": False writes no denial for this call. For "deny": who said no, and why.
+            'denial': more.get('denial', _ABSENT),
+            'source': more.get('source', _ABSENT),
+            'codes': _ABSENT if more.get('codes', _ABSENT) is _ABSENT else _plain(more['codes'], 'codes'),
         }
         if call['hasApproval']:
             try:
@@ -886,6 +953,64 @@ class Recorder:
         self._carried = promote_carried(tried)
         self._text += line + '\n'
         return {'fits': True, 'checked': checked}
+
+    # A denial: the agent's side states that it did not take an action, and
+    # why. It is written into the book only if the book still passes its
+    # check with it and it is not dated ahead of the clock; it is tried on a
+    # reader split off the book's own, as a stub is, because a denial changes
+    # nothing read before it. At most "denials_per_hour" are written in any
+    # hour, by the clock: past it, none is written and the writer counts it.
+    # Whatever happens, the answer says what was done; nothing is raised, so
+    # a denial never stands in the way of what the writer does next. The
+    # request is the copy made when the call was made, and only its action,
+    # amount, service and documents are written: the documents are
+    # fingerprints, never the documents themselves.
+    def _denial_answer(self, problem):
+        return {'written': False, 'problem': problem, 'notWritten': self._not_written_denials}
+
+    def _write_denial_line(self, request, source, codes, when):
+        try:
+            at = self._now()
+            t = at if when is _ABSENT else when
+            if not _js.finite(t):
+                return self._denial_answer({'code': 'bad-field', 'message': 'when: does not give a time.'})
+            if self._ahead_of_clock(t) or self._behind_clock(t):
+                return self._denial_answer({
+                    'code': 'record-not-sound',
+                    'message': "The denial was not written: a denial is written when the action is refused, so its date must be within 300 seconds of the stub writer's clock.",
+                })
+            in_hour = len([d for d in self._denial_times if d > at - _HOUR_MS])
+            if in_hour >= self._denials_per_hour:
+                self._not_written_denials += 1
+                return self._denial_answer({
+                    'code': 'denials-over-limit',
+                    'message': f'The denial was not written: this stub writer has written {self._denials_per_hour} denials in the last hour, the most it may. '
+                    f'Since it was opened, {self._not_written_denials} were not written for that reason.',
+                })
+            request = request if isinstance(request, dict) else {}
+            fields = {'slip': self._slip, 'action': request.get('action'), 'source': source, 'when': t}
+            for name in ('amount', 'with', 'details'):
+                if name in request:
+                    fields[name] = request[name]
+            if _js.truthy(self._pass):
+                fields['pass'] = self._pass
+            if codes is not _ABSENT and codes is not None:
+                fields['codes'] = codes
+            made = write_denial(fields, self._private_keys)
+            line = entry_line({'denial': made['record']})
+            if len(utf8(line)) > MAX_LINE_BYTES:
+                return self._denial_answer({'code': 'too-large', 'message': 'The denial is longer than a line of a book may be.'})
+            tried = fork_carried(self._carried)
+            carry_on(tried, line + '\n')
+            checked = self._standing(tried)['result']
+            if checked['summary']['problemFound']:
+                return self._denial_answer({'code': 'record-not-sound', 'message': 'The denial was not written: with it, the book would not pass its check.'})
+            self._carried = promote_carried(tried)
+            self._text += line + '\n'
+            self._denial_times.append(at)
+            return {'written': True, 'fingerprint': made['fingerprint'], 'line': line, 'notWritten': self._not_written_denials}
+        except Exception as e:
+            return self._denial_answer(problem_from(e))
 
     # A cancellation held beside the book is written into the book as soon
     # as it can be: once the date it gives is no longer ahead of the clock.
@@ -1177,7 +1302,10 @@ class Recorder:
         Returns {"done", "answer"} and, where the action was taken,
         "result" (what perform gave) and "stub" (as "record" gives it);
         where "details_after" was given, "detailsAfter": {"added": the
-        number of documents added, "problem": why none were, or None}."""
+        number of documents added, "problem": why none were, or None}. Where
+        the action was not taken and the writer was opened with
+        denials=True, "denial": what was done about the denial (as "deny"
+        gives it); "denial": False in "more" writes none for this call."""
 
         def work(call):
             self._write_waiting(self._now())
@@ -1228,7 +1356,9 @@ class Recorder:
                 except Exception as e:
                     stop(problem_from(e))
             if not answer['allowed']:
-                return {'done': False, 'answer': answer}
+                if not self._denials or call['denial'] is False:
+                    return {'done': False, 'answer': answer}
+                return {'done': False, 'answer': answer, 'denial': self._write_denial_line(call['request'], 'check', denial_codes(answer), _ABSENT)}
             outcome = self._run_inside(perform)
             if not has_later:
                 stub = self._commit(self._countersigned(made, call), made, tried)
@@ -1274,6 +1404,40 @@ class Recorder:
                     further['problem'] = {'code': 'details-not-added', 'message': 'detailsAfter failed, or gave no answer in time, so the stub was written without further documents.'}
             stub = self._commit(self._countersigned(chosen, call), chosen, chosen_tried)
             return {'done': True, 'answer': answer, 'result': outcome, 'stub': stub, 'detailsAfter': further}
+
+        return self._calling(request, more, work)
+
+    def deny(self, request, more=None):
+        """Write a denial for an action that was not taken, where "act" did
+        not write one: the person refused, or gave no approval when asked
+        ("person"); a rule of the software around the agent, outside the
+        slip, said no ("rule"); or the check before acting said no, and the
+        caller asked "act" to write no denial for that call ("check", with
+        the codes of that answer: denial_codes gives them). Nothing is taken
+        and no stub is written. A writer opened without denials=True writes
+        none.
+
+        request: what was asked for: {"action", and where they apply
+        "amount", "with", "details"}.
+        more: {"source": "check", "person" or "rule"; "codes" only for
+        "check"; "when" (milliseconds since 1970, or a datetime), which
+        defaults to the clock and must be within 300 seconds of it}.
+        Returns {"written": True, "fingerprint", "line", "notWritten"} or
+        {"written": False, "problem", "notWritten"}; "notWritten" counts the
+        denials not written because of the hourly limit since the writer was
+        opened."""
+
+        def work(call):
+            if not self._denials:
+                return self._denial_answer({'code': 'bad-field', 'message': 'This stub writer was opened without "denials: true", so it writes no denial.'})
+            if call['source'] not in ('check', 'person', 'rule'):
+                return self._denial_answer({'code': 'bad-field', 'message': 'source: must be "check", "person" or "rule".'})
+            try:
+                at = self._now()
+            except Exception as e:
+                return self._denial_answer(problem_from(e))
+            self._write_waiting(at)
+            return self._write_denial_line(call['request'], call['source'], call['codes'], call['when'])
 
         return self._calling(request, more, work)
 
@@ -1545,6 +1709,8 @@ class Recorder:
                 # An added stub of this writer's own chain moves its place in the chain on.
                 self._after = self._last_stub(whole['checked']['entries'])
                 last = whole['checked']['entries'][-1]
+                if self._own_denial(last):
+                    self._denial_times.append(at)
                 if last['kind'] == 'cancellation' and last.get('slip') == slip and last['verified'] == 'all':
                     self._stopped = True
                     return {'acknowledgement': self._acknowledge(last['fingerprint'], _js.parse(line)['cancellation'], True, at)}

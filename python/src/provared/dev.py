@@ -126,7 +126,7 @@ def development_recorder(fields=None, more=None, **named):
     """The stub writer, opened under a development slip, in one call: the
     shortest way to a first record. The same as development_slip followed by
     open_recorder; "more" (a dict) is passed to open_recorder: "options",
-    "now", "countersign_within", "sign_within". What it hands back has the writer as
+    "now", "countersign_within", "sign_within", "denials", "denials_per_hour". What it hands back has the writer as
     ".writer", beside everything development_slip gives."""
     made = development_slip(fields, **named)
     made.writer = open_recorder(made.book, made.slip_fingerprint, made.agent_private_keys, made.issuer_keys, **(more or {}))

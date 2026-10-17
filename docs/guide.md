@@ -551,6 +551,60 @@ not a promise. The numbers `0` and `-0` share a fingerprint, as RFC
 though the tool has run and its stub is in the book. `recordTools`
 names no agent software, and works with any function.
 
+### Denials: the calls the agent's side refused
+
+A book shows what the agent did, not how often it was stopped. Opened
+with `denials: true`, the stub writer also writes a **denial** whenever
+`act` does not take an action: the agent's side's own signed statement
+that it did not take it, and why (format description, section 28).
+
+```js
+const recorder = await openRecorder({ book, slip, privateKeys, issuerKeys, denials: true });
+
+const outcome = await recorder.act({ action: 'provared.data.delete' }, async () => removeTheFiles());
+outcome.done;              // false: the slip does not allow it
+outcome.denial.written;    // true: the book now holds a denial, by "check", with the reason "action-not-allowed"
+
+// A refusal that came from elsewhere: the person said no, or a rule of the software around the agent did.
+await recorder.deny({ action: 'provared.order.place', amount: { unit: 'GBP', value: 900 } }, { source: 'person' });
+```
+
+A denial names what was asked for (its action, amount and service) and
+who said no: `check` (the check before acting, with the codes it gave),
+`person` or `rule`. Its documents are fingerprints only; arguments are
+never written into it. `more.denial: false` asks `act` to write none
+for one call. A writer writes at most `denialsPerHour` (600 by default)
+in any hour by its clock. Each denial it writes, or is handed through
+`add`, counts at the clock's time when it joins the book, whatever date
+it states; those of its own chain that the book already held when it
+was opened count at the dates they state. Past that it writes none, and
+each answer's `notWritten` says how many it left out since it was
+opened. A writer opened again on a book counts the book's denials at
+their stated dates, so a caller who dates denials back and then opens
+the writer again can get a second burst (5 and then 5 more within 3,302
+seconds, at a limit of 5). At 600 an hour, an agent that is refused again and again still
+fills a book's 100,000 entries in about a week: the limit slows that,
+it does not stop it. A stub is never kept out by that limit, and
+nothing that goes wrong in writing a denial makes `act` or `deny` fail:
+the answer says what was done. `deny` does throw where the call itself
+is malformed: a request that is not an object, or that cannot be copied
+as plain data, a `when` that is neither
+a number nor a date, `codes` that cannot be copied, or a call from
+inside an action, which is refused as every call from there is. It
+writes nothing for a writer opened without `denials: true`, and takes a
+`when` within 300 seconds of the clock. It records what its caller
+states: it does not check that the action was not taken, so a caller
+can write a denial for a request that also has a stub.
+
+`recordTools` passes it on: with a writer that writes denials, a call
+that is not run leaves one, and `NotTaken` holds what was done
+(`denial`). Where a tool can ask the person for approval, no denial is
+written until it is known that the call will not run: so one call
+leaves a stub or a denial, never both. A checker shows each denial as
+the agent's side's own word, counts it (`summary.counts.denials`), and
+never counts it against the agent. An agent can simply not write one,
+so a book without denials shows nothing about refusals.
+
 ### Binding a stub to the platform's own record
 
 Where the other side will not countersign, a stub can still be matched
@@ -798,7 +852,7 @@ answer with a named reason. It keeps two things apart:
 |---|---|
 | `size`, `root` | How many entries the book holds, and its top fingerprint |
 | `problems` | Problems with the book as a whole |
-| `entries` | One for each line: `index`, `kind` (`slip`, `stub`, `refusal`, `terms`, `seal`, `cancellation`, `acknowledgement`, `vouching`, `withdrawal`, `pass` or `unreadable`), `fingerprint`, `verified` (`all`, `some` or `none` of its signatures confirmed here), `problems`, `breaches`, `notes`, the signature states, and `content`. Where a time-stamp you trust on a later seal covers the entry: `existedBy`, the time by which it is shown to have existed. On a seal or a cancellation that passed its check: `stampedAt`, the time its own time-stamps give it |
+| `entries` | One for each line: `index`, `kind` (`slip`, `stub`, `refusal`, `terms`, `seal`, `cancellation`, `acknowledgement`, `vouching`, `withdrawal`, `pass`, `denial` or `unreadable`), `fingerprint`, `verified` (`all`, `some` or `none` of its signatures confirmed here), `problems`, `breaches`, `notes`, the signature states, and `content`. Where a time-stamp you trust on a later seal covers the entry: `existedBy`, the time by which it is shown to have existed. On a seal or a cancellation that passed its check: `stampedAt`, the time its own time-stamps give it |
 | `held` | One for each cancellation handed over beside the book: whether it passed its check and was used, whether the book holds it (`inBook`), the time its time-stamp gives, and the acknowledgements handed over with it (`acknowledgements`: who acknowledged, and when by their own word) |
 | `summary.problemFound` | A problem was found somewhere in the record |
 | `summary.fullyChecked` | Every signature was checked on this device |
@@ -806,7 +860,7 @@ answer with a named reason. It keeps two things apart:
 | `summary.methodsMissing` | The signing methods this device lacks, if any, for example `ML-DSA-87` |
 | `summary.withinSlips` | Every stub was compared with its slip, and none is outside it |
 | `summary.firstBreach` | The first entry that shows the agent outside its slip, if any |
-| `summary.counts` | Slips, stubs, countersigned stubs (the countersignature confirmed on this device), one-sided stubs (no countersignature; a stub that was not checked, because its slip failed, is neither), stubs the person approved, refusals, sets of terms, and the other kinds of entry |
+| `summary.counts` | Slips, stubs, countersigned stubs (the countersignature confirmed on this device), one-sided stubs (no countersignature; a stub that was not checked, because its slip failed, is neither), stubs the person approved, refusals, sets of terms, denials (the agent's side's own word, never counted against it), and the other kinds of entry |
 | `summary.sealed` | How far the last time-stamp you trust reaches: how many entries, the time they existed by, and whether a service or a block (`by`) gave it. Otherwise nothing |
 | `summary.limits` | What no check can show, in plain sentences |
 

@@ -659,6 +659,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 0,
           "cancellations": 0,
           "countersigned": 1,
@@ -1051,6 +1052,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 0,
           "cancellations": 0,
           "countersigned": 1,
@@ -1593,6 +1595,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 0,
           "cancellations": 0,
           "countersigned": 2,
@@ -3148,6 +3151,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 0,
           "cancellations": 0,
           "countersigned": 1,
@@ -3924,6 +3928,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 1,
+          "denials": 0,
           "approved": 0,
           "cancellations": 1,
           "countersigned": 1,
@@ -5049,6 +5054,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 2,
           "cancellations": 0,
           "countersigned": 0,
@@ -5731,6 +5737,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 0,
           "cancellations": 0,
           "countersigned": 0,
@@ -7941,6 +7948,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 0,
           "cancellations": 0,
           "countersigned": 3,
@@ -8502,6 +8510,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 0,
           "cancellations": 0,
           "countersigned": 1,
@@ -10502,6 +10511,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 0,
           "cancellations": 0,
           "countersigned": 0,
@@ -11257,6 +11267,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 0,
           "cancellations": 0,
           "countersigned": 0,
@@ -13418,6 +13429,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 0,
           "cancellations": 0,
           "countersigned": 0,
@@ -13961,6 +13973,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 0,
           "cancellations": 0,
           "countersigned": 1,
@@ -14589,6 +14602,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 1,
+          "denials": 0,
           "approved": 0,
           "cancellations": 1,
           "countersigned": 0,
@@ -15191,6 +15205,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 0,
           "cancellations": 1,
           "countersigned": 0,
@@ -15857,6 +15872,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 0,
           "cancellations": 0,
           "countersigned": 0,
@@ -16218,6 +16234,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 1,
+          "denials": 0,
           "approved": 0,
           "cancellations": 1,
           "countersigned": 0,
@@ -16577,6 +16594,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 1,
+          "denials": 0,
           "approved": 0,
           "cancellations": 1,
           "countersigned": 0,
@@ -19109,6 +19127,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 1,
+          "denials": 0,
           "approved": 0,
           "cancellations": 1,
           "countersigned": 0,
@@ -19347,6 +19366,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 1,
+          "denials": 0,
           "approved": 0,
           "cancellations": 1,
           "countersigned": 0,
@@ -19985,6 +20005,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 0,
           "cancellations": 0,
           "countersigned": 0,
@@ -21866,6 +21887,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 0,
           "cancellations": 1,
           "countersigned": 0,
@@ -23634,6 +23656,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 1,
+          "denials": 0,
           "approved": 0,
           "cancellations": 17,
           "countersigned": 0,
@@ -24724,6 +24747,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 0,
           "cancellations": 16,
           "countersigned": 0,
@@ -25488,6 +25512,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 1,
+          "denials": 0,
           "approved": 0,
           "cancellations": 1,
           "countersigned": 0,
@@ -25777,6 +25802,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 1,
+          "denials": 0,
           "approved": 0,
           "cancellations": 1,
           "countersigned": 0,
@@ -26410,6 +26436,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 2,
+          "denials": 0,
           "approved": 0,
           "cancellations": 2,
           "countersigned": 0,
@@ -27539,6 +27566,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 0,
           "cancellations": 0,
           "countersigned": 0,
@@ -28324,6 +28352,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 1,
+          "denials": 0,
           "approved": 0,
           "cancellations": 1,
           "countersigned": 0,
@@ -28599,6 +28628,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 1,
+          "denials": 0,
           "approved": 0,
           "cancellations": 1,
           "countersigned": 0,
@@ -28852,6 +28882,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 1,
+          "denials": 0,
           "approved": 0,
           "cancellations": 1,
           "countersigned": 0,
@@ -29641,6 +29672,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 1,
+          "denials": 0,
           "approved": 0,
           "cancellations": 1,
           "countersigned": 0,
@@ -30074,6 +30106,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 1,
+          "denials": 0,
           "approved": 0,
           "cancellations": 1,
           "countersigned": 0,
@@ -30531,6 +30564,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 1,
+          "denials": 0,
           "approved": 0,
           "cancellations": 1,
           "countersigned": 0,
@@ -32627,6 +32661,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 0,
           "cancellations": 1,
           "countersigned": 0,
@@ -32922,6 +32957,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 0,
           "cancellations": 1,
           "countersigned": 0,
@@ -33206,6 +33242,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 0,
           "cancellations": 1,
           "countersigned": 0,
@@ -33642,6 +33679,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 0,
           "cancellations": 0,
           "countersigned": 0,
@@ -36379,6 +36417,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 1,
+          "denials": 0,
           "approved": 0,
           "cancellations": 1,
           "countersigned": 0,
@@ -36611,6 +36650,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 0,
           "cancellations": 0,
           "countersigned": 0,
@@ -36928,6 +36968,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 1,
+          "denials": 0,
           "approved": 0,
           "cancellations": 1,
           "countersigned": 0,
@@ -37309,6 +37350,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 1,
+          "denials": 0,
           "approved": 0,
           "cancellations": 1,
           "countersigned": 0,
@@ -37672,6 +37714,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 1,
+          "denials": 0,
           "approved": 0,
           "cancellations": 1,
           "countersigned": 1,
@@ -37966,6 +38009,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 0,
           "cancellations": 0,
           "countersigned": 1,
@@ -38741,6 +38785,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 1,
+          "denials": 0,
           "approved": 0,
           "cancellations": 1,
           "countersigned": 0,
@@ -39128,6 +39173,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 1,
+          "denials": 0,
           "approved": 0,
           "cancellations": 1,
           "countersigned": 0,
@@ -39574,6 +39620,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 0,
           "cancellations": 1,
           "countersigned": 1,
@@ -40056,6 +40103,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 0,
           "cancellations": 1,
           "countersigned": 0,
@@ -41025,6 +41073,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 0,
           "cancellations": 0,
           "countersigned": 0,
@@ -41279,6 +41328,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 1,
+          "denials": 0,
           "approved": 0,
           "cancellations": 1,
           "countersigned": 0,
@@ -41529,6 +41579,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 0,
           "cancellations": 0,
           "countersigned": 0,
@@ -41783,6 +41834,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 1,
+          "denials": 0,
           "approved": 0,
           "cancellations": 1,
           "countersigned": 0,
@@ -42038,6 +42090,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 1,
+          "denials": 0,
           "approved": 0,
           "cancellations": 1,
           "countersigned": 0,
@@ -42261,6 +42314,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 1,
+          "denials": 0,
           "approved": 0,
           "cancellations": 1,
           "countersigned": 0,
@@ -42516,6 +42570,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 1,
+          "denials": 0,
           "approved": 0,
           "cancellations": 1,
           "countersigned": 0,
@@ -42739,6 +42794,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 1,
+          "denials": 0,
           "approved": 0,
           "cancellations": 1,
           "countersigned": 0,
@@ -43969,6 +44025,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 0,
           "cancellations": 0,
           "countersigned": 0,
@@ -44494,6 +44551,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 0,
           "cancellations": 0,
           "countersigned": 0,
@@ -51605,6 +51663,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 0,
           "cancellations": 1,
           "countersigned": 1,
@@ -52924,6 +52983,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 0,
           "cancellations": 0,
           "countersigned": 0,
@@ -54036,6 +54096,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 1,
+          "denials": 0,
           "approved": 0,
           "cancellations": 1,
           "countersigned": 0,
@@ -54810,6 +54871,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 0,
           "cancellations": 0,
           "countersigned": 1,
@@ -55587,6 +55649,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 0,
           "cancellations": 0,
           "countersigned": 2,
@@ -56242,6 +56305,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 0,
           "cancellations": 0,
           "countersigned": 0,
@@ -56547,6 +56611,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 0,
           "cancellations": 0,
           "countersigned": 1,
@@ -56953,6 +57018,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 0,
           "cancellations": 0,
           "countersigned": 1,
@@ -57391,6 +57457,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 1,
           "cancellations": 0,
           "countersigned": 2,
@@ -57866,6 +57933,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 1,
           "cancellations": 0,
           "countersigned": 2,
@@ -58397,6 +58465,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 1,
           "cancellations": 0,
           "countersigned": 2,
@@ -58937,6 +59006,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 1,
           "cancellations": 0,
           "countersigned": 2,
@@ -59568,6 +59638,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 1,
           "cancellations": 0,
           "countersigned": 2,
@@ -60211,6 +60282,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 1,
+          "denials": 0,
           "approved": 1,
           "cancellations": 1,
           "countersigned": 2,
@@ -60795,6 +60867,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 1,
+          "denials": 0,
           "approved": 1,
           "cancellations": 1,
           "countersigned": 2,

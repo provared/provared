@@ -124,7 +124,11 @@ export function norm(value, ctx, key) {
 
 /** An error as the transcript holds it. */
 function failure(e, ctx) {
-  if (e instanceof NotTaken) return { error: { kind: 'NotTaken', tool: e.tool, message: e.message, answer: norm(e.answer, ctx) } };
+  if (e instanceof NotTaken) {
+    const out = { kind: 'NotTaken', tool: e.tool, message: e.message, answer: norm(e.answer, ctx) };
+    if (e.denial !== undefined) out.denial = norm(e.denial, ctx);
+    return { error: out };
+  }
   if (e instanceof Refusal) {
     const out = { kind: 'Refusal', code: e.code, message: norm(e.message, ctx) };
     if (e.acknowledgement) out.acknowledgement = norm(e.acknowledgement, ctx);
@@ -208,6 +212,7 @@ async function inside(names, ctx, writer) {
       else if (name === 'act') got = { value: (await writer.act(order(1), async () => null)).done };
       else if (name === 'record') got = { value: (await writer.record(order(1))).seq };
       else if (name === 'add') got = { value: await writer.add({ neither: 'this nor that' }) };
+      else if (name === 'deny') got = { value: await writer.deny(order(1), { source: 'rule' }) };
       got.value = norm(got.value, ctx);
     } catch (e) {
       got = failure(e, ctx);
@@ -243,7 +248,7 @@ function moreOf(spec, ctx, writer, seen) {
   // Anything but an object is handed to the writer as it is.
   if (spec === null || typeof spec !== 'object' || Array.isArray(spec)) return resolve(spec, ctx);
   const more = {};
-  for (const name of ['when', 'terms', 'approval']) if (Object.hasOwn(spec, name)) more[name] = resolve(spec[name], ctx);
+  for (const name of ['when', 'terms', 'approval', 'denial', 'source', 'codes']) if (Object.hasOwn(spec, name)) more[name] = resolve(spec[name], ctx);
   if (spec.countersign) more.countersign = countersigner(spec.countersign, ctx, writer, (seen.countersign = {}));
   if (spec.detailsAfter) more.detailsAfter = detailsAfter(spec.detailsAfter, ctx, writer, (seen.detailsAfter = {}));
   return more;
@@ -366,6 +371,8 @@ async function playStep(step, ctx) {
         if (Object.hasOwn(step, 'pass')) o.pass = resolve(step.pass, ctx);
         if (Object.hasOwn(step, 'options')) o.options = resolve(step.options, ctx);
         if (Object.hasOwn(step, 'countersignWithin')) o.countersignWithin = resolve(step.countersignWithin, ctx);
+        if (Object.hasOwn(step, 'denials')) o.denials = resolve(step.denials, ctx);
+        if (Object.hasOwn(step, 'denialsPerHour')) o.denialsPerHour = resolve(step.denialsPerHour, ctx);
         ctx.writers[step.as] = await openRecorder(o);
         return { ok: true };
       }
@@ -389,8 +396,11 @@ async function playStep(step, ctx) {
         if (step.more?.detailsAfter?.meddle && Array.isArray(given)) for (const d of given) if (d && typeof d === 'object') d.sha256 = 'E'.repeat(43);
         const out = { done: r.done, answer: norm(r.answer, ctx), result: norm(r.result, ctx), stub: norm(r.stub, ctx), seen: norm(seen, ctx) };
         if (Object.hasOwn(r, 'detailsAfter')) out.detailsAfter = norm(r.detailsAfter, ctx);
+        if (Object.hasOwn(r, 'denial')) out.denial = norm(r.denial, ctx);
         return out;
       }
+      case 'deny':
+        return { denial: norm(await w.deny(resolve(step.request, ctx), moreOf(step.more, ctx, w, seen)), ctx) };
       case 'record': {
         const r = await w.record(resolve(step.request, ctx), moreOf(step.more, ctx, w, seen));
         return { stub: norm(r, ctx), seen: norm(seen, ctx) };

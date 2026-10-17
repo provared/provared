@@ -17,6 +17,7 @@
 #            blockchain, to put beside a seal),
 #            prepare_cancellation + assemble_cancellation (the person ends a slip),
 #            write_acknowledgement (the agent's side says it was handed a cancellation),
+#            write_denial (the agent's side says it did not take an action, and why),
 #            write_vouching, write_withdrawal (an organisation vouches for a name),
 #            write_pass (an agent hands part of its permission to a helper agent),
 #            write_book, make_show
@@ -37,13 +38,14 @@ from .approval import assemble_approval, prepare_approval
 from .blockstamp import block_fingerprint, block_stamp_item
 from .book import LIMITS, check_book, check_show, entry_line, make_show, open_checker, write_book
 from .compare import condition_words, limit_words, never_words
+from .denial import DENIAL_SOURCES, FINDING_CODES, denial_codes, write_denial
 from .documents import DOCUMENT_NAMES, RESERVED_DOCUMENT_PREFIX, http_request_fingerprint, http_response_fingerprint, identifier_fingerprint
 from .encoding import Refusal, fingerprint, format_time, from_base64url, random_id, sha256, to_base64url, utf8
 from .guard import check_before
 from .headers import MIN_BLOCKS_AFTER, blocks_in_chain, check_header_chain
 from .keys import thumbprint
 from .pass_ import write_pass
-from .recorder import COUNTERSIGN_WITHIN_MS, SIGN_WITHIN_MS, Recorder, open_recorder
+from .recorder import COUNTERSIGN_WITHIN_MS, DENIALS_PER_HOUR, SIGN_WITHIN_MS, Recorder, open_recorder
 from .seal import key_set_fingerprint
 from .service import REFUSAL_REASONS, write_refusal, write_terms
 from .signatures import Signer, generate_key_set, key_set_from_seeds, key_set_seeds, method_available, signer_from_key
@@ -56,6 +58,7 @@ __all__ = [
     'MIN_BLOCKS_AFTER', 'blocks_in_chain', 'check_header_chain',
     'COUNTERSIGN_WITHIN_MS', 'NotTaken', 'Recorder', 'arguments_fingerprint', 'key_set_from_seeds', 'key_set_seeds', 'open_recorder',
     'SIGN_WITHIN_MS', 'Signer', 'signer_from_key',
+    'DENIALS_PER_HOUR', 'DENIAL_SOURCES', 'FINDING_CODES', 'denial_codes', 'write_denial',
     'record_function', 'record_tools',
     'ACTION_KINDS', 'CONDUCT_RULES', 'COVERABLE', 'LIMITS', 'REFUSAL_REASONS', 'RESERVED_PREFIX', 'SHARED_ACTIONS', 'VOUCHED_KINDS',
     'DOCUMENT_NAMES', 'RESERVED_DOCUMENT_PREFIX', 'http_request_fingerprint', 'http_response_fingerprint', 'identifier_fingerprint',

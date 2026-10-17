@@ -21,7 +21,7 @@ test('a sound book is intact, fully checked and within its slip', async () => {
   assert.equal(r.summary.fullyChecked, true);
   assert.equal(r.summary.withinSlips, true);
   assert.equal(r.summary.firstBreach, null);
-  assert.deepEqual(r.summary.counts, { slips: 1, stubs: 3, countersigned: 3, oneSided: 0, approved: 0, refusals: 0, terms: 0, seals: 0, cancellations: 0, acknowledgements: 0, vouchings: 0, passes: 0 });
+  assert.deepEqual(r.summary.counts, { slips: 1, stubs: 3, countersigned: 3, oneSided: 0, approved: 0, refusals: 0, terms: 0, seals: 0, cancellations: 0, acknowledgements: 0, denials: 0, vouchings: 0, passes: 0 });
 
   const [slip, first, , third] = r.entries;
   assert.equal(slip.kind, 'slip');
@@ -90,7 +90,7 @@ test('a stub with no countersignature is one-sided, which is not a fault', async
   const r = await checkBook(w.book());
   assert.equal(r.summary.intact, true);
   assert.equal(r.entries[1].countersignature.state, 'absent');
-  assert.deepEqual(r.summary.counts, { slips: 1, stubs: 1, countersigned: 0, oneSided: 1, approved: 0, refusals: 0, terms: 0, seals: 0, cancellations: 0, acknowledgements: 0, vouchings: 0, passes: 0 });
+  assert.deepEqual(r.summary.counts, { slips: 1, stubs: 1, countersigned: 0, oneSided: 1, approved: 0, refusals: 0, terms: 0, seals: 0, cancellations: 0, acknowledgements: 0, denials: 0, vouchings: 0, passes: 0 });
 });
 
 test('a stub with no other party needs no "with"', async () => {
@@ -279,7 +279,7 @@ test('two slips in one book each have their own chain and total', async () => {
   const r = await checkBook(text);
   assert.equal(r.summary.intact, true);
   assert.equal(r.summary.withinSlips, true);
-  assert.deepEqual(r.summary.counts, { slips: 2, stubs: 2, countersigned: 2, oneSided: 0, approved: 0, refusals: 0, terms: 0, seals: 0, cancellations: 0, acknowledgements: 0, vouchings: 0, passes: 0 });
+  assert.deepEqual(r.summary.counts, { slips: 2, stubs: 2, countersigned: 2, oneSided: 0, approved: 0, refusals: 0, terms: 0, seals: 0, cancellations: 0, acknowledgements: 0, denials: 0, vouchings: 0, passes: 0 });
 });
 
 test('an empty book and a missing book are refused, not crashed on', async () => {

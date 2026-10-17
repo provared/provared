@@ -312,8 +312,117 @@ const flipByte = (b64) => {
   return toBase64url(bytes);
 };
 
+// --- the denial (format description, section 28) ---
+
+async function denialWorld() {
+  const w = await makeWorld({ fields: { passes: 1, requires: [] } });
+  const trusted = { issuerKeys: [await thumbprint(w.passkey.key)] };
+  await w.add({ value: 30 });
+  const byCheck = await w.deny({ codes: ['over-limit', 'party-not-allowed'], with: 'stranger' });
+  await w.deny({ source: 'person', amount: undefined, with: undefined, action: 'provared.data.delete' });
+  await w.deny({ source: 'rule', details: [{ name: 'provared.arguments', sha256: toBase64url(new Uint8Array(32).fill(7)) }] });
+  const helper = await w.pass({ limits: [{ action: 'supplies.order', max: 30, unit: 'GBP' }] });
+  await helper.add({ value: 20 });
+  await w.deny({ pass: helper.fingerprint, signer: helper.helper.privateKeys, codes: ['over-limit'], amount: { unit: 'GBP', value: 40 } });
+  await w.add({ value: 10 });
+  return { w, trusted, helper, byCheck };
+}
+
+async function denialBookCases() {
+  const cases = [];
+  const add = (name, text, options = {}) => cases.push({ name, text, options: withoutSlh(options) });
+  const { w, trusted, helper, byCheck } = await denialWorld();
+  const book = w.book();
+  add('denials by the check, the person and a rule, and a helper\'s, beside stubs', book, trusted);
+  add('denials, no passkey trusted', book);
+  add('denials, on a device without ML-DSA-87', book, { ...trusted, withoutMethods: ['ML-DSA-87'] });
+  add('denials, on a device without ES256: the slip cannot be confirmed', book, { ...trusted, withoutMethods: ['ES256'] });
+  const lines = book.split('\n');
+  // A denial before its slip.
+  add('a denial before its slip', [lines[2], lines[0], lines[1], ''].join('\n'), trusted);
+  // A denial signed with keys that are not the agent's.
+  const stranger = await generateKeySet();
+  const wrong = await makeWorld({ fields: { requires: [] } });
+  const wTrusted = { issuerKeys: [await thumbprint(wrong.passkey.key)] };
+  await wrong.deny({ signer: stranger.privateKeys });
+  await wrong.deny({ source: 'person', signer: [wrong.agent.privateKeys[0], stranger.privateKeys[1]] });
+  add('denials signed with keys that are not the agent\'s', wrong.book(), wTrusted);
+  // A helper's denial signed with the first agent's keys, and one naming a pass not in the book.
+  const h = await makeWorld({ fields: { passes: 1, requires: [] } });
+  const hTrusted = { issuerKeys: [await thumbprint(h.passkey.key)] };
+  const hp = await h.pass({});
+  await h.deny({ pass: hp.fingerprint });
+  await h.deny({ pass: toBase64url(new Uint8Array(32).fill(9)), signer: hp.helper.privateKeys });
+  add('a helper\'s denial signed by the first agent, and one naming a pass not in the book', h.book(), hTrusted);
+  // A denial whose content was changed after it was signed, and one that repeats a unique number.
+  const changed = JSON.parse(lines[2]);
+  changed.denial = withContent(changed.denial, (c) => {
+    const { codes: _, ...rest } = c;
+    return { ...rest, source: 'rule' };
+  });
+  const repeated = await makeWorld({ fields: { requires: [] } });
+  const rTrusted = { issuerKeys: [await thumbprint(repeated.passkey.key)] };
+  const first = await repeated.add({ value: 10 });
+  await repeated.deny({ id: JSON.parse(Buffer.from(first.record.payload, 'base64url').toString()).id });
+  add('a denial changed after signing', [lines[0], lines[1], JSON.stringify(changed), ''].join('\n'), trusted);
+  add('a denial that repeats the unique number of a stub', repeated.book(), rTrusted);
+  // A denial dated outside the slip's time is compared with nothing.
+  const late = await makeWorld({ fields: { requires: [] } });
+  const lTrusted = { issuerKeys: [await thumbprint(late.passkey.key)] };
+  await late.deny({ when: Date.parse('2026-11-01T00:00:00Z'), codes: ['outside-valid-time'] });
+  add('a denial dated after the slip ended', late.book(), lTrusted);
+  // A line that holds a denial and something else is not a known kind of entry.
+  const both = { ...JSON.parse(lines[2]), stub: JSON.parse(lines[1]).stub };
+  add('a denial and a stub on one line', [lines[0], lines[1], JSON.stringify(both), ''].join('\n'), trusted);
+  // A denial record under the label of another kind of record.
+  const relabelled = JSON.parse(lines[2]);
+  relabelled.denial = { ...relabelled.denial, signatures: relabelled.denial.signatures.map((s, i) => ({ ...s, protected: toBase64url(Buffer.from(i === 0 ? '{"typ":"vnd.provared.refusal.v0+json","alg":"Ed25519"}' : '{"typ":"vnd.provared.refusal.v0+json","alg":"ML-DSA-87"}')) })) };
+  add('a denial under the labels of a refusal', [lines[0], lines[1], JSON.stringify(relabelled), ''].join('\n'), trusted);
+  void helper;
+  void byCheck;
+  return cases;
+}
+
+async function denialShowCases() {
+  const cases = [];
+  const add = (name, show, options = {}) => cases.push({ name, show, options: withoutSlh(options) });
+  const { w, trusted } = await denialWorld();
+  const book = w.book();
+  add('a denial and its slip', await makeShow(book, [0, 2]), trusted);
+  add('a denial without its slip', await makeShow(book, [2]), trusted);
+  add('a helper\'s denial with its slip and pass', await makeShow(book, [0, 5, 7]), trusted);
+  add('a helper\'s denial without its pass', await makeShow(book, [0, 7]), trusted);
+  return cases;
+}
+
+async function denialBeforeCases() {
+  const cases = [];
+  const { w, trusted } = await denialWorld();
+  const book = w.book();
+  const add = (name, proposal, options = trusted) => cases.push({ name, text: book, proposal, options: withoutSlh(options) });
+  const at = START + 6 * 3600 * 1000;
+  add('an action after denials, within the slip', { slip: w.slipFingerprint, action: 'supplies.order', amount: { unit: 'GBP', value: 10 }, with: 'supplier', when: at });
+  add('an action after denials, over the limit', { slip: w.slipFingerprint, action: 'supplies.order', amount: { unit: 'GBP', value: 300 }, with: 'supplier', when: at });
+  add('on a device without ML-DSA-87: nothing is allowed', { slip: w.slipFingerprint, action: 'supplies.order', amount: { unit: 'GBP', value: 10 }, with: 'supplier', when: at }, { ...trusted, withoutMethods: ['ML-DSA-87'] });
+  // A sealed book that holds a denial: on a device without SLH-DSA the check goes on, as for any other sealed book.
+  const sealed = await makeWorld({ fields: { requires: [] } });
+  await sealed.add({ value: 10 });
+  await sealed.deny({ source: 'rule' });
+  await sealed.seal({});
+  cases.push({
+    name: 'a sealed book holding a denial, on a device without SLH-DSA',
+    text: sealed.book(),
+    proposal: { slip: sealed.slipFingerprint, action: 'supplies.order', amount: { unit: 'GBP', value: 5 }, with: 'supplier', when: START + 2 * 3600 * 1000 },
+    options: withoutSlh({ issuerKeys: [await thumbprint(sealed.passkey.key)] }),
+  });
+  return cases;
+}
+
 /** Each set of cases, by the name of its file. */
 export const CASES = {
+  'denial-books': async () => finish('Checking a whole book that holds denials (format description, section 28), on a device without SLH-DSA.', 'checkBook', await denialBookCases(), ANSWER),
+  'denial-shows': async () => finish('Checking a Show whose pages hold denials (format description, sections 11 and 28), on a device without SLH-DSA.', 'checkShow', await denialShowCases(), ANSWER),
+  'denial-before': async () => finish('The check before acting over a book that holds denials (format description, sections 20 and 28), on a device without SLH-DSA.', 'checkBefore', await denialBeforeCases(), ANSWER),
   books: async () => finish('Checking a whole book (format description, sections 7 to 11 and 17 to 26), on a device without SLH-DSA.', 'checkBook', await bookCases(), ANSWER),
   shows: async () => finish('Checking a Show (format description, section 11), on a device without SLH-DSA.', 'checkShow', await showCases(), ANSWER),
   'make-show': async () => finish('Making a Show: the pages, their proofs and the top fingerprint (format description, sections 10 and 11).', 'makeShow', await makeShowCases(), ANSWER),

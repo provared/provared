@@ -136,7 +136,7 @@ def _only_seal_third_unchecked(result):
             elif sig.get('state') == 'unavailable':
                 missing.add(sig.get('alg'))
             stamps(e.get('stamps') or [])
-        elif kind in ('refusal', 'terms', 'vouching', 'withdrawal', 'pass', 'acknowledgement'):
+        elif kind in ('refusal', 'terms', 'vouching', 'withdrawal', 'pass', 'acknowledgement', 'denial'):
             note(e.get('signatures') or [])
         else:
             state['skipped'] = True

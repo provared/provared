@@ -87,7 +87,7 @@ method was used. Because it is part of the signed bytes, a signature made
 for one kind of record can never pass as another kind.
 
 In this draft the protected header, once decoded, MUST be **exactly** one
-of these twenty-two texts, byte for byte. A checker compares the bytes and does
+of these twenty-four texts, byte for byte. A checker compares the bytes and does
 not interpret anything else.
 
 | Record | Method | Protected header |
@@ -114,6 +114,8 @@ not interpret anything else.
 | Withdrawal | ML-DSA-87 | `{"typ":"vnd.provared.withdrawal.v0+json","alg":"ML-DSA-87"}` |
 | Pass | Ed25519 | `{"typ":"vnd.provared.pass.v0+json","alg":"Ed25519"}` |
 | Pass | ML-DSA-87 | `{"typ":"vnd.provared.pass.v0+json","alg":"ML-DSA-87"}` |
+| Denial | Ed25519 | `{"typ":"vnd.provared.denial.v0+json","alg":"Ed25519"}` |
+| Denial | ML-DSA-87 | `{"typ":"vnd.provared.denial.v0+json","alg":"ML-DSA-87"}` |
 
 `typ` is the media type of the record (RFC 7515, section 4.1.9), used as
 explicit typing (RFC 8725, section 3.11). `alg` names the signing method
@@ -542,6 +544,7 @@ in place of the narrowed content), and is one of:
 - `{"vouching": vouching record}` and `{"withdrawal": withdrawal record}`
   (section 23)
 - `{"pass": pass record}` (section 25)
+- `{"denial": denial record}` (section 28)
 
 A slip MUST come before the entries that rely on it, and a set of terms
 before the stubs that rely on it. A book MUST NOT hold
@@ -648,6 +651,9 @@ the seal's own date (section 21.1, rule 4).
 - A one-sided stub proves what the agent's side said, not what the other
   side did.
 - A refusal proves what the service's side said, not what the agent did.
+- A denial proves what the agent's side said it did not do, and why. It
+  does not prove that the action was not taken some other way, and an
+  agent that writes no denial leaves no trace of the refusal.
 - A rule of conduct in a slip, such as "never claim to be a human being",
   is the person's signed instruction. No check can show that the agent
   kept it.
@@ -972,7 +978,9 @@ record, with its approval and a countersignature, could be longer than a
 line of a book may be (section 9) is not allowed either (`too-large`).
 
 This is a help to whoever runs the agent. It is not evidence: nothing in a
-record shows that the check was made.
+record shows that the check was made. Where the check refuses an action,
+the agent's side MAY write a denial (section 28): its own signed
+statement that the action was not taken, and why.
 
 ## 21. The Seal and the outside time-stamp
 
@@ -1839,6 +1847,86 @@ with the body `{"hello": "world"}` is written as these four lines:
   once-only names twice; such records are refused, so a book that holds
   one no longer passes its check. A checker that does not know this
   section reads a reserved name as a label.
+
+## 28. The denial
+
+A record shows what the agent did, not how often it was stopped. A
+denial closes part of that gap from the agent's own side: the agent's
+software states that it did not take an action that was asked for, and
+who said no. It is the agent's side's own word, like a one-sided stub.
+
+Content:
+
+| Member | Meaning | Form |
+|---|---|---|
+| `type` | The kind of content | `provared.denial.v0` |
+| `id` | A unique number | Section 3.7 |
+| `slip` | The slip the agent acts under | A fingerprint |
+| `pass` | Optional. For a helper agent: the pass it acts under | A fingerprint |
+| `action` | What was asked for | Text in the form of an action name. As in a refusal (section 18), a name that begins `provared.` need not be on the shared list here: what was asked for is written down as it was asked |
+| `amount` | Optional | As in a stub (section 5.1) |
+| `with` | Optional. The service asked for, as asked | The form of a service's `id`; it need not be one the slip names |
+| `details` | Optional. Documents, by their fingerprints only | As in a stub, with the reserved names of section 27 |
+| `source` | Who said no | `check`, `person` or `rule`, as below |
+| `codes` | Why, where `source` is `check`; absent otherwise | A list of 1 to 16 finding codes from the list below, none repeated |
+| `when` | When the action was refused, as the agent's side states it | A time |
+
+| Source | Meaning |
+|---|---|
+| `check` | The check before acting (section 20) did not allow the action. |
+| `person` | The person refused, or gave no approval when asked. |
+| `rule` | A rule of the software around the agent, outside the slip. |
+
+The format's own list of finding codes, from which `codes` is drawn, is
+every code a checker or the check before acting gives: `not-json`, `bad-envelope`, `bad-base64url`, `too-large`, `unknown-type`, `bad-signatures-layout`, `payload-not-canonical`, `payload-type-mismatch`, `bad-field`, `bad-key`, `signature-invalid`, `passkey-wrong-type`, `passkey-challenge-mismatch`, `passkey-origin-mismatch`, `passkey-rpid-mismatch`, `passkey-user-not-present`, `passkey-user-not-verified`, `passkey-bad-data`, `issuer-not-expected`, `slip-missing`, `slip-unusable`, `chain-broken`, `time-went-backwards`, `duplicate-id`, `duplicate-slip`, `countersignature-invalid`, `countersignature-wrong-stub`, `countersignature-not-possible`, `line-not-canonical`, `unknown-entry`, `approval-mismatch`, `approval-reused`, `approval-invalid`, `approval-not-found`, `approval-dated-after-stub`, `terms-not-found`, `terms-unusable`, `terms-mismatch`, `pass-missing`, `pass-mismatch`, `pass-too-deep`, `cover-invalid`, `cancellation-invalid`, `cancellation-not-found`, `acknowledgement-mismatch`, `vouching-missing`, `seal-mismatch`, `seal-chain-broken`, `sealer-not-expected`, `dated-after-stamp`, `stamp-bad-data`, `stamp-wrong-data`, `stamp-invalid`, `headers-invalid`, `record-not-sound`, `proof-invalid`, `root-mismatch`, `check-failed`, `action-not-allowed`, `party-not-allowed`, `outside-valid-time`, `amount-missing`, `over-limit`, `over-each-limit`, `over-count-limit`, `over-period-limit`, `countersignature-missing`, `approval-missing`, `prohibited`, `pass-not-allowed`, `pass-wider`, `after-cancellation`, `outside-terms`.
+A code not on this list MUST be refused (`bad-field`), as MUST `codes`
+where `source` is not `check`, and its absence where it is.
+
+It is signed as a stub is (section 5.2), with the denial labels of
+section 3.2: with the two keys of the agent the slip names or, where it
+holds `pass`, with the `to.keys` of that pass (`signature-invalid`),
+exactly as an acknowledgement is (section 26). It speaks for one agent.
+
+**In a book.** The slip MUST be earlier in the book (`slip-missing`),
+and so MUST the pass, under the same slip (`pass-missing`,
+`pass-mismatch`); among the pages of a Show, both MUST be among the
+pages. A denial is in no chain (section 7): it changes no stub's `seq`
+or `previous`, and adds to no running total, count or period. It is
+compared with nothing: no rule ties its `when` to the slip's time or to
+any stub, and a checker does not judge whether the refusal was right.
+
+**What a checker says about it.** A checker MUST show a denial as the
+agent's side's own statement that it did not take the action, with who
+said no and the codes it gives, and MUST count it (`denials` among the
+counts). It MUST NOT count a denial against the agent, nor take it as
+evidence that the action was not taken in some other way. A denial
+whose signatures this device could not check, or under a slip it could
+not confirm, is not shown as fact.
+
+**How it differs from a refusal.** A refusal (section 18) is signed by
+the service and is the other side's word; a denial is signed by the
+agent's own keys and is the agent's side's word. A book may hold both
+for one attempt: the agent's side asked, the service refused, and the
+agent's software then wrote a denial with `source` `rule`. A checker
+shows both and links neither.
+
+**Whoever writes denials** SHOULD write one only for an action that was
+not taken, and never both a stub and a denial for one request. A
+denial names what was asked for: its action, its amount and its service
+are in clear, and its documents are fingerprints only; arguments and
+the contents of documents MUST NOT be written into it. A writer SHOULD
+keep to a set number of denials in any hour of its own clock, counting
+each it writes at the time it writes it, so that an agent that asks
+again and again cannot fill its book (section 9) quickly, and SHOULD say
+how many it did not write. At 600 an hour, a book's 100,000 entries
+still fill in about a week.
+
+What a denial does not show: that the action was not taken some other
+way; that the agent was asked at all, beyond its own word; or how often
+an agent was stopped, where it wrote no denial. Nothing obliges an
+agent's side to write one: a book with no denial shows nothing about
+refusals. A checker that does not know this section refuses a book that
+holds a denial (`unknown-entry`).
 
 ---
 

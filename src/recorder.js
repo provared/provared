@@ -38,12 +38,18 @@ import { KEY_SET_METHODS } from './keys.js';
 import { CLOCK_ALLOWANCE_MS, MAX_STAMPS } from './seal.js';
 import { holdSigningKeys } from './signatures.js';
 import { writeAcknowledgement } from './standing.js';
+import { denialCodes, writeDenial } from './denial.js';
 import { validateRequest, writeStub } from './stub.js';
 
 /** How long the other side is given to hand back its countersignature, unless the caller says otherwise: 30 seconds. */
 export const COUNTERSIGN_WITHIN_MS = 30000;
 /** How long a signer is given for each signature, unless the caller says otherwise: 30 seconds. */
 export const SIGN_WITHIN_MS = 30000;
+/** The most denials a writer writes in any hour, unless the caller says otherwise: 600. */
+export const DENIALS_PER_HOUR = 600;
+// The most a caller may set it to: as many as a book may hold entries.
+const MAX_DENIALS_PER_HOUR = 100000;
+const HOUR_MS = 3600000;
 // The longest wait a timer can hold.
 const MAX_WAIT_MS = 2 ** 31 - 1;
 // "detailsAfter" in "act": the most documents it may add, and the most the
@@ -227,11 +233,29 @@ function plainHeld(copy) {
  * @param {number} [o.countersignWithin] how long the other side is given to countersign, in milliseconds; defaults to 30,000
  * @param {number} [o.signWithin] how long a signer is given for each signature, in milliseconds; defaults to 30,000.
  *   After that the action is not taken and nothing is written; a late answer is not used
- * @returns {Promise<object>} the writer: before, record, act, book, check, cancellations, add
+ * @param {boolean} [o.denials] true to write a denial (format description, section 28) whenever "act" does not take an
+ *   action, and to let "deny" write one; defaults to false, and then no denial is written
+ * @param {number} [o.denialsPerHour] the most denials written in any hour, by the clock; defaults to 600. Each
+ *   denial this writer writes, or is handed through "add", counts at the clock's time when it joins the book, whatever
+ *   date it states; those the book held when the writer was opened count at the dates they state. Past the limit, a
+ *   denial is not written, and the answers count those not written
+ * @returns {Promise<object>} the writer: before, record, act, deny, book, check, cancellations, add
  * @throws {Refusal} "record-not-sound" if the book so far has a problem; "bad-field" or "bad-key" if an item of
  *   privateKeys is neither a key nor a signer, or is a signer that holds another key than the slip, or the pass, names
  */
-export async function openRecorder({ book, slip, privateKeys, issuerKeys, pass, options = {}, now = Date.now, countersignWithin = COUNTERSIGN_WITHIN_MS, signWithin = SIGN_WITHIN_MS }) {
+export async function openRecorder({
+  book,
+  slip,
+  privateKeys,
+  issuerKeys,
+  pass,
+  options = {},
+  now = Date.now,
+  countersignWithin = COUNTERSIGN_WITHIN_MS,
+  signWithin = SIGN_WITHIN_MS,
+  denials = false,
+  denialsPerHour = DENIALS_PER_HOUR,
+}) {
   if (typeof now !== 'function') throw new Refusal('bad-field', 'now: must be a function that gives the time in milliseconds.');
   // A clock that gives anything but a time is a clock that failed: no comparison with it would hold.
   const device = now;
@@ -245,6 +269,10 @@ export async function openRecorder({ book, slip, privateKeys, issuerKeys, pass, 
   }
   if (!(Number.isFinite(signWithin) && signWithin >= 1 && signWithin <= MAX_WAIT_MS)) {
     throw new Refusal('bad-field', 'signWithin: must be a number of milliseconds from 1 to 2,147,483,647.');
+  }
+  if (typeof denials !== 'boolean') throw new Refusal('bad-field', 'denials: must be true or false.');
+  if (!(Number.isInteger(denialsPerHour) && denialsPerHour >= 1 && denialsPerHour <= MAX_DENIALS_PER_HOUR)) {
+    throw new Refusal('bad-field', 'denialsPerHour: must be a whole number from 1 to 100,000.');
   }
   // Whom the writer trusts is fixed when it is opened: read once, as a whole
   // check reads it, and copied. The passkeys it trusts are its own
@@ -360,6 +388,16 @@ export async function openRecorder({ book, slip, privateKeys, issuerKeys, pass, 
   const { result } = await standing();
   if (result.summary.problemFound) throw notWritten('A problem was found in the record so far. It must be looked at before the agent acts again.');
   let after = lastStub(result.entries);
+  // The times of the denials of this writer's own chain, which the hourly
+  // limit counts: those the book held when the writer was opened, at the
+  // dates they state; and each one that joins the book since, at the
+  // clock's time when it joined, whatever date it states (a denial may be
+  // dated up to 300 seconds back, and counting it there would let more
+  // than the limit be written in an hour of the clock).
+  const ownDenial = (e) => e.kind === 'denial' && e.problems.length === 0 && e.slip === slip && (e.pass ?? null) === (pass ?? null);
+  const denialTimes = result.entries.filter(ownDenial).map((e) => parseTime(e.content.when));
+  // How many denials were not written because of the hourly limit, since the writer was opened.
+  let notWrittenDenials = 0;
   // What was given at opening: the first sound acknowledgement of this
   // writer's own agent that came with a cancellation is the one it goes on
   // handing back; a cancellation that the book does not hold waits to be
@@ -446,6 +484,10 @@ export async function openRecorder({ book, slip, privateKeys, issuerKeys, pass, 
       detailsAfter: more.detailsAfter,
       hasApproval: more.approval !== undefined && more.approval !== null,
       approval: undefined,
+      // For "act": false writes no denial for this call. For "deny": who said no, and why.
+      denial: more.denial,
+      source: more.source,
+      codes: more.codes === undefined ? undefined : plain(more.codes, 'codes'),
     };
     if (call.hasApproval) {
       try {
@@ -613,6 +655,54 @@ export async function openRecorder({ book, slip, privateKeys, issuerKeys, pass, 
     carried = promoteCarried(tried);
     text += line + '\n';
     return { fits: true, checked };
+  };
+
+  // A denial: the agent's side states that it did not take an action, and
+  // why. It is written into the book only if the book still passes its check
+  // with it and it is not dated ahead of the clock; it is tried on a reader
+  // split off the book's own, as a stub is, because a denial changes nothing
+  // read before it. At most "denialsPerHour" are written in any hour, by
+  // the clock: past it, none is written and the writer counts it. Whatever
+  // happens, the answer says what was done; nothing is thrown, so a denial
+  // never stands in the way of what the writer does next. The request is the
+  // copy made when the call was made, and only its action, amount, service
+  // and documents are written: the documents are fingerprints, never the
+  // documents themselves.
+  const denialAnswer = (problem) => ({ written: false, problem, notWritten: notWrittenDenials });
+  const writeDenialLine = async (request, source, codes, when) => {
+    try {
+      const at = now();
+      const t = when ?? at;
+      if (!Number.isFinite(t)) return denialAnswer({ code: 'bad-field', message: 'when: does not give a time.' });
+      if (aheadOfClock(t) || behindClock(t)) {
+        return denialAnswer({ code: 'record-not-sound', message: 'The denial was not written: a denial is written when the action is refused, so its date must be within 300 seconds of the stub writer\'s clock.' });
+      }
+      const inHour = denialTimes.filter((d) => d > at - HOUR_MS).length;
+      if (inHour >= denialsPerHour) {
+        notWrittenDenials++;
+        return denialAnswer({
+          code: 'denials-over-limit',
+          message: `The denial was not written: this stub writer has written ${denialsPerHour} denials in the last hour, the most it may. Since it was opened, ${notWrittenDenials} were not written for that reason.`,
+        });
+      }
+      const fields = { slip, action: request.action, source, when: t };
+      for (const name of ['amount', 'with', 'details']) if (request[name] !== undefined) fields[name] = request[name];
+      if (pass) fields.pass = pass;
+      if (codes) fields.codes = codes;
+      const made = await writeDenial(fields, signing);
+      const line = entryLine({ denial: made.record });
+      if (utf8(line).length > MAX_LINE_BYTES) return denialAnswer({ code: 'too-large', message: 'The denial is longer than a line of a book may be.' });
+      const tried = forkCarried(carried);
+      await carryOn(tried, line + '\n');
+      const checked = (await standing(tried)).result;
+      if (checked.summary.problemFound) return denialAnswer({ code: 'record-not-sound', message: 'The denial was not written: with it, the book would not pass its check.' });
+      carried = promoteCarried(tried);
+      text += line + '\n';
+      denialTimes.push(at);
+      return { written: true, fingerprint: made.fingerprint, line, notWritten: notWrittenDenials };
+    } catch (e) {
+      return denialAnswer(problemFrom(e));
+    }
   };
 
   // A cancellation held beside the book is written into the book as soon as
@@ -924,7 +1014,10 @@ export async function openRecorder({ book, slip, privateKeys, issuerKeys, pass, 
             stop(problemFrom(e));
           }
         }
-        if (!answer.allowed) return { done: false, answer };
+        if (!answer.allowed) {
+          if (!denials || call.denial === false) return { done: false, answer };
+          return { done: false, answer, denial: await writeDenialLine(call.request, 'check', denialCodes(answer), undefined) };
+        }
         const outcome = await runInside(perform);
         if (!hasLater) {
           const stub = await commit(await countersigned(made, call), made, tried);
@@ -977,6 +1070,35 @@ export async function openRecorder({ book, slip, privateKeys, issuerKeys, pass, 
         }
         const stub = await commit(await countersigned(chosen, call), chosen, chosenTried);
         return { done: true, answer, result: outcome, stub, detailsAfter: further };
+      });
+    },
+
+    /**
+     * Write a denial for an action that was not taken, where "act" did not
+     * write one: the person refused, or gave no approval when asked
+     * ("person"); a rule of the software around the agent, outside the slip,
+     * said no ("rule"); or the check before acting said no, and the caller
+     * asked "act" to write no denial for that call ("check", with the codes
+     * of that answer: denialCodes gives them). Nothing is taken and no stub
+     * is written. A writer opened without "denials: true" writes none.
+     * @param {{action: string, amount?: object, with?: string, details?: object[]}} request what was asked for
+     * @param {{source: 'check'|'person'|'rule', codes?: string[], when?: number|Date}} more "codes" only for "check";
+     *   "when" defaults to the clock, and must be within 300 seconds of it
+     * @returns {Promise<{written: boolean, fingerprint?: string, line?: string, problem?: object, notWritten: number}>}
+     *   "notWritten": how many denials were not written because of the hourly limit since the writer was opened
+     */
+    deny(request, more = {}) {
+      return calling(request, more, async (call) => {
+        if (!denials) return denialAnswer({ code: 'bad-field', message: 'This stub writer was opened without "denials: true", so it writes no denial.' });
+        if (call.source !== 'check' && call.source !== 'person' && call.source !== 'rule') return denialAnswer({ code: 'bad-field', message: 'source: must be "check", "person" or "rule".' });
+        let at;
+        try {
+          at = now();
+        } catch (e) {
+          return denialAnswer(problemFrom(e));
+        }
+        await writeWaiting(at);
+        return writeDenialLine(call.request, call.source, call.codes, call.when);
       });
     },
 
@@ -1220,6 +1342,7 @@ export async function openRecorder({ book, slip, privateKeys, issuerKeys, pass, 
             // An added stub of this writer's own chain moves its place in the chain on.
             after = lastStub(whole.checked.entries);
             const last = whole.checked.entries.at(-1);
+            if (ownDenial(last)) denialTimes.push(at);
             if (last.kind === 'cancellation' && last.slip === slip && last.verified === 'all') {
               stopped = true;
               return { acknowledgement: await acknowledge(last.fingerprint, JSON.parse(line).cancellation, true, at) };
@@ -1275,5 +1398,7 @@ export async function openRecorder({ book, slip, privateKeys, issuerKeys, pass, 
       });
     },
   };
+  // Whether this writer writes denials, as it was opened. It cannot be changed.
+  Object.defineProperty(writer, 'denials', { value: denials, enumerable: true });
   return writer;
 }

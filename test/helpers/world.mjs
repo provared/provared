@@ -17,6 +17,7 @@ import {
   toBase64url,
   writeAcknowledgement,
   writeBook,
+  writeDenial,
   writePass,
   writeRefusal,
   writeSeal,
@@ -214,6 +215,29 @@ export async function makeWorld(o = {}) {
       );
       world.entries.push({ acknowledgement: acknowledgement.record });
       return { ...acknowledgement, entry: world.entries.at(-1) };
+    },
+    /**
+     * The agent's side states that it did not take an action, and why; the
+     * record goes into the book. By default: an order of 300 GBP with the
+     * supplier, refused by the check before acting as over the limit.
+     * "pass" and "signer" make it a helper's.
+     */
+    async deny(change = {}) {
+      const fields = {
+        slip: change.slip ?? slipFingerprint,
+        action: change.action ?? 'supplies.order',
+        amount: 'amount' in change ? change.amount : { unit: 'GBP', value: 300 },
+        with: 'with' in change ? change.with : 'supplier',
+        details: change.details,
+        pass: change.pass,
+        source: change.source ?? 'check',
+        id: change.id,
+        when: change.when ?? START + world.count * 3600 * 1000 + 5 * 60 * 1000,
+      };
+      if (fields.source === 'check') fields.codes = change.codes ?? ['over-limit'];
+      const denial = await writeDenial(fields, change.signer ?? agent.privateKeys);
+      world.entries.push({ denial: denial.record });
+      return { ...denial, entry: world.entries.at(-1) };
     },
     /** An organisation vouches for a name; the record goes into the book. */
     async vouch(who, change = {}) {

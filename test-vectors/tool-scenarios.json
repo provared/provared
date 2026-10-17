@@ -454,6 +454,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 0,
           "cancellations": 0,
           "countersigned": 1,
@@ -1083,6 +1084,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 2,
           "cancellations": 0,
           "countersigned": 0,
@@ -2172,6 +2174,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 0,
           "cancellations": 0,
           "countersigned": 0,
@@ -3079,6 +3082,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 1,
           "cancellations": 0,
           "countersigned": 0,
@@ -4096,6 +4100,7 @@
         "summary": {
          "counts": {
           "acknowledgements": 0,
+          "denials": 0,
           "approved": 0,
           "cancellations": 0,
           "countersigned": 0,

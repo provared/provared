@@ -111,7 +111,7 @@ function onlySealThirdUnchecked(result) {
       if (!e.signature) skipped = true;
       else if (e.signature.state === 'unavailable') missing.add(e.signature.alg);
       stamps(e.stamps ?? []);
-    } else if (['refusal', 'terms', 'vouching', 'withdrawal', 'pass', 'acknowledgement'].includes(e.kind)) {
+    } else if (['refusal', 'terms', 'vouching', 'withdrawal', 'pass', 'acknowledgement', 'denial'].includes(e.kind)) {
       note(e.signatures ?? []);
     } else {
       skipped = true;

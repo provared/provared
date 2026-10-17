@@ -2,6 +2,37 @@
 
 ## Unreleased
 
+- **A new kind of record: the denial** (format description, section 28),
+  in both languages. It is the agent's own side's signed statement that it
+  did not take an action that was asked for, and who said no: the check
+  before acting (with the finding codes it gave, from the format's own
+  list, now written out in section 28), the person, or a rule of the
+  software around the agent. It is signed with the agent's two keys, or a
+  helper's under its pass, with the new labels
+  `vnd.provared.denial.v0+json` (twenty-four labels in all). In a book it
+  comes after its slip, is in no chain and is compared with nothing; a
+  checker shows it as the agent's side's own word, counts it
+  (`summary.counts.denials`, new in every answer), and never counts it
+  against the agent. `writeDenial` (`write_denial`), `denialCodes`,
+  `FINDING_CODES` and `DENIAL_SOURCES` are new. The stub writer writes a
+  denial whenever `act` does not take an action if it is opened with
+  `denials: true` (`more.denial: false` writes none for one call);
+  `deny` writes one for a refusal from elsewhere; at most
+  `denialsPerHour` (600 by default) are written in any hour of the
+  writer's clock, each counted at the clock's time when it joins the
+  book (whatever date it states), the answers count those left out, and
+  a stub is never kept out. `deny` records what its caller states. `recordTools` and
+  `record_function` pass it on (`NotTaken.denial`), and where the person
+  may yet approve a call they write none until it is known the call will
+  not run, so one call never leaves both a stub and a denial. The
+  command-line checker and the checking page show denials. **A checker of
+  an earlier version refuses a book that holds a denial** (`unknown-entry`).
+  New shared test files: `denial-contents`, `denials-written`,
+  `denial-codes`, `denial-constants`, `denial-books`, `denial-shows`,
+  `denial-before` and `denial-scenarios`; `books`, `shows`,
+  `recorder-scenarios`, `recorder-details-after` and `tool-scenarios`
+  gain `denials: 0` in their stored counts, and nothing else changes in
+  them.
 - **`provared-hermes` 0.1.0, a plugin for Hermes Agent**
   (`python/integrations/provared-hermes/`): every tool call of a Hermes
   agent is checked against the slip before it runs, and a stub is

@@ -66,6 +66,10 @@ export const KINDS = {
     type: 'provared.pass.v0',
     protected: ['{"typ":"vnd.provared.pass.v0+json","alg":"Ed25519"}', '{"typ":"vnd.provared.pass.v0+json","alg":"ML-DSA-87"}'],
   },
+  denial: {
+    type: 'provared.denial.v0',
+    protected: ['{"typ":"vnd.provared.denial.v0+json","alg":"Ed25519"}', '{"typ":"vnd.provared.denial.v0+json","alg":"ML-DSA-87"}'],
+  },
   seal: {
     type: 'provared.seal.v0',
     protected: [

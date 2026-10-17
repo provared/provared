@@ -158,6 +158,7 @@ export type BookEntry =
   | { seal: SignedRecord; stamps?: StampItem[] }
   | { cancellation: SignedRecord; stamps?: StampItem[] }
   | { acknowledgement: SignedRecord }
+  | { denial: SignedRecord }
   | { vouching: SignedRecord }
   | { withdrawal: SignedRecord }
   | { pass: SignedRecord };
@@ -206,7 +207,7 @@ export type Vouched = { counted: boolean; by: string; keys: Fingerprint } | null
 
 export interface CheckedEntry {
   index: number;
-  kind: 'slip' | 'stub' | 'refusal' | 'terms' | 'seal' | 'cancellation' | 'acknowledgement' | 'vouching' | 'withdrawal' | 'pass' | 'unreadable';
+  kind: 'slip' | 'stub' | 'refusal' | 'terms' | 'seal' | 'cancellation' | 'acknowledgement' | 'vouching' | 'withdrawal' | 'pass' | 'denial' | 'unreadable';
   fingerprint: Fingerprint | null;
   /** How much of the entry's own signing this device confirmed. */
   verified: 'all' | 'some' | 'none';
@@ -281,6 +282,7 @@ export interface Summary {
     seals: number;
     cancellations: number;
     acknowledgements: number;
+    denials: number;
     vouchings: number;
     passes: number;
   };
@@ -433,6 +435,8 @@ export function conditionWords(condition: Condition): string;
 export function neverWords(name: string): string;
 export const LIMITS: string[];
 export const REFUSAL_REASONS: Record<string, string>;
+/** Who said no, in a denial: "check", "person" or "rule", each with its meaning. */
+export const DENIAL_SOURCES: Record<'check' | 'person' | 'rule', string>;
 
 export interface Proposal extends Request {
   slip: Fingerprint;
@@ -478,8 +482,18 @@ export interface Recorder {
        * answer says why.
        */
       detailsAfter?: (result: T) => DocumentRef[] | null | undefined | Promise<DocumentRef[] | null | undefined>;
+      /** False writes no denial for this call, where the writer was opened with "denials: true". */
+      denial?: boolean;
     },
-  ): Promise<{ done: boolean; answer: BeforeAnswer; result?: T; stub?: WrittenStub; detailsAfter?: { added: number; problem: Finding | null } }>;
+  ): Promise<{ done: boolean; answer: BeforeAnswer; result?: T; stub?: WrittenStub; detailsAfter?: { added: number; problem: Finding | null }; denial?: DenialAnswer }>;
+  /**
+   * Writes a denial for an action that was not taken where "act" wrote none: the person said no, a rule of the
+   * software around the agent said no, or ("check", with the codes of that answer) the check before acting said no
+   * on a call for which "act" was asked to write none. A writer opened without "denials: true" writes none.
+   */
+  deny(request: Request, more: { source: 'check' | 'person' | 'rule'; codes?: string[]; when?: number | Date }): Promise<DenialAnswer>;
+  /** Whether this writer writes denials, as it was opened. */
+  readonly denials: boolean;
   book(): string;
   /**
    * What the record shows as it stands: the answer a whole check of the book gives, with the cancellations
@@ -503,6 +517,11 @@ export interface Recorder {
    */
   add(entry: BookEntry): Promise<{ acknowledgement?: SignedRecord }>;
 }
+/**
+ * What the stub writer did about a denial. "notWritten" counts the denials not written because of the hourly
+ * limit since the writer was opened.
+ */
+export type DenialAnswer = { written: true; fingerprint: Fingerprint; line: string; notWritten: number } | { written: false; problem: Finding; notWritten: number };
 /** A stub the stub writer wrote. A countersignature that did not check is left out, and "problem" says why. */
 export type WrittenStub = Written & { seq: number; line: string; countersignature: { accepted: boolean; problem: Finding | null } };
 export function openRecorder(o: {
@@ -519,6 +538,10 @@ export function openRecorder(o: {
   countersignWithin?: number;
   /** How long a signer is given for each signature, in milliseconds. Defaults to 30,000. After that nothing is written. */
   signWithin?: number;
+  /** True to write a denial whenever "act" does not take an action, and to let "deny" write one. Defaults to false. */
+  denials?: boolean;
+  /** The most denials written in any hour, by the clock: 1 to 100,000. Defaults to 600. */
+  denialsPerHour?: number;
 }): Promise<Recorder>;
 
 /** One of an agent's tools, as it is described to recordTools. */
@@ -539,9 +562,11 @@ export interface RecordedTool<A = any, R = any> {
 }
 /** A call through a recorded tool that was not run. "answer" is what the check before acting said. */
 export class NotTaken extends Error {
-  constructor(tool: string, answer: BeforeAnswer);
+  constructor(tool: string, answer: BeforeAnswer, denial?: DenialAnswer);
   tool: string;
   answer: BeforeAnswer;
+  /** Where the stub writer writes denials: what it did about the denial for this call. */
+  denial?: DenialAnswer;
 }
 /**
  * Puts an agent's tools behind the stub writer: each call asks first, runs the tool only if the slip allows
@@ -622,6 +647,15 @@ export function writeWithdrawal(fields: { vouching: Fingerprint; when?: number |
 /** The agent's side states that it was handed the person's cancellation of a slip, and when. */
 export function writeAcknowledgement(
   fields: { slip: Fingerprint; cancellation: Fingerprint; pass?: Fingerprint; when?: number | Date; id?: Base64url },
+  privateKeys: SigningKey[],
+): Promise<Written>;
+/** The format's own list of finding codes, from which a denial by the check before acting names its reasons. */
+export const FINDING_CODES: readonly string[];
+/** The reasons of a refusal by the check before acting, as a denial names them: 1 to 16 codes, each once. */
+export function denialCodes(answer: Pick<BeforeAnswer, 'problems' | 'breaches'>): string[];
+/** The agent's side states that it did not take an action that was asked for, and why. */
+export function writeDenial(
+  fields: Request & { slip: Fingerprint; pass?: Fingerprint; source: 'check' | 'person' | 'rule'; codes?: string[]; when?: number | Date; id?: Base64url },
   privateKeys: SigningKey[],
 ): Promise<Written>;
 /**

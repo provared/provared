@@ -18,6 +18,7 @@ import { MAX_PASSES, validatePassContent } from './pass.js';
 import { CLOCK_ALLOWANCE_MS, decodeStamps, keySetFingerprint, validateSealContent } from './seal.js';
 import { verifySignature } from './signatures.js';
 import { validateAcknowledgementContent, validateCancellationContent, validateVouchingContent, validateWithdrawalContent } from './standing.js';
+import { validateDenialContent } from './denial.js';
 import { requestOf, validateApprovalContent } from './approval.js';
 import { compareWithSlip, newTally, settlePeriods } from './compare.js';
 import { validateRefusalContent, validateTermsContent } from './service.js';
@@ -62,7 +63,7 @@ export const LIMITS = [
 /**
  * Write one entry of a book as its line (without the line feed).
  * @param {object} entry one of: {slip}, {stub, countersignature?, approval?}, {refusal}, {terms}, {seal, stamps?},
- *   {cancellation, stamps?}, {acknowledgement}, {vouching}, {withdrawal}, {pass}
+ *   {cancellation, stamps?}, {acknowledgement}, {vouching}, {withdrawal}, {pass}, {denial}
  * @returns {string}
  */
 export function entryLine(entry) {
@@ -192,7 +193,8 @@ async function readLine(reader, item) {
       const names = value !== null && typeof value === 'object' && !Array.isArray(value) ? Object.keys(value).sort().join(',') : '';
       // A reader split off to try one more stub reads nothing else: a stub
       // is the one kind of entry that changes nothing read before it.
-      if (reader.forked && !STUB_ENTRIES.includes(names)) throw new Error('only a stub may be tried');
+      // A denial changes nothing read before it either.
+      if (reader.forked && !STUB_ENTRIES.includes(names) && names !== 'denial') throw new Error('only a stub or a denial may be tried');
       if (names === 'slip') {
         entry.kind = 'slip';
         const check = await checkSlip(value.slip, options, item.disclosures);
@@ -278,6 +280,9 @@ async function readLine(reader, item) {
       } else if (names === 'acknowledgement') {
         entry.kind = 'acknowledgement';
         await checkAcknowledgementEntry(entry, value, slips, passes, ids, entries, without, whole);
+      } else if (names === 'denial') {
+        entry.kind = 'denial';
+        await checkDenialEntry(entry, value, slips, passes, ids, without, whole);
       } else if (names === 'pass') {
         entry.kind = 'pass';
         await checkPassEntry(entry, value, slips, passes, ids, without, whole);
@@ -790,6 +795,36 @@ async function checkAcknowledgementEntry(entry, value, slips, passes, ids, entri
   } else {
     entry.cancellation = named.index;
   }
+}
+
+// A denial: the agent's side states that it did not take an action that was
+// asked for, and why. It is signed as an acknowledgement is, with the keys of
+// the agent the slip names or of the helper agent its pass names. It is in
+// no chain and is compared with nothing: a checker does not judge whether
+// the refusal was right, and never counts it against the agent.
+const DENIED = 'The agent\'s side states that it did not take this action, and why. That is its own word: it is not counted against the agent, and it does not show that the action was not taken in some other way.';
+async function checkDenialEntry(entry, value, slips, passes, ids, without, whole) {
+  entry.signatures = [];
+  const parsed = await parseRecord(value.denial, 'denial');
+  entry.fingerprint = parsed.fingerprint;
+  validateDenialContent(parsed.content);
+  const c = parsed.content;
+  entry.content = c;
+  entry.slip = c.slip;
+  noteId(entry, ids, c.id);
+  const slip = findSlip(slips, c.slip, whole);
+  const pass = Object.hasOwn(c, 'pass') ? findPass(passes, c.pass, c.slip, whole) : null;
+  if (pass) entry.pass = c.pass;
+  entry.signatures = await checkKeySetSignatures(parsed, pass ? pass.content.to.keys : slip.content.agent.keys, without);
+  if (overall(entry.signatures) === 'invalid') {
+    entry.problems.push({
+      code: 'signature-invalid',
+      message: pass ? 'A signature on the denial does not fit the keys of the helper agent the pass names.' : 'A signature on the denial does not fit the agent\'s keys.',
+    });
+  }
+  entry.verified = verifiedBy(entry.signatures);
+  underConfirmedSlip(entry, slip);
+  if (entry.problems.length === 0 && entry.verified !== 'none') entry.notes.push(DENIED);
 }
 
 // The acknowledgements handed over with the person's own copy of a
@@ -1604,6 +1639,7 @@ function summarise(entries, bookProblems, sealed = null, held = []) {
   let vouchingCount = 0;
   let passCount = 0;
   let acknowledgementCount = 0;
+  let denialCount = 0;
   const note = (signatures) => {
     if (signatures.length === 0) skipped = true;
     for (const s of signatures) if (s.state === 'unavailable') missing.add(s.method);
@@ -1639,8 +1675,9 @@ function summarise(entries, bookProblems, sealed = null, held = []) {
       if (!e.signature) skipped = true;
       else if (e.signature.state === 'unavailable') missing.add(e.signature.alg);
       for (const s of e.stamps ?? []) if (s.state === 'unavailable') missing.add('the time-stamp service\'s method');
-    } else if (e.kind === 'vouching' || e.kind === 'withdrawal' || e.kind === 'pass' || e.kind === 'acknowledgement') {
+    } else if (e.kind === 'vouching' || e.kind === 'withdrawal' || e.kind === 'pass' || e.kind === 'acknowledgement' || e.kind === 'denial') {
       if (e.kind === 'vouching') vouchingCount++;
+      if (e.kind === 'denial') denialCount++;
       if (e.kind === 'pass') passCount++;
       if (e.kind === 'acknowledgement') acknowledgementCount++;
       note(e.signatures ?? []);
@@ -1676,6 +1713,7 @@ function summarise(entries, bookProblems, sealed = null, held = []) {
       seals: sealCount,
       cancellations,
       acknowledgements: acknowledgementCount,
+      denials: denialCount,
       vouchings: vouchingCount,
       passes: passCount,
     },

@@ -20,7 +20,7 @@
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { MIN_BLOCKS_AFTER, REFUSAL_REASONS, blocksInChain, checkBook, checkHeaderChain, checkShow, conditionWords, limitWords, neverWords } from '../src/check.js';
+import { DENIAL_SOURCES, MIN_BLOCKS_AFTER, REFUSAL_REASONS, blocksInChain, checkBook, checkHeaderChain, checkShow, conditionWords, limitWords, neverWords } from '../src/check.js';
 
 // Node.js marks its ML-DSA and SLH-DSA as experimental and says so on every
 // run. The checker does not repeat that warning; any other warning is shown.
@@ -313,6 +313,25 @@ function printAcknowledgement(e) {
   if (e.signatures && e.signatures.length) console.log(`  Agent's signatures: ${e.signatures.map((s) => `${s.method} ${s.state}`).join('; ')}`);
 }
 
+// A denial: the agent's own side says it did not take an action, and why.
+function printDenial(e) {
+  console.log(`\nEntry ${e.index}: DENIAL ${e.fingerprint ?? ''}`);
+  if (hidden(e)) console.log(hidden(e));
+  else {
+    const c = e.content;
+    const amount = c.amount ? `, ${c.amount.value} ${safe(c.amount.unit)}` : '';
+    const service = c.with ? `, with [${safe(c.with)}]` : '';
+    console.log(`  ${c.pass ? `The helper agent of pass ${c.pass}` : 'The slip\'s own agent'} states that it did not take an action`);
+    console.log(`  Under slip ${c.slip}`);
+    console.log(`  ${c.when} (the agent's side's own word): not taken ${safe(c.action)}${amount}${service}`);
+    if (c.details) console.log(`  Documents named: ${c.details.length}, by their fingerprints only`);
+    console.log(`  Who said no: ${DENIAL_SOURCES[c.source]}`);
+    if (c.codes) console.log(`  Reasons given: ${c.codes.join(', ')}`);
+    console.log('  This shows what the agent\'s side said. It is not counted against the agent, and it does not show that the action was not taken in some other way.');
+  }
+  if (e.signatures && e.signatures.length) console.log(`  Agent's signatures: ${e.signatures.map((s) => `${s.method} ${s.state}`).join('; ')}`);
+}
+
 // A cancellation the person kept, handed over beside the book.
 function printHeld(h, n) {
   console.log(`\nHanded over beside the book, ${n}: CANCELLATION ${h.fingerprint ?? ''}`);
@@ -403,6 +422,7 @@ function print(result, isShow) {
     else if (e.kind === 'seal') printSeal(e);
     else if (e.kind === 'cancellation') printCancellation(e);
     else if (e.kind === 'acknowledgement') printAcknowledgement(e);
+    else if (e.kind === 'denial') printDenial(e);
     else if (e.kind === 'pass') printPass(e);
     else if (e.kind === 'vouching') printVouching(e);
     else if (e.kind === 'withdrawal') printWithdrawal(e);
@@ -445,6 +465,7 @@ function print(result, isShow) {
   if (s.counts.approved || s.counts.refusals || s.counts.terms) {
     console.log(`  Approved by the person ${s.counts.approved}, refusals ${s.counts.refusals}, terms for agents ${s.counts.terms}`);
   }
+  if (s.counts.denials) console.log(`  Denials (the agent's side's own word, not counted against it) ${s.counts.denials}`);
   console.log('\nWhat this check does not show');
   for (const l of s.limits) console.log(`  - ${l}`);
 }

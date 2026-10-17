@@ -25,6 +25,7 @@ from collections.abc import Mapping
 
 from . import _js
 from . import fields as f
+from .denial import denial_codes
 from .encoding import Refusal, _well_formed, fingerprint, utf8
 from .recorder import _ABSENT, _clone, _refuse_awaitable
 
@@ -57,9 +58,11 @@ _MAX_ARGUMENT_DEPTH = 64
 class NotTaken(Exception):
     """A call through a recorded tool that was not run: the check before
     acting did not allow it, or the record so far has a problem. "answer" is
-    what the check before acting said (allowed, problems, breaches, needs)."""
+    what the check before acting said (allowed, problems, breaches, needs).
+    "denial", where the stub writer was opened with denials=True, is what it
+    said of the denial it wrote, or did not write, for the call."""
 
-    def __init__(self, tool, answer):
+    def __init__(self, tool, answer, denial=None):
         found = [*answer['problems'], *answer['breaches']]
         first = found[0] if found else None
         message = f'The tool "{tool}" was not run. ' + (first['message'] if first else 'The check before acting did not allow it.')
@@ -68,6 +71,7 @@ class NotTaken(Exception):
         self.message = message
         self.tool = tool
         self.answer = answer
+        self.denial = denial
 
 
 # The arguments written in one form, as RFC 8785 sets out: members sorted
@@ -218,6 +222,9 @@ def record_tools(recorder, tools, options=None, on_stub=None):
         options = {}
     # What the tools are put behind is fixed here too.
     told = on_stub if on_stub is not None else options.get('onStub')
+    # Whether the writer writes denials, read once: only then are denials asked for.
+    deny = getattr(recorder, 'deny', None) if getattr(recorder, 'denials', None) is True else None
+    deny = deny if callable(deny) else None
     told = told if callable(told) else None
     recorded = {}
     for name in _js.keys(tools) if all(isinstance(n, str) for n in tools) else list(tools):
@@ -243,19 +250,19 @@ def record_tools(recorder, tools, options=None, on_stub=None):
         for member in ('amount', 'with'):
             if not callable(fixed[member]):
                 fixed[member] = _copied(fixed[member], f'tools.{name}.{member}')
-        recorded[name] = _tool(act, told, name, fixed)
+        recorded[name] = _tool(act, deny, told, name, fixed)
     return recorded
 
 
-def _tool(act, on_stub, name, spec):
+def _tool(act, deny, on_stub, name, spec):
     def call(args=_ABSENT):
-        return _call(act, on_stub, name, spec, args)
+        return _call(act, deny, on_stub, name, spec, args)
 
     call.__name__ = name if name.isidentifier() else 'tool'
     return call
 
 
-def _call(act, on_stub, name, spec, args):
+def _call(act, deny, on_stub, name, spec, args):
     # The arguments are copied when the call is made. The fingerprint is
     # made from that copy, and the tool is run with a copy of it. Each of
     # the tool's other functions is handed a copy of its own.
@@ -292,16 +299,25 @@ def _call(act, on_stub, name, spec, args):
     def perform():
         return run(_given(given))
 
-    outcome = act(request, perform, more)
+    # Where the person may be asked for their approval, the first call
+    # writes no denial: the action may yet be taken. A denial is written once
+    # it is known that it will not be, so that one call never leaves both a
+    # stub and a denial.
+    approve = spec['approve']
+    asking = callable(approve) and deny is not None
+    outcome = act(request, perform, {**more, 'denial': False} if asking else more)
     # Where the slip asks for the person's own approval of this action, and
     # that is the one thing missing, the person is asked, once.
-    approve = spec['approve']
     if not outcome['done'] and callable(approve) and _needs_only_approval(outcome['answer']):
         approval = _at_once(approve(_clone_any(request), _given(given)), f'tools.{name}.approve')
         if _js.truthy(approval):
             outcome = act(request, perform, {**more, 'approval': approval})
+        elif asking:
+            outcome = {**outcome, 'denial': deny(request, {'source': 'person'})}
+    elif not outcome['done'] and asking:
+        outcome = {**outcome, 'denial': deny(request, {'source': 'check', 'codes': denial_codes(outcome['answer'])})}
     if not outcome['done']:
-        raise NotTaken(name, outcome['answer'])
+        raise NotTaken(name, outcome['answer'], outcome.get('denial'))
     if on_stub:
         _at_once(on_stub(outcome['stub'], name), 'onStub')
     return outcome['result']

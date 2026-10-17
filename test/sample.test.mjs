@@ -21,7 +21,9 @@ test('the sample book checks, and shows what it showed when it was written', asy
   assert.deepEqual(r.entries.map((e) => e.breaches.map((b) => b.code)), expected.breaches);
   assert.deepEqual(r.entries.map((e) => (e.running ? e.running.total : null)), expected.running);
   const { intact, fullyChecked, withinSlips, firstBreach, counts } = r.summary;
-  assert.deepEqual({ intact, fullyChecked, withinSlips, firstBreach, counts }, expected.summary);
+  // The sample was written before the denial (format description, section 28)
+  // existed: it holds none, and its stored counts have no place for them.
+  assert.deepEqual({ intact, fullyChecked, withinSlips, firstBreach, counts }, { ...expected.summary, counts: { ...expected.summary.counts, denials: 0 } });
   // With the issuer's key, the recorder's keys and the time-stamp service
   // given, nothing is left as a note.
   assert.deepEqual(r.entries.flatMap((e) => e.notes), []);
@@ -49,7 +51,7 @@ test('the sample is the demonstration: a sound record that shows the agent outsi
   assert.deepEqual(r.entries[4].needs, ['countersignature', 'approval']);
   assert.deepEqual(r.entries[6].running, { action: 'provared.order.place', unit: 'GBP', total: '230', max: 200 });
   assert.equal(r.entries[7].service, 'supplier');
-  assert.deepEqual(r.summary.counts, { slips: 1, stubs: 6, countersigned: 3, oneSided: 3, approved: 1, refusals: 1, terms: 1, seals: 1, cancellations: 0, acknowledgements: 0, vouchings: 0, passes: 0 });
+  assert.deepEqual(r.summary.counts, { slips: 1, stubs: 6, countersigned: 3, oneSided: 3, approved: 1, refusals: 1, terms: 1, seals: 1, cancellations: 0, acknowledgements: 0, denials: 0, vouchings: 0, passes: 0 });
   // With no service named as trusted, the time-stamp counts for nothing.
   assert.equal(r.summary.sealed, null);
 });

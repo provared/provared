@@ -9,7 +9,7 @@
 // seal is used ("withoutMethods"), so that an implementation without
 // SLH-DSA can be held to every answer.
 
-import { argumentsFingerprint, countersign, fromBase64url, identifierFingerprint, toBase64url, writeAcknowledgement, writeBook, writeStub, writeVouching, writeWithdrawal } from '../../src/index.js';
+import { argumentsFingerprint, countersign, fromBase64url, identifierFingerprint, toBase64url, writeAcknowledgement, writeBook, writeDenial, writeStub, writeVouching, writeWithdrawal } from '../../src/index.js';
 import { thumbprint } from '../../src/keys.js';
 import { playScenario, seededKeySet } from './scenarios.mjs';
 import { makeStampService } from './stamp.mjs';
@@ -40,6 +40,7 @@ const check = (w) => ({ op: 'check', w });
 const held = (w) => ({ op: 'held', w });
 const book = (w) => ({ op: 'book', w });
 const clock = (change) => ({ op: 'clock', ...change });
+const deny = (w, request, more) => (more === undefined ? { op: 'deny', w, request } : { op: 'deny', w, request, more });
 
 // --- building a scenario ---
 
@@ -85,7 +86,7 @@ class Scenario {
 
   open(as, o = {}) {
     const step = { op: 'open', as, book: Object.hasOwn(o, 'book') ? o.book : this.book(), slip: o.slip ?? this.slip, keys: o.keys ?? 'agent', issuerKeys: o.issuerKeys ?? this.issuer };
-    for (const name of ['pass', 'options', 'countersignWithin']) if (Object.hasOwn(o, name)) step[name] = o[name];
+    for (const name of ['pass', 'options', 'countersignWithin', 'denials', 'denialsPerHour']) if (Object.hasOwn(o, name)) step[name] = o[name];
     return this.step(step);
   }
 
@@ -1303,7 +1304,154 @@ async function detailsAfterScenarios() {
   return cases;
 }
 
+// --- the denial (format description, section 28) ---
+
+async function denials() {
+  // denial.test.mjs
+  const s = await setUp('denials: written when "act" refuses, by "deny", at most a set number an hour, and never for an action taken', {
+    fields: { actions: [ORDER, LOOK], requires: [] },
+  });
+  s.open('a', { denials: true, denialsPerHour: 3 });
+  s.step(
+    act('a', { action: 'provared.data.delete' }),
+    act('a', order(250)),
+    deny('a', order(10), { source: 'person' }),
+    deny('a', order(10), { source: 'rule' }),
+    deny('a', order(10), { source: 'rule' }),
+    act('a', order(10)),
+    clock({ add: HOUR + 1000 }),
+    deny('a', { action: LOOK }, { source: 'rule' }),
+    deny('a', order(260), { source: 'check', codes: ['over-limit'] }),
+    deny('a', order(10), { source: 'service' }),
+    deny('a', order(10)),
+    deny('a', order(10), { source: 'person', codes: ['over-limit'] }),
+    deny('a', order(10), { source: 'check' }),
+    deny('a', order(10), { source: 'rule', when: s.start + HOUR + 1000 + 301 * 1000 }),
+    deny('a', order(10), { source: 'rule', when: s.start + HOUR + 1000 - 301 * 1000 }),
+    deny('a', { action: 'A' }, { source: 'rule' }),
+    deny('a', { action: ORDER, details: [{ name: 'provared.secret', sha256: 'A'.repeat(43) }] }, { source: 'rule' }),
+    act('a', order(300), { denial: false }),
+    act('a', order(1), undefined, { inside: ['deny', 'book'], gives: 'ordered' }),
+    check('a'),
+    book('a'),
+  );
+  // Opened again from the same book: the two denials of the last hour that the book holds are counted.
+  s.step({ op: 'open', as: 'b', book: { $book: 'a' }, slip: s.slip, keys: 'agent', issuerKeys: s.issuer, denials: true, denialsPerHour: 2 });
+  s.step(deny('b', order(10), { source: 'rule' }), clock({ add: HOUR }), deny('b', order(10), { source: 'rule' }), check('b'));
+  // A writer opened without denials writes none.
+  s.open('c');
+  s.step(act('c', { action: 'provared.data.delete' }), deny('c', order(10), { source: 'person' }));
+  for (const value of ['yes', 1, null]) s.open('bad', { denials: value });
+  for (const value of [0, 0.5, 100001, '600', { $: 'NaN' }]) s.open('bad', { denials: true, denialsPerHour: value });
+  s.open('largest', { denials: true, denialsPerHour: 100000 });
+  return s.done();
+}
+
+async function denialsOfHelpers() {
+  // denial.test.mjs: a helper agent's writer
+  const s = await setUp('denials of a helper agent are signed with its keys and name its pass', { fields: { passes: 1, requires: [] } });
+  const helperKeys = s.key('helper', seededKeySet());
+  const pass = await s.w.pass({ limits: [{ action: ORDER, max: 30, unit: 'GBP' }], helper: helperKeys, when: START });
+  const passRef = s.ref('pass', pass.fingerprint);
+  s.open('h', { keys: 'helper', pass: passRef, denials: true });
+  s.step(act('h', order(40)), deny('h', order(5), { source: 'person' }), act('h', order(20)), check('h'));
+  // A writer opened under a pass the book does not hold: its denial would not pass the check of the book, so none is written.
+  s.open('wrong', { keys: 'helper', pass: s.slip, denials: true });
+  s.step(act('wrong', order(1)), deny('wrong', order(1), { source: 'rule' }), book('wrong'));
+  return s.done();
+}
+
+async function denialsCancelled() {
+  // denial.test.mjs: after the person's cancellation
+  const s = await setUp('after the person cancels, every action is refused and a denial says why', { fields: { requires: [] } });
+  const c = await s.cancel(s.start + 10 * MINUTE);
+  s.open('a', { denials: true });
+  s.step(clock({ add: 10 * MINUTE }), add('a', c.ref), act('a', order(10)), check('a'));
+  return s.done();
+}
+
+async function denialsCounted() {
+  // review of step 4: what the hourly limit counts, and when
+  const s = await setUp('the hourly limit of denials: each written is counted at the clock, the pass is matched, one handed through "add" counts, and a kept cancellation goes in first', {
+    fields: { passes: 1, requires: [] },
+  });
+  const t = s.start;
+  const helperKeys = s.key('helper', seededKeySet());
+  const pass = await s.w.pass({ helper: helperKeys, when: START });
+  const passRef = s.ref('pass', pass.fingerprint);
+  // A denial of the first agent, in the book before any writer is opened, dated within the hour.
+  await s.w.deny({ source: 'rule', when: t - 10 * MINUTE });
+  // Dated 299 seconds back each time: they count at the clock, so the fourth, 55 minutes on, is over the limit.
+  s.open('a', { denials: true, denialsPerHour: 3 });
+  s.step(
+    deny('a', order(1), { source: 'rule', when: t - 299 * 1000 }),
+    deny('a', order(1), { source: 'rule', when: t - 299 * 1000 }),
+    clock({ add: 3302 * 1000 }),
+    deny('a', order(1), { source: 'rule', when: t + 3302 * 1000 - 299 * 1000 }),
+    deny('a', order(1), { source: 'rule', when: t + 3302 * 1000 - 299 * 1000 }),
+  );
+  // The helper's writer does not count the first agent's denial: its own chain is its pass.
+  s.step(clock({ set: t }));
+  s.open('h', { keys: 'helper', pass: passRef, denials: true, denialsPerHour: 1 });
+  s.step(deny('h', order(1), { source: 'rule' }), deny('h', order(1), { source: 'rule' }));
+  // A denial of the writer's own agent handed through "add" counts towards the limit.
+  const handed = s.ref('handedDenial', { denial: (await writeDenial({ slip: s.w.slipFingerprint, action: ORDER, source: 'person', when: t }, s.w.agent.privateKeys)).record });
+  s.open('b', { denials: true, denialsPerHour: 2 });
+  s.step(add('b', handed), deny('b', order(1), { source: 'rule' }));
+  // A cancellation kept beside the book, because it was dated ahead of the clock, goes into the book before the denial once its date has come.
+  const c = await s.cancel(t + 10 * MINUTE);
+  s.open('k', { denials: true });
+  s.step(add('k', c.ref), clock({ add: 11 * MINUTE }), deny('k', order(1), { source: 'rule' }), book('k'), check('k'));
+  return s.done();
+}
+
+async function toolsDenials() {
+  // denial.test.mjs: the connector for an agent's tools
+  const s = await setUp('recorded tools: a denial for each call not run, by the check or by the person, and none for a call that is run', {
+    fields: { requires: [{ above: 40, action: ORDER, need: 'approval', unit: 'GBP' }] },
+  });
+  const t = s.start;
+  const requestFor = async (args, amount = args.total) => ({ action: ORDER, with: 'supplier', amount: { unit: 'GBP', value: amount }, details: [{ name: 'arguments', sha256: await argumentsFingerprint(args) }] });
+  const yes = s.ref(null, await s.w.approve({ slip: s.w.slipFingerprint, ...(await requestFor({ item: 'toner', total: 60 })), when: t }));
+  const base = { action: ORDER, with: 'supplier', amount: { fn: { unit: 'GBP', field: 'total' } }, run: { fn: { field: 'item', prefix: 'ordered ' } } };
+  s.open('a', { denials: true });
+  s.step({
+    op: 'tools',
+    w: 'a',
+    as: 't',
+    tools: {
+      yes: { ...base, approve: { fn: { gives: yes } } },
+      no: { ...base, approve: { fn: { gives: null } } },
+      plain: base,
+      forbidden: { action: 'provared.data.delete', run: { fn: { gives: 'deleted' } }, approve: { fn: { gives: null } } },
+    },
+  });
+  s.step(
+    { op: 'call', t: 't', tool: 'yes', args: { item: 'pens', total: 10 } },
+    { op: 'call', t: 't', tool: 'yes', args: { item: 'toner', total: 60 } },
+    { op: 'call', t: 't', tool: 'no', args: { item: 'chairs', total: 70 } },
+    { op: 'call', t: 't', tool: 'plain', args: { item: 'desk', total: 300 } },
+    { op: 'call', t: 't', tool: 'forbidden', args: {} },
+    check('a'),
+  );
+  // A writer opened without denials: the tools write none, and NotTaken has none.
+  s.open('b');
+  s.step({ op: 'tools', w: 'b', as: 'u', tools: { no: { ...base, approve: { fn: { gives: null } } }, plain: base } });
+  s.step({ op: 'call', t: 'u', tool: 'no', args: { item: 'chairs', total: 70 } }, { op: 'call', t: 'u', tool: 'plain', args: { item: 'desk', total: 300 } }, book('b'));
+  return s.done();
+}
+
 export const CASES = {
+  'denial-scenarios': async () => {
+    const cases = [];
+    for (const make of [denials, denialsOfHelpers, denialsCancelled, toolsDenials, denialsCounted]) cases.push(await make());
+    return finish(
+      'Denials beside an agent (format description, section 28): the stub writer (openRecorder, with "denials") and the connector for an agent\'s tools, played step by step, each with its transcript (test/helpers/scenarios.mjs).',
+      'recorderScenario',
+      cases,
+      ANSWER,
+    );
+  },
   'recorder-details-after': async () =>
     finish(
       'The stub writer\'s "detailsAfter" (openRecorder, "act"): further documents from what the action gave, signed into the stub after the action (format description, section 27). Scenarios played step by step, each with its transcript (test/helpers/scenarios.mjs).',

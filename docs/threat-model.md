@@ -893,6 +893,52 @@ make a pass: it needs the keys of the agent that passes on.
   every stub under it, as outside the slip. The record is still sound.
   Only an eleventh pass in a row, which no slip can allow, is refused.
 
+## 6e. The denial
+
+A denial (format description, section 28) is the agent's side's signed
+statement that it did not take an action that was asked for, and who
+said no: the check before acting, the person, or a rule of the software
+around the agent.
+
+**Protects.** That a denial in the book was signed by the agent the slip
+names, or by the helper its pass names, under a slip that is earlier in
+the book (`slip-missing`, `pass-missing`, `pass-mismatch`,
+`signature-invalid`). A6 cannot make one. A7 cannot use one to change
+any other answer: a denial is in no chain, adds to no total, and is never
+counted against the agent, so a flood of denials, or a denial that names
+an action far outside the slip, makes no stub read as outside it. A
+denial changed after it was signed, or under another kind of record's
+labels, is refused like any record. In this library, `act` writes a
+denial only where it did not take the action, so one call through `act`,
+`recordTools` or `record_function` leaves a stub or a denial, never both
+(the connector for an agent's tools asks for no denial until it knows
+the person will not approve). `deny` is different: it records whatever
+its caller states, and a caller can write a denial for a request that
+also has a stub; the checker shows both. The writer keeps to a set
+number of denials an hour of its own clock (600 by default), counting
+each it writes at the clock's time, so that an agent that asks again and
+again cannot fill its book quickly: at 600 an hour a book's 100,000
+entries still fill in about a week. A stub is never kept out by that
+limit.
+
+**Does not protect.**
+
+- **It is the agent's side's own word.** A3 can write a denial for an
+  action it then took some other way, or a false reason. Only the other
+  side's records, or the service's own refusal, can show otherwise.
+- **An agent can simply not write one.** A book with no denial shows
+  nothing about how often the agent was stopped. A1 or A2 can also leave
+  denials out of a copy of the book after the last seal, as any entry.
+- **What was asked for is in clear.** A denial names the action, the
+  amount and the service. Its documents are fingerprints only, and the
+  library never writes arguments into it; but a fingerprint of a short
+  or guessable value can be guessed.
+- **The source is not checked.** Nothing shows that the person, or a
+  rule, said no: `person` and `rule` are the agent's side's statement.
+  A denial by the check before acting names the codes the check gave,
+  and nothing in the record shows that the check was made.
+- **Older checkers** refuse a book that holds a denial (`unknown-entry`).
+
 ## 7. The checker and the checking page
 
 **Protects.** A7 cannot crash the checker, make it run a script, or make
@@ -988,7 +1034,10 @@ it show a pass for a record that does not check.
 ## 8. What is refused, and the test that proves it
 
 Each row is one test in `test/refusals.test.mjs`, named by its code. A
-further test reads this table and fails if a code here has no test.
+further test reads this table and fails if a code here has no test. This
+table is also the format's own list of finding codes, from which a denial
+names its reasons (format description, section 28); `test/denial.test.mjs`
+fails if the two differ.
 
 | Code | What is refused or reported |
 |---|---|

@@ -13,6 +13,7 @@
 //            (a proof from a public blockchain, to put beside a seal),
 //            prepareCancellation + assembleCancellation (the person ends a slip),
 //            writeAcknowledgement (the agent's side says it was handed a cancellation),
+//            writeDenial (the agent's side says it did not take an action, and why),
 //            writeVouching, writeWithdrawal (an organisation vouches for a name),
 //            writePass (an agent hands part of its permission to a helper agent),
 //            writeBook, makeShow
@@ -35,6 +36,7 @@ export { writePass } from './pass.js';
 export { writeSeal } from './seal.js';
 export { blockStampItem } from './blockstamp.js';
 export { prepareCancellation, assembleCancellation, writeAcknowledgement, writeVouching, writeWithdrawal, VOUCHED_KINDS } from './standing.js';
+export { writeDenial, denialCodes, FINDING_CODES } from './denial.js';
 export { entryLine, writeBook, makeShow } from './book.js';
 export { generateKeySet, generateSealKeySet, signerFromKey } from './signatures.js';
 export { ACTION_KINDS, SHARED_ACTIONS, CONDUCT_RULES, RESERVED_PREFIX, actionKind } from './actions.js';

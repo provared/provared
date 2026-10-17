@@ -152,7 +152,10 @@ def _message(e, ctx):
 def _failure(e, ctx):
     """An error as the transcript holds it."""
     if isinstance(e, NotTaken):
-        return {'error': {'kind': 'NotTaken', 'tool': e.tool, 'message': e.message, 'answer': norm(e.answer, ctx)}}
+        out = {'kind': 'NotTaken', 'tool': e.tool, 'message': e.message, 'answer': norm(e.answer, ctx)}
+        if e.denial is not None:
+            out['denial'] = norm(e.denial, ctx)
+        return {'error': out}
     if isinstance(e, Refusal):
         out = {'kind': 'Refusal', 'code': e.code, 'message': norm(e.message, ctx)}
         if _js.truthy(getattr(e, 'acknowledgement', None)):
@@ -272,6 +275,8 @@ def _inside(names, ctx, writer):
                 value = writer.record(_order(1))['seq']
             elif name == 'add':
                 value = writer.add({'neither': 'this nor that'})
+            elif name == 'deny':
+                value = writer.deny(_order(1), {'source': 'rule'})
             got = {'value': norm(value, ctx)}
         except Exception as e:
             got = _failure(e, ctx)
@@ -312,7 +317,7 @@ def _more_of(spec, ctx, writer, seen):
     if not isinstance(spec, dict):
         return _top(resolve(spec, ctx))
     more = {}
-    for name in ('when', 'terms', 'approval'):
+    for name in ('when', 'terms', 'approval', 'denial', 'source', 'codes'):
         if name in spec:
             value = resolve(spec[name], ctx)
             if value is not _UNDEF:
@@ -506,6 +511,10 @@ def _play_step(step, ctx):
                 options['options'] = _top(resolve(step['options'], ctx))
             if 'countersignWithin' in step:
                 options['countersign_within'] = _top(resolve(step['countersignWithin'], ctx))
+            if 'denials' in step:
+                options['denials'] = _top(resolve(step['denials'], ctx))
+            if 'denialsPerHour' in step:
+                options['denials_per_hour'] = _top(resolve(step['denialsPerHour'], ctx))
             ctx.writers[step['as']] = open_recorder(
                 _top(resolve(step['book'], ctx)),
                 _top(resolve(step['slip'], ctx)),
@@ -543,7 +552,11 @@ def _play_step(step, ctx):
             out = {'done': r['done'], 'answer': norm(r['answer'], ctx), 'result': norm(r.get('result'), ctx), 'stub': norm(r.get('stub'), ctx), 'seen': norm(seen, ctx)}
             if 'detailsAfter' in r:
                 out['detailsAfter'] = norm(r['detailsAfter'], ctx)
+            if 'denial' in r:
+                out['denial'] = norm(r['denial'], ctx)
             return out
+        if op == 'deny':
+            return {'denial': norm(w.deny(_top(resolve(step['request'], ctx)), _more_of(step.get('more'), ctx, w, seen)), ctx)}
         if op == 'record':
             r = w.record(_top(resolve(step['request'], ctx)), _more_of(step.get('more'), ctx, w, seen))
             return {'stub': norm(r, ctx), 'seen': norm(seen, ctx)}

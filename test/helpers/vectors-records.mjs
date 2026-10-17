@@ -1,6 +1,6 @@
 // Shared test cases for the approval, the refusal, a service's terms, the
-// cancellation, the acknowledgement, the vouching record, the withdrawal
-// and the pass.
+// cancellation, the acknowledgement, the vouching record, the withdrawal,
+// the pass and the denial.
 //
 // The keys in the cases have the right shapes and made-up values: the
 // checks of content look only at shapes. Where a record is written, its
@@ -27,6 +27,7 @@ import {
   writeVouching,
   writeWithdrawal,
 } from '../../src/standing.js';
+import { DENIAL_SOURCES, FINDING_CODES, MAX_DENIAL_CODES, denialCodes, validateDenialContent, writeDenial } from '../../src/denial.js';
 import { answer, finish } from './vector-tools.mjs';
 
 const hex = (bytes) => Buffer.from(bytes).toString('hex');
@@ -94,6 +95,10 @@ export const ANSWER = {
   validatePassContent: valid(validatePassContent),
   writePass: written(writePass),
   recordConstants: () => answer(() => ({ REFUSAL_REASONS, VOUCHED_KINDS, MAX_PASSES })),
+  validateDenialContent: valid(validateDenialContent),
+  writeDenial: written(writeDenial),
+  denialCodes: (c) => answer(() => denialCodes(c.answer)),
+  denialConstants: () => answer(() => ({ DENIAL_SOURCES, FINDING_CODES, MAX_DENIAL_CODES })),
 };
 
 // --- values the cases share ---
@@ -963,6 +968,113 @@ function passFields() {
   ]);
 }
 
+// --- the denial ---
+
+const DENIAL = { type: 'provared.denial.v0', id: ID, slip: FP, action: 'supplies.order', source: 'check', codes: ['over-limit'], when: WHEN };
+const FULL_DENIAL = { ...DENIAL, amount: { unit: 'GBP', value: 250 }, with: 'supplier', details: [DOC], pass: b64(32, 9) };
+const PERSON_DENIAL = { type: 'provared.denial.v0', id: ID, slip: FP, action: 'supplies.order', source: 'person', when: WHEN };
+
+function denialContents() {
+  const sources = [
+    ...Object.keys(DENIAL_SOURCES).map((s) => [s, s]),
+    ['a source with a capital letter', 'Check'],
+    ['the source of a refusal', 'service'],
+    ['toString', 'toString'],
+    ['__proto__', '__proto__'],
+    ['a number', 1],
+    ['null', null],
+    ['a list', ['check']],
+  ];
+  const codes = [
+    ['one code', ['over-limit']],
+    ['every code a stub can be reported with', ['action-not-allowed', 'party-not-allowed', 'over-limit', 'prohibited']],
+    ['16 codes', FINDING_CODES.slice(0, 16)],
+    ['17 codes', FINDING_CODES.slice(0, 17)],
+    ['no codes', []],
+    ['a code twice', ['over-limit', 'over-limit']],
+    ['a code not on the list', ['too-many']],
+    ['a code of an answer of the stub writer, not on the list', ['details-not-added']],
+    ['a code with a capital letter', ['Over-limit']],
+    ['a code that is a number', [1]],
+    ['a code that is null', [null]],
+    ['a second code that is faulty', ['over-limit', 'x']],
+    ['text in place of a list', 'over-limit'],
+    ['an object', { 0: 'over-limit' }],
+    ['null', null],
+  ];
+  return cases([
+    ['a denial by the check before acting', DENIAL],
+    ['a denial with every member', FULL_DENIAL],
+    ['a denial by the person', PERSON_DENIAL],
+    ['a denial by a rule of the software', { ...PERSON_DENIAL, source: 'rule' }],
+    ['a denial by the person with codes', { ...PERSON_DENIAL, codes: ['approval-missing'] }],
+    ['a denial by a rule with codes', { ...PERSON_DENIAL, source: 'rule', codes: ['over-limit'] }],
+    ['a denial by the check with no codes', drop(DENIAL, 'codes')],
+    ['a service the slip need not name', { ...DENIAL, with: 'another-service' }],
+    ['an action not on the shared list, under the reserved prefix', { ...DENIAL, action: 'provared.money.send' }],
+    ['a type of another kind, which this check does not read', { ...DENIAL, type: 'provared.refusal.v0' }],
+    ['an unknown member', { ...DENIAL, colour: 'red' }],
+    ['a reason, which a denial does not hold', { ...DENIAL, reason: 'other' }],
+    ['a member named __proto__', withProto(DENIAL)],
+    ...NOT_OBJECTS,
+    ...missing(DENIAL, ['action', 'id', 'slip', 'source', 'type', 'when']),
+    ...each(DENIAL, 'id', IDS),
+    ...each(DENIAL, 'slip', FINGERPRINTS),
+    ...each(DENIAL, 'pass', FINGERPRINTS),
+    ...each(DENIAL, 'action', ACTIONS),
+    ...each(DENIAL, 'amount', AMOUNTS),
+    ...each(DENIAL, 'with', SERVICES),
+    ...each(DENIAL, 'details', DETAILS),
+    ...each(DENIAL, 'source', sources),
+    ...each(DENIAL, 'codes', codes),
+    ...each(DENIAL, 'when', TIMES),
+    ['reserved document names: the arguments and the platform\'s identifier', { ...DENIAL, details: [{ name: 'provared.arguments', sha256: FP2 }, { name: 'provared.event-id', sha256: FP }] }],
+    ['a reserved document name not on the list', { ...DENIAL, details: [{ name: 'provared.secret', sha256: FP2 }] }],
+    ['the arguments named twice', { ...DENIAL, details: [{ name: 'provared.arguments', sha256: FP2 }, { name: 'provared.arguments', sha256: FP }] }],
+    ['a faulty id, slip and pass: the id is reported', { ...DENIAL, id: 'x', slip: 'x', pass: 'x' }],
+    ['a faulty pass and action: the pass is reported', { ...DENIAL, pass: 'x', action: 'A' }],
+    ['a faulty action, amount and source: the action is reported', { ...DENIAL, action: 'A', amount: {}, source: 'x' }],
+    ['a faulty amount, service and documents: the amount is reported', { ...DENIAL, amount: {}, with: 'A', details: [] }],
+    ['a faulty service and source: the service is reported', { ...DENIAL, with: 'A', source: 'x' }],
+    ['a faulty source and codes: the source is reported', { ...DENIAL, source: 'x', codes: ['x'] }],
+    ['faulty codes and time: the codes are reported', { ...DENIAL, codes: ['x'], when: 'x' }],
+  ]);
+}
+
+function denialFields() {
+  const base = { id: ID, slip: FP, action: 'supplies.order', source: 'check', codes: ['over-limit'], when: T };
+  return writes([
+    ['a denial by the check before acting', base],
+    ['a denial by the person', { id: ID, slip: FP, action: 'supplies.order', source: 'person', when: T }],
+    ['a denial by a rule, of a helper agent', { id: ID, slip: FP, action: 'supplies.order', source: 'rule', pass: b64(32, 9), when: T }],
+    ['with an amount, a service and a document', { ...base, amount: { unit: 'GBP', value: 250 }, with: 'supplier', details: [DOC] }],
+    ['no documents are left out', { ...base, details: [] }],
+    ['an amount of 0 is left out', { ...base, amount: 0 }],
+    ['a pass that is empty text is left out', { ...base, pass: '' }],
+    ['an unknown field is left out', { ...base, colour: 'red' }],
+    ['an unknown reserved action', { ...base, action: 'provared.money.send' }],
+    ['a denial by the check with no codes', drop(base, 'codes')],
+    ['a denial by the person with codes', { ...base, source: 'person' }],
+    ['codes given as null are left out', { ...base, source: 'person', codes: null }],
+    ['an unknown source', { ...base, source: 'service' }],
+    ['a time before 1970', { ...base, when: -1000 }],
+  ]);
+}
+
+function denialCodeCases() {
+  const p = (code) => ({ code, message: 'm' });
+  return [
+    ['a finding', { problems: [], breaches: [p('over-limit')] }],
+    ['problems come before findings', { problems: [p('record-not-sound')], breaches: [p('over-limit'), p('prohibited')] }],
+    ['a code twice is named once', { problems: [p('bad-field')], breaches: [p('over-limit'), p('over-limit'), p('bad-field')] }],
+    ['a code not on the list is left out', { problems: [p('details-not-added')], breaches: [p('over-limit')] }],
+    ['no code on the list: check-failed', { problems: [p('details-not-added')], breaches: [] }],
+    ['nothing at all: check-failed', { problems: [], breaches: [] }],
+    ['at most 16', { problems: [], breaches: FINDING_CODES.slice(0, 20).map(p) }],
+    ['a code that is not text is left out', { problems: [{ code: 1 }, null], breaches: [p('prohibited')] }],
+  ].map(([name, a]) => ({ name, answer: a }));
+}
+
 // --- each set ---
 
 /** Each set of cases, by the name of its file. */
@@ -1008,6 +1120,11 @@ export const CASES = {
   'withdrawals-written': () => finish('Writing and signing a withdrawal (format description, section 23).', 'writeWithdrawal', withdrawalFields(), ANSWER),
   'pass-contents': () => finish("Confirming the members of a pass's content, with its own limits (format description, section 25).", 'validatePassContent', passContents(), ANSWER),
   'passes-written': () => finish('Writing and signing a pass (format description, section 25).', 'writePass', passFields(), ANSWER),
+  'denial-contents': () => finish("Confirming the members of a denial's content (format description, section 28).", 'validateDenialContent', denialContents(), ANSWER),
+  'denials-written': () => finish('Writing and signing a denial (format description, section 28).', 'writeDenial', denialFields(), ANSWER),
+  'denial-codes': () => finish('The reasons a denial by the check before acting names, from its answer (format description, section 28).', 'denialCodes', denialCodeCases(), ANSWER),
+  'denial-constants': () =>
+    finish("Who may say no in a denial, the format's own list of finding codes, and the most codes one denial names (format description, section 28).", 'denialConstants', [{ name: 'the constants' }], ANSWER),
   'record-constants': () =>
     finish('The reasons a service may give for a refusal, the kinds a vouching record may vouch for, and the most passes in a row.', 'recordConstants', [{ name: 'the constants' }], ANSWER),
 };

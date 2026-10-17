@@ -221,6 +221,36 @@ only that the content matches, not that it was the same call.
 `record_tools` and `record_function` still name the arguments
 `arguments` by default.
 
+Opened with `denials=True`, the writer also writes a **denial**
+whenever `act` does not take an action: the agent's side's own signed
+statement that it did not take it, and why (format description, section
+28). `writer.deny(request, {'source': 'person'})` writes one for a
+refusal that came from elsewhere (`'person'`, or `'rule'` for a rule
+of the software around the agent; `'check'` with `'codes'` where
+`act` was asked to write none with `{'denial': False}`). A denial names
+the action, the amount and the service, with documents as fingerprints
+only; arguments are never written into it. At most `denials_per_hour`
+(600 by default) are written in any hour of the writer's clock: each
+denial it writes, or is handed through `add`, counts at the clock's time
+when it joins the book, whatever date it states, and those the book held
+when the writer was opened count at the dates they state. The answer's
+`notWritten` counts those left out, and a stub is never kept out. At 600
+an hour a book's 100,000 entries still fill in about a week. A writer
+opened again on a book counts the book's denials at their stated dates,
+so a caller who dates denials back and then opens the writer again can
+get a second burst (5 and then 5 more within 3,302 seconds, at a limit
+of 5). `deny`
+records what its caller states, and raises only for a malformed call (a
+request that is text, a number or None, or that is not plain data,
+`codes` that cannot be copied, a `when` that is not a time, or a call from
+inside an action). `record_tools` and
+`record_function` pass it on: a call that is not run leaves a denial,
+which `NotTaken.denial` describes, and a call where the person may yet
+approve leaves one only once it is known that it will not run. A checker
+counts denials (`summary.counts.denials`) and never counts one against
+the agent. An agent can simply not write one, so a book without denials
+shows nothing about refusals.
+
 ## Keys held elsewhere: signers
 
 The keys of an agent, a service or an organisation need not sit in the
