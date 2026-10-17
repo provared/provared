@@ -174,9 +174,20 @@ agent's keys between runs as two 32-byte seeds.
 Names follow Python's way (`check_book`, `write_stub`). Options may be
 given as keyword arguments (`issuer_keys`, `expected_root`,
 `stamp_services`, `seal_keys`, `vouchers`, `disclosures`,
-`cancellations`, `without_methods`), or as one dict with the names the
+`cancellations`, `seals`, `without_methods`), or as one dict with the names the
 JavaScript library uses (`issuerKeys` and so on). Records and answers
 are dicts and lists, with the same member names as in the format.
+
+A seal of the book that someone holds elsewhere (the person, an auditor,
+a copy kept apart) can be handed to the checker beside the book, as the
+entry it is in the book: `check_book(text, seals=[entry], seal_keys=[...])`,
+up to 64. A book that ends before the place the seal states is reported
+as cut short (`book-cut-short`); one that holds another line there, as
+changed (`seal-not-in-book`). This version cannot check a seal's third
+signature (SLH-DSA), so such a seal counts on its Ed25519 and ML-DSA-87
+signatures, and the answer says so (format description, section 21.5).
+Hand over only seals of the book being checked: nothing in a seal names
+its book.
 
 `provared.check` holds the checker alone, for anyone who audits the
 checking.

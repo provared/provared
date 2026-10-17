@@ -628,6 +628,11 @@ block time-stamp where the whole book sets that time-stamp aside and
 passes. The last two need a block that states a time far behind the
 true time.
 
+A checker does not use seals held elsewhere (section 21.5) with a Show,
+and MUST say so where any are handed over: single pages cannot show what
+the book holds at the place a seal states, nor that the book goes on to
+it.
+
 Nothing fixes the time-stamps beside the seal that comes with a Show.
 They stand outside the tree and outside the seal's signatures, so
 whoever hands the Show over can put a later time-stamp in the place of
@@ -639,7 +644,7 @@ the seal's own date (section 21.1, rule 4).
 
 | Missing | What follows |
 |---|---|
-| A public place where seals are kept | The last seal of a book, with everything after it, can be removed unnoticed, unless someone else holds a copy of that seal or of its top fingerprint and number of entries |
+| A public place where seals are kept, and witnesses that sign for each seal | The last seal of a book, with everything after it, can be removed unnoticed, unless someone else holds a copy of that seal, and hands it to the checker (section 21.5), or holds its top fingerprint and number of entries |
 | A quantum-safe time-stamp | Time-stamp services sign with methods of today's kind |
 | Covered fields outside a slip's names and purpose | Every other field of an entry is visible to whoever holds it |
 | A compact binary form | Records are JSON text only |
@@ -757,6 +762,11 @@ is frozen.
     Content-Digest, and an absent body none; no header covered; SHA-256
     only; only the three identifiers may be named more than once; the
     form of a trace-id not checked.
+20. Seals held elsewhere, section 21.5: at most 64; compared with the
+    book by the seal's content, its signatures and time-stamps not;
+    counted only for a recorder the person named, and on a device
+    without SLH-DSA on its first two signatures; its time-stamps not used
+    for the entries of the book.
 
 ## 16. The shared list: actions, kinds of action, rules of conduct
 
@@ -1203,8 +1213,8 @@ entries after it are not time-stamped.
 What a seal and a time-stamp do not fix: the last seal of a book, with
 everything after it, can be removed, and what is left still checks. Only
 a copy of that seal, or of its top fingerprint and number of entries,
-held by someone else shows it. And a time-stamp service signs with a
-method of today's kind.
+held by someone else shows it (section 21.5). And a time-stamp service
+signs with a method of today's kind.
 
 ### 21.4 A block time-stamp
 
@@ -1327,6 +1337,85 @@ block. The person who names a block vouches for that, having compared
 its fingerprint with sources they trust. A proof is complete only one to
 several hours after it is asked for, so it is an addition to a
 time-stamp from a service, not a replacement.
+
+### 21.5 Seals held elsewhere
+
+Whoever keeps a book can cut off its end, the last seal with it, and
+what is left still checks (section 21.3). A copy of a seal kept out of
+the recorder's reach shows it: by the person, an auditor, a second copy
+of the book, or any party the recorder handed the seal to.
+
+A checker MAY be handed, beside a book, up to 64 seals held elsewhere,
+each as the entry it is in a book: `{"seal": seal record}`, with or
+without `"stamps"` (section 9). More than 64, or anything that is not a
+list, is refused (`bad-field`). An empty list is none. The same seal MUST
+NOT be handed over twice (`bad-field`).
+
+Each seal handed over is checked as a seal in a book is: its three
+signatures (`signature-invalid`), its recorder against the recorders the
+person expects (`sealer-not-expected`, rule 5 of section 21.1), and its
+time-stamps as section 21.2 sets out. Its `size` and `root` are not
+worked out again here: the book's own seal at that place is (rule 2 of
+section 21.1). A seal handed over that does not pass its own check is a
+problem with the check as a whole: it is never set aside silently.
+
+A seal handed over **counts** only where all of these hold:
+
+1. it passed its own check;
+2. the person named the recorders they expect, and its recorder is one
+   of them. Otherwise anyone could make a seal with keys of their own and
+   have a sound book reported; a checker MUST say that it was not used;
+3. the device checked its Ed25519 and ML-DSA-87 signatures. Where the
+   device does not have SLH-DSA (the Python version, and browsers that
+   have ML-DSA, such as Edge and Brave 155 when tested), the seal counts
+   on those two, and a checker MUST say that its third signature was not
+   checked. On a device without ML-DSA, or without Ed25519, it is not
+   used. A seal held elsewhere can only show a problem with a book, never
+   excuse one.
+
+For a seal that counts, at entry n (its `size`), a checker MUST report a
+problem with the book:
+
+- `book-cut-short`, where the book has n entries or fewer: it ends
+  before the place where the seal stands, so its end was cut off after
+  the seal was made;
+- `seal-not-in-book`, where the entry at n is not a seal with the same
+  content: the same fingerprint (section 3.5), which fixes `size` and
+  `root`, and so the entries before it. The book was changed after the
+  seal was made, or the seal is of another book.
+
+Nothing in a seal names its book. So a seal of another book by the same
+recorder (a book it kept before, when it started a new one) is reported
+as `seal-not-in-book` where it stands, or as `book-cut-short` where the
+other book was longer: hand over only seals of the book being checked.
+
+Where the book holds the seal at entry n, the checker MUST say so. Where
+that entry did not pass its own check, it MUST say that too. The same
+content with other signatures is the same seal: only someone who holds
+the recorder's keys can sign it again, and it fixes the same entries. It
+is not a fault of the book, and a checker MUST say that the signatures
+differ. (So a copy whose third signature was changed, on a device that
+cannot check that signature, agrees with the book; on a device that can,
+it does not pass its own check.) The time-stamps of the copy stand
+outside the seal's signatures (section 11), so they may differ from
+those beside the same seal in the book; a checker MUST say where they
+do. The copy's own time-stamps are shown,
+and are not used for the entries of the book: the time by which an entry
+existed (section 21.3) comes from the book alone.
+
+A checker that is carried on (one that reads a book and then more lines)
+applies this to the book as it stands at each answer. What rests on a
+seal handed over alone (its signatures, its recorder, its time-stamps)
+it MAY check once and keep.
+
+What this closes: the end of a book cut off after a seal that someone
+else holds, back to any place before that seal; and a second history of
+a book, shown to someone who holds a seal of the first, since the seal
+does not fit it. What it does not close: a book cut back after the
+latest seal anyone holds; a book, or the part of one, never shown to
+anyone who keeps a seal; and a recorder that hands its seals to nobody.
+Witnesses, which sign for each seal and keep the latest they saw, are
+not part of draft version 0.
 
 ## 22. Cancelling a slip
 

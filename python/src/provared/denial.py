@@ -25,7 +25,7 @@ FINDING_CODES = (
     'countersignature-invalid', 'countersignature-wrong-stub', 'countersignature-not-possible', 'line-not-canonical', 'unknown-entry',
     'approval-mismatch', 'approval-reused', 'approval-invalid', 'approval-not-found', 'approval-dated-after-stub', 'terms-not-found',
     'terms-unusable', 'terms-mismatch', 'pass-missing', 'pass-mismatch', 'pass-too-deep', 'cover-invalid', 'cancellation-invalid',
-    'cancellation-not-found', 'acknowledgement-mismatch', 'vouching-missing', 'seal-mismatch', 'seal-chain-broken', 'sealer-not-expected',
+    'cancellation-not-found', 'acknowledgement-mismatch', 'vouching-missing', 'seal-mismatch', 'seal-chain-broken', 'sealer-not-expected', 'book-cut-short', 'seal-not-in-book',
     'dated-after-stamp', 'stamp-bad-data', 'stamp-wrong-data', 'stamp-invalid', 'headers-invalid', 'record-not-sound', 'proof-invalid',
     'root-mismatch', 'check-failed', 'action-not-allowed', 'party-not-allowed', 'outside-valid-time', 'amount-missing', 'over-limit',
     'over-each-limit', 'over-count-limit', 'over-period-limit', 'countersignature-missing', 'approval-missing', 'prohibited',

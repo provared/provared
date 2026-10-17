@@ -479,7 +479,8 @@ unnoticed).
   what is left still checks. This can hide the very stub that shows the agent outside its
   slip. A seal closes this for everything before it (section 6a). After
   the last seal, only a copy of a top fingerprint, with its number of
-  entries, held by someone else would show it.
+  entries, or a copy of a later seal, held by someone else would show it
+  (section 6a, "Seals held elsewhere").
 - **Writing a different history with the agent's keys.** A1, A3 or A5
   can sign a second, different chain under the same slip. Countersigned
   stubs resist this, because the service's keys are needed. One-sided
@@ -549,8 +550,37 @@ person checking gives.
 - **The end of the book.** The last seal, with everything after it, can
   be removed, and what is left still checks. Only a copy of that seal, or
   of its top fingerprint and number of entries, held by someone else
-  shows it. A public place where seals are kept would close this; it is
-  not built.
+  shows it. A seal held elsewhere can be handed to the checker beside the
+  book (below); a public place where seals are kept, or a witness that
+  signs for each seal, would close the rest. Neither is built.
+- **Seals held elsewhere.** The person, an auditor, or any copy kept out
+  of the recorder's reach can hand the checker, beside the book, up to 64
+  seal entries it holds (option `seals`, `--seal` on the command line, files on
+  the checking page). A seal at entry n stands at entry n of the
+  book, so the checker reports a book that ends before that place
+  (`book-cut-short`) and a book that holds another line there
+  (`seal-not-in-book`). This closes the end of a book cut off after a seal
+  someone else holds, back to any place before that seal, and a second
+  history shown to someone who holds a seal of the first. What it does
+  not close: a book cut back after the latest seal anyone holds; a book,
+  or a part of one, never shown to anyone who keeps a seal; and a holder
+  who keeps no seal at all. A seal handed over counts only where the
+  person named its recorder (`sealKeys`), and only where the device checked
+  its Ed25519 and ML-DSA-87 signatures; on a device without SLH-DSA (the
+  Python version, and browsers that have ML-DSA, such as Edge and Brave
+  155 when tested) it counts on those two, and says so; on a device
+  without ML-DSA it is not used. It is compared with the book by its
+  content: the same content with other signatures is the same seal, and
+  is said, not reported against the book. It can only show a problem
+  with the book, never excuse one, so this widens nothing. Nothing in a
+  seal names its book, so a seal of another book by the same recorder
+  (one it kept before, when it started a new book) is reported against
+  the book being checked: hand over only that book's seals. A seal handed over that does not pass its own check is a
+  problem with the whole check, never set aside. Its time-stamps are
+  checked and shown, but are not used for the entries of the book: where
+  they differ from those beside the same seal in the book, the checker
+  says so. A Show does not use a seal held elsewhere, and says so: single
+  pages cannot show what the book holds at the place the seal states.
 - **Entries after the last time-stamp.** They are not time-stamped.
 - **A recorder who seals a false book.** A1 holding the agent's keys and
   the recorder's keys can write another history and seal it. A time-stamp
@@ -1090,6 +1120,8 @@ fails if the two differ.
 | `seal-mismatch` | A seal that does not fit the entries before it: an entry was changed, added or removed after the seal was made. In a Show: a seal for another book, or for another length of this one |
 | `seal-chain-broken` | A seal that does not name the seal before it: a seal is missing, moved or changed |
 | `sealer-not-expected` | A seal signed with keys other than the ones the checker was told to expect |
+| `book-cut-short` | A book that ends before the place of a seal held elsewhere and handed over beside it: its end was cut off after that seal was made |
+| `seal-not-in-book` | A book that holds another line at the place of a seal held elsewhere and handed over beside it: it was changed after that seal was made, or the seal is of another book |
 | `dated-after-stamp` | An entry dated later than the outside time-stamp that covers it, or a seal dated later than its own time-stamp |
 | `stamp-bad-data` | A time-stamp that is not laid out as its standard sets out |
 | `stamp-wrong-data` | A time-stamp made for something other than this seal |

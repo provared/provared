@@ -335,6 +335,39 @@ export interface HeldAcknowledgement {
   inBook: number | null;
 }
 
+/** A seal held elsewhere, as it is handed over: the entry it is in the book. */
+export interface HandedSeal {
+  seal: SignedRecord;
+  stamps?: StampItem[];
+}
+
+/**
+ * A seal held elsewhere (by the person, an auditor, a copy kept apart), handed over beside the book. The book
+ * must hold the same seal at the place it states: a book that ends before that place was cut short
+ * ("book-cut-short"), and one that holds another line there was changed ("seal-not-in-book").
+ */
+export interface HeldSeal {
+  kind: 'seal';
+  fingerprint: Fingerprint | null;
+  /** The fingerprint of the key set that signed it. */
+  sealer: Fingerprint | null;
+  /** The entry of the book at which it stands: the number of entries it covers. Null where it could not be read. */
+  place: number | null;
+  /** That entry, where the book holds the same seal there; null otherwise, or where it was not used. */
+  inBook: number | null;
+  /** Whether it passed its check, its recorder is one you named, and this device checked its first two signatures. */
+  used: boolean;
+  verified: 'all' | 'some' | 'none';
+  problems: Finding[];
+  notes: string[];
+  signatures: KeySignature[];
+  /** Its own time-stamps: checked and shown, not used for the entries of the book. */
+  stamps: Stamp[];
+  content?: any;
+  /** The earliest time a time-stamp from a trusted service gives it, where all three of its signatures were checked. */
+  stampedAt?: Time;
+}
+
 export interface CheckResult {
   format: string;
   size: number;
@@ -342,8 +375,8 @@ export interface CheckResult {
   problems: Finding[];
   notes: string[];
   entries: CheckedEntry[];
-  /** What was handed over beside the book, and what came of it. */
-  held: HeldCancellation[];
+  /** What was handed over beside the book, and what came of it: the cancellations first, then the seals. */
+  held: (HeldCancellation | HeldSeal)[];
   summary: Summary;
 }
 
@@ -366,6 +399,11 @@ export interface CheckOptions {
    * out, or holds them with a later time-stamp.
    */
   cancellations?: HandedCancellation[];
+  /**
+   * Seals held elsewhere, each as the entry it is in the book. At most 64. The book must hold each at the
+   * place it states. Each counts only where its recorder is one named in "sealKeys".
+   */
+  seals?: HandedSeal[];
   expectedRoot?: Fingerprint;
   expectedSize?: number;
   /** Signing methods to treat as not built into this device. It can only withhold a pass. */

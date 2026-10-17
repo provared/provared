@@ -34,6 +34,8 @@
     <p class="quiet">Choose these files first, then choose the record file. They stay chosen, and are used with every record you check, until you clear them. The sample record is checked without them.</p>
     <label for="cancellations">The person's own copies of cancellations: one file for each, up to 16. A copy counts even where the book leaves the cancellation out. A file may also hold what the agent's side signed when it was handed the cancellation.</label>
     <input type="file" id="cancellations" accept=".json,.txt" multiple>
+    <label for="seals">Seals of the book held elsewhere, by you, an auditor or a copy kept apart: one file for each, up to 64. The book must hold each at the place it states; one that ends before it was cut short. A seal counts only where you named its recorder above.</label>
+    <input type="file" id="seals" accept=".json,.txt" multiple>
     <label for="disclosures">Disclosures for covered fields of a slip: one file</label>
     <input type="file" id="disclosures" accept=".json,.txt">
     <p><button type="button" class="second" id="clear-beside">Clear these files</button></p>

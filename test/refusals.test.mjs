@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { checkBook, checkShow, checkSlip, entryLine, generateKeySet, makeShow, prepareSlip, writeBook, writeStub } from '../src/index.js';
+import { checkBook, checkShow, checkSlip, entryLine, generateKeySet, keySetFingerprint, makeShow, prepareSlip, writeBook, writeStub } from '../src/index.js';
 import { makeWorld, withContent } from './helpers/world.mjs';
 
 const b64 = (text) => Buffer.from(text).toString('base64url');
@@ -301,6 +301,16 @@ Object.assign(REFUSED, {
   'sealer-not-expected': async () => {
     const { lines, trust } = await sealedBook();
     return checkBook(lines.join('\n') + '\n', { ...trust, sealKeys: ['A'.repeat(43)] });
+  },
+  'book-cut-short': async () => {
+    const { w, lines, trust } = await sealedBook();
+    // The second seal is held elsewhere; the book is cut back to the first.
+    return checkBook(lines.slice(0, 4).join('\n') + '\n', { ...trust, sealKeys: [await keySetFingerprint(w.recorder.keys)], seals: [JSON.parse(lines[5])] });
+  },
+  'seal-not-in-book': async () => {
+    const { w, lines, trust } = await sealedBook();
+    // The first seal is held elsewhere; the book holds the third stub in its place.
+    return checkBook([lines[0], lines[1], lines[2], lines[4]].join('\n') + '\n', { ...trust, sealKeys: [await keySetFingerprint(w.recorder.keys)], seals: [JSON.parse(lines[3])] });
   },
   'dated-after-stamp': async () => {
     const w = await makeWorld();

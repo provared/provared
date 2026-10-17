@@ -2,6 +2,41 @@
 
 ## Unreleased
 
+- **Seals held elsewhere, handed over beside the book** (format
+  description, section 21.5), in both languages. Whoever keeps a book
+  could cut off its end, the last seal with it, and what is left still
+  checks. Now anyone who keeps a copy of a seal (the person, an auditor, a
+  second copy out of the recorder's reach) can hand up to 64 of them to
+  the checker, each as the entry it is in the book: the option `seals`,
+  `--seal <file>` on the command line (may be repeated), and a file
+  chooser in the checking page's panel "What you were handed with the
+  record". A seal at entry n must stand at entry n of the book. Two new
+  codes, both problems with the book: `book-cut-short` (the book ends
+  before that place) and `seal-not-in-book` (the entry there is not a
+  seal with the same content; the same content with other signatures is
+  the same seal, and is said). Nothing in a seal names its book, so a
+  seal of another book by the same recorder is reported against the book
+  being checked. Each seal handed over is checked as any seal is, once
+  for a checker that is carried on and for the stub writer; it counts
+  only where its recorder is named in `sealKeys` (`--sealer`), and on a
+  device without SLH-DSA (the Python version, and browsers that have
+  ML-DSA) on its Ed25519 and ML-DSA-87 signatures, which the answer says.
+  Seals handed over without `--sealer` give no pass (code 1), and a line
+  of their own says why, on the command line and on the checking page. One that does not pass its own check is a problem with
+  the whole check. Its own time-stamps are shown, and are not used for the
+  entries of the book; where they differ from those the book holds beside
+  the same seal, the answer says so. A Show does not use seals held
+  elsewhere, and says so. Each one is given in the answer's `held` list,
+  after any cancellations, with `kind: "seal"`, `place`, `inBook`,
+  `sealer`, `used`, `verified`, its signatures and time-stamps; the
+  type declarations give `held` as `(HeldCancellation | HeldSeal)[]`.
+  The check before acting and the stub writer take the option too, and a
+  seal held elsewhere whose third signature this device cannot check is
+  excused there as a seal in the book is. No new kind of record. The two
+  codes join the format's own list of finding codes (`FINDING_CODES`).
+  New shared test files: `held-seals`, `held-seal-shows` and
+  `held-seals-before`; `denial-constants` changes for the two new codes,
+  and no other shared file changes.
 - **A new kind of record: the denial** (format description, section 28),
   in both languages. It is the agent's own side's signed statement that it
   did not take an action that was asked for, and who said no: the check

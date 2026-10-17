@@ -45,6 +45,8 @@ MAX_HELD = 16
 """The most cancellations that may be handed over beside a book."""
 MAX_ACKNOWLEDGEMENTS = 4
 """The most acknowledgements that may be handed over with one cancellation."""
+MAX_HELD_SEALS = 64
+"""The most seals held elsewhere that may be handed over beside a book."""
 
 # What can be said about time, with and without an outside time-stamp.
 _NOT_STAMPED = (
@@ -140,14 +142,17 @@ def _verified_by(states):
 
 class _Entry(dict):
     """An entry of an answer. It also keeps, out of sight, the time of the first
-    counted time-stamp that covers it."""
+    counted time-stamp that covers it, and for a seal its line exactly as it
+    stands in the book, so that a seal held elsewhere can be compared with
+    it (_check_held_seals)."""
 
-    __slots__ = ('stamped',)
+    __slots__ = ('stamped', 'line')
 
 
 def _new_entry(index, kind='unreadable'):
     e = _Entry(index=index, kind=kind, fingerprint=None, verified='none', problems=[], breaches=[], notes=[])
     e.stamped = None
+    e.line = None
     return e
 
 
@@ -299,6 +304,8 @@ def _read_line(reader, index, line, disclosures=_UNDEFINED):
             _check_terms_entry(entry, value, reader.terms, reader.ids, without)
         elif names in ('seal', 'seal,stamps'):
             entry['kind'] = 'seal'
+            # The line itself is kept, out of sight, so that a seal held elsewhere can be compared with it (_check_held_seals).
+            entry.line = line
             # The top fingerprint of the entries before it is worked out only once the seal has been read.
             before = (lambda: {'size': index, 'root': to_base64url(reader.tree.root())}) if whole else None
             _check_seal_entry(entry, value, seals, reader.ids, options, before, entries, not whole)
@@ -439,6 +446,7 @@ def _fork_reader(reader, whole=False):
             c['breaches'] = list(e['breaches'])
             c['notes'] = list(e['notes'])
             c.stamped = getattr(e, 'stamped', None)
+            c.line = getattr(e, 'line', None)
             twin_entry.set(e, c)
             twin_list.set(e['breaches'], c['breaches'])
             entries.append(c)
@@ -505,7 +513,7 @@ def _fork_reader(reader, whole=False):
 
 # --- the options a checker reads ---
 
-OPTION_NAMES = ['issuerKeys', 'sealKeys', 'stampServices', 'blocks', 'vouchers', 'disclosures', 'cancellations', 'expectedRoot', 'expectedSize', 'withoutMethods']
+OPTION_NAMES = ['issuerKeys', 'sealKeys', 'stampServices', 'blocks', 'vouchers', 'disclosures', 'cancellations', 'seals', 'expectedRoot', 'expectedSize', 'withoutMethods']
 
 # The same options, as a Python caller may name them.
 _SNAKE = {
@@ -516,6 +524,7 @@ _SNAKE = {
     'vouchers': 'vouchers',
     'disclosures': 'disclosures',
     'cancellations': 'cancellations',
+    'seals': 'seals',
     'expected_root': 'expectedRoot',
     'expected_size': 'expectedSize',
     'without_methods': 'withoutMethods',
@@ -1356,7 +1365,7 @@ def _credit_stamp(earlier, stamped_at, time):
     return True
 
 
-def _check_seal_entry(entry, value, seals, ids, options, before, entries, as_page=False):
+def _check_seal_entry(entry, value, seals, ids, options, before, entries, as_page=False, held=False):
     """A seal: the recorder's signed statement of the top fingerprint and the
     number of entries before it, with outside time-stamps beside it.
 
@@ -1364,7 +1373,8 @@ def _check_seal_entry(entry, value, seals, ids, options, before, entries, as_pag
     stands alone. before: works out the entries before the seal, where they
     are at hand. entries: the entries so far, so that the ones a time-stamp
     covers can be marked. as_page: whether the seal is a single page of a
-    Show, with nothing to compare it with."""
+    Show, with nothing to compare it with. held: whether the seal is one held
+    elsewhere and handed over beside the book, with no place of its own."""
     without = _without(options)
     entry['signatures'] = []
     entry['stamps'] = []
@@ -1393,7 +1403,7 @@ def _check_seal_entry(entry, value, seals, ids, options, before, entries, as_pag
     when = nan_time(c['when'])
     at = before() if before else None
     # A seal sits after exactly as many entries as it covers.
-    if not at and c['size'] != entry['index']:
+    if not at and not held and c['size'] != entry['index']:
         entry['problems'].append({'code': 'seal-mismatch', 'message': 'A seal sits after exactly as many entries as it covers, and this one does not.'})
     if as_page:
         entry['notes'].append(
@@ -1826,8 +1836,12 @@ def _summarise(entries, book_problems, sealed=None, held=()):
         for s in h['stamps']:
             if s['state'] == 'unavailable':
                 missing.add("the time-stamp service's method")
-        for a in h['acknowledgements']:
+        for a in h.get('acknowledgements') or []:
             note(a['signatures'])
+        # A seal held elsewhere: each of its signatures that this device could not check.
+        for s in h['signatures'] if h['kind'] == 'seal' else []:
+            if s['state'] == 'unavailable':
+                missing.add(s['method'])
     problem_found = len(book_problems) > 0 or any(e['problems'] for e in entries)
     fully_checked = not skipped and len(missing) == 0
     first_breach = next((e for e in entries if e['breaches']), None)
@@ -1986,6 +2000,147 @@ def _check_held(result, reader, options, late, beside):
         })
 
 
+_SEAL_THIRD = 'SLH-DSA-SHA2-256s'
+"""The third signing method of a seal, which some devices (this version,
+and every browser when tested) do not have."""
+
+
+def _check_held_seals(result, carried, options):
+    """Seals held elsewhere, handed over beside the book: by the person, an
+    auditor, or any copy kept out of the recorder's reach.
+
+    Whoever keeps a book can cut off its end, the last seal with it, and what
+    is left still checks. A seal that someone else holds shows it: a seal at
+    entry n covers the n entries before it, so the book must hold that very
+    seal at entry n. A book that ends before it was cut short; a book that
+    holds another line there was changed, or is not the book the seal is of.
+
+    Each seal handed over is checked as any seal is: its three signatures and
+    its time-stamps. It counts only where its recorder is one the person
+    named, and where this device checked its Ed25519 and ML-DSA-87
+    signatures; its third (SLH-DSA) may be one this device cannot check, as
+    in the check before acting (guard.py). The book holds it where the seal
+    at its place has the same content (the same fingerprint); other
+    signatures over the same content are said, and are not a fault of the
+    book. A seal handed over says nothing for the book, only against it, so
+    this widens nothing. One that does not pass its own check is a problem
+    with the whole check, never set aside: the person handed it over to have
+    it counted.
+
+    Its time-stamps are checked and shown, but are not used for the entries
+    of the book. Nothing the reader keeps is changed."""
+    if 'seals' not in options:
+        return
+    handed = options['seals']
+    # Up to sixty-four, none included: an empty list is none.
+    f.list_of(handed, 0, MAX_HELD_SEALS, 'seals')
+    own = _own_checks(carried, handed, options)
+    entries = carried.reader.entries
+    # The problems, in the order of the seals handed over.
+    found = []
+    for i, item in enumerate(own):
+        n = i + 1
+        held = copy.deepcopy(item['held'])
+        result['held'].append(held)
+        if held['problems']:
+            for p in held['problems']:
+                found.append({'code': p['code'], 'message': f"Seal {n} of those handed over beside the book did not pass its check, so it was not used. {p['message']}"})
+            continue
+        # It counts only where the person named its recorder.
+        if not isinstance(options.get('sealKeys'), list):
+            held['notes'].append('It was not used: a seal handed over beside the book counts only where you named its recorder as one you expect.')
+            continue
+
+        def state(method):
+            return next((s['state'] for s in held['signatures'] if s['method'] == method), None)
+
+        if state('Ed25519') != 'valid' or state('ML-DSA-87') != 'valid':
+            held['notes'].append(
+                'It was not used: a seal handed over beside the book counts only where this device checked its Ed25519 and ML-DSA-87 signatures, '
+                'and this device could not check both.'
+            )
+            continue
+        if state(_SEAL_THIRD) != 'valid':
+            held['notes'].append(f'This device could not check its third signature ({_SEAL_THIRD}). It was used on the strength of its Ed25519 and ML-DSA-87 signatures, which were checked here.')
+        held['used'] = True
+        at = held['place']
+        if at >= len(entries):
+            found.append({
+                'code': 'book-cut-short',
+                'message': f'Seal {n} of those handed over beside the book stands at entry {at}, but the book ends at entry {len(entries) - 1}. '
+                'The end of the book was cut off after that seal was made.',
+            })
+            continue
+        # The book holds this seal at its place where the seal there has the
+        # same content: its fingerprint fixes the number of entries and their
+        # top fingerprint, and so the entries before it.
+        there = entries[at]
+        if there['kind'] != 'seal' or there['fingerprint'] != held['fingerprint']:
+            found.append({
+                'code': 'seal-not-in-book',
+                'message': f'Seal {n} of those handed over beside the book stands at entry {at}, but the book holds another line there. '
+                'The book was changed after that seal was made, or the seal is of another book.',
+            })
+            continue
+        held['inBook'] = at
+        if there['problems']:
+            held['notes'].append(f'The book holds this seal at entry {at}, but that entry did not pass its check.')
+        # The same content with other signatures, or with other time-stamps
+        # beside it, is not a fault of the book: it is said.
+        line = _js.parse(there.line)
+        if canonical_json(line['seal']) != item['sealText']:
+            held['notes'].append(
+                f'The book holds this seal at entry {at} with the same content, but with other signatures than this copy. '
+                'The same content fixes the same entries, so this is not a fault of the book. '
+                "Only someone who holds the recorder's keys can sign a seal again."
+            )
+        if (canonical_json(line['stamps']) if 'stamps' in line else None) != item['stampsText']:
+            held['notes'].append(
+                f'The book holds this seal at entry {at}, with other time-stamps beside it than this copy. '
+                "Time-stamps stand outside a seal's signatures, so either side may have added one. "
+                "This copy's own are shown here, and are not used for the entries of the book."
+            )
+    result['problems'].extend(found)
+
+
+def _own_checks(carried, handed, options):
+    """The check of each seal handed over that rests on the seal alone: its
+    signatures, its recorder and its time-stamps. It does not depend on the
+    book, so a checker that is carried on, and the stub writer, make it once
+    and keep it for as long as they are given the same seals with the same
+    options; each answer starts from a copy of it."""
+    key = [handed, options.get('sealKeys'), options.get('stampServices'), options.get('blocks'), options.get('withoutMethods')]
+    kept = carried.held_seals
+    if kept is not None and all(a is b for a, b in zip(kept['key'], key)):
+        return kept['items']
+    seen = set()
+    items = []
+    for i, value in enumerate(handed):
+        held = {'kind': 'seal', 'fingerprint': None, 'sealer': None, 'place': None, 'inBook': None, 'used': False, 'verified': 'none', 'problems': [], 'notes': [], 'signatures': [], 'stamps': []}
+        seal_text = None
+        stamps_text = None
+        try:
+            f.members(value, ['seal'], ['stamps'], f'seals[{i}]')
+            parsed = parse_record(value.get('seal'), 'seal')
+            held['fingerprint'] = parsed.fingerprint
+            if parsed.fingerprint in seen:
+                raise f.fail(f'seals[{i}]', 'the same seal is handed over twice.')
+            seen.add(parsed.fingerprint)
+            # Checked as a seal that stands alone: its own unique number is the
+            # book's seal's own, and its place is the one it states.
+            fresh = {'count': 0, 'last': None, 'lastWhen': -INF, 'lastStampTime': -INF, 'latest': -INF, 'next': 0, 'sealed': None}
+            _check_seal_entry(held, value, fresh, set(), options, None, [], False, True)
+            seal_text = canonical_json(value['seal'])
+            stamps_text = canonical_json(value['stamps']) if 'stamps' in value else None
+        except Exception as e:
+            held['problems'].append(problem_from(e))
+        if held.get('content'):
+            held['place'] = held['content']['size']
+        items.append({'held': held, 'sealText': seal_text, 'stampsText': stamps_text})
+    carried.held_seals = {'key': key, 'items': items}
+    return items
+
+
 _BLOCK = re.compile(r'[0-9a-fA-F]{64}')
 
 
@@ -2016,7 +2171,7 @@ def check_book(text, options=None, **named):
     raises for a bad record: a failed check is a normal answer. The options
     are those of the JavaScript library, by its names or in Python's way:
     issuer_keys, expected_root, expected_size, stamp_services, blocks,
-    seal_keys, vouchers, disclosures, cancellations, without_methods. See
+    seal_keys, vouchers, disclosures, cancellations, seals, without_methods. See
     the README, "What the checker returns". The content of an entry that
     has problems, or whose "verified" is "none", is given as it was read,
     for whoever must find out what went wrong. It is unverified: never show
@@ -2043,7 +2198,7 @@ def check_book_keeping_state(text, options=None):
 
 
 class _Carried:
-    __slots__ = ('options', 'reader', 'any', 'closed', 'failure')
+    __slots__ = ('options', 'reader', 'any', 'closed', 'failure', 'held_seals')
 
 
 def start_carried(options=None):
@@ -2058,6 +2213,8 @@ def start_carried(options=None):
     carried.closed = True
     # A problem with the book as a whole, which no later line can mend: an option that cannot be used, or too many entries.
     carried.failure = None
+    # The check of the seals handed over that rests on the seals alone, made once (_own_checks).
+    carried.held_seals = None
     try:
         _check_blocks_option(options)
     except Exception as e:
@@ -2125,6 +2282,7 @@ def answer_of(carried, options=None):
         result['problems'].extend(reader.handed_problems)
         _unused_disclosures(result, options)
         _check_held(result, reader, options, late, beside)
+        _check_held_seals(result, carried, options)
         _compare_trusted(result, options)
     except Exception as e:
         result['problems'].append(problem_from(e))
@@ -2145,6 +2303,7 @@ def fork_carried(carried, whole=False):
     out.any = carried.any
     out.closed = carried.closed
     out.failure = carried.failure
+    out.held_seals = carried.held_seals
     return out
 
 
@@ -2344,6 +2503,11 @@ def check_show(show, options=None, **named):
         if 'cancellations' in options and not (isinstance(options['cancellations'], list) and len(options['cancellations']) == 0):
             result['notes'].append(
                 'Cancellations were handed over beside this Show. They were not used: single pages cannot show which stubs existed before a cancellation. Check the whole book with them.'
+            )
+        if 'seals' in options and not (isinstance(options['seals'], list) and len(options['seals']) == 0):
+            result['notes'].append(
+                'Seals held elsewhere were handed over beside this Show. They were not used: single pages cannot show what the book holds at the place each seal states, '
+                'nor that the book goes on to it. Check the whole book with them.'
             )
     except Exception as e:
         result['problems'].append(problem_from(e))

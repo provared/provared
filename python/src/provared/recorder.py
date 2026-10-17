@@ -537,8 +537,9 @@ class Recorder:
         # goes on handing back; a cancellation that the book does not hold
         # waits to be written.
         given = self._given
+        # (Seals held elsewhere, handed over with the options, come after the cancellations, and are not these.)
         for i, h in enumerate(result['held']):
-            if not h['used']:
+            if h['kind'] != 'cancellation' or not h['used']:
                 continue
             # The person's cancellation of this writer's own slip, given when it was opened, stops it from the start.
             if h['slip'] == slip:
@@ -566,7 +567,7 @@ class Recorder:
         # book holds without it, follows the cancellation into the book: it
         # was still waiting when the writer that signed it handed it back.
         for i, h in enumerate(result['held']):
-            if h['used'] and h['slip'] == slip and h['inBook'] is not None and h['fingerprint'] in self._acknowledged and h['fingerprint'] not in self._written:
+            if h['kind'] == 'cancellation' and h['used'] and h['slip'] == slip and h['inBook'] is not None and h['fingerprint'] in self._acknowledged and h['fingerprint'] not in self._written:
                 self._waiting[h['fingerprint']] = given[i]['cancellation']
         # The services the slip names, to check a countersignature before it goes into the book.
         slip_entry = next((e for e in result['entries'] if e['kind'] == 'slip' and e['fingerprint'] == slip), None)

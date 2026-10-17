@@ -168,8 +168,9 @@ is invented: nothing is bought, sent or deleted. The checking
 page on its own is at `http://localhost:8787/check`. It takes a record
 file, the fingerprints you already trust (keys, time-stamp services,
 blocks), and what you were handed with the record: the person's own
-copies of cancellations, and disclosures for covered fields. All of it is
-read in the browser and sent nowhere.
+copies of cancellations, seals of the book held elsewhere, and
+disclosures for covered fields. All of it is read in the browser and
+sent nowhere.
 
 ## What a slip can say
 
@@ -235,6 +236,41 @@ npm run check -- samples/office-supplies.jsonl --stamp-service <fingerprint> --s
 The fingerprints for the sample are in
 `samples/office-supplies.expected.json`. The sample's time-stamp service
 is made up, as its passkey is.
+
+### Seals held elsewhere
+
+Whoever keeps the book can cut off its end, with the last seal, and what
+is left still checks. Anyone who keeps a copy of a seal elsewhere (the
+person, an auditor, a second copy out of the recorder's reach) can hand
+it to the checker beside the book, as the entry it is in the book:
+
+```
+provared-check record.jsonl --seal seal.json --sealer <fingerprint> --issuer <thumbprint>
+```
+
+In the library: `seals`, up to 64. A seal at entry n covers the n
+entries before it, so the book must hold that very seal at entry n. A
+book that ends before it is reported as cut short (`book-cut-short`); a
+book that holds another line there, as changed (`seal-not-in-book`).
+Both are problems with the book. A seal handed over is checked as any
+seal is, and counts only where you named its recorder (`--sealer`, or
+`sealKeys`); one that does not pass its own check is a problem with the
+whole check. On a device without SLH-DSA (the Python version, and
+browsers that have ML-DSA, such as Edge and Brave 155 when tested) it
+counts on its Ed25519 and ML-DSA-87 signatures, and says so; on a device
+without ML-DSA it is not used. The seal is compared with the book by its
+content: the same content with other signatures is the same seal, and
+the answer says that the signatures differ. Nothing in a seal names its
+book, so hand over only seals of the book being checked: a seal of
+another book by the same recorder (for example the book it kept before
+it started a new one) is reported as `seal-not-in-book` or
+`book-cut-short`. Without `--sealer`, the seals handed over are not
+compared with the book, and the command-line checker says so on a line
+of its own and gives no pass.
+Its own time-stamps are shown but are not used for the entries of the
+book. The answer lists each one in `held`, after any cancellations. A
+Show does not use one. What it does not catch: a book cut back after the
+latest seal anyone holds, or a book never shown to anyone who holds one.
 
 ### Knowing that a block is part of the chain
 
@@ -853,7 +889,7 @@ answer with a named reason. It keeps two things apart:
 | `size`, `root` | How many entries the book holds, and its top fingerprint |
 | `problems` | Problems with the book as a whole |
 | `entries` | One for each line: `index`, `kind` (`slip`, `stub`, `refusal`, `terms`, `seal`, `cancellation`, `acknowledgement`, `vouching`, `withdrawal`, `pass`, `denial` or `unreadable`), `fingerprint`, `verified` (`all`, `some` or `none` of its signatures confirmed here), `problems`, `breaches`, `notes`, the signature states, and `content`. Where a time-stamp you trust on a later seal covers the entry: `existedBy`, the time by which it is shown to have existed. On a seal or a cancellation that passed its check: `stampedAt`, the time its own time-stamps give it |
-| `held` | One for each cancellation handed over beside the book: whether it passed its check and was used, whether the book holds it (`inBook`), the time its time-stamp gives, and the acknowledgements handed over with it (`acknowledgements`: who acknowledged, and when by their own word) |
+| `held` | One for each cancellation handed over beside the book (`kind` `cancellation`): whether it passed its check and was used, whether the book holds it (`inBook`), the time its time-stamp gives, and the acknowledgements handed over with it (`acknowledgements`: who acknowledged, and when by their own word). Then one for each seal held elsewhere (`kind` `seal`): whether it passed its check and was used, the entry it stands at (`place`), whether the book holds it there (`inBook`), its recorder's key set (`sealer`), its signatures and time-stamps |
 | `summary.problemFound` | A problem was found somewhere in the record |
 | `summary.fullyChecked` | Every signature was checked on this device |
 | `summary.intact` | No problem was found **and** every signature was checked. The only answer that is a pass |
@@ -882,7 +918,8 @@ time-stamp services you trust), `blocks` (the fingerprints of the
 blocks of a public blockchain you trust), `vouchers` (the fingerprints of the key
 sets of the organisations whose vouching you trust), `disclosures` (the
 disclosures of covered fields that you were handed), `cancellations`
-(the person's own copies of cancellations), `expectedRoot` and
+(the person's own copies of cancellations), `seals` (seals of the book
+held elsewhere), `expectedRoot` and
 `expectedSize` (a top fingerprint and a number of entries you already
 hold a copy of). Give
 them whenever you have them.
@@ -947,7 +984,8 @@ And about time:
   the agent outside its slip;
 - the last seal, with everything after it, can itself be removed. Only a
   copy of it, or of its top fingerprint and number of entries, held by
-  someone else shows that;
+  someone else shows that: hand such a copy of a seal to the checker
+  (`--seal`, or `seals`);
 - time-stamp services sign with methods of today's kind, which are not
   quantum-safe.
 
@@ -960,7 +998,8 @@ connects to anything: to the Bitcoin nodes you name, for block headers.
 
 ## Not built yet
 
-A public place where seals are kept; covering fields other than a slip's
+A public place where seals are kept, and witnesses that sign for each
+seal; covering fields other than a slip's
 names and purpose; connectors for particular agent software (the
 general one, `recordTools`, is built); a compact binary form; the
 recorder service. The checking page cannot yet take a chain of block

@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { checkBefore, checkBook, checkShow, fingerprint, fromBase64url, generateKeySet, makeShow, toBase64url, writeBook } from '../../src/index.js';
+import { checkBefore, checkBook, checkShow, entryLine, fingerprint, fromBase64url, generateKeySet, makeShow, toBase64url, writeBook, writeSeal } from '../../src/index.js';
 import { thumbprint } from '../../src/keys.js';
 import { keySetFingerprint } from '../../src/seal.js';
 import { makeStampService } from './stamp.mjs';
@@ -418,8 +418,113 @@ async function denialBeforeCases() {
   return cases;
 }
 
+// --- seals held elsewhere (format description, section 21.5) ---
+
+// A book of a slip, two stubs, a seal, a stub, a seal and a stub, each seal
+// time-stamped; and what the cases make from it. Made once: signing a seal
+// is slow.
+let heldWorld;
+function heldSealWorld() {
+  heldWorld ??= (async () => {
+    const w = await makeWorld({ fields: { requires: [] } });
+    await w.add({ value: 10 });
+    await w.add({ value: 10 });
+    const first = await w.seal();
+    await w.add({ value: 10 });
+    const second = await w.seal();
+    await w.add({ value: 10 });
+    const trust = { issuerKeys: [await thumbprint(w.passkey.key)], sealKeys: [await keySetFingerprint(w.recorder.keys)], stampServices: [w.stampService.fingerprint] };
+    const lines = w.book().split('\n').filter(Boolean);
+    const book = (some) => some.join('\n') + '\n';
+    // The recorder seals the entries before the second seal again, with another date.
+    const again = await writeSeal(book(lines.slice(0, 5)), { by: { keys: w.recorder.keys, name: 'Example recorder (invented)' }, previous: first.fingerprint, when: second.when + 1000 }, w.recorder.privateKeys);
+    // The same seal content signed a second time: the same seal in all but its signatures.
+    const content = JSON.parse(Buffer.from(second.record.payload, 'base64url').toString());
+    const resigned = await writeSeal(book(lines.slice(0, 5)), { id: content.id, by: content.by, previous: content.previous, when: Date.parse(content.when) }, w.recorder.privateKeys);
+    // A seal of another book, by another recorder.
+    const other = await makeWorld({ fields: { requires: [] } });
+    await other.add({ value: 1 });
+    const elsewhere = await other.seal();
+    return { w, first, second, again, resigned, elsewhere, trust, lines, book, text: w.book() };
+  })();
+  return heldWorld;
+}
+
+async function heldSealCases() {
+  const cases = [];
+  const add = (name, text, options = {}) => cases.push({ name, text, options: withoutSlh(options) });
+  const { first, second, again, resigned, elsewhere, trust, lines, book, text } = await heldSealWorld();
+  const { sealKeys: _, ...unnamed } = trust;
+  const cut = book(lines.slice(0, 4));
+  add('a seal held elsewhere that the book holds at its place', text, { ...trust, seals: [second.entry] });
+  add('two seals held elsewhere, handed over out of their order', text, { ...trust, seals: [second.entry, first.entry] });
+  add('the book cut back to the first seal, the second held elsewhere', cut, { ...trust, seals: [second.entry] });
+  add('the book cut back to the first seal, and no seal handed over', cut, trust);
+  add('the book cut back to the entries the seal covers, without the seal', book(lines.slice(0, 5)), { ...trust, seals: [second.entry] });
+  add('another seal of the same entries in the place of the one held elsewhere', book([...lines.slice(0, 5), entryLine({ seal: again.record }), lines[6]]), { ...trust, seals: [second.entry] });
+  if (resigned.record.signatures[1].signature === second.record.signatures[1].signature) throw new Error('signing the same seal again gave the same signatures');
+  add('the same seal content, signed again, in the place of the one held elsewhere', book([...lines.slice(0, 5), entryLine({ ...second.entry, seal: resigned.record }), lines[6]]), { ...trust, seals: [second.entry] });
+  add('a stub in the place of the seal held elsewhere', book([...lines.slice(0, 5), lines[6]]), { ...trust, seals: [second.entry] });
+  add('a copy without the time-stamp the book holds beside the seal', text, { ...trust, seals: [{ seal: second.entry.seal }] });
+  add('an entry before the seal changed, the seal still at its place', book([lines[0], lines[1], lines[2], lines[3], lines[2], lines[5], lines[6]]), { ...trust, seals: [second.entry] });
+  add('its recorder not named', cut, { ...unnamed, seals: [second.entry] });
+  add('a seal by a recorder other than the one named', cut, { ...trust, seals: [elsewhere.entry] });
+  add('a seal held elsewhere whose Ed25519 signature was changed', text, { ...trust, seals: [{ ...second.entry, seal: { ...second.entry.seal, signatures: [{ ...second.entry.seal.signatures[0], signature: flipByte(second.entry.seal.signatures[0].signature) }, ...second.entry.seal.signatures.slice(1)] } }] });
+  add('a seal held elsewhere with a time-stamp that is not one', text, { ...trust, seals: [{ ...second.entry, stamps: ['AAAA'] }] });
+  add('on a device without ML-DSA-87 either', cut, { ...trust, seals: [second.entry], withoutMethods: ['ML-DSA-87'] });
+  add('on a device without Ed25519 either', cut, { ...trust, seals: [second.entry], withoutMethods: ['Ed25519'] });
+  {
+    // A copy whose third signature was changed by one byte, beside the untouched book: on this device, which
+    // cannot check that signature, it is the same seal as the book's, with other signatures.
+    const changed = JSON.parse(JSON.stringify(second.entry));
+    changed.seal.signatures[2].signature = flipByte(changed.seal.signatures[2].signature);
+    add('a copy whose third signature was changed, beside the untouched book', text, { ...trust, seals: [changed] });
+  }
+  add('more than 64 handed over', text, { ...trust, seals: Array(65).fill(5) });
+  add('an empty list', text, { ...trust, seals: [] });
+  add('not a list', text, { ...trust, seals: 'x' });
+  add('the same seal handed over twice', text, { ...trust, seals: [second.entry, second.entry] });
+  add('an item that is not an object', text, { ...trust, seals: [5] });
+  add('an item that is nothing', text, { ...trust, seals: [null] });
+  add('an item with a member not known', text, { ...trust, seals: [{ ...second.entry, note: 'kept' }] });
+  add('a slip handed over as a seal', text, { ...trust, seals: [{ seal: JSON.parse(lines[0]).slip }] });
+  add('a cancellation copy and a seal handed over together, the book cut short', cut, { ...trust, cancellations: [], seals: [second.entry] });
+  return cases;
+}
+
+async function heldSealShowCases() {
+  const cases = [];
+  const add = (name, show, options = {}) => cases.push({ name, show, options: withoutSlh(options) });
+  const { second, trust, text } = await heldSealWorld();
+  const show = await makeShow(text, [0, 1]);
+  add('a Show with a seal held elsewhere handed over beside it', show, { ...trust, seals: [second.entry] });
+  add('a Show with an empty list of seals held elsewhere', show, { ...trust, seals: [] });
+  return cases;
+}
+
+async function heldSealBeforeCases() {
+  const cases = [];
+  const { w, second, trust, lines, book, text } = await heldSealWorld();
+  const proposal = { slip: w.slipFingerprint, action: 'supplies.order', amount: { unit: 'GBP', value: 1 }, with: 'supplier', when: START + 6 * 3600 * 1000 };
+  const add = (name, book, options) => cases.push({ name, text: book, proposal, options: withoutSlh(options) });
+  add('a book that holds the seal held elsewhere', text, { ...trust, seals: [second.entry] });
+  add('a book cut back before the seal held elsewhere', book(lines.slice(0, 4)), { ...trust, seals: [second.entry] });
+  // A book of a permission alone, signed by a passkey: only the seal handed over needs Ed25519 and ML-DSA-87.
+  // The check before acting excuses the third signature of a held seal only where it checked the first two.
+  const lone = await makeWorld({ fields: { requires: [] } });
+  const loneProposal = { ...proposal, slip: lone.slipFingerprint, when: START + 3600 * 1000 };
+  const loneTrust = { issuerKeys: [await thumbprint(lone.passkey.key)], seals: [second.entry] };
+  for (const [name, lacking] of [['', []], [', and without Ed25519', ['Ed25519']], [', and without ML-DSA-87', ['ML-DSA-87']]]) {
+    cases.push({ name: `a permission alone, with a seal of another book handed over${name}`, text: lone.book(), proposal: loneProposal, options: withoutSlh({ ...loneTrust, withoutMethods: lacking }) });
+  }
+  return cases;
+}
+
 /** Each set of cases, by the name of its file. */
 export const CASES = {
+  'held-seals': async () => finish('Checking a whole book with seals held elsewhere handed over beside it (format description, section 21.5), on a device without SLH-DSA.', 'checkBook', await heldSealCases(), ANSWER),
+  'held-seal-shows': async () => finish('Checking a Show with seals held elsewhere handed over beside it (format description, sections 11 and 21.5), on a device without SLH-DSA.', 'checkShow', await heldSealShowCases(), ANSWER),
+  'held-seals-before': async () => finish('The check before acting with seals held elsewhere handed over beside the book (format description, sections 20 and 21.5), on a device without SLH-DSA.', 'checkBefore', await heldSealBeforeCases(), ANSWER),
   'denial-books': async () => finish('Checking a whole book that holds denials (format description, section 28), on a device without SLH-DSA.', 'checkBook', await denialBookCases(), ANSWER),
   'denial-shows': async () => finish('Checking a Show whose pages hold denials (format description, sections 11 and 28), on a device without SLH-DSA.', 'checkShow', await denialShowCases(), ANSWER),
   'denial-before': async () => finish('The check before acting over a book that holds denials (format description, sections 20 and 28), on a device without SLH-DSA.', 'checkBefore', await denialBeforeCases(), ANSWER),

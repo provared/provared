@@ -144,6 +144,16 @@ def _only_seal_third_unchecked(result):
         stamps(h.get('stamps') or [])
         for a in h.get('acknowledgements') or []:
             note(a.get('signatures') or [])
+        # A seal held elsewhere, handed over beside the book: excused as a seal in the book is.
+        if h.get('kind') == 'seal':
+            sigs = h.get('signatures') or []
+            by = {x.get('method'): x.get('state') for x in sigs}
+            if len(sigs) == 3 and by.get('Ed25519') == 'valid' and by.get('ML-DSA-87') == 'valid' and by.get(SEAL_THIRD) == 'unavailable':
+                state['excused'] += 1
+            else:
+                for x in sigs:
+                    if x.get('state') == 'unavailable':
+                        missing.add(x.get('method'))
     if not state['skipped'] and len(missing) == 0 and state['excused'] > 0:
         return [SEAL_THIRD]
     return None

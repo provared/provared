@@ -120,6 +120,14 @@ function onlySealThirdUnchecked(result) {
   for (const h of result.held ?? []) {
     stamps(h.stamps ?? []);
     for (const a of h.acknowledgements ?? []) note(a.signatures ?? []);
+    // A seal held elsewhere, handed over beside the book: excused as a seal in the book is.
+    if (h.kind === 'seal') {
+      const sigs = h.signatures ?? [];
+      const by = (method) => sigs.find((x) => x.method === method);
+      const third = sigs.length === 3 && by('Ed25519')?.state === 'valid' && by('ML-DSA-87')?.state === 'valid' && by(SEAL_THIRD)?.state === 'unavailable';
+      if (third) excused++;
+      else for (const x of sigs) if (x.state === 'unavailable') missing.add(x.method);
+    }
   }
   return !skipped && missing.size === 0 && excused > 0 ? [SEAL_THIRD] : null;
 }

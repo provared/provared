@@ -188,8 +188,38 @@ function acknowledgementCard(e) {
   return card;
 }
 
+// A seal held elsewhere, handed over beside the book.
+function heldSealCard(h, n) {
+  const card = el('div', `card seal${h.problems.length ? ' broken' : ''}`);
+  card.append(el('h3', 'kind', `Handed over beside the book, ${n}: a seal of the book held elsewhere`));
+  if (h.problems.length) {
+    card.append(el('p', 'quiet', 'It did not pass its check, so it was not used. See the problems above.'));
+    return card;
+  }
+  if (h.verified === 'none') {
+    card.append(el('p', 'quiet', 'What this seal says is not shown, because this device could not check its signatures.'));
+  } else {
+    const c = h.content;
+    const list = el('dl');
+    row(list, 'Covers', `the first ${c.size} entries`);
+    row(list, 'Stands at', `entry ${h.place}`);
+    row(list, 'Top fingerprint', c.root, true);
+    row(list, 'Sealed at', `${showTime(c.when)} (the recorder's own word)`);
+    row(list, 'Recorder', `${label(c.by.name)} (a label; it is not checked)`);
+    row(list, 'Recorder\'s key set', h.sealer, true);
+    row(list, 'Recorder\'s signatures', signatureWords(h.signatures));
+    stampRows(list, h.stamps);
+    row(list, 'In the book at that place', h.used ? (h.inBook === null ? 'no' : `yes, at entry ${h.inBook}`) : 'not compared, because it was not used');
+    row(list, 'Fingerprint', h.fingerprint, true);
+    card.append(list);
+  }
+  for (const note of h.notes) flag(card, 'note', note);
+  return card;
+}
+
 // A cancellation the person kept, handed over beside the book.
 function heldCard(h, n) {
+  if (h.kind === 'seal') return heldSealCard(h, n);
   const card = el('div', `card slip${h.problems.length ? ' broken' : ''}`);
   card.append(el('h3', 'kind', `Handed over beside the book, ${n}: the person's own copy of a cancellation`));
   if (h.problems.length) {
@@ -440,15 +470,75 @@ function termsCard(e) {
  * @param {object} [o.options] what the check was told to trust: the green answer needs the passkey the
  *   person trusts and, where the record has a seal, the recorder they expect
  */
+// A copy of a cancellation, a seal, or a file of disclosures, is small.
+const MAX_HANDED_BYTES = 1000000;
+const MAX_COPIES = 16;
+const MAX_SEALS = 64;
+
+async function jsonFrom(file, what) {
+  if (file.size > MAX_HANDED_BYTES) throw new Error(`The file of ${what}, ${shown(file.name)}, is too large. Nothing was checked.`);
+  try {
+    return JSON.parse(await file.text());
+  } catch {
+    throw new Error(`The file of ${what}, ${shown(file.name)}, is not JSON. Nothing was checked. Choose another file, or clear these files.`);
+  }
+}
+
+/**
+ * What the person was handed with the record: their own copies of
+ * cancellations (up to 16), seals held elsewhere (up to 64), and one file of
+ * disclosures for covered fields. A file that cannot be read stops the
+ * check: it is never set aside silently.
+ * @param {{cancellations?: File[], seals?: File[], disclosures?: File|null}} files the files chosen, as the
+ *   browser gives them (anything with "name", "size" and "text()")
+ * @returns {Promise<{options: object, said: string[]}>} the options to check with, and what to say was handed over
+ */
+export async function readHanded({ cancellations = [], seals = [], disclosures = null } = {}) {
+  const options = {};
+  const said = [];
+  if (cancellations.length > MAX_COPIES) throw new Error('At most 16 copies of cancellations can be handed over at once. Nothing was checked.');
+  if (cancellations.length) {
+    options.cancellations = [];
+    for (const file of cancellations) options.cancellations.push(await jsonFrom(file, 'a cancellation'));
+    said.push(cancellations.length === 1 ? 'one copy of a cancellation' : `${cancellations.length} copies of cancellations`);
+  }
+  if (seals.length > MAX_SEALS) throw new Error('At most 64 seals held elsewhere can be handed over at once. Nothing was checked.');
+  if (seals.length) {
+    options.seals = [];
+    for (const file of seals) options.seals.push(await jsonFrom(file, 'a seal'));
+    said.push(seals.length === 1 ? 'one seal held elsewhere' : `${seals.length} seals held elsewhere`);
+  }
+  if (disclosures) {
+    options.disclosures = await jsonFrom(disclosures, 'disclosures');
+    said.push('disclosures for covered fields');
+  }
+  return { options, said };
+}
+
+/**
+ * What the check rests on: whether the person named the passkey they trust
+ * and, where the record has a seal or seals held elsewhere were handed
+ * over, the recorder they expect; and whether those seals went unused
+ * because no recorder was named. Without the keys the person named, a
+ * record agrees only with the keys inside it, and anyone could have made
+ * those.
+ * @param {object} result what checkBook or checkShow returned
+ * @param {object} [options] what the check was told
+ */
+export function trustOf(result, options = {}) {
+  const s = result.summary;
+  const issuerNamed = Array.isArray(options.issuerKeys) && options.issuerKeys.length > 0;
+  const sealerNamed = Array.isArray(options.sealKeys) && options.sealKeys.length > 0;
+  const sealsHanded = Array.isArray(options.seals) && options.seals.length > 0;
+  const named = issuerNamed && ((s.counts.seals === 0 && !sealsHanded) || sealerNamed);
+  return { issuerNamed, named, sure: s.intact && named, heldUnused: sealsHanded && !sealerNamed };
+}
+
 export function renderResult(target, result, { isShow = false, checkedBy = 'Checked in this browser.', options = {} } = {}) {
   target.replaceChildren();
   const s = result.summary;
   const missing = s.methodsMissing.join(' or ');
-  // Without the keys the person named, a record agrees only with the keys
-  // inside it, and anyone could have made those.
-  const issuerNamed = Array.isArray(options.issuerKeys) && options.issuerKeys.length > 0;
-  const named = issuerNamed && (s.counts.seals === 0 || (Array.isArray(options.sealKeys) && options.sealKeys.length > 0));
-  const sure = s.intact && named;
+  const { issuerNamed, named, sure, heldUnused } = trustOf(result, options);
 
   target.append(el('h2', '', 'The answer'));
   const answers = el('ul', 'answers');
@@ -461,9 +551,11 @@ export function renderResult(target, result, { isShow = false, checkedBy = 'Chec
       answers,
       'partly',
       'Intact only as far as its own keys show.',
-      issuerNamed
-        ? 'The record has a seal, and you named no recorder you expect, so anyone could have sealed it. Put the fingerprint of the recorder you expect in its box. This is not a pass.'
-        : 'You named no passkey you trust, so anyone could have made a record like this. Put the thumbprint of the passkey you trust in its box. This is not a pass.',
+      !issuerNamed
+        ? 'You named no passkey you trust, so anyone could have made a record like this. Put the thumbprint of the passkey you trust in its box. This is not a pass.'
+        : s.counts.seals === 0
+          ? 'You were handed seals held elsewhere, and you named no recorder you expect, so those seals were not compared with the book. Put the fingerprint of the recorder you expect in its box. This is not a pass.'
+          : 'The record has a seal, and you named no recorder you expect, so anyone could have sealed it. Put the fingerprint of the recorder you expect in its box. This is not a pass.',
     );
   } else {
     answer(
@@ -500,6 +592,11 @@ export function renderResult(target, result, { isShow = false, checkedBy = 'Chec
 
   const held = result.held ?? [];
   if (held.length) target.append(el('h2', '', 'Handed over beside the book'));
+  if (heldUnused) {
+    const card = el('div', 'card show');
+    flag(card, 'note', 'The seals held elsewhere that you handed over were not compared with the book, because you named no recorder you expect. Put the fingerprint of the recorder you expect in its box.');
+    target.append(card);
+  }
   held.forEach((h, i) => target.append(heldCard(h, i + 1)));
 
   if (result.root) {

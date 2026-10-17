@@ -37,6 +37,8 @@ export const MAX_PAGES = 64;
 export const MAX_HELD = 16;
 /** The most acknowledgements that may be handed over with one cancellation. */
 export const MAX_ACKNOWLEDGEMENTS = 4;
+/** The most seals held elsewhere that may be handed over beside a book. */
+export const MAX_HELD_SEALS = 64;
 
 // What can be said about time, with and without an outside time-stamp.
 const NOT_STAMPED =
@@ -264,6 +266,8 @@ async function readLine(reader, item) {
         await checkTermsEntry(entry, value, terms, ids, without);
       } else if (names === 'seal' || names === 'seal,stamps') {
         entry.kind = 'seal';
+        // The line itself is kept, out of sight, so that a seal held elsewhere can be compared with it (checkHeldSeals).
+        sealLines.set(entry, line);
         // The top fingerprint of the entries before it is worked out only once the seal has been read.
         const before = whole ? async () => ({ size: index, root: toBase64url(await tree.root()) }) : null;
         await checkSealEntry(entry, value, seals, ids, options, before, entries, !whole);
@@ -381,6 +385,7 @@ function forkReader(reader, whole = false) {
         twinEntry.set(e, copy);
         twinList.set(e.breaches, copy.breaches);
         if (stampedTimes.has(e)) stampedTimes.set(copy, stampedTimes.get(e));
+        if (sealLines.has(e)) sealLines.set(copy, sealLines.get(e));
         return copy;
       })
     : reader.entries.slice();
@@ -444,7 +449,7 @@ function forkReader(reader, whole = false) {
 // worked out when it is asked for.
 // The fixed copies made so far. Nothing changes one once it is made.
 const FIXED = new WeakSet();
-const OPTION_NAMES = ['issuerKeys', 'sealKeys', 'stampServices', 'blocks', 'vouchers', 'disclosures', 'cancellations', 'expectedRoot', 'expectedSize', 'withoutMethods'];
+const OPTION_NAMES = ['issuerKeys', 'sealKeys', 'stampServices', 'blocks', 'vouchers', 'disclosures', 'cancellations', 'seals', 'expectedRoot', 'expectedSize', 'withoutMethods'];
 
 /**
  * The options of a check, fixed: read once and copied, so that nothing done
@@ -978,6 +983,8 @@ function markNotShownEarlier(slip, time, message, late = null, strict = null) {
 
 // The time of the first counted time-stamp that covers an entry, as a number.
 const stampedTimes = new WeakMap();
+// The line of each seal in the book, exactly as it stands there.
+const sealLines = new WeakMap();
 
 // The outside time-stamps beside a record. Each states that the record
 // existed at a time. Returns the earliest time stated by a service the
@@ -1229,8 +1236,9 @@ function creditStamp(earlier, stampedAt, time) {
  * @param {(() => Promise<{size: number, root: string}>)|null} before works out the entries before the seal, where they are at hand
  * @param {any[]} entries the entries so far, so that the ones a time-stamp covers can be marked
  * @param {boolean} [asPage] whether the seal is a single page of a Show, with nothing to compare it with
+ * @param {boolean} [held] whether the seal is one held elsewhere and handed over beside the book, with no place of its own
  */
-async function checkSealEntry(entry, value, seals, ids, options, before, entries, asPage = false) {
+async function checkSealEntry(entry, value, seals, ids, options, before, entries, asPage = false, held = false) {
   const without = Array.isArray(options.withoutMethods) ? options.withoutMethods : [];
   entry.signatures = [];
   entry.stamps = [];
@@ -1261,7 +1269,7 @@ async function checkSealEntry(entry, value, seals, ids, options, before, entries
   const when = parseTime(c.when);
   const at = before ? await before() : null;
   // A seal sits after exactly as many entries as it covers.
-  if (!at && c.size !== entry.index) {
+  if (!at && !held && c.size !== entry.index) {
     entry.problems.push({ code: 'seal-mismatch', message: 'A seal sits after exactly as many entries as it covers, and this one does not.' });
   }
   if (asPage) {
@@ -1687,7 +1695,9 @@ function summarise(entries, bookProblems, sealed = null, held = []) {
   }
   for (const h of held) {
     for (const s of h.stamps) if (s.state === 'unavailable') missing.add('the time-stamp service\'s method');
-    for (const a of h.acknowledgements) note(a.signatures);
+    for (const a of h.acknowledgements ?? []) note(a.signatures);
+    // A seal held elsewhere: each of its signatures that this device could not check.
+    for (const s of h.kind === 'seal' ? h.signatures : []) if (s.state === 'unavailable') missing.add(s.method);
   }
   const problemFound = bookProblems.length > 0 || entries.some((e) => e.problems.length > 0);
   const fullyChecked = !skipped && missing.size === 0;
@@ -1860,6 +1870,145 @@ async function checkHeld(result, reader, options, late, beside) {
   }
 }
 
+/**
+ * Seals held elsewhere, handed over beside the book: by the person, an
+ * auditor, or any copy kept out of the recorder's reach.
+ *
+ * Whoever keeps a book can cut off its end, the last seal with it, and what
+ * is left still checks. A seal that someone else holds shows it: a seal at
+ * entry n covers the n entries before it, so the book must hold that very
+ * seal at entry n. A book that ends before it was cut short; a book that
+ * holds another line there was changed, or is not the book the seal is of.
+ *
+ * Each seal handed over is checked as any seal is: its three signatures and
+ * its time-stamps. It counts only where its recorder is one the person
+ * named, and where this device checked its Ed25519 and ML-DSA-87
+ * signatures; its third (SLH-DSA) may be one this device cannot check, as
+ * in the check before acting (guard.js). The book holds it where the seal
+ * at its place has the same content (the same fingerprint); other
+ * signatures over the same content are said, and are not a fault of the
+ * book. A seal handed over says nothing
+ * for the book, only against it, so this widens nothing. One that does not
+ * pass its own check is a problem with the whole check, never set aside:
+ * the person handed it over to have it counted.
+ *
+ * Its time-stamps are checked and shown, but are not used for the entries
+ * of the book. Nothing the reader keeps is changed.
+ */
+async function checkHeldSeals(result, carried, options) {
+  const handed = options.seals;
+  if (handed === undefined) return;
+  // Up to sixty-four, none included: an empty list is none.
+  f.list(handed, 0, MAX_HELD_SEALS, 'seals');
+  const own = await ownChecks(carried, handed, options);
+  const entries = carried.reader.entries;
+  // The problems, in the order of the seals handed over.
+  const found = [];
+  for (let i = 0; i < own.length; i++) {
+    const n = i + 1;
+    const { sealText, stampsText } = own[i];
+    const held = structuredClone(own[i].held);
+    result.held.push(held);
+    if (held.problems.length > 0) {
+      for (const p of held.problems) found.push({ code: p.code, message: `Seal ${n} of those handed over beside the book did not pass its check, so it was not used. ${p.message}` });
+      continue;
+    }
+    // It counts only where the person named its recorder.
+    if (!Array.isArray(options.sealKeys)) {
+      held.notes.push('It was not used: a seal handed over beside the book counts only where you named its recorder as one you expect.');
+      continue;
+    }
+    const state = (method) => held.signatures.find((s) => s.method === method)?.state;
+    if (state('Ed25519') !== 'valid' || state('ML-DSA-87') !== 'valid') {
+      held.notes.push('It was not used: a seal handed over beside the book counts only where this device checked its Ed25519 and ML-DSA-87 signatures, and this device could not check both.');
+      continue;
+    }
+    if (state(SEAL_THIRD) !== 'valid') {
+      held.notes.push(`This device could not check its third signature (${SEAL_THIRD}). It was used on the strength of its Ed25519 and ML-DSA-87 signatures, which were checked here.`);
+    }
+    held.used = true;
+    const at = held.place;
+    if (at >= entries.length) {
+      found.push({
+        code: 'book-cut-short',
+        message: `Seal ${n} of those handed over beside the book stands at entry ${at}, but the book ends at entry ${entries.length - 1}. The end of the book was cut off after that seal was made.`,
+      });
+      continue;
+    }
+    // The book holds this seal at its place where the seal there has the
+    // same content: its fingerprint fixes the number of entries and their
+    // top fingerprint, and so the entries before it.
+    const there = entries[at];
+    if (there.kind !== 'seal' || there.fingerprint !== held.fingerprint) {
+      found.push({
+        code: 'seal-not-in-book',
+        message: `Seal ${n} of those handed over beside the book stands at entry ${at}, but the book holds another line there. The book was changed after that seal was made, or the seal is of another book.`,
+      });
+      continue;
+    }
+    held.inBook = at;
+    if (there.problems.length > 0) held.notes.push(`The book holds this seal at entry ${at}, but that entry did not pass its check.`);
+    // The same content with other signatures, or with other time-stamps
+    // beside it, is not a fault of the book: it is said.
+    const line = JSON.parse(sealLines.get(there));
+    if (canonicalJson(line.seal) !== sealText) {
+      held.notes.push(
+        `The book holds this seal at entry ${at} with the same content, but with other signatures than this copy. The same content fixes the same entries, so this is not a fault of the book. Only someone who holds the recorder's keys can sign a seal again.`,
+      );
+    }
+    if ((Object.hasOwn(line, 'stamps') ? canonicalJson(line.stamps) : null) !== stampsText) {
+      held.notes.push(
+        `The book holds this seal at entry ${at}, with other time-stamps beside it than this copy. Time-stamps stand outside a seal's signatures, so either side may have added one. This copy's own are shown here, and are not used for the entries of the book.`,
+      );
+    }
+  }
+  result.problems.push(...found);
+}
+
+/**
+ * The check of each seal handed over that rests on the seal alone: its
+ * signatures, its recorder and its time-stamps. It does not depend on the
+ * book, so a checker that is carried on, and the stub writer, make it once
+ * and keep it for as long as they are given the same seals with the same
+ * options; each answer starts from a copy of it.
+ */
+async function ownChecks(carried, handed, options) {
+  const key = [handed, options.sealKeys, options.stampServices, options.blocks, options.withoutMethods];
+  const kept = carried.heldSeals;
+  if (kept && kept.key.every((value, i) => value === key[i])) return kept.items;
+  const seen = new Set();
+  const items = [];
+  for (let i = 0; i < handed.length; i++) {
+    const value = handed[i];
+    const held = { kind: 'seal', fingerprint: null, sealer: null, place: null, inBook: null, used: false, verified: 'none', problems: [], notes: [], signatures: [], stamps: [] };
+    let sealText = null;
+    let stampsText = null;
+    try {
+      f.members(value, ['seal'], ['stamps'], `seals[${i}]`);
+      const parsed = await parseRecord(value.seal, 'seal');
+      held.fingerprint = parsed.fingerprint;
+      if (seen.has(parsed.fingerprint)) throw f.fail(`seals[${i}]`, 'the same seal is handed over twice.');
+      seen.add(parsed.fingerprint);
+      // Checked as a seal that stands alone: its own unique number is the
+      // book's seal's own, and its place is the one it states.
+      const fresh = { count: 0, last: null, lastWhen: -Infinity, lastStampTime: -Infinity, latest: -Infinity, next: 0, sealed: null };
+      await checkSealEntry(held, value, fresh, new Set(), options, null, [], false, true);
+      sealText = canonicalJson(value.seal);
+      stampsText = Object.hasOwn(value, 'stamps') ? canonicalJson(value.stamps) : null;
+    } catch (e) {
+      held.problems.push(problemFrom(e));
+    }
+    if (held.content) held.place = held.content.size;
+    items.push({ held, sealText, stampsText });
+  }
+  carried.heldSeals = { key, items };
+  return items;
+}
+
+// The third signing method of a seal, which some devices (the Python
+// version, and every browser when tested) do not have.
+const SEAL_THIRD = 'SLH-DSA-SHA2-256s';
+
 // The blocks a person trusts are named by their fingerprints: 64 hex
 // characters each. Anything else is refused, never set aside.
 function checkBlocksOption(options) {
@@ -1902,6 +2051,8 @@ function compareTrusted(result, options) {
  * @param {Record<string, string[]>} [options.disclosures] for covered fields: the disclosures handed over, by the fingerprint of the slip they belong to
  * @param {object[]} [options.cancellations] the person's own copies of cancellations, each as the entry it would be in a book:
  *   {cancellation, stamps?}. At most 16. They count even where the book leaves them out
+ * @param {object[]} [options.seals] seals held elsewhere (by the person, an auditor, a copy kept apart), each as the
+ *   entry it is in a book: {seal, stamps?}. At most 64. The book must hold each at the place it states
  * @param {string[]} [options.withoutMethods] signing methods to treat as not built into this device
  * @returns {Promise<object>} see the README, "What the checker returns".
  *   The content of an entry that has problems, or whose "verified" is
@@ -1947,6 +2098,8 @@ export function startCarried(options = {}) {
     closed: true,
     // A problem with the book as a whole, which no later line can mend: an option that cannot be used, or too many entries.
     failure: null,
+    // The check of the seals handed over that rests on the seals alone, made once (ownChecks).
+    heldSeals: null,
   };
   try {
     lookIntoOptions(options);
@@ -2033,6 +2186,7 @@ export async function answerOf(carried, options = carried.options) {
     result.problems.push(...reader.handedProblems);
     unusedDisclosures(result, options);
     await checkHeld(result, reader, options, late, beside);
+    await checkHeldSeals(result, carried, options);
     compareTrusted(result, options);
   } catch (e) {
     result.problems.push(problemFrom(e));
@@ -2253,6 +2407,9 @@ export async function checkShow(show, options = {}) {
     // An empty list is none, as for a whole book.
     if (options.cancellations !== undefined && !(Array.isArray(options.cancellations) && options.cancellations.length === 0)) {
       result.notes.push('Cancellations were handed over beside this Show. They were not used: single pages cannot show which stubs existed before a cancellation. Check the whole book with them.');
+    }
+    if (options.seals !== undefined && !(Array.isArray(options.seals) && options.seals.length === 0)) {
+      result.notes.push('Seals held elsewhere were handed over beside this Show. They were not used: single pages cannot show what the book holds at the place each seal states, nor that the book goes on to it. Check the whole book with them.');
     }
   } catch (e) {
     result.problems.push(problemFrom(e));

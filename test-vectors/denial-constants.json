@@ -61,6 +61,8 @@
       "seal-mismatch",
       "seal-chain-broken",
       "sealer-not-expected",
+      "book-cut-short",
+      "seal-not-in-book",
       "dated-after-stamp",
       "stamp-bad-data",
       "stamp-wrong-data",

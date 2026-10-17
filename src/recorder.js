@@ -402,8 +402,9 @@ export async function openRecorder({
   // writer's own agent that came with a cancellation is the one it goes on
   // handing back; a cancellation that the book does not hold waits to be
   // written.
+  // (Seals held elsewhere, handed over with the options, come after the cancellations, and are not these.)
   result.held.forEach((h, i) => {
-    if (!h.used) return;
+    if (h.kind !== 'cancellation' || !h.used) return;
     // The person's cancellation of this writer's own slip, given when it was opened, stops it from the start.
     if (h.slip === slip) stopped = true;
     h.acknowledgements.forEach((a, j) => {
@@ -428,7 +429,7 @@ export async function openRecorder({
   // holds without it, follows the cancellation into the book: it was still
   // waiting when the writer that signed it handed it back.
   result.held.forEach((h, i) => {
-    if (h.used && h.slip === slip && h.inBook !== null && acknowledged.has(h.fingerprint) && !written.has(h.fingerprint)) waiting.set(h.fingerprint, given[i].cancellation);
+    if (h.kind === 'cancellation' && h.used && h.slip === slip && h.inBook !== null && acknowledged.has(h.fingerprint) && !written.has(h.fingerprint)) waiting.set(h.fingerprint, given[i].cancellation);
   });
   // The services the slip names, to check a countersignature before it goes into the book.
   const slipEntry = result.entries.find((e) => e.kind === 'slip' && e.fingerprint === slip);

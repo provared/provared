@@ -6,7 +6,7 @@
 // request at all.
 
 import { checkBook, checkShow } from '../src/check.js';
-import { readBlocks, readFingerprints, renderResult, shown } from './render.js';
+import { readBlocks, readFingerprints, readHanded, renderResult, shown } from './render.js';
 
 const status = document.getElementById('status');
 const result = document.getElementById('result');
@@ -14,9 +14,6 @@ const result = document.getElementById('result');
 // This page reads the whole file into memory. A larger book is checked
 // with the command-line checker.
 const MAX_FILE_BYTES = 200000000;
-// A copy of a cancellation, or a file of disclosures, is small.
-const MAX_HANDED_BYTES = 1000000;
-const MAX_COPIES = 16;
 
 // What the person already trusts: one fingerprint to a line. A line that
 // is not a fingerprint stops the check, and the person is told which box.
@@ -42,34 +39,14 @@ function trusted() {
   return options;
 }
 
-async function jsonFrom(file, what) {
-  if (file.size > MAX_HANDED_BYTES) throw new Error(`The file of ${what}, ${shown(file.name)}, is too large. Nothing was checked.`);
-  try {
-    return JSON.parse(await file.text());
-  } catch {
-    throw new Error(`The file of ${what}, ${shown(file.name)}, is not JSON. Nothing was checked. Choose another file, or clear these files.`);
-  }
-}
-
-// What the person was handed with the record: their own copies of
-// cancellations, and disclosures for covered fields. A file that cannot be
-// read stops the check: it is never set aside silently.
-async function handedOver() {
-  const options = {};
-  const said = [];
-  const copies = [...document.getElementById('cancellations').files];
-  if (copies.length > MAX_COPIES) throw new Error('At most 16 copies of cancellations can be handed over at once. Nothing was checked.');
-  if (copies.length) {
-    options.cancellations = [];
-    for (const file of copies) options.cancellations.push(await jsonFrom(file, 'a cancellation'));
-    said.push(copies.length === 1 ? 'one copy of a cancellation' : `${copies.length} copies of cancellations`);
-  }
-  const [disclosures] = document.getElementById('disclosures').files;
-  if (disclosures) {
-    options.disclosures = await jsonFrom(disclosures, 'disclosures');
-    said.push('disclosures for covered fields');
-  }
-  return { options, said };
+// What the person was handed with the record: the files chosen in the
+// panel "What you were handed with the record" (render.js, readHanded).
+function handedOver() {
+  return readHanded({
+    cancellations: [...document.getElementById('cancellations').files],
+    seals: [...document.getElementById('seals').files],
+    disclosures: document.getElementById('disclosures').files[0] ?? null,
+  });
 }
 
 async function check(text, name, { beside = true, trust = null } = {}) {
@@ -131,6 +108,7 @@ if (chooser.files.length > 0) checkChosen(chooser);
 
 document.getElementById('clear-beside').addEventListener('click', () => {
   document.getElementById('cancellations').value = '';
+  document.getElementById('seals').value = '';
   document.getElementById('disclosures').value = '';
   status.textContent = 'The files you were handed with a record are cleared.';
 });
