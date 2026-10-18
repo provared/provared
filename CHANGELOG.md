@@ -127,6 +127,83 @@
   checker's answer, and points out a gap in their numbers; the site's
   publishing run fetches them from the release "record". Checked by an
   independent reviewer over four rounds; 93 tests.
+- **`provared-gateway` 0.1.0, a reverse proxy that writes the receipts**
+  (`gateway/`, not published). It sits in front of the web interfaces an
+  agent acts through, holds the agent's keys (in memory or through
+  signers) and each interface's credential, and for every call: checks
+  the agent's own secret, names the call from a rules file the company
+  writes (paths by the WHATWG URL Pattern standard, amounts by a fixed
+  value, a JSON Pointer of RFC 6901 or the length of a list), removes
+  the agent's own credentials from the headers and the address, asks the
+  stub writer's check before acting, sends the call, and writes a stub
+  that names `provared.http-request`, `provared.http-response` or
+  `provared.error`, and the upstream's own identifier where it gives one.
+  A call that is not allowed is not sent, is answered `403` with the
+  checker's words, and is written as a denial; a call that matches no
+  rule is refused by default. A call once sent always gets its stub,
+  whatever the upstream did. An upstream the company runs may
+  countersign. Books are sealed on demand with the recorder's keys
+  (`provared-gateway seal`); `provared-gateway check` says what each rule
+  maps to and what is wrong. Each book is a file appended line by line;
+  the feed to the application is not built. It is the gateway's record
+  only, and proves nothing about calls that do not go through it, as its
+  README says first. An independent review found one serious point: a
+  body naming `hosts` and `HOSTS` was recorded with the first's amount,
+  while an upstream that reads names whatever their case acts on the last.
+  Now a body whose names some readers take as one (differing only in
+  capitals, or in the long s or the Kelvin sign) gives no amount, and the
+  call is not sent. Also from the review: method and address override
+  headers and `_method` are removed, with every `X-Forwarded-*` and the
+  other client-address headers; a `;` in a path is refused unless the
+  upstream allows it, and then the rules match each segment without what
+  follows its `;`; overlong UTF-8 and full-width `/` or `.` in a path are
+  refused; each agent may have only so many calls and bytes waiting; a
+  journal beside each book lets a start find a call that was sent when the
+  gateway stopped, and stops that agent until the administrator
+  acknowledges it (`provared-gateway acknowledge`), when a stub saying the
+  outcome is not known is written; header names with `_` and a
+  `Connection` header that names other headers are refused; more
+  credential headers and query forms are removed; a character set other
+  than UTF-8 gives no amount; a credential that cannot be sent as a header
+  is refused at start; a stub for a call that never reached the upstream is
+  labelled `gateway.not-delivered`; two agents may not share a secret or a
+  book file; and the status answers while a call is out. A second review
+  found two medium points in the journal: one call could get two receipts
+  (a stop between its stub and the journal's "done" line, or an
+  acknowledgement tried again after a failure), and any program that could
+  write the journal could have the gateway sign stubs of its choosing. Now
+  every stub names its call (a label, `gateway.call`), and a start takes a
+  call whose stub the book holds as done; each journal line carries an
+  HMAC-SHA-256 tag under a journal key of the agent's own, and a line
+  whose tag does not check is never acted on; each line is checked against
+  the rules before a stub is written from it; the status shows each
+  waiting line whole; and the administrator can set aside a line
+  (`acknowledge --set-aside`). Also from that review: JSON names are
+  folded beyond ASCII (Greek final sigma, the dotless i and others), so an
+  unrelated `ID` and `id` in one object now give no amount; an encoded
+  character in a path whose NFKC form differs from itself is refused;
+  `provared-gateway repair` takes off a book's last line that a stop left
+  part-written; and two agents may not share a book, a journal, a journal
+  key or a key file. A third review found one medium point: a stub
+  written on acknowledgement went under the slip in force at the restart,
+  not the one the call was sent under. Now each journal line names its
+  slip, and the stub is written under that slip (by a stub writer for it,
+  opened on the same book), or, where the book does not hold it, the line
+  can only be set aside. Also from that review: two agents' files are also
+  compared by each existing file's device and file numbers (a link to
+  the file is followed), so, where the file itself exists, a hard link or
+  a link to the file counts as the same file; a journal that none of its
+  lines checks under the journal key in place stops the start; a
+  journal that holds lines and has lost its key stops the start (each of
+  these two stops the whole gateway, not that agent alone); a line
+  whose rule was taken out can still be acknowledged, with a warning; a
+  clock behind the journal's times is said plainly; calls set aside are
+  kept in a file a clean start does not empty; the library's own checks of
+  a request's fields decide whether a line is usable; the dotted capital
+  `İ` folds with `i`; `repair` takes its byte count only in digits and can
+  put back a lost line ending; and the README lists which honest path
+  forms are refused. 68 tests, all on 127.0.0.1, with a file of 145 calls
+  and the action, amount and service each must map to.
 
 ## 0.5.0 (17 October 2026)
 

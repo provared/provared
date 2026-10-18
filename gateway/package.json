@@ -1,0 +1,54 @@
+{
+  "name": "provared-gateway",
+  "version": "0.1.0",
+  "description": "A reverse proxy in front of the web interfaces an agent acts through: it holds the agent's keys and the interfaces' credentials, checks each call against a permission a person signed with a passkey, forwards it, and writes a Provared receipt. Evidence, not a verdict.",
+  "author": "Pavel Izmaylov",
+  "license": "Apache-2.0 AND CC-BY-4.0",
+  "homepage": "https://prova.red",
+  "bugs": "https://github.com/provared/provared/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/provared/provared.git",
+    "directory": "gateway"
+  },
+  "keywords": [
+    "ai-agent",
+    "agent",
+    "gateway",
+    "reverse-proxy",
+    "audit-trail",
+    "permission",
+    "authorization",
+    "receipt",
+    "tamper-evident",
+    "passkey",
+    "evidence"
+  ],
+  "type": "module",
+  "main": "./gateway.mjs",
+  "exports": {
+    ".": "./gateway.mjs",
+    "./rules": "./rules.mjs",
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "provared-gateway": "bin.mjs"
+  },
+  "files": [
+    "gateway.mjs",
+    "rules.mjs",
+    "files.mjs",
+    "bin.mjs",
+    "gateway.example.json",
+    "LICENSE-CC-BY-4.0.txt"
+  ],
+  "engines": {
+    "node": ">=24.7"
+  },
+  "scripts": {
+    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "provared": "^0.6.0"
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "listen": { "host": "127.0.0.1", "port": 8795 },
+  "bodyLimit": 10485760,
+  "timeout": 30000,
+  "unlisted": "refuse",
+  "admin": { "secretHash": "REPLACE-with-the-hash-provared-gateway-secret-prints" },
+  "recorder": { "name": "Provared gateway at gateway.example.internal", "keys": "keys/recorder.jwk" },
+  "upstreams": {
+    "tickets": {
+      "base": "https://tickets.example.internal",
+      "service": "tickets",
+      "credential": { "header": "Authorization", "file": "secrets/tickets", "prefix": "Bearer " },
+      "eventIdHeader": "X-Request-Id"
+    },
+    "patch": {
+      "base": "https://patch.example.internal/api",
+      "service": "patch",
+      "credential": { "header": "X-Api-Key", "env": "PATCH_TOKEN" },
+      "requestIdHeader": "X-Gateway-Call",
+      "countersign": "/provared/countersign"
+    }
+  },
+  "rules": [
+    { "upstream": "tickets", "method": "GET", "path": "/api/now/table/:table", "action": "provared.data.read" },
+    { "upstream": "tickets", "method": "PATCH", "path": "/api/now/table/change_request/:id", "action": "ticket.update" },
+    { "upstream": "patch", "method": "POST", "path": "/v1/waves", "action": "patch.apply", "amount": { "unit": "hosts", "count": "/hosts" } },
+    { "upstream": "patch", "method": "POST", "path": "/v1/hosts/:id/reboot", "action": "host.reboot", "amount": { "unit": "hosts", "value": 1 } }
+  ],
+  "agents": {
+    "patching": {
+      "secretHash": "REPLACE-with-the-hash-provared-gateway-secret-prints",
+      "slip": "slips/patching.json",
+      "book": "books/patching.jsonl",
+      "keys": "keys/patching.jwk",
+      "issuerKeys": ["REPLACE-with-the-thumbprint-of-the-person's-passkey"]
+    }
+  }
+}
