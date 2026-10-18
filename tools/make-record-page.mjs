@@ -325,7 +325,7 @@ npx provared-check book.jsonl ${issuers.map((i) => `--issuer ${esc(i)}`).join(' 
 ${limits}
 </ul>
 <p>And two things of this record's own. A refused call leaves no entry, so the record does not show how often the agent was stopped. Every receipt is one-sided, because no other party takes part in a tool call, so each shows what the agent's side said.</p>
-<p>One gap in this record, stated: on 11 October 2026, seven tool calls of a helper agent were taken and not recorded. The recorder could not replace the book file while another program was reading it, and the hook reported each as "taken and not in the record". The fault and its fix are in the change log; the seven calls stay unrecorded.</p>
+<p>Two gaps in this record, stated. On 11 October 2026, seven tool calls of a helper agent were taken and not recorded: the recorder could not replace the book file while another program was reading it, and the hook reported each as "taken and not in the record". The fault and its fix are in the change log; the seven calls stay unrecorded. On 17 October 2026, at about 15:05 UTC, the recorder was restarted on new code and did not answer for a short time: one tool call of a helper agent was taken and its receipt not written, and the hook reported it as "taken and not in the record"; that helper's next call was refused.</p>
 
 </main>
 <footer>
