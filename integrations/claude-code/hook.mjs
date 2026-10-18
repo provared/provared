@@ -71,7 +71,7 @@ async function ask(path, body) {
     signal: AbortSignal.timeout(WAIT_MS),
   });
   const answer = await response.json();
-  if (!response.ok) throw Object.assign(new Error(answer.error || `the recorder answered ${response.status}`), { refused: true });
+  if (!response.ok) throw Object.assign(new Error(answer.error || `the recorder answered ${response.status}`), { refused: true, code: answer.code });
   return answer;
 }
 
@@ -138,10 +138,13 @@ try {
     await ask('/record', call);
   } catch (e) {
     const which = `${action}${failed ? ', which failed' : ''}`;
-    // Only where the recorder refused, or was not there, is the stub known not to be written.
-    console.error(e.refused || notRunning(e)
-      ? `Provared: the stub for this call (${which}) was not written: ${e.message}. The action was taken and is not in the record.`
-      : `Provared: the recorder did not confirm the stub for this call (${which}) within ${WAIT_MS / 1000} seconds (${e.message}). The action was taken and is not shown to be in the record.`);
+    // Only where the recorder refused, or was not there, is the stub known not to be written;
+    // where it signed the stub and could not write the file yet, it says so, and that is told.
+    console.error(e.code === 'held-not-saved'
+      ? `Provared: the stub for this call (${which}) is not yet in the book file: ${e.message}. The action was taken.`
+      : e.refused || notRunning(e)
+        ? `Provared: the stub for this call (${which}) was not written: ${e.message}. The action was taken and is not in the record.`
+        : `Provared: the recorder did not confirm the stub for this call (${which}) within ${WAIT_MS / 1000} seconds (${e.message}). The action was taken and is not shown to be in the record.`);
     process.exit(2);
   }
 } catch (e) {

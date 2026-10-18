@@ -153,7 +153,9 @@ hook does (25 seconds) is refused, never let through unrecorded. Where the renam
 longer than the recorder waits), the recorder goes on with the book in
 force, tries again a minute later, and `status` says why
 (`newBookProblem`). Another program that follows `book.jsonl` (an
-uploader) sees the file start again after a switch.
+uploader) sees the file start again after a switch; one that reads the
+books through the feed (below) goes on in the same book under its kept
+name, and is told of the new one.
 
 **The recorder enforces every limit across its books.** A new book
 starts no limit again. The recorder keeps, for each permission, the time
@@ -192,6 +194,140 @@ Any program that can reach the recorder's port on this computer can
 start a new book, as it can ask for a seal; since a new book starts no
 limit again, this gains it nothing but another file.
 
+## A feed of the books, for an uploader on this computer
+
+Another program that wants the book's lines as they are written (the
+Provared application's uploader, which sends them, sealed, to a server
+that cannot read them) should ask the recorder, not open the book file.
+On Windows a program that holds a file open can make another's writing
+or renaming of it fail: on 11 October 2026 an uploader reading
+`book.jsonl` made the recorder's rename of it fail, and seven receipts
+were lost. So the recorder answers, on its own port, with the lines of
+its books, to a reader that proves it holds the token in the recorder's
+folder:
+
+```
+GET http://127.0.0.1:8794/hello            (opens a conversation)
+GET http://127.0.0.1:8794/books
+GET http://127.0.0.1:8794/lines?id=<identity>&from=<n>
+```
+
+- **The token, which never travels.** At its first start the recorder
+  writes a token (32 random bytes) into its folder as `feed-token`,
+  readable by your user alone on macOS and Linux (on Windows a file takes
+  the rights of its folder: in your user folder, your user, the system
+  and the computer's administrators; on another disk, see who may read
+  the folder). A reader that holds it opens a conversation with
+  `GET /hello`, sending a random number (`Provared-Feed-Hello`); the
+  recorder answers with a random number of its own and HMAC-SHA-256,
+  keyed by the token, over both: its proof that it knows the token. The
+  reader trusts nothing it is told until that proof checks. Each question
+  then carries the session, a random number used once and an HMAC over
+  the question under a key both sides work out from the token and the two
+  numbers (the reader's proof); each answer carries an HMAC under the
+  same key over the question's number, the answer's code and every byte
+  of the answer (the recorder's). Every proof is compared in constant
+  time, and a question asked twice is refused. Each of these 32-byte
+  values (the session, the reader's number, the number used once, each
+  proof) is taken only in the one way it can be written in base64url, so
+  none can be given again under another spelling of the same bytes. So a program on this
+  computer that cannot read the folder cannot read the book through the
+  feed, and one that listens on the recorder's port while the recorder is
+  stopped learns nothing and is believed in nothing; one that can read
+  the folder could read the book file anyway. **A hello keeps nothing:**
+  the recorder's number for a conversation is worked out from the time of
+  the hello, the reader's number and a secret only the running recorder
+  holds, and the reader sends its number again with each question. A
+  conversation is kept only from its first question that carries the
+  reader's proof, which must come within 10 minutes of its hello; at most
+  16 such conversations are kept (the one used longest ago gives way to a
+  new proved one), each ended after 10 minutes unused or after 100,000
+  questions, and one that has ended cannot be begun again. So a program
+  without the token, however many hellos it asks for, cannot push out a
+  conversation in use. What it can still do: keep the recorder busy
+  answering its hellos and refusing its questions, at about a thousandth
+  of a second each, which slows the hook's questions in proportion (on the
+  author's computer, with 64 programs asking for hellos without pause,
+  about 8,000 to 8,600 in all, the hook's two questions took 73 to 356
+  thousandths of a second over two runs; every round of the uploader went
+  through), and, while the recorder is
+  stopped, listen on its port, where it learns nothing but makes the
+  uploader stop and say so. A
+  `feed-token` that holds no token is not replaced: the feed refuses
+  every question and `status` says why (`feed.problem`); move the file
+  out of the folder, and the recorder makes a new one at its next start.
+  The application's uploader speaks this conversation; `feed.mjs` also
+  gives one for other programs (`feedReader`).
+- **`/books`** lists the books oldest first: the kept ones by number,
+  then the one in force. Each has its name (`book-3.jsonl`,
+  `book.jsonl`), its number, its size in bytes and its **identity**: the
+  volume, the number the file system gives the file, and the file's
+  creation time. A rename keeps all three, so the book in force keeps its
+  identity when it is kept as `book-<n>.jsonl`, and a new `book.jsonl`
+  has another, though it begins with the same permission line. Where the
+  file system gives files no number, the identity is `null`, and a book
+  is known by its name.
+- **`/lines`** answers for one book, named by `id=<identity>`, or by
+  `book=<name>`, or with neither for the book in force, from place `from`
+  (0 for the first line): up to 500 lines (`max` asks for fewer, 0 for
+  none), and at most 4 MiB of them but always one, with where each starts
+  and ends in the file, in bytes; the line before place `from`, with its
+  fingerprint (SHA-256, base64url) and where it is; the number of lines
+  (`size`), the book's size in bytes, and the fingerprint of its last
+  line. Lines are counted as the application's uploader and the checker
+  count them: an empty line, and a carriage return before a line break,
+  are set aside, and a line with no line break yet is not a line.
+- **Waiting.** Where the book holds no line at `from` yet, the question
+  waits up to 25 seconds (`wait`, 0 to 25) and is answered as soon as any
+  book is written: a new receipt, a seal, a new book, or a late receipt
+  and the seal again in a kept book. At most 8 questions wait at once; one
+  more is answered at once with 429 ("ask again in a few seconds").
+  Stopping the recorder answers every waiting question.
+- The books the recorder holds open (the one in force, and a kept one
+  that a call allowed under it may still come back to) are read from its
+  own copy in memory, but only as far as it has written them to their
+  files, so the feed answers even while another program holds
+  `book.jsonl` open with no sharing, and never gives out a receipt whose
+  save failed. A kept book it no longer writes is read from its file,
+  4 MiB at a time, and the file is closed again between pieces.
+- **Busy.** One answer is made at a time, with a pause between two so
+  that the hook's questions are answered in between, and at most 16 are
+  taken on at once; one more is answered at once with 429 ("ask again in
+  a moment"). Measured on the author's computer with a book of 98 MB: the
+  first question took about 110 thousandths of a second (the recorder
+  finds where each line is, once), and reading the whole book through the
+  feed 1.8 seconds. A hook's two questions (before and after a call) took
+  a median of 61 thousandths of a second and at most 145 with no reader;
+  a median of 160 and at most 266 with two readers reading the whole book
+  again and again; a hook's question took 149 thousandths of a second
+  with 300 feed questions at once, and 971 with 1,500 at once (the hook
+  waits 25 seconds before it refuses the call). The hold-up is at most
+  the making of one answer (about 150 thousandths of a second on that
+  book) and the reading of the questions that arrive meanwhile, about a
+  thousandth of a second each, refused or not. So very many at once do
+  hold the hook up, in proportion: in the independent review, 6,000 at
+  once from one holder of the token held a hook's question up for 5.3
+  seconds, and about 25,000 at once would reach the 25 seconds after
+  which the hook refuses the call.
+
+The recorder never replaces `book.jsonl` because it could not read it:
+where another program holds the file for a moment, the recorder waits up
+to ten seconds to read and add to it, and replaces it only where it read
+the file and found that it no longer holds the book's start (another
+program changed it). Such a replacement gives the file a new identity,
+and the uploader then stops and says so: that is a book to look at.
+Where the file is held for longer than ten seconds, the receipt is signed
+and held by the recorder, the hook says that it is not yet in the book
+file, and the recorder writes it with the next save of that book; it is
+lost only if the recorder stops before then. The feed gives it to no
+reader until it is in the file.
+
+The feed shows the book's lines, nothing more: whoever holds the token can
+read the book, as whoever can read the folder always could. The recorder
+still listens on 127.0.0.1 only; give its address as `127.0.0.1`, not
+`localhost`, which may lead to another program on the computer's other
+address.
+
 ## The commands
 
 | Command | What it does |
@@ -201,7 +337,7 @@ limit again, this gains it nothing but another file.
 | `renew <file>` | Take a new signed permission into the book, while the recorder runs or not; `--new-passkey` where you signed it with a passkey of yours that signed none before |
 | `start` | Run the recorder in this terminal, and see what it says |
 | `ensure` | Start the recorder in the background if it is not running (the hooks run this when a session starts) |
-| `status` | What the recorder holds: the permission, until when, the number of entries, the calls allowed and not yet recorded (`callsNotYetRecorded`), the books kept (`keptBooks`) and when a new one is started (`newBookAt`) |
+| `status` | What the recorder holds: the permission, until when, the number of entries, the calls allowed and not yet recorded (`callsNotYetRecorded`), the books kept (`keptBooks`), when a new one is started (`newBookAt`), and the feed's token file and how many questions wait (`feed`) |
 | `seal` | Seal the book now, with the recorder's three keys |
 | `new-book` | Seal the book, keep it as `book-<n>.jsonl`, and start a new one that begins with the permission in force (done by itself at 90,000 entries, or at 100 MB of text) |
 | `check [file]` | The checker's answer for the book, or, given a name such as `book-1.jsonl`, for a book kept before it. Name your passkey with `--issuer <its thumbprint>`, once for each passkey of yours; without it, `check` lists the passkeys the book's permissions name, as read from the book, and the checker takes none of them as one you trust |
@@ -238,7 +374,10 @@ the stub writer open on one book:
 - **After the call** (PostToolUse): a receipt (a stub) is written, signed
   with the agent's two keys, naming the tool and the SHA-256 fingerprint
   of its arguments. If it cannot be written, Claude Code is told, so that
-  the gap is known.
+  the gap is known; if it was signed and could not yet be written to the
+  book file (the file held by another program for longer than ten
+  seconds), Claude Code is told that, and the recorder writes it with its
+  next save.
 - **After a call that started and failed** (PostToolUseFailure): a stub
   is written too, because a failed call may have done part of its work.
   It names the tool as failed (`Bash (failed)`), and a second document,
@@ -408,8 +547,9 @@ The recorder keeps everything in one folder, `~/.provared/claude-code`
 (`agent-keys.jwk`), the recorder's private keys (`recorder-keys.jwk`),
 the permission it acts under (`slip.json`) and those before it, the list
 of passkeys whose permissions it takes (`trusted-passkeys.json`), the
-book (`book.jsonl`), and the books kept before it (`book-1.jsonl` and
-so on). Never share the files that end in `.jwk`.
+book (`book.jsonl`), the books kept before it (`book-1.jsonl` and
+so on), and the token of its feed (`feed-token`, below). Never share the
+files that end in `.jwk`, nor `feed-token`.
 After each receipt the new lines are added to the end of the book: the
 cost does not grow with the book, where the file is as the recorder left
 it; where someone else changed it, the recorder compares the whole file

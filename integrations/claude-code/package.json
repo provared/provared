@@ -32,6 +32,7 @@
     "recorder.mjs",
     "hook.mjs",
     "actions.mjs",
+    "feed.mjs",
     "LICENSE-CC-BY-4.0.txt"
   ],
   "engines": {

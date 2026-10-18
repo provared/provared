@@ -2,6 +2,83 @@
 
 ## Unreleased
 
+- **The recorder beside Claude Code offers its books to a reader on this
+  computer, through a feed on its own port** (`integrations/claude-code`,
+  `feed.mjs`), so that no other program need open a book file. On
+  11 October 2026 an uploader reading `book.jsonl` made the recorder's
+  rename of it fail on Windows, and seven receipts were lost; the
+  application's uploader now asks the recorder instead. `GET /books`
+  lists the books oldest first (the kept ones by number, the one in force
+  last), each named by its file's identity (the volume, the file's number
+  and its creation time, which a rename keeps, reckoned as the uploader
+  reckons it), with its size; `GET /lines?id=<identity>&from=<n>` (or
+  `book=<name>`, or neither for the book in force) answers with up to 500
+  lines (and at most 4 MiB) from place n, where each is in the file, the
+  line before place n with its fingerprint, the number of lines and the
+  fingerprint of the last; `max` asks for fewer, and 0 for none. Lines are
+  counted as the uploader and the checker count them (an empty line and a
+  carriage return set aside, a line with no line break not yet a line).
+  Where the book holds nothing at place n yet, the question waits up to
+  25 seconds (`wait`) and is answered as soon as any book is written, a
+  late receipt or a seal again in a kept book included; at most 8 wait at
+  once, and one more is told to ask again (429). The recorder writes a
+  token into its folder at its first start (`feed-token`, 32 random
+  bytes, readable by its owner only where the file system keeps such
+  rights), and **the token never travels**: a reader opens a conversation
+  (`GET /hello`) with a random number; the recorder answers with a random
+  number of its own and HMAC-SHA-256 over both, keyed by the token, and
+  the reader trusts nothing until that proof checks; each question then
+  carries an HMAC under a key both sides work out from the token and the
+  two numbers, with a number used once, and each answer an HMAC under the
+  same key over the question's number, its code and every byte; every
+  proof is compared in constant time, and a question asked twice is
+  refused. Each of these 32-byte values is read only in the one way it can
+  be written in base64url, so none can be given again under another
+  spelling of the same bytes. A hello keeps nothing: the recorder's number for a conversation
+  is worked out from the time, the reader's number and a secret only the
+  running recorder holds, and a conversation is kept only from its first
+  proved question; only proved conversations (at most 16, each ended
+  after 10 minutes unused) give way to one another, so a program without
+  the token cannot push out one in use. Each question, refused or not,
+  still costs the recorder about a thousandth of a second, so very many at
+  once slow the hook in proportion. A token file that holds no token is not replaced, and the feed
+  then refuses every question and `status` says why. One answer is made
+  at a time, with a pause between two, and at most 16 are taken on at
+  once (429 beyond). The books the recorder holds open are read from its
+  own copy in memory, only as far as it has written them to their files,
+  so the feed answers while another program holds `book.jsonl` open with
+  no sharing and never gives out a receipt whose save failed; a kept book
+  it no longer writes is read from its file, 4 MiB at a time, and closed
+  again. Measured on the author's computer with a book of 98 MB: about
+  110 thousandths of a second for the first question, 1.8 seconds to read
+  the whole book; a hook's two questions took a median of 61 thousandths
+  of a second with no reader and of 160 (at most 266) with two readers
+  reading the whole book again and again, and a hook's question 971
+  thousandths with 1,500 feed questions at once. The service still listens
+  on 127.0.0.1 only. Nothing of the record or the format changes.
+- **The recorder never replaces its book because it could not read it**
+  (`integrations/claude-code`). Where another program held `book.jsonl`
+  for a few seconds while a receipt was saved, the recorder took the
+  failed read as "no book yet" and replaced the whole file, which then had
+  a new identity; an uploader following it stopped for good. Now the
+  reading and the adding are tried again for up to ten seconds while the
+  file is busy, a read that fails otherwise fails the save and leaves the
+  file as it is, and the file is replaced only where it was read and no
+  longer holds the book's start. Found by the independent review of the
+  feed, with four faults of the feed itself, each fixed and tested: the
+  token sent to whatever listened (now never sent); questions that do not
+  wait had no limit (on a 98 MB book, 1,500 at once held a hook up for 22
+  seconds); a receipt whose save failed could be given out; and a kept
+  book of exactly 4 MiB that ended part way through a line lost that
+  line's start. A second review found that a hello kept a conversation,
+  so that a program without the token could push out the uploader's (now
+  a hello keeps nothing). Where a save fails after the ten seconds, the
+  hook is now told the truth: the stub is signed and held by the
+  recorder, not yet in the book file, and written with the next save, and
+  `status` counts it as recorded. A third review found that an ended
+  conversation could be begun again under another spelling of its number
+  (now refused), and that no test held the refusal of a hello dated ahead
+  of the clock (now tested). 37 tests of the feed; the package's 130 pass.
 - **Seals held elsewhere, handed over beside the book** (format
   description, section 21.5), in both languages. Whoever keeps a book
   could cut off its end, the last seal with it, and what is left still

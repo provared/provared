@@ -35,6 +35,12 @@
 //                            written at the first "use", changed only by "renew --new-passkey"
 //   book.jsonl               the book: the slips, a stub for each tool call, and seals
 //   book-<n>.jsonl           each book kept before it, sealed, numbered from 1 in the order kept
+//   feed-token               the token a reader gives to read the books through the feed (feed.mjs):
+//                            written at the first start (never share)
+//
+// The feed (GET /books and /lines, feed.mjs) gives the books' lines to a
+// reader on this computer that holds the token, such as the application's
+// uploader, so that no other program need open a book file.
 //
 // It listens on 127.0.0.1 only. Any program on this computer could ask it
 // to write a stub, or to take a new slip, and could change the files in its
@@ -50,6 +56,7 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkBook, checkSlip, entryLine, fingerprint, fromBase64url, keySetFingerprint, openRecorder, thumbprint, toBase64url, utf8, writeSeal } from 'provared';
+import { createFeed, feedToken } from './feed.mjs';
 
 const subtle = globalThis.crypto.subtle;
 const SLH = 'SLH-DSA-SHA2-256s';
@@ -239,11 +246,25 @@ export function replaceFile(path, text, { write = writeFileSync, rename = rename
 // it. Where the file does not match the book's start (it was edited by
 // hand), the whole file is replaced. "path" names a book kept before
 // (book-<n>.jsonl), which a call allowed under it may still add to.
-export function saveBook(folder, text, path = files(folder).book) {
+//
+// The file is replaced only where it was read and does not hold the book's
+// start, or does not exist: never because it could not be read. A program
+// that holds the file for a few seconds (a virus scanner, a backup tool)
+// makes the reading, and the appending, wait for up to ten seconds, as a
+// replacement does; past that, the save fails and the file is left as it
+// is, and the next save tries again. (Before 18 October 2026 a failed read
+// was taken as "no book yet", and the file was replaced: the book then had
+// a new identity, and the application's uploader stopped.)
+// The ways of reading and of adding to the file can be handed in, for the tests.
+export function saveBook(folder, text, path = files(folder).book, { read = readFileSync, append = appendFileSync } = {}) {
   let existing = '';
-  try { existing = readFileSync(path, 'utf8'); } catch { /* no book yet */ }
+  try {
+    existing = untilFree(() => read(path, 'utf8'));
+  } catch (e) {
+    if (e.code !== 'ENOENT') throw e;
+  }
   if (existing.length > 0 && text.startsWith(existing)) {
-    if (text.length > existing.length) appendFileSync(path, text.slice(existing.length));
+    if (text.length > existing.length) untilFree(() => append(path, text.slice(existing.length)));
     return;
   }
   replaceFile(path, text);
@@ -259,11 +280,12 @@ export function saveBook(folder, text, path = files(folder).book) {
  * the book is not the one last saved (a renewal that failed), it is
  * compared whole, as saveBook does.
  * @param {string} folder
- * @param {{path?: string, saved?: string}} [o] path: another book file (a kept book); saved: the
- *   text known to be in the file already, so that the first save need not read it
+ * @param {{path?: string, saved?: string, append?: Function}} [o] path: another book file (a kept book); saved: the
+ *   text known to be in the file already, so that the first save need not read it; append: the way of
+ *   adding to the file (for the tests)
  * @returns {(text: string) => void}
  */
-export function bookSaver(folder, { path = files(folder).book, saved } = {}) {
+export function bookSaver(folder, { path = files(folder).book, saved, append = appendFileSync } = {}) {
   /** @type {{chars: number, bytes: number, tail: Buffer, tailText: string}|null} */
   let left = null;
   const TAIL = 4096;
@@ -292,11 +314,11 @@ export function bookSaver(folder, { path = files(folder).book, saved } = {}) {
   return (text) => {
     if (left && text.length >= left.chars && text.startsWith(left.tailText, left.chars - left.tailText.length) && asLeft()) {
       const more = text.slice(left.chars);
-      if (more) appendFileSync(path, more);
+      if (more) untilFree(() => append(path, more));
       remember(text, left.bytes + Buffer.byteLength(more));
       return;
     }
-    saveBook(folder, text, path);
+    saveBook(folder, text, path, { append });
     remember(text, Buffer.byteLength(text));
   };
 }
@@ -539,8 +561,29 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
   // books ("keptFigures"), which every limit is counted with.
   let bookIds = 0;
   const keptFigures = new Map();
+  // The feed (feed.mjs): the books' lines for a reader on this computer,
+  // such as the application's uploader, so that no other program need open
+  // a book file. The books it reads from memory are the one in force and
+  // the kept ones a call may still come back to, each only as far as it has
+  // been written to its file ("written", set by each save that succeeds), so
+  // that no line whose save failed reaches a reader; every save of a book
+  // answers the readers that wait.
+  const feed = createFeed({
+    folder,
+    token: feedToken(folder),
+    memory: () => [current, ...keptOpen.values()].map((b) => ({ key: b.id, path: b.path, text: () => b.writer.book(), saved: () => b.written ?? 0, inForce: b === current })),
+  });
+  const watched = (b, save) => (text) => {
+    try {
+      save(text);
+      b.written = text.length;
+    } finally {
+      feed.changed();
+    }
+  };
   const bookAt = (path, writer, about, saved) => {
-    const b = { id: ++bookIds, path, save: bookSaver(folder, { path, saved }), writer, slip: about.slip, fingerprint: about.fingerprint, issuerKey: about.issuerKey, content: about.content, before: new Map(), seen: 0, entries: 0, bytes: 0, times: new Map() };
+    const b = { id: ++bookIds, path, writer, written: typeof saved === 'string' ? saved.length : 0, slip: about.slip, fingerprint: about.fingerprint, issuerKey: about.issuerKey, content: about.content, before: new Map(), seen: 0, entries: 0, bytes: 0, times: new Map() };
+    b.save = watched(b, bookSaver(folder, { path, saved }));
     follow(b);
     return b;
   };
@@ -746,14 +789,26 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
     const kept = call ? keptOpen.get(call.book) : undefined;
     if (kept) {
       const stub = await recordUnder(kept, call.slip, request, more);
-      kept.save(kept.writer.book());
+      savedOrHeld(kept);
       follow(kept);
       await tidy();
       return stub;
     }
     const stub = await recordUnder(current, call?.slip, request, more);
-    current.save(current.writer.book());
+    savedOrHeld(current);
     return stub;
+  }
+  // The stub is signed and in the recorder's own copy of the book. Where the
+  // file cannot be written now (another program holds it for longer than the
+  // recorder waits), the hook is told just that: the recorder writes it with
+  // the next save of that book, and it is lost only if the recorder stops
+  // before then. The feed gives it to no reader before it is in the file.
+  function savedOrHeld(b) {
+    try {
+      b.save(b.writer.book());
+    } catch (e) {
+      throw Object.assign(new Error(`the stub is signed and held by the recorder, but could not be written to its book file yet (${e.message}); the recorder writes it with the next save, and it is lost if the recorder stops before then`), { code: 'held-not-saved' });
+    }
   }
 
   async function sealIn(b) {
@@ -805,7 +860,7 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
     }
     old.times = keptFigures;
     current = bookAt(f.book, writer, old);
-    Object.assign(old, { path: keptPath, save: bookSaver(folder, { path: keptPath, saved: old.writer.book() }) });
+    Object.assign(old, { path: keptPath, save: watched(old, bookSaver(folder, { path: keptPath, saved: old.writer.book() })) });
     if (holding(old.id)) keptOpen.set(old.id, old);
     bookProblem = null;
     try {
@@ -861,7 +916,11 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
     } catch (e) {
       try { replaceFile(f.slip, JSON.stringify(current.slip)); } catch { /* left to the start-up checks */ }
       // The book file too, which may already hold the new permission's line.
-      try { saveBook(folder, current.writer.book(), current.path); } catch { /* the saver puts the file right with the next entry */ }
+      try {
+        saveBook(folder, current.writer.book(), current.path);
+        current.written = current.writer.book().length;
+      } catch { /* the saver puts the file right with the next entry */ }
+      feed.changed();
       throw e;
     }
     trusted = issuerKeys;
@@ -884,7 +943,8 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
     if (keptText.startsWith('{"seal":', keptText.lastIndexOf('\n', keptText.length - 2) + 1)) continue;
     try {
       const under = [...(await slipsIn(keptText))].at(-1);
-      const b = { path: k.path, save: bookSaver(folder, { path: k.path, saved: keptText }), writer: await open(keptText, under, trusted), seen: 0, entries: 0, bytes: 0, times: new Map() };
+      const b = { path: k.path, writer: await open(keptText, under, trusted), seen: 0, entries: 0, bytes: 0, times: new Map() };
+      b.save = watched(b, bookSaver(folder, { path: k.path, saved: keptText }));
       await sealIn(b);
     } catch (e) {
       bookProblem = `The book kept as ${k.path} does not end with a seal, and could not be sealed: ${e.message}`;
@@ -914,6 +974,8 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
       res.end(JSON.stringify(body));
     };
     try {
+      // The feed's own requests (GET /books and /lines), with its token.
+      if (await feed.handle(req, res)) return undefined;
       if (req.method === 'GET' && req.url === '/status') {
         return send(200, {
           slip: current.fingerprint,
@@ -928,6 +990,7 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
           callsNotYetRecorded: [...inFlight.values()].filter((c) => counting(c)).length,
           newBookAt: newAt,
           keptBooks: keptBooks(folder).map((k) => k.file),
+          feed: feed.status(),
           ...(bookProblem ? { newBookProblem: bookProblem } : {}),
           started,
           folder,
@@ -961,7 +1024,14 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
         try {
           // The answer is sent only once the stub is written and saved.
           const written = await inTurn(async () => {
-            const stub = await record(given);
+            let stub;
+            try {
+              stub = await record(given);
+            } catch (e) {
+              // Signed and held, to be written with the next save: in the book, and counted as recorded.
+              if (e.code === 'held-not-saved') count++;
+              throw e;
+            }
             count++;
             await whenFull();
             return stub;
@@ -994,6 +1064,7 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
       }
       if (req.url === '/stop') {
         send(200, { stopped: true });
+        feed.close();
         setTimeout(() => server.close(), 50);
         return undefined;
       }
@@ -1022,7 +1093,10 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
       return renewed;
     }),
     newBook: () => inTurn(newBook),
-    close: () => new Promise((resolve) => server.close(resolve)),
+    close: () => {
+      feed.close();
+      return new Promise((resolve) => server.close(resolve));
+    },
   };
 }
 
