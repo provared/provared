@@ -483,7 +483,8 @@
          "methodsMissing": [],
          "problemFound": false,
          "sealed": null,
-         "withinSlips": true
+         "withinSlips": true,
+         "witnessed": null
         }
        }
       }
@@ -1113,7 +1114,8 @@
          "methodsMissing": [],
          "problemFound": false,
          "sealed": null,
-         "withinSlips": true
+         "withinSlips": true,
+         "witnessed": null
         }
        }
       }
@@ -2203,7 +2205,8 @@
          "methodsMissing": [],
          "problemFound": false,
          "sealed": null,
-         "withinSlips": true
+         "withinSlips": true,
+         "witnessed": null
         }
        }
       }
@@ -3111,7 +3114,8 @@
          "methodsMissing": [],
          "problemFound": false,
          "sealed": null,
-         "withinSlips": true
+         "withinSlips": true,
+         "witnessed": null
         }
        }
       }
@@ -4129,7 +4133,8 @@
          "methodsMissing": [],
          "problemFound": false,
          "sealed": null,
-         "withinSlips": true
+         "withinSlips": true,
+         "witnessed": null
         }
        }
       }

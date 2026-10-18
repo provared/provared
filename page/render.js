@@ -149,6 +149,17 @@ function stampRows(list, stamps) {
   }
 }
 
+// The witness statements beside a seal. What a statement says is shown only where it passed its check.
+function witnessRows(list, witnesses) {
+  for (const w of witnesses ?? []) {
+    if (w.state === 'invalid') row(list, 'Witness statement, not used', 'it did not pass its check (see the problems)');
+    else if (w.state === 'unavailable') row(list, 'Witness statement, not checked', 'this browser cannot check both of its signatures');
+    else if (w.counted) row(list, 'Witnessed', `by ${label(w.name)} (a label), a witness you named as trusted (key set ${w.witness}), at ${showTime(w.when)} (the witness's own word)`);
+    else if (w.trusted) row(list, 'Witness statement, not counted', `from a witness you named as trusted (key set ${w.witness}), but it was not counted (see the notes on this card)`);
+    else row(list, 'Witness statement, not counted', `from a witness you did not name as trusted (key set ${w.witness})`);
+  }
+}
+
 function cancellationCard(e) {
   const card = el('div', `card slip${e.problems.length ? ' broken' : ''}`);
   card.append(el('h3', 'kind', `Entry ${e.index}: Cancellation (the person ends a slip)`));
@@ -209,6 +220,7 @@ function heldSealCard(h, n) {
     row(list, 'Recorder\'s key set', h.sealer, true);
     row(list, 'Recorder\'s signatures', signatureWords(h.signatures));
     stampRows(list, h.stamps);
+    witnessRows(list, h.witnesses);
     row(list, 'In the book at that place', h.used ? (h.inBook === null ? 'no' : `yes, at entry ${h.inBook}`) : 'not compared, because it was not used');
     row(list, 'Fingerprint', h.fingerprint, true);
     card.append(list);
@@ -434,6 +446,7 @@ function sealCard(e) {
   row(list, 'Recorder\'s key set', `${e.sealer}. Compare this fingerprint with the one the recorder gave you.`, true);
   row(list, 'Recorder\'s signatures', signatureWords(e.signatures));
   stampRows(list, e.stamps);
+  witnessRows(list, e.witnesses);
   row(list, 'Fingerprint', e.fingerprint, true);
   card.append(list);
   if (e.stamps.length === 0) flag(card, 'onesided', 'There is no outside time-stamp: the time is only the recorder\'s own word.');
@@ -531,7 +544,10 @@ export function trustOf(result, options = {}) {
   const sealerNamed = Array.isArray(options.sealKeys) && options.sealKeys.length > 0;
   const sealsHanded = Array.isArray(options.seals) && options.seals.length > 0;
   const named = issuerNamed && ((s.counts.seals === 0 && !sealsHanded) || sealerNamed);
-  return { issuerNamed, named, sure: s.intact && named, heldUnused: sealsHanded && !sealerNamed };
+  // A seal handed over that was not compared with the book (it gives another book number, or could not be used) gives no pass.
+  // (Where no recorder was named, the seals handed over were not compared at all, and heldUnused says so.)
+  const heldCompared = !sealsHanded || !sealerNamed || (result.held ?? []).filter((h) => h.kind === 'seal').every((h) => h.used);
+  return { issuerNamed, named, sure: s.intact && named && heldCompared, heldUnused: sealsHanded && !sealerNamed };
 }
 
 export function renderResult(target, result, { isShow = false, checkedBy = 'Checked in this browser.', options = {} } = {}) {
@@ -539,6 +555,7 @@ export function renderResult(target, result, { isShow = false, checkedBy = 'Chec
   const s = result.summary;
   const missing = s.methodsMissing.join(' or ');
   const { issuerNamed, named, sure, heldUnused } = trustOf(result, options);
+  const heldCompared = heldUnused || (result.held ?? []).filter((h) => h.kind === 'seal').every((h) => h.used);
 
   target.append(el('h2', '', 'The answer'));
   const answers = el('ul', 'answers');
@@ -546,6 +563,13 @@ export function renderResult(target, result, { isShow = false, checkedBy = 'Chec
     answer(answers, 'no', 'The record is NOT intact.', 'See the problems marked below. A record that is not intact is not evidence.');
   } else if (sure) {
     answer(answers, 'yes', 'The record is intact.', `Every signature fits its key, every label is right and nothing has been changed. ${checkedBy}`);
+  } else if (s.intact && named && !heldCompared) {
+    answer(
+      answers,
+      'partly',
+      'Not every seal you handed over was compared with this book.',
+      'A seal held elsewhere that you handed over gives another book number than this book, or could not be used, so it was not compared with the book. See the note beside it. This is not a pass.',
+    );
   } else if (s.intact) {
     answer(
       answers,
@@ -617,6 +641,9 @@ export function renderResult(target, result, { isShow = false, checkedBy = 'Chec
           : 'It stands for the whole book. No outside time-stamp from a service you trust covers it: compare it, and the number of entries, with a copy you already trust.',
       ),
     );
+    if (s.witnessed) {
+      seal.append(el('p', 'quiet', `A witness you named as trusted signed for the seal at entry ${s.witnessed.seal}, which covers the first ${s.witnessed.entries} entries (${s.witnessed.seals.length} of ${s.counts.seals} seals witnessed). Being witnessed excuses nothing.${isShow ? ' These are single pages: they cannot show that a limit over the whole book was kept, so being witnessed says nothing here about totals.' : ''}`));
+    }
     target.append(seal);
   }
 

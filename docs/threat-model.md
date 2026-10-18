@@ -551,8 +551,9 @@ person checking gives.
   be removed, and what is left still checks. Only a copy of that seal, or
   of its top fingerprint and number of entries, held by someone else
   shows it. A seal held elsewhere can be handed to the checker beside the
-  book (below); a public place where seals are kept, or a witness that
-  signs for each seal, would close the rest. Neither is built.
+  book (below), and a witness that signs for each seal (section 6f)
+  holds the latest one it signed for. A public place where seals are
+  kept, which gathers the seals of many books, is not built.
 - **Seals held elsewhere.** The person, an auditor, or any copy kept out
   of the recorder's reach can hand the checker, beside the book, up to 64
   seal entries it holds (option `seals`, `--seal` on the command line, files on
@@ -969,6 +970,128 @@ limit.
   and nothing in the record shows that the check was made.
 - **Older checkers** refuse a book that holds a denial (`unknown-entry`).
 
+## 6f. Witnesses, and a book shown two ways
+
+A recorder that keeps a book (A1, A2) can show one history to one reader
+and another to another (a "split view"): each copy checks, and each is
+sealed, so a reader who holds one copy cannot see the other. A witness
+(format description, section 29) is a party with a key set of its own
+that keeps, for each recorder, person and agent, the latest seal it
+signed for, and signs a statement for a new seal only where the new seal
+extends that one: in the same book, by a consistency proof (RFC 9162,
+section 2.1.4), or as the first seal of the next book (section 21.6). The
+person and the agent are those the permission on a book's first line
+names: its passkey and the agent's key set. So every permission one
+person gives one agent under one recorder, renewals included, is one
+sequence: the independent review showed that a sequence known by the
+permission alone let a book that started with a renewal fork the
+history, and a witness now refuses it. The statement sits beside the seal on its line, or is
+handed to a checker later with a copy of the seal.
+
+**Protects.** That a statement a checker counts was signed by a witness
+the person named, by the fingerprint of its key set, and speaks of that
+very seal: its `seal`, `size` and `root` must be the seal's, both its
+signatures must check, and it may not be dated more than 300 seconds
+before the seal (`witness-invalid`). A6 and A7 cannot make one, and a
+statement from a witness nobody named is shown and not counted. A
+statement that does not pass is a problem; one handed over beside the
+book is a problem with the whole check, and the seal it came with is
+used all the same. Being witnessed excuses nothing: it changes no other
+answer, and a book with a problem is never said to be witnessed.
+
+A witness knows which books are one sequence only by the passkey and the
+agent of the permission on their first line and the keys of their
+recorder, and the recorder (A1, A2) chooses the first line and its keys: it can start a history with another first line, or
+seal it with new keys, and the same honest witness signs for it as
+another sequence. So a statement counts only where the person fixed
+both: the book's first line is a permission that passed its check,
+signed by a passkey the person named (`issuerKeys`), and the person
+named the recorders they expect (`sealKeys`). The independent review of
+this step showed a history that began with made-up terms, then the
+permission, signed by the same witness and read as witnessed; it now
+reads as not witnessed, and the witness itself no longer keeps a book
+whose first line is not a permission.
+
+And every permission among the entries a seal covers must name the same
+passkey and agent as the first line's. The third round of the review
+showed a fork through a second agent of the same person under the same
+recorder, the gateway's own set-up: a book that started with agent Y's
+permission, then held agent X's permission and X's stubs without the
+one over its limit, was signed by the witness as the first book of the
+person and agent Y, and read as witnessed. It now reads as not
+witnessed, with a note saying why; so does one that starts with a
+second passkey's permission for X. A witness cannot refuse such a book
+itself: it sees a book's first line, not its entries. A Show counts a
+statement only where its pages hold every entry the seal covers, so it
+never counts one that the whole book would not.
+
+What it narrows, where the witness keeps section 29.3 and the person
+fixed the start: a second history sealed by the same recorder and
+starting from any permission that passkey gave the same agent needs that
+witness to sign for it too, which it does not do. So two readers who name that witness, the
+same passkey and the same recorder cannot be shown two such histories
+that both carry its statements and that disagree before the earlier of
+the two seals it signed for. A new book cannot start from an earlier
+seal than the latest the witness holds, so the books of one permission
+cannot fork either. Two witnesses need two to fail. The latest seal a
+witness holds, handed over beside the book it is of as a seal held
+elsewhere (section 6a), shows that book cut back to before that seal
+(`book-cut-short`, `seal-not-in-book`). The witness program in the
+library (`openWitness`) checks a seal's three signatures, signs nothing
+on a device that cannot check SLH-DSA (so there is none in the Python
+version), ties the first line to the seal with an audit path at first
+contact and at each new book, keeps it tied with each consistency proof,
+never signs two different seals of one book at one size, never again
+signs for a book once it has signed for the next, and hands back what it
+holds with each statement, to be kept before the statement is given
+out.
+
+**Does not protect.**
+
+- **Other recorder keys, or another agent.** A history sealed with
+  another key set, even one the person also named, or that starts from a
+  permission for another agent, is another sequence to a witness, and a
+  fork made that way is not caught. A person who names two recorders
+  should know that a fork sealed with the second reads as witnessed. One
+  recorder key set keeps one sequence for each person and agent, so books
+  kept side by side for one agent need recorder keys of their own, and
+  are then other sequences.
+- **What a later book holds.** A later book can repeat, or leave out,
+  what an earlier book holds: each book is checked on its own.
+- **A book sealed again under another number.** A book cut short can be
+  sealed again with another book number. A seal held elsewhere is then of
+  another number than the book, is not compared with it, and gives no
+  pass: the command-line checker says "Seals held elsewhere compared?
+  NO" and does not end with code 0, and the checking page gives no green
+  answer. The reader learns that their seal was not compared, not where
+  the book was cut.
+- **What is never shown to a witness.** A recorder can keep a book, or
+  the end of one, from every witness. Nothing in a book obliges it to be
+  witnessed, and a checker that is not handed the witness's latest seal
+  does not know of later seals. Where that latest seal is of a later
+  book, a checker of an earlier book cannot use it to show that earlier
+  book cut short: it cannot tell whether a seal of the next book is that
+  book's first (section 21.6).
+- **A witness that fails.** A witness that signs for two histories, or
+  that loses what it holds or is put back to an older copy of it, can
+  sign a fork, and nothing in either history shows it. The library's
+  witness, opened again from what it kept, signs nothing until it is
+  brought up to date (`update`) and told so (`ready`); it cannot tell
+  whether what it was given is the latest it gave out. Whoever can change
+  what it keeps can make it forget a sequence, which it then signs for
+  again from any seal: its state must be kept as safely as its keys.
+- **The entries.** A witness sees a seal's size and top fingerprint,
+  not the entries: it shows that the entries existed in that form when
+  it saw the seal, not that they are true.
+- **Time.** A statement's `when` is the witness's own word, and is not
+  used as a time-stamp.
+- **Limits across books.** A checker counts a limit within the book it
+  checks, not across the books of a permission.
+- **A device that cannot check both of a statement's signatures**
+  counts nothing, and the record is not fully checked there.
+- **Older checkers** refuse a seal's line that holds `witnesses`
+  (`unknown-entry`), and a seal that gives `book` (`bad-field`).
+
 ## 7. The checker and the checking page
 
 **Protects.** A7 cannot crash the checker, make it run a script, or make
@@ -1122,6 +1245,7 @@ fails if the two differ.
 | `sealer-not-expected` | A seal signed with keys other than the ones the checker was told to expect |
 | `book-cut-short` | A book that ends before the place of a seal held elsewhere and handed over beside it: its end was cut off after that seal was made |
 | `seal-not-in-book` | A book that holds another line at the place of a seal held elsewhere and handed over beside it: it was changed after that seal was made, or the seal is of another book |
+| `witness-invalid` | A witness statement, beside a seal in the book or handed over with a seal held elsewhere, whose signatures do not fit the keys it gives, that speaks of another seal, or that is dated more than 300 seconds before its seal |
 | `dated-after-stamp` | An entry dated later than the outside time-stamp that covers it, or a seal dated later than its own time-stamp |
 | `stamp-bad-data` | A time-stamp that is not laid out as its standard sets out |
 | `stamp-wrong-data` | A time-stamp made for something other than this seal |

@@ -125,7 +125,7 @@ each part protects against, is in
 
 - **[The guide](docs/guide.md)**: the whole library, in one document.
   Installing and importing; the command-line checker; what a slip can
-  say; seals, time-stamps and the chain of block headers; cancelling;
+  say; seals, time-stamps, witnesses and the chain of block headers; cancelling;
   who stands behind a name; covered fields; passing a slip on; the check
   before acting; the stub writer beside an agent and the connector for
   its tools; what the checker returns; what it never does; what is not

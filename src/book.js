@@ -19,6 +19,7 @@ import { CLOCK_ALLOWANCE_MS, decodeStamps, keySetFingerprint, validateSealConten
 import { verifySignature } from './signatures.js';
 import { validateAcknowledgementContent, validateCancellationContent, validateVouchingContent, validateWithdrawalContent } from './standing.js';
 import { validateDenialContent } from './denial.js';
+import { MAX_WITNESSES, validateWitnessContent } from './witness.js';
 import { requestOf, validateApprovalContent } from './approval.js';
 import { compareWithSlip, newTally, settlePeriods } from './compare.js';
 import { validateRefusalContent, validateTermsContent } from './service.js';
@@ -50,6 +51,10 @@ const stampedWords = (sealed) =>
     ? blockWords(sealed)
     : `An outside time-stamp covers the first ${sealed.entries} entries: they existed by ${sealed.when}, as the time-stamp service states. What came after is not time-stamped, and a later seal with everything after it could have been removed: compare the top fingerprint and the number of entries with a copy you trust. Time-stamp services sign with methods of today's kind, which are not quantum-safe.`;
 
+// What a witness the reader trusts shows, and what it does not (format description, section 29.4).
+const witnessedWords = (w) =>
+  `A witness you named as trusted signed for the seal at entry ${w.seal}, which covers the first ${w.entries} entries. This book starts from a permission signed by a passkey you named, every permission before the seal is from that passkey for the same agent, and the book is sealed by a recorder you named. For that recorder, that passkey and the agent the permission names, the witness states that it saw this seal, and that it will sign for no seal that does not extend it, in this book or a later one, whichever permission from that passkey to that agent the book starts from. So a second history of those entries, sealed by the same recorder and starting from a permission that passkey gave that agent, shown to someone else, would need that witness to sign for it too. It does not cover a history sealed with other keys, even keys you also named, nor one that starts from a permission for another agent. It does not show when the seal was made, that nothing was cut off after a later seal, nor anything never shown to the witness: to see whether the end of the book is missing, ask the witness for the latest seal it holds for this recorder, passkey and agent, and hand that seal over beside the book it is of.`;
+
 /** What no check of a draft version 0 record can show. Stated with every result. */
 export const LIMITS = [
   'It shows what was recorded, not what was left out. An agent that acts and writes no stub leaves no trace here.',
@@ -64,7 +69,7 @@ export const LIMITS = [
 
 /**
  * Write one entry of a book as its line (without the line feed).
- * @param {object} entry one of: {slip}, {stub, countersignature?, approval?}, {refusal}, {terms}, {seal, stamps?},
+ * @param {object} entry one of: {slip}, {stub, countersignature?, approval?}, {refusal}, {terms}, {seal, stamps?, witnesses?},
  *   {cancellation, stamps?}, {acknowledgement}, {vouching}, {withdrawal}, {pass}, {denial}
  * @returns {string}
  */
@@ -158,7 +163,7 @@ function newReader(options, whole) {
     // The seals so far: the last one, how far an outside time-stamp reaches,
     // and the tree as it grows, so that each seal can be compared with the
     // entries before it.
-    seals: { count: 0, last: null, lastWhen: -Infinity, lastStampTime: -Infinity, latest: -Infinity, next: 0, sealed: null },
+    seals: { count: 0, last: null, lastWhen: -Infinity, lastStampTime: -Infinity, latest: -Infinity, next: 0, sealed: null, book: null, firstPrevious: null },
     tree: whole ? treeBuilder() : null,
     // Problems with what was handed over beside the record (disclosures), which are not faults of an entry.
     handedProblems: [],
@@ -264,7 +269,7 @@ async function readLine(reader, item) {
       } else if (names === 'terms') {
         entry.kind = 'terms';
         await checkTermsEntry(entry, value, terms, ids, without);
-      } else if (names === 'seal' || names === 'seal,stamps') {
+      } else if (SEAL_ENTRIES.includes(names)) {
         entry.kind = 'seal';
         // The line itself is kept, out of sight, so that a seal held elsewhere can be compared with it (checkHeldSeals).
         sealLines.set(entry, line);
@@ -339,7 +344,7 @@ function settleLate(reader) {
 // An entry as an answer gives it: with the findings that were worked out
 // last, and with no time of its own if it did not pass its check. The
 // entry the reader keeps is left as it is.
-function answered(entry, late, entries) {
+function answered(entry, late, entries, why = () => null) {
   const more = late.get(entry.breaches);
   const copy = more && more.length > 0 ? { ...entry, breaches: [...entry.breaches, ...more] } : { ...entry };
   // A cancellation that passed when its acknowledgement was read may have
@@ -348,6 +353,8 @@ function answered(entry, late, entries) {
   // pass its check.
   if (entry.kind === 'acknowledgement' && entry.cancellation !== undefined && entries[entry.cancellation].problems.length > 0) failAcknowledgement(copy);
   if (copy.problems.length > 0) delete copy.stampedAt;
+  // Whether each witness statement counts is settled now that the seal's own check is complete.
+  if (copy.kind === 'seal' && Array.isArray(copy.witnesses)) Object.assign(copy, witnessesCounted(copy, why(copy)));
   return copy;
 }
 
@@ -449,7 +456,7 @@ function forkReader(reader, whole = false) {
 // worked out when it is asked for.
 // The fixed copies made so far. Nothing changes one once it is made.
 const FIXED = new WeakSet();
-const OPTION_NAMES = ['issuerKeys', 'sealKeys', 'stampServices', 'blocks', 'vouchers', 'disclosures', 'cancellations', 'seals', 'expectedRoot', 'expectedSize', 'withoutMethods'];
+const OPTION_NAMES = ['issuerKeys', 'sealKeys', 'stampServices', 'blocks', 'vouchers', 'witnesses', 'disclosures', 'cancellations', 'seals', 'expectedRoot', 'expectedSize', 'withoutMethods'];
 
 /**
  * The options of a check, fixed: read once and copied, so that nothing done
@@ -1156,6 +1163,9 @@ function laterThanSeals(seal, pages) {
     const named = others.find((p) => p.fingerprint === seal.content.previous);
     broken = named !== undefined && (!(named.index < seal.index) || earlier.some((p) => p.index > named.index));
   }
+  // The seals of one book all give the same book number (section 21.6).
+  const number = (s) => (Object.hasOwn(s.content, 'book') ? s.content.book : 1);
+  if (earlier.some((p) => number(p) !== number(seal))) broken = true;
   if (broken) {
     seal.problems.push({ code: 'seal-chain-broken', message: 'The seal does not name the seal before it among the pages: a seal is missing, moved or changed.' });
   }
@@ -1242,6 +1252,7 @@ async function checkSealEntry(entry, value, seals, ids, options, before, entries
   const without = Array.isArray(options.withoutMethods) ? options.withoutMethods : [];
   entry.signatures = [];
   entry.stamps = [];
+  entry.witnesses = [];
   const parsed = await parseRecord(value.seal, 'seal');
   entry.fingerprint = parsed.fingerprint;
   validateSealContent(parsed.content);
@@ -1281,9 +1292,20 @@ async function checkSealEntry(entry, value, seals, ids, options, before, entries
     if (c.size !== at.size || c.root !== at.root) {
       entry.problems.push({ code: 'seal-mismatch', message: 'The seal does not fit the entries before it: an entry was changed, added or removed after the seal was made.' });
     }
-    if ((Object.hasOwn(c, 'previous') ? c.previous : null) !== seals.last) {
+    // The book's number (section 21.6): absent is the first book. The first seal of a book after the first names,
+    // as the seal before it, the last seal of the book before, which is not in this book: it is not compared here,
+    // and is kept, so that a copy of that seal handed over beside the book can be (checkHeldSeals).
+    const number = Object.hasOwn(c, 'book') ? c.book : 1;
+    if (seals.last === null && number > 1) {
+      seals.firstPrevious = c.previous;
+      entry.notes.push(`This is the first seal of book ${number} in this book. It names, as the seal before it, the last seal of book ${number - 1}, which is not in this book and was not compared. To compare the two, check book ${number - 1} with that seal handed over beside it.`);
+    } else if ((Object.hasOwn(c, 'previous') ? c.previous : null) !== seals.last) {
       entry.problems.push({ code: 'seal-chain-broken', message: 'The seal does not name the seal before it: a seal is missing, moved or changed.' });
     }
+    if (seals.last !== null && number !== seals.book) {
+      entry.problems.push({ code: 'seal-chain-broken', message: 'The seal gives another book number than the seals before it in this book.' });
+    }
+    if (seals.last === null) seals.book = number;
     if (when < seals.lastWhen) {
       entry.problems.push({ code: 'time-went-backwards', message: 'This seal is dated before the seal ahead of it.' });
     }
@@ -1310,6 +1332,15 @@ async function checkSealEntry(entry, value, seals, ids, options, before, entries
       ? await checkStamps(entry, value.stamps, parsed.fingerprint, when, options, entry.verified === 'all', floor)
       : null;
   if (Object.hasOwn(value, 'stamps') && overall(entry.signatures) === 'invalid') decodeStamps(value.stamps);
+
+  // The witness statements on the seal's own line. (Those handed over beside
+  // a seal held elsewhere are checked apart: see ownChecks.)
+  if (!held && Object.hasOwn(value, 'witnesses')) {
+    const { items, problems } = await checkWitnesses(value.witnesses, parsed, options, without, ids);
+    entry.witnesses = items;
+    entry.problems.push(...problems);
+    noteWitnesses(entry);
+  }
 
   // A seal counts as signed only if all three of its signatures were
   // checked. Only then is a time-stamp on it credited.
@@ -1361,9 +1392,178 @@ async function checkSealEntry(entry, value, seals, ids, options, before, entries
   seals.sealed = { entries: c.size, when: entry.stampedAt, seal: entry.index, by };
 }
 
+/**
+ * The witness statements beside a seal (format description, section 29.2):
+ * on the seal's line, or handed over with a seal held elsewhere. Each is
+ * checked by itself: its envelope and content, its two signatures against
+ * the keys it gives, and that it speaks of this seal. One that does not
+ * pass is a problem. One from a witness the reader did not name is shown,
+ * and not counted. Whether a statement counts is settled with the answer
+ * (witnessesCounted), once it is known whether its seal passed.
+ *
+ * @param {any} list the statements, as handed over
+ * @param {any} seal the seal they speak of, as parseRecord read it
+ * @param {any} options the checker's options
+ * @param {string[]} without signing methods to treat as not built in
+ * @param {Set<string>|null} ids the unique numbers of the book so far, for statements on a line of the book
+ * @returns {Promise<{items: object[], problems: {code: string, message: string}[]}>}
+ */
+async function checkWitnesses(list, seal, options, without, ids) {
+  const items = [];
+  const problems = [];
+  try {
+    f.list(list, 1, MAX_WITNESSES, 'witnesses');
+  } catch (e) {
+    return { items, problems: [problemFrom(e)] };
+  }
+  const seen = new Set();
+  // Every place is read by its number, a gap included: a gap is not a statement.
+  for (let i = 0; i < list.length; i++) {
+    const item = { fingerprint: null, witness: null, name: null, when: null, state: 'invalid', trusted: false, counted: false, signatures: [] };
+    items.push(item);
+    try {
+      const parsed = await parseRecord(list[i], 'witness');
+      item.fingerprint = parsed.fingerprint;
+      validateWitnessContent(parsed.content);
+      const c = parsed.content;
+      item.witness = await keySetFingerprint(c.by.keys);
+      item.name = c.by.name;
+      item.when = c.when;
+      if (ids) {
+        if (ids.has(c.id)) throw new Refusal('duplicate-id', 'Another record has the same unique number.');
+        ids.add(c.id);
+      }
+      item.signatures = await checkKeySetSignatures(parsed, c.by.keys, without);
+      if (overall(item.signatures) === 'invalid') throw new Refusal('witness-invalid', 'A signature on the witness statement does not fit the keys it gives.');
+      if (c.seal !== seal.fingerprint || c.size !== seal.content.size || c.root !== seal.content.root) {
+        throw new Refusal('witness-invalid', 'The witness statement speaks of another seal: its seal, its number of entries or its top fingerprint is not this seal\'s.');
+      }
+      if (parseTime(c.when) < parseTime(seal.content.when) - CLOCK_ALLOWANCE_MS) {
+        throw new Refusal('witness-invalid', 'The witness statement is dated more than 300 seconds before the seal it speaks of.');
+      }
+      if (seen.has(item.witness)) throw f.fail('witnesses', 'the same witness signs twice.');
+      seen.add(item.witness);
+      item.state = overall(item.signatures) === 'valid' ? 'valid' : 'unavailable';
+      item.trusted = Array.isArray(options.witnesses) && options.witnesses.includes(item.witness);
+    } catch (e) {
+      item.state = 'invalid';
+      const p = problemFrom(e);
+      problems.push({ code: p.code, message: `Witness statement ${i + 1} beside the seal did not pass its check. ${p.message}` });
+    }
+  }
+  return { items, problems };
+}
+
+// What a reader is told of the statements beside a seal that passed their check.
+function noteWitnesses(entry) {
+  entry.witnesses.forEach((w, i) => {
+    if (w.state === 'unavailable') entry.notes.push(`This device could not check witness statement ${i + 1} beside this seal, so it was not counted.`);
+    else if (w.state === 'valid' && !w.trusted) {
+      entry.notes.push(`Witness statement ${i + 1} beside this seal is from a witness you did not name as trusted, so it was not counted. The fingerprint of its key set is ${w.witness}.`);
+    }
+  });
+}
+
+// Whether a seal's first two signatures (Ed25519 and ML-DSA-87) were both
+// checked on this device. A statement counts on those two, as a seal held
+// elsewhere does: its third (SLH-DSA) may be one this device cannot check.
+function firstTwoChecked(signatures) {
+  const state = (method) => signatures.find((s) => s.method === method)?.state;
+  return state('Ed25519') === 'valid' && state('ML-DSA-87') === 'valid';
+}
+
+/**
+ * Why a witness's statement cannot count for this book, or null where it
+ * can (format description, section 29.2). A witness knows a book by the
+ * permission on its first line and the keys of its recorder, and the
+ * recorder chooses both. So a statement counts only where the reader fixed
+ * both: the book's first line is a permission that passed its check, signed
+ * by a passkey the reader named, and the reader named the recorders they
+ * expect (so that a seal by any other recorder is a problem).
+ * @param {any[]} entries the entries of the book, or the pages of a Show
+ * @param {any} options the options the lines were read with
+ * @returns {string|null}
+ */
+function unfixedStart(entries, options) {
+  // An option that cannot be read names nothing here; a check that reads it elsewhere reports it.
+  const isList = (name) => {
+    try {
+      return Array.isArray(options[name]);
+    } catch {
+      return false;
+    }
+  };
+  if (!isList('issuerKeys')) return 'you named no passkey you trust, so the permission this book starts from is not fixed';
+  if (!isList('sealKeys')) return 'you named no recorder you expect, so anyone could have sealed it';
+  const first = entries[0];
+  if (first === undefined || first.index !== 0 || first.kind !== 'slip' || first.problems.length > 0 || !first.signature || first.signature.state !== 'valid') {
+    return 'this book does not start with a permission that passed its check here, signed by a passkey you named';
+  }
+  return null;
+}
+/**
+ * For each seal: why a witness's statement cannot count for it, or null
+ * where it can (format description, section 29.2). Beyond a start the
+ * reader fixed (unfixedStart), every permission among the entries the seal
+ * covers must name the passkey and the agent's key set of the permission
+ * the book starts from. A witness knows a sequence by those two and the
+ * recorder's keys, so a book that starts with one person's permission for
+ * one agent, and holds another's further on, could be the first book of a
+ * sequence the witness never saw, and so a fork of another. Among the pages
+ * of a Show, the pages must hold every entry the seal covers: single pages
+ * cannot show that no other permission stands between them.
+ * @param {any[]} entries the entries of the book, or the pages of a Show
+ * @param {any} options the options the lines were read with
+ * @param {Set<number>|null} [pages] for a Show: the places of its pages
+ * @returns {(seal: any) => string|null}
+ */
+function whyFor(entries, options, pages = null) {
+  const start = unfixedStart(entries, options);
+  if (start !== null) return () => start;
+  const first = entries[0];
+  const agent = canonicalJson(first.content.agent.keys);
+  const others = entries.filter((e) => e.kind === 'slip' && (!e.content || e.issuerKey !== first.issuerKey || canonicalJson(e.content.agent.keys) !== agent));
+  return (seal) => {
+    const size = seal.content ? seal.content.size : 0;
+    if (pages !== null) {
+      for (let i = 0; i < size; i++) {
+        if (!pages.has(i)) return 'the pages do not hold every entry this seal covers, and single pages cannot show that every permission among them is from the passkey and for the agent of the permission the book starts from';
+      }
+    }
+    if (others.some((e) => e.index < size)) {
+      return 'the entries this seal covers hold a permission from another passkey, or for another agent, than the permission the book starts from, and a witness keeps the books of each person and agent apart';
+    }
+    return null;
+  };
+}
+const unfixedWords = (why) =>
+  `The statements beside this seal from witnesses you trust were not counted: ${why}. A witness knows a book only by the passkey and the agent of the permission it starts from and the keys of its recorder, which the recorder chooses, so a statement counts only for a book that starts with a permission signed by a passkey you named, sealed by a recorder you named.`;
+
+/**
+ * The statements beside a seal, each with whether it counts: it passed its
+ * check, its witness is one the reader named, the book's start is one the
+ * reader fixed (unfixedStart), and the seal passed its own check with its
+ * first two signatures checked on this device. A new list: the one the
+ * reader keeps is left as it is. Where a statement from a witness the
+ * reader trusts is not counted because the start is not fixed, the reader
+ * is told why, in "notes", a new list too.
+ * @param {any} seal an entry of kind "seal", or a seal held elsewhere
+ * @param {string|null} why what whyFor gives for the seal
+ * @param {boolean} [sound] whether the seal counts as sound here
+ * @returns {{witnesses: object[], notes: string[]}}
+ */
+function witnessesCounted(seal, why, sound = seal.problems.length === 0) {
+  const ok = sound && why === null && firstTwoChecked(seal.signatures ?? []);
+  const witnesses = (seal.witnesses ?? []).map((w) => ({ ...w, counted: ok && w.state === 'valid' && w.trusted }));
+  const notes = why !== null && sound && witnesses.some((w) => w.state === 'valid' && w.trusted) ? [...seal.notes, unfixedWords(why)] : seal.notes;
+  return { witnesses, notes };
+}
+
 // A stub may have with it, on the same line, the service's countersignature
 // and the person's approval.
 const STUB_ENTRIES = ['stub', 'countersignature,stub', 'approval,stub', 'approval,countersignature,stub'];
+// A seal may have beside it, on the same line, time-stamps and witness statements.
+const SEAL_ENTRIES = ['seal', 'seal,stamps', 'seal,witnesses', 'seal,stamps,witnesses'];
 
 function findSlip(slips, fingerprint, whole) {
   const slip = slips.get(fingerprint);
@@ -1630,7 +1830,27 @@ async function checkStubEntry(entry, value, slips, terms, passes, ids, without, 
     entry.breaches.push({ code: 'approval-missing', message: 'The slip asks for the person\'s own approval of this action, and there is none.' });
   }
 }
-function summarise(entries, bookProblems, sealed = null, held = []) {
+// How far a witness the reader trusts reaches: the seals that passed their
+// own check, with their first two signatures checked on this device, for
+// which at least one statement counts (on the seal's line, or handed over
+// beside the book with a copy of the seal). Null where there is none.
+function witnessedReach(entries, heldWitnessed) {
+  const seals = [];
+  let last = null;
+  for (const e of entries) {
+    if (e.kind !== 'seal' || !e.content || e.problems.length > 0 || !firstTwoChecked(e.signatures ?? [])) continue;
+    const by = new Set([...(e.witnesses ?? []).filter((w) => w.counted).map((w) => w.witness), ...(heldWitnessed.get(e.index) ?? [])]);
+    if (by.size === 0) continue;
+    seals.push(e.index);
+    last = { seal: e.index, entries: e.content.size, by: [...by].sort() };
+  }
+  return last && { ...last, seals };
+}
+
+// Beside a Show's witnessed answer: the limit of a Show (format description, section 11).
+const SHOW_WITNESSED_WORDS = 'These are single pages of a book: they cannot show that a limit over the whole book was kept (section 11), so being witnessed says nothing here about totals.';
+
+function summarise(entries, bookProblems, sealed = null, held = [], heldWitnessed = new Map(), isShow = false) {
   // Methods this device lacked, and whether any signature was never reached
   // because its entry, or the whole record, could not be read or used.
   const missing = new Set();
@@ -1677,6 +1897,7 @@ function summarise(entries, bookProblems, sealed = null, held = []) {
     } else if (e.kind === 'seal') {
       sealCount++;
       note(e.signatures ?? []);
+      for (const w of e.witnesses ?? []) note(w.signatures);
       for (const s of e.stamps ?? []) if (s.state === 'unavailable') missing.add('the time-stamp service\'s method');
     } else if (e.kind === 'cancellation') {
       cancellations++;
@@ -1696,11 +1917,13 @@ function summarise(entries, bookProblems, sealed = null, held = []) {
   for (const h of held) {
     for (const s of h.stamps) if (s.state === 'unavailable') missing.add('the time-stamp service\'s method');
     for (const a of h.acknowledgements ?? []) note(a.signatures);
-    // A seal held elsewhere: each of its signatures that this device could not check.
+    // A seal held elsewhere: each of its signatures that this device could not check, and those of the witness statements handed over with it.
     for (const s of h.kind === 'seal' ? h.signatures : []) if (s.state === 'unavailable') missing.add(s.method);
+    for (const w of h.kind === 'seal' ? h.witnesses : []) note(w.signatures);
   }
   const problemFound = bookProblems.length > 0 || entries.some((e) => e.problems.length > 0);
   const fullyChecked = !skipped && missing.size === 0;
+  const witnessed = problemFound ? null : witnessedReach(entries, heldWitnessed);
   const firstBreach = entries.find((e) => e.breaches.length > 0);
   // "Within its slip" is said only if every stub, and every pass, was
   // compared with what it rests on, and none was found outside it.
@@ -1729,7 +1952,9 @@ function summarise(entries, bookProblems, sealed = null, held = []) {
     },
     // How far an outside time-stamp from a trusted service reaches, if any does.
     sealed: problemFound ? null : sealed,
-    limits: sealed && !problemFound ? [...LIMITS.slice(0, -1), stampedWords(sealed)] : LIMITS,
+    // How far a witness the reader trusts reaches, if any does.
+    witnessed,
+    limits: [...(sealed && !problemFound ? [...LIMITS.slice(0, -1), stampedWords(sealed)] : LIMITS), ...(witnessed ? [isShow ? `${witnessedWords(witnessed)} ${SHOW_WITNESSED_WORDS}` : witnessedWords(witnessed)] : [])],
   };
 }
 
@@ -1894,75 +2119,135 @@ async function checkHeld(result, reader, options, late, beside) {
  *
  * Its time-stamps are checked and shown, but are not used for the entries
  * of the book. Nothing the reader keeps is changed.
+ *
+ * Witness statements handed over with it (format description, section
+ * 29.2) are checked as statements on a seal's line are. One that does not
+ * pass is a problem with the whole check, and is not used; the seal is used
+ * all the same. A statement that counts, for a seal the book holds at its
+ * place, counts for the book's seal there.
+ *
+ * @returns {Promise<Map<number, string[]>>} for each entry of the book that is a seal, the key set fingerprints
+ *   of the witnesses whose statements, handed over beside the book, count for it
  */
 async function checkHeldSeals(result, carried, options) {
+  const witnessed = new Map();
   const handed = options.seals;
-  if (handed === undefined) return;
+  if (handed === undefined) return witnessed;
   // Up to sixty-four, none included: an empty list is none.
   f.list(handed, 0, MAX_HELD_SEALS, 'seals');
   const own = await ownChecks(carried, handed, options);
   const entries = carried.reader.entries;
+  // Whether a statement handed over can count for the book's seals (whyFor).
+  const why = whyFor(entries, carried.options);
+  // This book's number (section 21.6), from its first seal; null where it holds no seal.
+  const bookNumber = carried.reader.seals.book;
+  const firstSeal = entries.find((e) => e.kind === 'seal' && e.content);
   // The problems, in the order of the seals handed over.
   const found = [];
   for (let i = 0; i < own.length; i++) {
     const n = i + 1;
-    const { sealText, stampsText } = own[i];
+    const { sealText, stampsText, witnessProblems } = own[i];
     const held = structuredClone(own[i].held);
     result.held.push(held);
-    if (held.problems.length > 0) {
-      for (const p of held.problems) found.push({ code: p.code, message: `Seal ${n} of those handed over beside the book did not pass its check, so it was not used. ${p.message}` });
-      continue;
+    for (const p of witnessProblems) {
+      found.push({ code: p.code, message: `A witness statement handed over with seal ${n} of those beside the book did not pass its check, so it was not used. The seal itself was not set aside because of it. ${p.message}` });
     }
-    // It counts only where the person named its recorder.
-    if (!Array.isArray(options.sealKeys)) {
-      held.notes.push('It was not used: a seal handed over beside the book counts only where you named its recorder as one you expect.');
-      continue;
-    }
-    const state = (method) => held.signatures.find((s) => s.method === method)?.state;
-    if (state('Ed25519') !== 'valid' || state('ML-DSA-87') !== 'valid') {
-      held.notes.push('It was not used: a seal handed over beside the book counts only where this device checked its Ed25519 and ML-DSA-87 signatures, and this device could not check both.');
-      continue;
-    }
-    if (state(SEAL_THIRD) !== 'valid') {
-      held.notes.push(`This device could not check its third signature (${SEAL_THIRD}). It was used on the strength of its Ed25519 and ML-DSA-87 signatures, which were checked here.`);
-    }
-    held.used = true;
-    const at = held.place;
-    if (at >= entries.length) {
-      found.push({
-        code: 'book-cut-short',
-        message: `Seal ${n} of those handed over beside the book stands at entry ${at}, but the book ends at entry ${entries.length - 1}. The end of the book was cut off after that seal was made.`,
-      });
-      continue;
-    }
-    // The book holds this seal at its place where the seal there has the
-    // same content: its fingerprint fixes the number of entries and their
-    // top fingerprint, and so the entries before it.
-    const there = entries[at];
-    if (there.kind !== 'seal' || there.fingerprint !== held.fingerprint) {
-      found.push({
-        code: 'seal-not-in-book',
-        message: `Seal ${n} of those handed over beside the book stands at entry ${at}, but the book holds another line there. The book was changed after that seal was made, or the seal is of another book.`,
-      });
-      continue;
-    }
-    held.inBook = at;
-    if (there.problems.length > 0) held.notes.push(`The book holds this seal at entry ${at}, but that entry did not pass its check.`);
-    // The same content with other signatures, or with other time-stamps
-    // beside it, is not a fault of the book: it is said.
-    const line = JSON.parse(sealLines.get(there));
-    if (canonicalJson(line.seal) !== sealText) {
-      held.notes.push(
-        `The book holds this seal at entry ${at} with the same content, but with other signatures than this copy. The same content fixes the same entries, so this is not a fault of the book. Only someone who holds the recorder's keys can sign a seal again.`,
-      );
-    }
-    if ((Object.hasOwn(line, 'stamps') ? canonicalJson(line.stamps) : null) !== stampsText) {
-      held.notes.push(
-        `The book holds this seal at entry ${at}, with other time-stamps beside it than this copy. Time-stamps stand outside a seal's signatures, so either side may have added one. This copy's own are shown here, and are not used for the entries of the book.`,
-      );
+    // Whether each statement handed over with it counts is settled once it is known whether the seal is used.
+    const settle = () => {
+      Object.assign(held, witnessesCounted(held, why(held), held.used));
+      // A statement that counts, for a seal the book holds at its place, counts for the book's seal there.
+      if (held.inBook !== null) {
+        const by = held.witnesses.filter((w) => w.counted).map((w) => w.witness);
+        if (by.length > 0) witnessed.set(held.inBook, [...(witnessed.get(held.inBook) ?? []), ...by]);
+      }
+    };
+    try {
+      if (held.problems.length > 0) {
+        for (const p of held.problems) found.push({ code: p.code, message: `Seal ${n} of those handed over beside the book did not pass its check, so it was not used. ${p.message}` });
+        continue;
+      }
+      // It counts only where the person named its recorder.
+      if (!Array.isArray(options.sealKeys)) {
+        held.notes.push('It was not used: a seal handed over beside the book counts only where you named its recorder as one you expect.');
+        continue;
+      }
+      const state = (method) => held.signatures.find((s) => s.method === method)?.state;
+      if (state('Ed25519') !== 'valid' || state('ML-DSA-87') !== 'valid') {
+        held.notes.push('It was not used: a seal handed over beside the book counts only where this device checked its Ed25519 and ML-DSA-87 signatures, and this device could not check both.');
+        continue;
+      }
+      if (state(SEAL_THIRD) !== 'valid') {
+        held.notes.push(`This device could not check its third signature (${SEAL_THIRD}). It was used on the strength of its Ed25519 and ML-DSA-87 signatures, which were checked here.`);
+      }
+      held.used = true;
+      // A seal of another book of the same permission is not compared by its place (section 21.6), so it is not
+      // used: it never counts as compared with the book, whatever it shows about the books around this one. The
+      // number is the recorder's own word, and a book cut short could be sealed again under another number.
+      const heldNumber = Object.hasOwn(held.content, 'book') ? held.content.book : 1;
+      if (bookNumber !== null && heldNumber !== bookNumber) {
+        held.used = false;
+        const notCompared = `It was not compared with this book, so it gives no pass: a book is compared only with seals that give its own book number.`;
+        if (heldNumber === bookNumber - 1 && held.fingerprint === carried.reader.seals.firstPrevious) {
+          // The last seal of the book before, which the first seal of this book names.
+          if (held.sealer !== firstSeal.sealer) {
+            found.push({ code: 'seal-chain-broken', message: `Seal ${n} of those handed over beside the book is the seal the first seal of this book names as the last seal of the book before, but it was signed with other keys than this book's first seal.` });
+          } else if (parseTime(held.content.when) > parseTime(firstSeal.content.when)) {
+            found.push({ code: 'time-went-backwards', message: `Seal ${n} of those handed over beside the book is the last seal of the book before, which the first seal of this book names, but it is dated after that first seal.` });
+          } else {
+            held.notes.push(`It is the last seal of book ${heldNumber}, which the first seal of this book (book ${bookNumber}) names as the seal before it: this book follows on from it. It does not show whether book ${heldNumber} was cut short after it: check book ${heldNumber} with it. ${notCompared}`);
+          }
+        } else if (heldNumber === bookNumber - 1) {
+          held.notes.push(`It is a seal of book ${heldNumber}, but the first seal of this book (book ${bookNumber}) names another seal as the last seal of book ${heldNumber}. So this book does not show whether book ${heldNumber} was cut short, nor that this book follows on from that book: check book ${heldNumber} with this seal. ${notCompared}`);
+        } else if (heldNumber === bookNumber + 1 && entries.some((e) => e.kind === 'seal' && e.fingerprint === held.content.previous)) {
+          const named = entries.find((e) => e.kind === 'seal' && e.fingerprint === held.content.previous);
+          held.notes.push(`It is a seal of book ${heldNumber}, the next book, and names the seal at entry ${named.index} of this book as the seal before it: the next book follows on from this one there. It does not show whether this book was cut short. ${notCompared}`);
+        } else if (heldNumber > bookNumber) {
+          held.notes.push(`It is a seal of book ${heldNumber}, a later book than this one (book ${bookNumber}). This book does not show whether the books after it were cut short. Hand over seals of the book being checked. ${notCompared}`);
+        } else {
+          held.notes.push(`It is a seal of book ${heldNumber}, an earlier book than this one (book ${bookNumber}). This book does not show whether that book was cut short. Hand over seals of the book being checked. ${notCompared}`);
+        }
+        continue;
+      }
+      const at = held.place;
+      if (at >= entries.length) {
+        found.push({
+          code: 'book-cut-short',
+          message: `Seal ${n} of those handed over beside the book stands at entry ${at}, but the book ends at entry ${entries.length - 1}. The end of the book was cut off after that seal was made.`,
+        });
+        continue;
+      }
+      // The book holds this seal at its place where the seal there has the
+      // same content: its fingerprint fixes the number of entries and their
+      // top fingerprint, and so the entries before it.
+      const there = entries[at];
+      if (there.kind !== 'seal' || there.fingerprint !== held.fingerprint) {
+        found.push({
+          code: 'seal-not-in-book',
+          message: `Seal ${n} of those handed over beside the book stands at entry ${at}, but the book holds another line there. The book was changed after that seal was made, or the seal is of another book.`,
+        });
+        continue;
+      }
+      held.inBook = at;
+      if (there.problems.length > 0) held.notes.push(`The book holds this seal at entry ${at}, but that entry did not pass its check.`);
+      // The same content with other signatures, or with other time-stamps
+      // beside it, is not a fault of the book: it is said.
+      const line = JSON.parse(sealLines.get(there));
+      if (canonicalJson(line.seal) !== sealText) {
+        held.notes.push(
+          `The book holds this seal at entry ${at} with the same content, but with other signatures than this copy. The same content fixes the same entries, so this is not a fault of the book. Only someone who holds the recorder's keys can sign a seal again.`,
+        );
+      }
+      if ((Object.hasOwn(line, 'stamps') ? canonicalJson(line.stamps) : null) !== stampsText) {
+        held.notes.push(
+          `The book holds this seal at entry ${at}, with other time-stamps beside it than this copy. Time-stamps stand outside a seal's signatures, so either side may have added one. This copy's own are shown here, and are not used for the entries of the book.`,
+        );
+      }
+    } finally {
+      settle();
     }
   }
   result.problems.push(...found);
+  return witnessed;
 }
 
 /**
@@ -1973,18 +2258,20 @@ async function checkHeldSeals(result, carried, options) {
  * options; each answer starts from a copy of it.
  */
 async function ownChecks(carried, handed, options) {
-  const key = [handed, options.sealKeys, options.stampServices, options.blocks, options.withoutMethods];
+  const key = [handed, options.sealKeys, options.stampServices, options.blocks, options.witnesses, options.withoutMethods];
   const kept = carried.heldSeals;
   if (kept && kept.key.every((value, i) => value === key[i])) return kept.items;
   const seen = new Set();
   const items = [];
   for (let i = 0; i < handed.length; i++) {
     const value = handed[i];
-    const held = { kind: 'seal', fingerprint: null, sealer: null, place: null, inBook: null, used: false, verified: 'none', problems: [], notes: [], signatures: [], stamps: [] };
+    const held = { kind: 'seal', fingerprint: null, sealer: null, place: null, inBook: null, used: false, verified: 'none', problems: [], notes: [], signatures: [], stamps: [], witnesses: [] };
     let sealText = null;
     let stampsText = null;
+    // The problems with the witness statements handed over with it: reported, without setting the seal aside.
+    let witnessProblems = [];
     try {
-      f.members(value, ['seal'], ['stamps'], `seals[${i}]`);
+      f.members(value, ['seal'], ['stamps', 'witnesses'], `seals[${i}]`);
       const parsed = await parseRecord(value.seal, 'seal');
       held.fingerprint = parsed.fingerprint;
       if (seen.has(parsed.fingerprint)) throw f.fail(`seals[${i}]`, 'the same seal is handed over twice.');
@@ -1995,14 +2282,44 @@ async function ownChecks(carried, handed, options) {
       await checkSealEntry(held, value, fresh, new Set(), options, null, [], false, true);
       sealText = canonicalJson(value.seal);
       stampsText = Object.hasOwn(value, 'stamps') ? canonicalJson(value.stamps) : null;
+      // Witness statements that arrived after the seal was written into the book, handed over with it.
+      // They are not entries of the book, so their unique numbers are not held against its own.
+      if (held.problems.length === 0 && Object.hasOwn(value, 'witnesses')) {
+        const without = Array.isArray(options.withoutMethods) ? options.withoutMethods : [];
+        const { items: statements, problems } = await checkWitnesses(value.witnesses, parsed, options, without, null);
+        held.witnesses = statements;
+        witnessProblems = problems;
+        noteWitnesses(held);
+        if (problems.length > 0) held.notes.push('A witness statement handed over with it did not pass its check, so that statement was not used. See the problems at the top.');
+      }
     } catch (e) {
       held.problems.push(problemFrom(e));
     }
     if (held.content) held.place = held.content.size;
-    items.push({ held, sealText, stampsText });
+    items.push({ held, sealText, stampsText, witnessProblems });
   }
   carried.heldSeals = { key, items };
   return items;
+}
+
+/**
+ * Check a seal record by itself, as a seal held elsewhere is checked: its
+ * envelope, its content and its three signatures against the keys it
+ * gives. Nothing is said about where it stands in a book. For a witness
+ * (witnessing.js). Not part of the public interface.
+ * @param {any} record the seal record
+ * @param {string[]} [withoutMethods] signing methods to treat as not built in
+ * @returns {Promise<{fingerprint: string|null, content?: any, signatures: object[], problems: object[]}>}
+ */
+export async function checkSealAlone(record, withoutMethods = []) {
+  const entry = { kind: 'seal', index: null, fingerprint: null, verified: 'none', problems: [], breaches: [], notes: [], signatures: [], stamps: [], witnesses: [] };
+  try {
+    const fresh = { count: 0, last: null, lastWhen: -Infinity, lastStampTime: -Infinity, latest: -Infinity, next: 0, sealed: null };
+    await checkSealEntry(entry, { seal: record }, fresh, new Set(), { withoutMethods }, null, [], false, true);
+  } catch (e) {
+    entry.problems.push(problemFrom(e));
+  }
+  return entry;
 }
 
 // The third signing method of a seal, which some devices (the Python
@@ -2052,7 +2369,8 @@ function compareTrusted(result, options) {
  * @param {object[]} [options.cancellations] the person's own copies of cancellations, each as the entry it would be in a book:
  *   {cancellation, stamps?}. At most 16. They count even where the book leaves them out
  * @param {object[]} [options.seals] seals held elsewhere (by the person, an auditor, a copy kept apart), each as the
- *   entry it is in a book: {seal, stamps?}. At most 64. The book must hold each at the place it states
+ *   entry it is in a book: {seal, stamps?, witnesses?}. At most 64. The book must hold each at the place it states
+ * @param {string[]} [options.witnesses] the key set fingerprints of the witnesses the checker trusts (section 29)
  * @param {string[]} [options.withoutMethods] signing methods to treat as not built into this device
  * @returns {Promise<object>} see the README, "What the checker returns".
  *   The content of an entry that has problems, or whose "verified" is
@@ -2171,6 +2489,8 @@ export async function answerOf(carried, options = carried.options) {
   let sealed = null;
   let late = new Map();
   const beside = new Set();
+  // For each seal of the book, the witnesses whose statements, handed over beside it, count for it.
+  let heldWitnessed = new Map();
   if (options === null || typeof options !== 'object') options = {};
   try {
     if (!carried.any) throw new Refusal('not-json', 'There is no record to check.');
@@ -2186,14 +2506,16 @@ export async function answerOf(carried, options = carried.options) {
     result.problems.push(...reader.handedProblems);
     unusedDisclosures(result, options);
     await checkHeld(result, reader, options, late, beside);
-    await checkHeldSeals(result, carried, options);
+    heldWitnessed = await checkHeldSeals(result, carried, options);
     compareTrusted(result, options);
   } catch (e) {
     result.problems.push(problemFrom(e));
   }
   const read = result.entries;
-  result.entries = read.map((e) => answered(e, late, read));
-  result.summary = summarise(result.entries, result.problems, sealed, result.held);
+  // Whether a witness's statement can count for each seal (whyFor).
+  const why = whyFor(read, carried.options);
+  result.entries = read.map((e) => answered(e, late, read, why));
+  result.summary = summarise(result.entries, result.problems, sealed, result.held, heldWitnessed);
   return { result, state, beside };
 }
 
@@ -2303,6 +2625,7 @@ export async function makeShow(text, indexes, options = {}) {
  * @param {string[]} [options.issuerKeys]
  * @param {string[]} [options.stampServices]
  * @param {string[]} [options.sealKeys]
+ * @param {string[]} [options.witnesses]
  * @param {string[]} [options.withoutMethods]
  * @returns {Promise<object>} the same shape as checkBook returns. A seal that comes with the Show is the last entry.
  */
@@ -2371,7 +2694,7 @@ export async function checkShow(show, options = {}) {
       const entry = { index: show.size, kind: 'seal', fingerprint: null, verified: 'none', problems: [], breaches: [], notes: [] };
       result.entries.push(entry);
       try {
-        f.members(show.seal, ['seal'], ['stamps'], 'show.seal');
+        f.members(show.seal, ['seal'], ['stamps', 'witnesses'], 'show.seal');
         // It is held to the pages as a seal in a whole book is held to the
         // entries before it: no unique number twice, and no block
         // time-stamp counted that states a time before a service's
@@ -2422,6 +2745,9 @@ export async function checkShow(show, options = {}) {
   }
   // A seal or a cancellation that did not pass its check shows no time of its own.
   for (const e of result.entries) if (e.problems.length > 0) delete e.stampedAt;
-  result.summary = summarise(result.entries, result.problems, sealed);
+  // Whether each witness statement counts, now that each seal's own check is complete.
+  const why = whyFor(result.entries, options, new Set(result.entries.map((e) => e.index)));
+  for (const e of result.entries) if (e.kind === 'seal' && Array.isArray(e.witnesses)) Object.assign(e, witnessesCounted(e, why(e)));
+  result.summary = summarise(result.entries, result.problems, sealed, [], new Map(), true);
   return result;
 }

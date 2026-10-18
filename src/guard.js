@@ -98,6 +98,8 @@ function onlySealThirdUnchecked(result) {
       const third = sigs.length === 3 && by('Ed25519')?.state === 'valid' && by('ML-DSA-87')?.state === 'valid' && by(SEAL_THIRD)?.state === 'unavailable';
       if (third) excused++; else note(sigs);
       stamps(e.stamps ?? []);
+      // The witness statements beside it: each of their signatures counts, as for any record.
+      for (const w of e.witnesses ?? []) note(w.signatures ?? []);
     } else if (e.kind === 'slip') {
       if (!e.signature || e.signature.state === 'unavailable') missing.add(e.signature ? e.signature.alg : 'passkey');
       else if (e.signature.state === 'unchecked') skipped = true;
@@ -127,6 +129,7 @@ function onlySealThirdUnchecked(result) {
       const third = sigs.length === 3 && by('Ed25519')?.state === 'valid' && by('ML-DSA-87')?.state === 'valid' && by(SEAL_THIRD)?.state === 'unavailable';
       if (third) excused++;
       else for (const x of sigs) if (x.state === 'unavailable') missing.add(x.method);
+      for (const w of h.witnesses ?? []) note(w.signatures ?? []);
     }
   }
   return !skipped && missing.size === 0 && excused > 0 ? [SEAL_THIRD] : null;

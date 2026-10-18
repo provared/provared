@@ -17,6 +17,7 @@ import * as book from './vectors-book.mjs';
 import * as recorder from './vectors-recorder.mjs';
 import * as records from './vectors-records.mjs';
 import * as stamps from './vectors-stamps.mjs';
+import * as witness from './vectors-witness.mjs';
 
 const hex = (bytes) => Buffer.from(bytes).toString('hex');
 
@@ -26,6 +27,7 @@ export const ANSWER = {
   ...records.ANSWER,
   ...book.ANSWER,
   ...recorder.ANSWER,
+  ...witness.ANSWER,
   parseCanonical: (c) => answer(() => parseCanonical(c.text)),
   fromBase64url: (c) => answer(() => hex(fromBase64url(c.text))),
   parseTime: async (c) => ({ ok: Number.isNaN(parseTime(c.text)) ? null : parseTime(c.text) }),
@@ -734,4 +736,5 @@ export const CASES = {
   ...records.CASES,
   ...book.CASES,
   ...recorder.CASES,
+  ...witness.CASES,
 };

@@ -87,7 +87,7 @@ method was used. Because it is part of the signed bytes, a signature made
 for one kind of record can never pass as another kind.
 
 In this draft the protected header, once decoded, MUST be **exactly** one
-of these twenty-four texts, byte for byte. A checker compares the bytes and does
+of these twenty-six texts, byte for byte. A checker compares the bytes and does
 not interpret anything else.
 
 | Record | Method | Protected header |
@@ -116,6 +116,8 @@ not interpret anything else.
 | Pass | ML-DSA-87 | `{"typ":"vnd.provared.pass.v0+json","alg":"ML-DSA-87"}` |
 | Denial | Ed25519 | `{"typ":"vnd.provared.denial.v0+json","alg":"Ed25519"}` |
 | Denial | ML-DSA-87 | `{"typ":"vnd.provared.denial.v0+json","alg":"ML-DSA-87"}` |
+| Witness statement | Ed25519 | `{"typ":"vnd.provared.witness.v0+json","alg":"Ed25519"}` |
+| Witness statement | ML-DSA-87 | `{"typ":"vnd.provared.witness.v0+json","alg":"ML-DSA-87"}` |
 
 `typ` is the media type of the record (RFC 7515, section 4.1.9), used as
 explicit typing (RFC 8725, section 3.11). `alg` names the signing method
@@ -537,7 +539,8 @@ in place of the narrowed content), and is one of:
 - `{"refusal": refusal record}`
 - `{"terms": terms record}`
 - `{"seal": seal record}`, which MAY also hold `"stamps": list of 1 to 4
-  time-stamps` (section 21)
+  time-stamps` (section 21) and `"witnesses": list of 1 to 4 witness
+  statements` (section 29)
 - `{"cancellation": cancellation record}`, which MAY also hold `"stamps"`
   (section 22)
 - `{"acknowledgement": acknowledgement record}` (section 26)
@@ -589,7 +592,7 @@ of RFC 6962, section 2.1.1).
 ```
 
 A Show MAY also hold `"seal"`: an entry of the form `{"seal": seal
-record}`, with or without `"stamps"`. The Show is then of the book as it
+record}`, with or without `"stamps"` and `"witnesses"` (section 29). The Show is then of the book as it
 stood when that seal was made: the seal's `size` and `root` MUST equal the
 Show's (`seal-mismatch`), and a checker checks the seal and its
 time-stamps as section 21 sets out. Its `id` MUST NOT be that of a
@@ -644,7 +647,7 @@ the seal's own date (section 21.1, rule 4).
 
 | Missing | What follows |
 |---|---|
-| A public place where seals are kept, and witnesses that sign for each seal | The last seal of a book, with everything after it, can be removed unnoticed, unless someone else holds a copy of that seal, and hands it to the checker (section 21.5), or holds its top fingerprint and number of entries |
+| A public place where seals are kept, which gathers the seals of many books and proves it dropped none | The last seal of a book, with everything after it, can be removed unnoticed, unless someone else holds a copy of that seal, and hands it to the checker (section 21.5), or holds its top fingerprint and number of entries. A witness (section 29) holds the latest seal it signed for, and can be asked for it; nothing obliges a recorder to show its seals to a witness |
 | A quantum-safe time-stamp | Time-stamp services sign with methods of today's kind |
 | Covered fields outside a slip's names and purpose | Every other field of an entry is visible to whoever holds it |
 | A compact binary form | Records are JSON text only |
@@ -677,6 +680,11 @@ the seal's own date (section 21.1, rule 4).
   one call, not that the call did what either says. A matching
   fingerprint of a request, an answer, arguments or an error shows only
   that the content matches, not that it was the same call.
+- A witness statement (section 29) shows that a witness saw a seal, by
+  the time it states, and undertook to sign for no seal of that book that
+  does not extend it. It does not show that the entries are true, when
+  the seal was made, or anything of a book, or the end of one, that was
+  never shown to the witness.
 
 ## 14. Standards used
 
@@ -693,7 +701,7 @@ the seal's own date (section 21.1, rule 4).
 | FIPS 186-5; RFC 7518; RFC 8017 | The signing methods passkeys use (ES256, RS256) |
 | RFC 4648, section 5 | Base64url |
 | RFC 3339 | Times |
-| RFC 6962, section 2.1; RFC 9162, section 2.1.3.2 | The tree and its proofs |
+| RFC 6962, section 2.1; RFC 9162, sections 2.1.3.2 and 2.1.4 | The tree, the proof that one entry is in it, and the proof that one tree extends another (section 29.1) |
 | FIPS 205 | SLH-DSA-SHA2-256s, the third signature on a seal |
 | RFC 3161; RFC 5652; RFC 5280; ITU-T X.690 | Time-stamps: the statement, its signed wrapper, the certificate, and the byte layout (DER) |
 | The OpenTimestamps proof file, version 1 (an open format; not the work of a standards body) | Block time-stamps: the steps from a fingerprint to the Merkle root of a block |
@@ -1009,7 +1017,8 @@ Content:
 | `by` | The recorder | `{"keys": the recorder's three keys, "name": text}` |
 | `size` | How many entries the book held | A whole number, 1 or more |
 | `root` | The top fingerprint of those entries | A fingerprint (section 10) |
-| `previous` | The seal before this one in the book. Absent for the first | That seal's fingerprint |
+| `previous` | The seal before this one in the book. Absent for the first seal of the first book; for the first seal of a later book, the last seal of the book before (section 21.6) | That seal's fingerprint |
+| `book` | The book's number among the books its recorder keeps under one permission (section 21.6). Absent for the first book | A whole number, 2 or more |
 | `when` | When it was made, as the recorder states | A time |
 
 It is signed with the three keys in `by`, with the seal labels of section
@@ -1024,7 +1033,11 @@ otherwise report a problem:
 2. `size` is the number of entries before the seal, and `root` is their
    top fingerprint (`seal-mismatch`).
 3. `previous` is the fingerprint of the seal before it in the book, and
-   is absent if there is none (`seal-chain-broken`).
+   is absent if there is none (`seal-chain-broken`). The one exception is
+   the first seal of a book that gives `book`: its `previous` names the
+   last seal of the book before, which is not in this book, and is not
+   compared (section 21.6). Every seal of a book gives the same `book`
+   (`seal-chain-broken`).
 4. `when` is not earlier than the `when` of the seal before it
    (`time-went-backwards`). `when` is also not more than 300 seconds
    earlier than the latest time stated by an entry it covers that passed
@@ -1347,7 +1360,7 @@ of the book, or any party the recorder handed the seal to.
 
 A checker MAY be handed, beside a book, up to 64 seals held elsewhere,
 each as the entry it is in a book: `{"seal": seal record}`, with or
-without `"stamps"` (section 9). More than 64, or anything that is not a
+without `"stamps"` and `"witnesses"` (sections 9 and 29.2). More than 64, or anything that is not a
 list, is refused (`bad-field`). An empty list is none. The same seal MUST
 NOT be handed over twice (`bad-field`).
 
@@ -1388,6 +1401,9 @@ Nothing in a seal names its book. So a seal of another book by the same
 recorder (a book it kept before, when it started a new one) is reported
 as `seal-not-in-book` where it stands, or as `book-cut-short` where the
 other book was longer: hand over only seals of the book being checked.
+Where the seals give book numbers (section 21.6) and the book holds a
+seal, a seal handed over whose number is not the book's is not compared
+by its place: section 21.6 says what is done with it.
 
 Where the book holds the seal at entry n, the checker MUST say so. Where
 that entry did not pass its own check, it MUST say that too. The same
@@ -1414,8 +1430,74 @@ a book, shown to someone who holds a seal of the first, since the seal
 does not fit it. What it does not close: a book cut back after the
 latest seal anyone holds; a book, or the part of one, never shown to
 anyone who keeps a seal; and a recorder that hands its seals to nobody.
-Witnesses, which sign for each seal and keep the latest they saw, are
-not part of draft version 0.
+Witnesses (section 29), which sign for each seal and keep the latest
+they signed for, narrow the last two: a seal a witness signed for is one
+anyone who names that witness can ask it for. Statements that witnesses
+signed for a seal MAY be handed over with it, as `{"seal": seal record,
+"witnesses": [...]}` (section 29.2).
+
+### 21.6 The books of one permission
+
+A recorder may keep the record of one permission in several books, one
+after another: it seals a book, and starts a new one that begins with the
+same permission as its first line. A seal MAY say which book it is of, in
+`book`: 2 for the second book of that permission, 3 for the third, and so
+on. The first book carries no number, so every seal written before this
+member existed reads as the seal of a first book, exactly as before; `1`
+is not written (`bad-field`), so that there is one way to write each
+number. A seal that gives `book` MUST give `previous` (`bad-field`).
+A recorder numbers in one sequence all the books it keeps for one person
+and one agent, whichever of their permissions each book starts from, a
+renewal included: that is how a witness knows them (section 29.3).
+
+The first seal of book n names, as `previous`, the last seal of book
+n − 1. A checker that holds only book n cannot see that seal: it MUST NOT
+report the `previous` of that first seal, MUST say that it was not
+compared, and keeps it. Every later seal of book n names the seal before
+it in book n, and gives the same `book` (rule 3 of section 21.1). Among
+the pages of a Show, seals that give different numbers cannot be of one
+book (`seal-chain-broken`).
+
+Where a book holds a seal, its number is that of its first seal, and a
+seal held elsewhere (section 21.5) whose number is another is not
+compared with the book at all. It is not used, and a checker MUST NOT
+count it as compared: where any seal handed over was not compared, the
+check gives no pass, as where no recorder was named (section 21.5), even
+for an honest book: a reader who hands the seal of book n − 1 over
+beside book n gets no pass for book n, and should check book n − 1 with
+it instead. The
+number is the recorder's own word, so a book cut short could be sealed
+again under another number; the reader learns that the seal they hold
+was not compared, not that the book is whole. A checker MUST then say
+which of these the seal is:
+
+- **the last seal of the book before**, which the first seal of this
+  book names: where it is signed with the same key set as that first
+  seal, and not dated after it, a checker says that this book follows on
+  from it; where it is signed with another key set
+  (`seal-chain-broken`), or dated after that first seal
+  (`time-went-backwards`), it reports a problem;
+- **a seal of the book before that the first seal of this book does not
+  name**: this book then does not show whether the book before was cut
+  short, nor that this book follows on from it, and a checker MUST say so;
+- **a seal of the next book that names a seal of this book** as the seal
+  before it: the next book follows on from this one there;
+- a seal of a later or an earlier book: this book does not show whether
+  that book was cut short.
+
+In every case it does not show whether the book of the seal held was
+cut short: check that book with it.
+
+To compare book n − 1 with the seal that book n starts from, check book
+n − 1 with that seal handed over beside it: it must hold that seal at its
+place, as section 21.5 sets out.
+
+What the numbers do not show: that a book is the whole of its number; a
+checker of one book cannot tell whether the seal the next book starts
+from is the last of this book, or a seal of the next book handed over is
+its first. Nor does a checker count a limit across books: it counts within the
+book it checks.
+
 
 ## 22. Cancelling a slip
 
@@ -1967,7 +2049,7 @@ Content:
 | `rule` | A rule of the software around the agent, outside the slip. |
 
 The format's own list of finding codes, from which `codes` is drawn, is
-every code a checker or the check before acting gives: `not-json`, `bad-envelope`, `bad-base64url`, `too-large`, `unknown-type`, `bad-signatures-layout`, `payload-not-canonical`, `payload-type-mismatch`, `bad-field`, `bad-key`, `signature-invalid`, `passkey-wrong-type`, `passkey-challenge-mismatch`, `passkey-origin-mismatch`, `passkey-rpid-mismatch`, `passkey-user-not-present`, `passkey-user-not-verified`, `passkey-bad-data`, `issuer-not-expected`, `slip-missing`, `slip-unusable`, `chain-broken`, `time-went-backwards`, `duplicate-id`, `duplicate-slip`, `countersignature-invalid`, `countersignature-wrong-stub`, `countersignature-not-possible`, `line-not-canonical`, `unknown-entry`, `approval-mismatch`, `approval-reused`, `approval-invalid`, `approval-not-found`, `approval-dated-after-stub`, `terms-not-found`, `terms-unusable`, `terms-mismatch`, `pass-missing`, `pass-mismatch`, `pass-too-deep`, `cover-invalid`, `cancellation-invalid`, `cancellation-not-found`, `acknowledgement-mismatch`, `vouching-missing`, `seal-mismatch`, `seal-chain-broken`, `sealer-not-expected`, `dated-after-stamp`, `stamp-bad-data`, `stamp-wrong-data`, `stamp-invalid`, `headers-invalid`, `record-not-sound`, `proof-invalid`, `root-mismatch`, `check-failed`, `action-not-allowed`, `party-not-allowed`, `outside-valid-time`, `amount-missing`, `over-limit`, `over-each-limit`, `over-count-limit`, `over-period-limit`, `countersignature-missing`, `approval-missing`, `prohibited`, `pass-not-allowed`, `pass-wider`, `after-cancellation`, `outside-terms`.
+every code a checker or the check before acting gives: `not-json`, `bad-envelope`, `bad-base64url`, `too-large`, `unknown-type`, `bad-signatures-layout`, `payload-not-canonical`, `payload-type-mismatch`, `bad-field`, `bad-key`, `signature-invalid`, `passkey-wrong-type`, `passkey-challenge-mismatch`, `passkey-origin-mismatch`, `passkey-rpid-mismatch`, `passkey-user-not-present`, `passkey-user-not-verified`, `passkey-bad-data`, `issuer-not-expected`, `slip-missing`, `slip-unusable`, `chain-broken`, `time-went-backwards`, `duplicate-id`, `duplicate-slip`, `countersignature-invalid`, `countersignature-wrong-stub`, `countersignature-not-possible`, `line-not-canonical`, `unknown-entry`, `approval-mismatch`, `approval-reused`, `approval-invalid`, `approval-not-found`, `approval-dated-after-stub`, `terms-not-found`, `terms-unusable`, `terms-mismatch`, `pass-missing`, `pass-mismatch`, `pass-too-deep`, `cover-invalid`, `cancellation-invalid`, `cancellation-not-found`, `acknowledgement-mismatch`, `vouching-missing`, `seal-mismatch`, `seal-chain-broken`, `sealer-not-expected`, `book-cut-short`, `seal-not-in-book`, `witness-invalid`, `dated-after-stamp`, `stamp-bad-data`, `stamp-wrong-data`, `stamp-invalid`, `headers-invalid`, `record-not-sound`, `proof-invalid`, `root-mismatch`, `check-failed`, `action-not-allowed`, `party-not-allowed`, `outside-valid-time`, `amount-missing`, `over-limit`, `over-each-limit`, `over-count-limit`, `over-period-limit`, `countersignature-missing`, `approval-missing`, `prohibited`, `pass-not-allowed`, `pass-wider`, `after-cancellation`, `outside-terms`.
 A code not on this list MUST be refused (`bad-field`), as MUST `codes`
 where `source` is not `check`, and its absence where it is.
 
@@ -2016,6 +2098,227 @@ an agent was stopped, where it wrote no denial. Nothing obliges an
 agent's side to write one: a book with no denial shows nothing about
 refusals. A checker that does not know this section refuses a book that
 holds a denial (`unknown-entry`).
+
+## 29. Witnesses
+
+A seal fixes everything before it (section 21), but whoever keeps a book
+can show different histories to different readers, each sealed, since a
+reader who holds one copy cannot see another (a "split view"). A
+**witness** is a party, with a key set of its own, that keeps, for each
+recorder, person and agent, the latest seal it has signed for, and signs
+a statement for a new seal only where the new seal extends that one: in
+the same book, or as the first seal of the next book (section 21.6). A
+person and an agent are those the permission on a book's first line
+names: its passkey and the agent's key set.
+
+What a witness can then show is narrow, and is said exactly here: to a
+reader who fixed the start of a book (the permission it starts from,
+signed by a passkey the reader named) and its recorder (a key set the
+reader named), a second history sealed by that same recorder and
+starting from any permission that passkey gave that agent, renewals
+included, would need the witness to sign for it too. It shows nothing
+about a history that is sealed with other keys, or that starts from a
+permission for another agent.
+
+### 29.1 Consistency proofs
+
+The tree of section 10 is the tree of RFC 9162, section 2.1. The proof
+that the tree of the first m entries of a book is the first part of the
+tree of its first n entries (a **consistency proof**) is made as RFC
+9162, section 2.1.4.1, sets out, and checked with the steps of section
+2.1.4.2. Each value of a proof is 32 bytes.
+
+RFC 9162 defines a proof for 0 < m < n. Where m is larger than n, the
+proof does not check. Where m equals n, the proof is empty and the two
+top fingerprints MUST be the same. Where m is 0 (no seal is), the proof
+is empty and the earlier top fingerprint MUST be that of the empty tree,
+the SHA-256 hash of nothing. Anything that is not a proof of the two
+sizes it is checked for, including an empty proof for 0 < m < n, does
+not check.
+
+### 29.2 The witness statement
+
+Content:
+
+| Member | Meaning | Form |
+|---|---|---|
+| `type` | The kind of content | `provared.witness.v0` |
+| `id` | A unique number | Section 3.7 |
+| `seal` | The seal it speaks of | That seal's fingerprint (section 3.5) |
+| `size`, `root` | Repeated from the seal, so that the statement stands alone | As in the seal (section 21.1) |
+| `by` | The witness | `{"keys": the witness's two keys, "name": text}`; the name is a label |
+| `when` | When the witness signed, as the witness states | A time |
+
+It is signed with the two keys in `by`, with the witness labels of
+section 3.2. It means: "I saw this seal by this time; for the recorder
+that signed it, and the person and agent of the permission its book
+starts from, it extends every earlier seal I signed for; I will sign for
+no seal of that recorder, person and agent that does not extend it."
+
+**Beside a seal.** An entry that holds a seal MAY hold, in `witnesses`,
+1 to 4 statements, beside `stamps` (section 9). A line of a book is a
+leaf of its tree, so the statements on it are those the line held when
+it was written. Statements that came later MAY be handed to a checker
+with a copy of the seal, as a seal held elsewhere (section 21.5):
+`{"seal": seal record, "stamps": [...], "witnesses": [...]}`. A seal is
+about 52,000 bytes and a statement about 12,000, so a seal with four
+statements and four of the largest time-stamps would pass the longest a
+line may be (section 9): whoever writes such a line keeps fewer on it,
+and hands the others over beside the book.
+
+A checker MUST confirm, for each statement, and otherwise report a
+problem:
+
+1. the list holds 1 to 4 statements (`bad-field`);
+2. its envelope and content, as for any record (section 3);
+3. both its signatures check against `by.keys` (`witness-invalid`);
+4. its `seal`, `size` and `root` are the fingerprint, `size` and `root`
+   of the seal it stands beside (`witness-invalid`);
+5. its `when` is not more than 300 seconds earlier than the seal's own
+   `when` (`witness-invalid`): a witness cannot have seen a seal before
+   it was made;
+6. no two statements beside one seal are signed with the same key set
+   (`bad-field`);
+7. on a line of a book, its `id` is that of no other record in the book
+   (`duplicate-id`), as for every record (section 7).
+
+A statement on a seal's line that does not pass is a problem with that
+entry. A statement handed over with a seal held elsewhere that does not
+pass is a problem with the check as a whole, and is not used; the seal
+is used all the same, as an acknowledgement is (section 26).
+
+**When a statement counts.** A witness knows which books are one
+sequence only by the passkey and the agent of the permission on their
+first line and the keys of their recorder (section 29.3), and the
+recorder chooses both the first line and its keys. So a
+statement counts only where the reader fixed both. All of these must
+hold:
+
+1. it passed its check, and both its signatures were checked on this
+   device;
+2. the person checking named its witness among the witnesses they
+   trust, by the fingerprint of its key set (section 21.1); a statement
+   from any other witness is shown, with that fingerprint, and not
+   counted;
+3. the person named the passkeys they trust, and the book's first line
+   (for a Show: its page 0) is a permission that passed its check,
+   signed by one of them;
+4. the person named the recorders they expect, so that a seal by any
+   other recorder is a problem (rule 5 of section 21.1);
+5. every permission among the entries the seal covers names the same
+   passkey key and the same agent's key set as the permission on the
+   first line. A witness keeps the books of each person and agent apart
+   (section 29.3), so a book that starts with a permission for one agent
+   and holds a permission for another, or from another passkey, further
+   on could be the first book of a sequence the witness never saw, and so
+   a fork of the other's. A renewal by the same person for the same agent
+   meets this rule. Among the pages of a Show, the pages MUST hold every
+   entry the seal covers: single pages cannot show that no other
+   permission stands between them, and a Show never counts a statement
+   that the whole book would not;
+6. the seal it stands beside passed its own check, and its Ed25519 and
+   ML-DSA-87 signatures were checked on this device. As for a seal held
+   elsewhere (section 21.5), its third signature (SLH-DSA) may be one
+   the device cannot check: the statement speaks of the seal's content,
+   which its fingerprint fixes;
+7. for a statement handed over with a seal held elsewhere: that seal
+   counts (section 21.5), and the book holds the same seal at its place;
+   the statement then counts for the book's seal there.
+
+Where a statement from a witness the person trusts is not counted
+because of rule 3, 4 or 5, a checker MUST say why. A witness cannot
+apply rule 5 itself: it sees a book's first line, not its entries. A checker MUST say,
+for the book, the latest seal for which a statement counts, the entries
+it covers, the witnesses whose statements count for it, and every seal
+for which one counts; and where none does, that none does. Where a
+problem was found, nothing is said to be witnessed.
+
+**What being witnessed changes in the answer: nothing else.** It never
+excuses a fault, never makes a record pass that does not, and is not
+needed for a pass. It gives no time: a statement's `when` is the
+witness's own word, and is not used as a time-stamp (section 21.2). A
+statement that does not pass is a problem like any other.
+
+### 29.3 What a witness SHOULD check before it signs
+
+A checker cannot test how a witness behaved: a person names a witness
+they trust to do the following.
+
+1. **Know a sequence of books** by the fingerprint of the recorder's key
+   set (section 21.1) with the thumbprint of the passkey key (RFC 7638)
+   and the fingerprint of the agent's key set that the permission on the
+   book's first line names. So every permission one person gives one
+   agent, under one recorder, is one sequence, renewals included: a book
+   that starts with a later permission must follow on from the seal the
+   witness holds, as any new book. This is written into no record. A book
+   whose first line is not a permission (an entry that holds only a slip)
+   is not one a witness keeps. One recorder key set therefore keeps one
+   sequence for each person and agent: books kept side by side for one
+   agent need recorder keys of their own, and are then other sequences.
+2. **Check the seal** as a seal that stands alone: its envelope, its
+   content and all three of its signatures. A witness on a device that
+   cannot check one of the three signs nothing.
+3. Where it holds no seal of that sequence: confirm that the audit path
+   of the book's first line, at place 0, leads to the new seal's top
+   fingerprint (RFC 9162, section 2.1.3.2), so that the first line it was
+   given is the book's.
+4. Where it holds a seal of that sequence, of book k (section 21.6):
+   - a seal of book k: confirm that it covers more entries; that its
+     `previous` names the seal it holds (a seal it was not shown is shown
+     to it first, in order); and that a consistency proof (section 29.1)
+     from the size and top fingerprint of the seal it holds to those of
+     the new seal checks;
+   - a seal of book k + 1: confirm that its `previous` names the seal it
+     holds, and that the audit path of the book's first line leads to its
+     top fingerprint, as in item 3. From then on, book k is closed to it;
+   - a seal of an earlier book than k, or of a book after k + 1: refuse
+     it;
+   - in every case, that its `when` is not earlier than that of the seal
+     it holds.
+5. **Never sign two different seals of one book at one size**, nor a
+   seal that does not extend the one it holds. Shown the seal it holds
+   again, give the same statement again.
+6. Refuse a seal dated more than 300 seconds after its own clock, and
+   date its statement by its own clock.
+7. **Keep, before it gives a statement out, that it now holds the new
+   seal.** A witness that loses what it holds, or is put back to an
+   older copy of it, can be made to sign a fork. Opened again from what
+   it kept, it SHOULD sign nothing new until it has been brought up to
+   date from a copy, kept apart, of the statements it gave out.
+
+### 29.4 What a witness shows, and what it does not
+
+For a book whose first line is a permission signed by a passkey the
+reader named, sealed by a recorder the reader named, whose every
+permission before the seal is from that passkey for the same agent: the
+witness saw the
+seal, and so the entries before it by their top fingerprint, by the time
+it states; and a second history of those entries, sealed by the same
+recorder and starting from any permission that passkey gave the same
+agent, shown to someone else, needs that witness to sign for it too,
+which a witness that keeps section 29.3 does not. That holds across the
+books of that person and agent: a new book cannot start from an earlier
+seal than the latest the witness holds. Two witnesses need two to fail. With the latest seal a witness
+holds, handed over beside the book it is of (section 21.5), the end of
+that book cannot be cut off back to before that seal unnoticed.
+
+It does not show:
+
+- anything about a history sealed with another key set, even one the
+  reader also named (a reader who names two recorders should know that a
+  fork sealed with the second reads as witnessed), or one that starts
+  from a permission for another agent: to a witness, each is another
+  sequence;
+- that a later book does not repeat or leave out what an earlier book
+  holds: each book is checked on its own;
+- anything that was never shown to it: a book, or the end of a book
+  after the latest seal it signed for. Nothing obliges a recorder to
+  show its seals to a witness;
+- that the entries are true: a witness sees fingerprints, not entries;
+- when the seal was made: its `when` is its own word;
+- that what a witness keeps was not changed. Whoever can change it can
+  make a witness forget a sequence, and it then signs again for that
+  sequence from any seal.
 
 ---
 

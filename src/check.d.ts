@@ -8,6 +8,8 @@ export {
   methodAvailable,
   thumbprint,
   keySetFingerprint,
+  verifyConsistency,
+  verifyInclusion,
   blockFingerprint,
   checkHeaderChain,
   blocksInChain,

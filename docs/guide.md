@@ -21,7 +21,7 @@ An Internet-Draft is a working document, not a standard.
 |---|---|---|
 | **Slip** | A short permission a person signs with a passkey: which agent, which actions, what limits and conditions, with whom, from when until when, and why | Built |
 | **Stub** | A signed receipt for each action, pointing back to its slip, countersigned by the other side where possible, and approved by the person where the slip asks for it | Built |
-| **Seal** | The stubs chained together and gathered under one top fingerprint, signed by whoever keeps the book and time-stamped by an outside service | Built. A public place where seals are kept is not |
+| **Seal** | The stubs chained together and gathered under one top fingerprint, signed by whoever keeps the book, time-stamped by an outside service, and signed for by witnesses | Built, with the part of a witness that decides and signs. A public place where seals are kept is not |
 | **Show** | One page shown to a checker with proof that it is in the book, and when the book was sealed, with the names it does not need kept covered | Built. Only a slip's names and purpose can be covered so far |
 
 ## What is here
@@ -271,6 +271,75 @@ Its own time-stamps are shown but are not used for the entries of the
 book. The answer lists each one in `held`, after any cancellations. A
 Show does not use one. What it does not catch: a book cut back after the
 latest seal anyone holds, or a book never shown to anyone who holds one.
+
+### Witnesses
+
+A witness is a party, with a key set of its own, that keeps for each
+book the latest seal it has signed for, and signs a short statement for
+a new seal only where the new seal extends that one (format
+description, section 29). The recorder sends it the seal and a
+consistency proof (RFC 9162, section 2.1.4); the statement goes beside
+the seal on its line, in `witnesses`, up to four, or is handed to the
+checker later with a copy of the seal (`--seal` with a file of
+`{"seal": ..., "witnesses": [...]}`). Name the witnesses you trust by
+the fingerprints of their key sets:
+
+```
+provared-check record.jsonl --witness <fingerprint> --sealer <fingerprint> --issuer <thumbprint>
+```
+
+In the library: `witnesses`. The answer's `summary.witnessed` gives the
+latest seal for which a statement from a witness you trust counts, the
+entries it covers, those witnesses, and every seal witnessed; the
+command-line checker prints it as "Witnessed by a witness you trust?".
+A statement that does not check, or that speaks of another seal, is a
+problem (`witness-invalid`). A statement counts only where you also
+named the passkey you trust (`--issuer`) and the recorder you expect
+(`--sealer`), the book starts with a permission signed by that passkey,
+and every permission before the seal is from that passkey for the same
+agent (a Show must hold every page the seal covers): a witness knows a book only by the passkey and the agent of
+the permission it starts from and its recorder's keys, and the recorder
+chooses the first line and its keys. Being witnessed excuses nothing
+and is not needed for a pass. What it adds: a second history of the
+entries before a witnessed seal, sealed by the same recorder and
+starting from any permission that passkey gave that agent (a renewal
+included), shown to someone else, would need that witness to sign for it
+too. What it does not: a history sealed with other keys, even keys you
+also named, or one that starts from a permission for another agent;
+anything never shown to the witness; or the time. To see whether the end
+of the book is missing, ask the witness for the latest seal it holds for
+this recorder, passkey and agent, and hand that seal over beside the book
+it is of. One recorder key set keeps one sequence for each person and
+agent: books kept side by side for one agent need recorder keys of
+their own.
+
+A recorder may keep the record of one permission in several books: a
+seal says which in `book` (2, 3 and so on; the first book has no
+number), and the first seal of a later book names the last seal of the
+book before. `writeSeal` takes `book`. A witness treats every book of one
+recorder, person and agent as one sequence: it signs for a new book only
+where its first seal starts from the latest seal it holds, and never
+again for the book before. A checker of one book does not see the book
+before; handed that book's last seal, it says whether this book follows
+on from it (format description, section 21.6). A seal handed over that
+gives another book number than the book is not compared with it, and
+gives no pass: the command-line checker says "Seals held elsewhere
+compared? NO" and does not end with code 0, even for an honest book.
+To check book n − 1 against the seal book n starts from, check book
+n − 1 with that seal handed over beside it.
+
+The library holds a witness: `openWitness({ by, signers, state })`, with
+`witness(entry, proof, firstLine)`, which signs only for a seal whose
+three signatures it checked and that extends the seal it holds, and
+hands back its state with each statement, to be saved before the
+statement is given out; `update`, `ready`, `latest` and `state`.
+`witnessProof(book, size, from)` makes the proof to send it (`from`:
+the size of the seal the witness holds of the same book, or none for a
+first seal and for the first seal of the next book), and `bookIdentity`
+names a sequence as a witness knows it: by the recorder's keys with the
+passkey and the agent of the permission on the book's first line. Whoever can change a witness's
+state can make it forget a sequence: keep it as safely as its keys. A
+witness needs SLH-DSA, so it needs Node.js; the Python version has none.
 
 ### Knowing that a block is part of the chain
 
@@ -916,7 +985,8 @@ Options: `issuerKeys` (the thumbprints of issuer keys you trust),
 expect), `stampServices` (the fingerprints of the certificates of the
 time-stamp services you trust), `blocks` (the fingerprints of the
 blocks of a public blockchain you trust), `vouchers` (the fingerprints of the key
-sets of the organisations whose vouching you trust), `disclosures` (the
+sets of the organisations whose vouching you trust), `witnesses` (the
+fingerprints of the key sets of the witnesses you trust), `disclosures` (the
 disclosures of covered fields that you were handed), `cancellations`
 (the person's own copies of cancellations), `seals` (seals of the book
 held elsewhere), `expectedRoot` and
@@ -943,7 +1013,8 @@ Writing records: `prepareSlip` and `assembleSlip`, `prepareApproval` and
 `writeRefusal` and `writeTerms` (the service), `writeVouching` and
 `writeWithdrawal` (an organisation), `writePass` (an agent, to a helper
 agent), `writeSeal` (whoever keeps
-the book; it needs Node.js), `writeBook` and `makeShow`, all from
+the book; it needs Node.js), `writeWitness` and `openWitness` (a
+witness; `openWitness` needs Node.js), `consistencyProof`, `writeBook` and `makeShow`, all from
 `provared`. The library asks no time-stamp service itself: you send
 the seal's fingerprint to the service you choose and put its answer
 beside the seal. In a browser, `createPasskey`, `signSlipWithPasskey`,
@@ -985,7 +1056,9 @@ And about time:
 - the last seal, with everything after it, can itself be removed. Only a
   copy of it, or of its top fingerprint and number of entries, held by
   someone else shows that: hand such a copy of a seal to the checker
-  (`--seal`, or `seals`);
+  (`--seal`, or `seals`), such as the latest seal a witness holds;
+- a witness statement is the witness's own word for when it saw the
+  seal, and is not used as a time-stamp;
 - time-stamp services sign with methods of today's kind, which are not
   quantum-safe.
 
@@ -998,8 +1071,9 @@ connects to anything: to the Bitcoin nodes you name, for block headers.
 
 ## Not built yet
 
-A public place where seals are kept, and witnesses that sign for each
-seal; covering fields other than a slip's
+A public place where seals are kept, which gathers the seals of many
+books; a witness that runs as a service (the library holds the part that
+decides and signs); covering fields other than a slip's
 names and purpose; connectors for particular agent software (the
 general one, `recordTools`, is built); a compact binary form; the
 recorder service. The checking page cannot yet take a chain of block

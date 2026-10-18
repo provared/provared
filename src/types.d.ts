@@ -155,7 +155,7 @@ export type BookEntry =
   | { stub: SignedRecord; countersignature?: SignedRecord; approval?: SignedRecord }
   | { refusal: SignedRecord }
   | { terms: SignedRecord }
-  | { seal: SignedRecord; stamps?: StampItem[] }
+  | { seal: SignedRecord; stamps?: StampItem[]; witnesses?: SignedRecord[] }
   | { cancellation: SignedRecord; stamps?: StampItem[] }
   | { acknowledgement: SignedRecord }
   | { denial: SignedRecord }
@@ -169,7 +169,7 @@ export interface Show {
   root: Fingerprint;
   /** "disclosures" reveal covered fields of the record on that page. */
   pages: { index: number; entry: string; path: Fingerprint[]; disclosures?: string[] }[];
-  seal?: { seal: SignedRecord; stamps?: StampItem[] };
+  seal?: { seal: SignedRecord; stamps?: StampItem[]; witnesses?: SignedRecord[] };
 }
 
 // --- what the checker answers ---
@@ -199,6 +199,28 @@ export interface Stamp {
   authority: string | null;
   /** For a block: its number, as the proof states it. Nothing checks it. */
   height?: number;
+}
+/** A witness statement beside a seal, as the checker found it (format description, section 29). */
+export interface WitnessCheck {
+  /** The statement's own fingerprint. */
+  fingerprint: Fingerprint | null;
+  /** The fingerprint of the witness's key set: how the person names a witness they trust. */
+  witness: Fingerprint | null;
+  /** The witness's name, a label. */
+  name: string | null;
+  /** When the witness says it signed: its own word. */
+  when: Time | null;
+  /** "valid": it passed its check and both its signatures were checked here. "unavailable": this device could not check them both. */
+  state: 'valid' | 'unavailable' | 'invalid';
+  /** Whether its witness is one the person named. */
+  trusted: boolean;
+  /**
+   * Whether it counts: valid, trusted, its seal passed its own check with its first two signatures checked here, the book
+   * starts with a permission signed by a passkey you named, you named the recorders you expect, and every permission the
+   * seal covers names the first line's passkey and agent (a Show must hold every page the seal covers). Section 29.2.
+   */
+  counted: boolean;
+  signatures: KeySignature[];
 }
 /** A time-stamp beside a seal or a cancellation: a service's answer, or a proof with the header of its block. */
 export type StampItem = Base64url | { block: Base64url; proof: Base64url };
@@ -258,6 +280,8 @@ export interface CheckedEntry {
   service?: string | null;
   sealer?: Fingerprint;
   stamps?: Stamp[];
+  /** A seal: the witness statements on its line. */
+  witnesses?: WitnessCheck[];
   counted?: boolean;
 }
 
@@ -288,6 +312,12 @@ export interface Summary {
   };
   /** How far the last time-stamp from a trusted service reaches. */
   sealed: { entries: number; when: Time; seal: number; by: 'service' | 'block' } | null;
+  /**
+   * How far a witness the person named reaches: the latest seal for which a statement counts, the entries it covers,
+   * the witnesses whose statements count for it, and every seal for which one counts. Null where none does, or where a
+   * problem was found. It excuses nothing.
+   */
+  witnessed: { seal: number; entries: number; by: Fingerprint[]; seals: number[] } | null;
   /** What no check can show, in plain sentences. */
   limits: string[];
 }
@@ -339,6 +369,8 @@ export interface HeldAcknowledgement {
 export interface HandedSeal {
   seal: SignedRecord;
   stamps?: StampItem[];
+  /** Witness statements for the seal, 1 to 4, none from one witness twice: those beside it in the book, or that came later. */
+  witnesses?: SignedRecord[];
 }
 
 /**
@@ -355,7 +387,10 @@ export interface HeldSeal {
   place: number | null;
   /** That entry, where the book holds the same seal there; null otherwise, or where it was not used. */
   inBook: number | null;
-  /** Whether it passed its check, its recorder is one you named, and this device checked its first two signatures. */
+  /**
+   * Whether it was compared with the book: it passed its check, its recorder is one you named, this device checked its
+   * first two signatures, and it gives the book's own number (section 21.6). One that was not compared gives no pass.
+   */
   used: boolean;
   verified: 'all' | 'some' | 'none';
   problems: Finding[];
@@ -363,6 +398,8 @@ export interface HeldSeal {
   signatures: KeySignature[];
   /** Its own time-stamps: checked and shown, not used for the entries of the book. */
   stamps: Stamp[];
+  /** The witness statements handed over with it. One that counts, for a seal the book holds at its place, counts for that seal. */
+  witnesses: WitnessCheck[];
   content?: any;
   /** The earliest time a time-stamp from a trusted service gives it, where all three of its signatures were checked. */
   stampedAt?: Time;
@@ -391,6 +428,8 @@ export interface CheckOptions {
   blocks?: string[];
   /** The key set fingerprints of the organisations whose vouching the checker trusts. */
   vouchers?: Fingerprint[];
+  /** The key set fingerprints of the witnesses the checker trusts (format description, section 29). */
+  witnesses?: Fingerprint[];
   /** For covered fields: the disclosures handed over, by the fingerprint of the slip they belong to. */
   disclosures?: Record<Fingerprint, string[]>;
   /**
@@ -446,6 +485,14 @@ export function checkSlip(record: SignedRecord, options?: Pick<CheckOptions, 'is
 export function methodAvailable(alg: string): Promise<boolean>;
 export function thumbprint(key: PublicKey): Promise<string>;
 export function keySetFingerprint(keys: KeySet | SealKeySet): Promise<Fingerprint>;
+/**
+ * Check a consistency proof (RFC 9162, section 2.1.4.2): that the tree of m leaves whose root is rootM is the first
+ * part of the tree of n leaves whose root is rootN. For m equal to n the proof is empty and the roots the same; for
+ * m of 0 the proof is empty and rootM the root of the empty tree. Never throws for a bad proof.
+ */
+export function verifyConsistency(m: number, n: number, rootM: Uint8Array, rootN: Uint8Array, proof: Uint8Array[]): Promise<boolean>;
+/** Check an audit path (RFC 9162, section 2.1.3.2). */
+export function verifyInclusion(index: number, size: number, leaf: Uint8Array, path: Uint8Array[], root: Uint8Array): Promise<boolean>;
 /** The fingerprint of a block, as it is written everywhere: 64 hex characters. */
 export function blockFingerprint(header: Uint8Array): Promise<string>;
 /** A chain of Bitcoin block headers, checked on this device from the chain's first block. */
@@ -703,9 +750,57 @@ export function writeDenial(
  */
 export function writeSeal(
   book: string,
-  fields: { by: { keys: SealKeySet; name: string }; previous?: Fingerprint; when?: number | Date; id?: Base64url },
+  /** "book": the book's number among the books of one permission, 2 or more; 1 or none for the first (section 21.6). */
+  fields: { by: { keys: SealKeySet; name: string }; previous?: Fingerprint; book?: number; when?: number | Date; id?: Base64url },
   privateKeys: unknown[],
 ): Promise<Written & { fingerprintBytes: Uint8Array }>;
+
+/** The most witness statements beside one seal, or handed over with one seal held elsewhere. */
+export const MAX_WITNESSES: 4;
+/** A witness signs for a seal. This only writes the statement; it does not check the seal (see openWitness). */
+export function writeWitness(
+  fields: { seal: Fingerprint; size: number; root: Fingerprint; by: { keys: KeySet; name: string }; when?: number | Date; id?: Base64url },
+  privateKeys: SigningKey[],
+): Promise<Written>;
+/** The consistency proof from the tree of the first m leaves to the tree of all of them (RFC 9162, section 2.1.4.1). Empty for m of 0 or m equal to the number of leaves. */
+export function consistencyProof(leaves: Uint8Array[], m: number): Promise<Uint8Array[]>;
+/** The audit path of one leaf (RFC 9162, section 2.1.3). */
+export function inclusionPath(leaves: Uint8Array[], index: number): Promise<Uint8Array[]>;
+/** How a witness keeps sequences of books apart: the recorder's key set, with the passkey and the agent's key set that the permission on the book's first line names. */
+export function bookIdentity(keys: SealKeySet, firstLine: Uint8Array): Promise<Fingerprint>;
+/**
+ * What a witness is sent with a seal: the consistency proof from the seal it holds for the book ("from", its number
+ * of entries), or, where it holds none or the seal is the first of the next book, the audit path of the book's first line in
+ * the new seal's tree.
+ */
+export function witnessProof(book: string, size: number, from?: number | null): Promise<Uint8Array[]>;
+/** A witness's state, as it hands it back: to be saved before a statement is given out. */
+export interface WitnessState {
+  type: 'provared.witness-state.v0';
+  /** The fingerprint of the witness's key set. */
+  by: Fingerprint;
+  /** For each recorder, passkey (its thumbprint) and agent (the fingerprint of its key set): the latest seal this witness signed for, and its statement. */
+  books: { passkey: Fingerprint; agent: Fingerprint; seal: SignedRecord; statement: SignedRecord }[];
+}
+export type WitnessAnswer<T> = T | { refused: Finding };
+export interface Witness {
+  /** Sign for a seal if it extends the latest seal of its book this witness holds. The state handed back holds the new seal: save it first. */
+  witness(entry: { seal: SignedRecord; stamps?: StampItem[]; witnesses?: SignedRecord[] }, proof: Uint8Array[], firstLine: Uint8Array): Promise<WitnessAnswer<{ statement: SignedRecord; state: WitnessState }>>;
+  /** Take as the latest seal of its book a seal this witness signed for before, from a copy of what it gave out. It signs nothing. */
+  update(entry: { seal: SignedRecord; witnesses: SignedRecord[]; stamps?: StampItem[] }, proof: Uint8Array[], firstLine: Uint8Array): Promise<WitnessAnswer<{ state: WitnessState }>>;
+  /** Opened from a saved state, the witness signs nothing until it is told it has been brought up to date. */
+  ready(): void;
+  latest(book: Fingerprint): { seal: SignedRecord; statement: SignedRecord } | null;
+  state(): WitnessState;
+}
+/** A witness needs SLH-DSA, so it needs Node.js. */
+export function openWitness(o: {
+  by: { keys: KeySet; name: string };
+  signers: SigningKey[];
+  state?: WitnessState;
+  clock?: () => number;
+  withoutMethods?: string[];
+}): Promise<Witness>;
 
 /** A proof from a public blockchain and the 80-byte header of its block, in the form they have in "stamps". */
 export function blockStampItem(proof: Uint8Array, header: Uint8Array): { block: Base64url; proof: Base64url };

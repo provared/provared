@@ -11,6 +11,8 @@
 //            writeStub (the agent), countersign, writeRefusal, writeTerms
 //            (the service), writeSeal (whoever keeps the book), blockStampItem
 //            (a proof from a public blockchain, to put beside a seal),
+//            writeWitness (a witness signs for a seal), openWitness (a witness
+//            that signs only for a seal that extends the last one it holds),
 //            prepareCancellation + assembleCancellation (the person ends a slip),
 //            writeAcknowledgement (the agent's side says it was handed a cancellation),
 //            writeDenial (the agent's side says it did not take an action, and why),
@@ -34,6 +36,9 @@ export { writeStub, countersign } from './stub.js';
 export { writeRefusal, writeTerms } from './service.js';
 export { writePass } from './pass.js';
 export { writeSeal } from './seal.js';
+export { writeWitness, MAX_WITNESSES } from './witness.js';
+export { openWitness, bookIdentity, witnessProof } from './witnessing.js';
+export { consistencyProof, inclusionPath } from './tree.js';
 export { blockStampItem } from './blockstamp.js';
 export { prepareCancellation, assembleCancellation, writeAcknowledgement, writeVouching, writeWithdrawal, VOUCHED_KINDS } from './standing.js';
 export { writeDenial, denialCodes, FINDING_CODES } from './denial.js';

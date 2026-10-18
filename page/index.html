@@ -26,6 +26,8 @@
     <textarea id="trust-stamps" rows="2" spellcheck="false"></textarea>
     <label for="trust-vouchers">Organisations whose vouching for names you trust (the fingerprint of each one's key set)</label>
     <textarea id="trust-vouchers" rows="2" spellcheck="false"></textarea>
+    <label for="trust-witnesses">Witnesses you trust to have seen the seals (the fingerprint of each one's key set)</label>
+    <textarea id="trust-witnesses" rows="2" spellcheck="false"></textarea>
     <label for="trust-blocks">Blocks of a public blockchain that you trust to be part of the chain (the fingerprint of each block: 64 characters, the digits 0 to 9 and the letters a to f)</label>
     <textarea id="trust-blocks" rows="2" spellcheck="false"></textarea>
   </details>
@@ -34,7 +36,7 @@
     <p class="quiet">Choose these files first, then choose the record file. They stay chosen, and are used with every record you check, until you clear them. The sample record is checked without them.</p>
     <label for="cancellations">The person's own copies of cancellations: one file for each, up to 16. A copy counts even where the book leaves the cancellation out. A file may also hold what the agent's side signed when it was handed the cancellation.</label>
     <input type="file" id="cancellations" accept=".json,.txt" multiple>
-    <label for="seals">Seals of the book held elsewhere, by you, an auditor or a copy kept apart: one file for each, up to 64. The book must hold each at the place it states; one that ends before it was cut short. A seal counts only where you named its recorder above.</label>
+    <label for="seals">Seals of the book held elsewhere, by you, an auditor or a copy kept apart: one file for each, up to 64. The book must hold each at the place it states; one that ends before it was cut short. A seal counts only where you named its recorder above. A file may also hold statements that witnesses signed for the seal.</label>
     <input type="file" id="seals" accept=".json,.txt" multiple>
     <label for="disclosures">Disclosures for covered fields of a slip: one file</label>
     <input type="file" id="disclosures" accept=".json,.txt">

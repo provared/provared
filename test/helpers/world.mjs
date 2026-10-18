@@ -288,6 +288,8 @@ export async function makeWorld(o = {}) {
         block = await makeBlockStamp(sealed.fingerprintBytes, change.blockTime);
         (entry.stamps ??= []).push(block.item);
       }
+      // "witnesses": a function given the seal and the book before it, that gives the statements to put beside it.
+      if (change.witnesses) entry.witnesses = await change.witnesses(sealed, world.book());
       world.entries.push(entry);
       world.lastSeal = sealed.fingerprint;
       return { ...sealed, entry, when, block };

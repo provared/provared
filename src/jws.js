@@ -70,6 +70,10 @@ export const KINDS = {
     type: 'provared.denial.v0',
     protected: ['{"typ":"vnd.provared.denial.v0+json","alg":"Ed25519"}', '{"typ":"vnd.provared.denial.v0+json","alg":"ML-DSA-87"}'],
   },
+  witness: {
+    type: 'provared.witness.v0',
+    protected: ['{"typ":"vnd.provared.witness.v0+json","alg":"Ed25519"}', '{"typ":"vnd.provared.witness.v0+json","alg":"ML-DSA-87"}'],
+  },
   seal: {
     type: 'provared.seal.v0',
     protected: [

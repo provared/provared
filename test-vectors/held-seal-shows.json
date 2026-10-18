@@ -255,7 +255,8 @@
        "It does not show who was holding the device when the passkey signed.",
        "A name in a record is a label. Only keys are checked.",
        "Nothing here is time-stamped by an outside service that you named as trusted. So it does not show when the record was made, and the latest stubs under a slip or a pass, or a slip or a pass with all its stubs, could have been removed."
-      ]
+      ],
+      "witnessed": null
      }
     }
    }
@@ -489,7 +490,8 @@
        "It does not show who was holding the device when the passkey signed.",
        "A name in a record is a label. Only keys are checked.",
        "Nothing here is time-stamped by an outside service that you named as trusted. So it does not show when the record was made, and the latest stubs under a slip or a pass, or a slip or a pass with all its stubs, could have been removed."
-      ]
+      ],
+      "witnessed": null
      }
     }
    }

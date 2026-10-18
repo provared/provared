@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { checkBook, checkShow, checkSlip, entryLine, generateKeySet, keySetFingerprint, makeShow, prepareSlip, writeBook, writeStub } from '../src/index.js';
+import { checkBook, checkShow, checkSlip, entryLine, fingerprint, generateKeySet, keySetFingerprint, makeShow, prepareSlip, writeBook, writeStub, writeWitness } from '../src/index.js';
 import { makeWorld, withContent } from './helpers/world.mjs';
 
 const b64 = (text) => Buffer.from(text).toString('base64url');
@@ -311,6 +311,16 @@ Object.assign(REFUSED, {
     const { w, lines, trust } = await sealedBook();
     // The first seal is held elsewhere; the book holds the third stub in its place.
     return checkBook([lines[0], lines[1], lines[2], lines[4]].join('\n') + '\n', { ...trust, sealKeys: [await keySetFingerprint(w.recorder.keys)], seals: [JSON.parse(lines[3])] });
+  },
+  'witness-invalid': async () => {
+    const { lines, trust } = await sealedBook();
+    // A witness statement beside the last seal that speaks of another seal: the first.
+    const witness = await generateKeySet();
+    const first = JSON.parse(lines[3]).seal;
+    const content = JSON.parse(Buffer.from(first.payload, 'base64url').toString());
+    const statement = await writeWitness({ seal: await fingerprint(Buffer.from(first.payload, 'base64url')), size: content.size, root: content.root, by: { keys: witness.keys, name: 'Example witness (invented)' } }, witness.privateKeys);
+    const last = JSON.parse(lines[5]);
+    return checkBook([...lines.slice(0, 5), entryLine({ ...last, witnesses: [statement.record] }), ...lines.slice(6)].join('\n') + '\n', trust);
   },
   'dated-after-stamp': async () => {
     const w = await makeWorld();

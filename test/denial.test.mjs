@@ -84,7 +84,7 @@ test('every finding code the checker can give is on the format\'s own list, and 
   const listed = [...table.matchAll(/^\| `([a-z0-9-]+)` \|/gm)].map((m) => m[1]);
   assert.deepEqual([...listed].sort(), [...FINDING_CODES].sort());
   // Every code given in the library's own source is on the list, apart from the answers of the stub writer.
-  const sources = ['book', 'guard', 'recorder', 'slip', 'compare', 'stub', 'standing', 'service', 'seal', 'timestamp', 'blockstamp', 'der', 'cover', 'jws', 'encoding', 'fields', 'keys', 'webauthn', 'signatures', 'tree', 'headers', 'documents', 'pass', 'approval', 'denial', 'tools']
+  const sources = ['book', 'guard', 'recorder', 'slip', 'compare', 'stub', 'standing', 'service', 'seal', 'timestamp', 'blockstamp', 'der', 'cover', 'jws', 'encoding', 'fields', 'keys', 'webauthn', 'signatures', 'tree', 'headers', 'documents', 'pass', 'approval', 'denial', 'tools', 'witness', 'witnessing']
     .map((n) => readFileSync(new URL(`../src/${n}.js`, import.meta.url), 'utf8'))
     .join('\n');
   const given = new Set([...sources.matchAll(/(?:Refusal\(|code: )'([a-z0-9-]+)'/g)].map((m) => m[1]));

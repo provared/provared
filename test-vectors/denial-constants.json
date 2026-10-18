@@ -63,6 +63,7 @@
       "sealer-not-expected",
       "book-cut-short",
       "seal-not-in-book",
+      "witness-invalid",
       "dated-after-stamp",
       "stamp-bad-data",
       "stamp-wrong-data",

@@ -3,7 +3,7 @@
 //
 //   provared-check <file> [--issuer <thumbprint>]... [--sealer <fingerprint>]... [--stamp-service <fingerprint>]...
 //                  [--block <fingerprint>]... [--voucher <fingerprint>]... [--disclosures <file>] [--cancellation <file>]...
-//                  [--seal <file>]... [--root <top fingerprint>] [--size <entries>] [--json]
+//                  [--seal <file>]... [--witness <fingerprint>]... [--root <top fingerprint>] [--size <entries>] [--json]
 //
 // Exit codes:
 //   0  the record is intact (no problem found, every signature checked),
@@ -31,7 +31,8 @@ process.on('warning', (w) => {
 
 const USAGE = `Usage: provared-check <file> [--issuer <thumbprint>]... [--sealer <fingerprint>]... [--stamp-service <fingerprint>]...
                       [--block <fingerprint>]... [--voucher <fingerprint>]... [--disclosures <file>] [--cancellation <file>]...
-                      [--seal <file>]... [--root <top fingerprint>] [--size <entries>] [--headers <file>] [--json]
+                      [--seal <file>]... [--witness <fingerprint>]... [--root <top fingerprint>] [--size <entries>]
+                      [--headers <file>] [--json]
        provared-check --sample [--json]
 
   <file>           a book (one entry to a line) or a Show (one JSON object)
@@ -49,7 +50,10 @@ const USAGE = `Usage: provared-check <file> [--issuer <thumbprint>]... [--sealer
                    It may hold "acknowledgements": what the agent's side signed when it was handed the cancellation
   --seal           a JSON file of a seal held elsewhere (by you, an auditor, a copy kept apart), as the entry it is in the book:
                    {"seal": {...}, "stamps": [...]}. The book must hold that seal at the place it states: one that ends
-                   before it was cut short. It counts only with --sealer naming its recorder; may be repeated
+                   before it was cut short. It counts only with --sealer naming its recorder; may be repeated.
+                   It may hold "witnesses": statements that witnesses signed for that seal, such as ones that came later
+  --witness        the fingerprint of the key set of a witness you trust: a seal counts as witnessed only by such a
+                   witness. Being witnessed excuses nothing; may be repeated
   --root           the top fingerprint you already trust
   --size           the number of entries you already trust; keep it with the top fingerprint
   --headers        a file of Bitcoin block headers, as provared-headers keeps it. It is checked here, from the chain's
@@ -64,14 +68,14 @@ const FINGERPRINT = /^[A-Za-z0-9_-]{43}$/;
 const BLOCK = /^[0-9a-f]{64}$/;
 
 // Options that may be repeated, and those that may be given once.
-const LISTS = { '--issuer': 'issuerKeys', '--sealer': 'sealKeys', '--stamp-service': 'stampServices', '--block': 'blocks', '--voucher': 'vouchers', '--cancellation': 'cancellations', '--seal': 'seals' };
+const LISTS = { '--issuer': 'issuerKeys', '--sealer': 'sealKeys', '--stamp-service': 'stampServices', '--block': 'blocks', '--voucher': 'vouchers', '--witness': 'witnesses', '--cancellation': 'cancellations', '--seal': 'seals' };
 const ONCE = { '--disclosures': 'disclosures', '--root': 'expectedRoot', '--size': 'expectedSize', '--headers': 'headers' };
 
 // The arguments, or the reason they cannot be used. A value that is not a
 // fingerprint is refused, never set aside: a typing error must not quietly
 // leave a time-stamp or a name uncounted.
 function parseArguments(argv) {
-  const out = { file: null, sample: false, issuerKeys: [], sealKeys: [], stampServices: [], blocks: [], vouchers: [], cancellations: [], seals: [], disclosures: undefined, expectedRoot: undefined, expectedSize: undefined, json: false };
+  const out = { file: null, sample: false, issuerKeys: [], sealKeys: [], stampServices: [], blocks: [], vouchers: [], witnesses: [], cancellations: [], seals: [], disclosures: undefined, expectedRoot: undefined, expectedSize: undefined, json: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--help' || a === '-h') return { help: true };
@@ -85,7 +89,7 @@ function parseArguments(argv) {
       if (i + 1 >= argv.length) return { error: `${a} needs a value.` };
       const value = argv[++i];
       if (Object.hasOwn(ONCE, a) && out[ONCE[a]] !== undefined) return { error: `${a} may be given once.` };
-      if (['--issuer', '--sealer', '--stamp-service', '--voucher', '--root'].includes(a) && !FINGERPRINT.test(value)) {
+      if (['--issuer', '--sealer', '--stamp-service', '--voucher', '--witness', '--root'].includes(a) && !FINGERPRINT.test(value)) {
         return { error: `The value of ${a} is not a fingerprint. A fingerprint is 43 letters, digits, hyphens or underscores, with no spaces.` };
       }
       if (a === '--block' && !BLOCK.test(value)) return { error: 'The value of --block is not the fingerprint of a block: 64 characters, the digits 0 to 9 and the letters a to f.' };
@@ -97,7 +101,7 @@ function parseArguments(argv) {
   }
   if (out.sample) {
     if (out.file !== null) return { error: '--sample names the sample record itself: give no file with it.' };
-    for (const name of ['issuerKeys', 'sealKeys', 'stampServices', 'blocks', 'vouchers', 'cancellations', 'seals']) {
+    for (const name of ['issuerKeys', 'sealKeys', 'stampServices', 'blocks', 'vouchers', 'witnesses', 'cancellations', 'seals']) {
       if (out[name].length) return { error: '--sample names what to trust itself: give no other option with it but --json.' };
     }
     if (out.disclosures !== undefined || out.expectedRoot !== undefined || out.expectedSize !== undefined || out.headers !== undefined) {
@@ -285,8 +289,20 @@ function printSeal(e) {
     console.log(`  Recorder's key set fingerprint:      ${e.sealer}`);
     printStamps(e.stamps);
     if (e.stamps.length === 0) console.log('  No outside time-stamp: the time is only the recorder\'s own word.');
+    printWitnesses(e.witnesses);
   }
   if (e.signatures && e.signatures.length) console.log(`  Recorder's signatures: ${e.signatures.map((s) => `${s.method} ${s.state}`).join('; ')}`);
+}
+
+// The witness statements beside a seal. What a statement says is shown only where it passed its check.
+function printWitnesses(list) {
+  for (const w of list ?? []) {
+    if (w.state === 'invalid') console.log('  Witness statement, NOT USED: it did not pass its check (see the problems)');
+    else if (w.state === 'unavailable') console.log('  Witness statement, NOT CHECKED: this device cannot check both of its signatures');
+    else if (w.counted) console.log(`  WITNESSED by ${label(w.name)} (a label), a witness you named as trusted (key set ${w.witness}), at ${w.when} (the witness's own word)`);
+    else if (w.trusted) console.log(`  Witness statement, NOT COUNTED: from a witness you named as trusted (key set ${w.witness}), but it was not counted (see the notes beside the seal)`);
+    else console.log(`  Witness statement, NOT COUNTED: from a witness you did not name as trusted (key set ${w.witness})`);
+  }
 }
 
 function printCancellation(e) {
@@ -354,6 +370,7 @@ function printHeldSeal(h, n) {
   console.log(`  Recorder:                            ${label(c.by.name)} (a label, not checked)`);
   console.log(`  Recorder's key set fingerprint:      ${h.sealer}`);
   printStamps(h.stamps);
+  printWitnesses(h.witnesses);
   console.log(h.used ? (h.inBook === null ? '  In the book at that place: NO' : `  In the book at that place: yes, at entry ${h.inBook}`) : '  In the book at that place: not compared, because it was not used');
   console.log(`  Recorder's signatures: ${h.signatures.map((s) => `${s.method} ${s.state}`).join('; ')}`);
   for (const n of h.notes) console.log(`  Note: ${n}`);
@@ -484,6 +501,7 @@ function print(result, isShow) {
   if (!s.problemFound) {
     const stamped = s.sealed ? `yes: the first ${s.sealed.entries} entries existed by ${s.sealed.when}` : 'no';
     console.log(`  Time-stamped in a way you trust?      ${stamped}`);
+    if (s.counts.seals || args.witnesses.length) console.log(`  Witnessed by a witness you trust?     ${witnessedWords(s)}${isShow && s.witnessed ? ' (single pages: this says nothing about totals over the whole book)' : ''}`);
     console.log(`  Checked against keys you named?       ${trustWords(s)}`);
     if (args.seals.length) console.log(`  Seals held elsewhere compared?        ${heldWords(result)}`);
   }
@@ -508,12 +526,25 @@ function named(s) {
   return args.issuerKeys.length > 0 && ((s.counts.seals === 0 && args.seals.length === 0) || args.sealKeys.length > 0);
 }
 
+// How far a witness the person named reaches. It excuses nothing, and is not needed for exit code 0.
+function witnessedWords(s) {
+  if (!s.witnessed) return args.witnesses.length ? 'no' : 'no (you named no witness you trust, --witness)';
+  const w = s.witnessed;
+  return `yes: the seal at entry ${w.seal}, which covers the first ${w.entries} entries (${w.seals.length} of ${s.counts.seals} seals witnessed)`;
+}
+
 // Whether the seals held elsewhere that were handed over were compared with the book.
 function heldWords(result) {
   if (args.sealKeys.length === 0) return 'NO: you named no recorder you expect (--sealer), so the seals handed over were not compared with the book. This is not a pass.';
   const seals = (result.held ?? []).filter((h) => h.kind === 'seal');
   const used = seals.filter((h) => h.used).length;
-  return used === seals.length ? 'yes' : `${used} of ${seals.length}: see the note beside each one`;
+  return used === seals.length ? 'yes' : `NO: ${seals.length - used} of ${seals.length} handed over were not compared with the book (see the note beside each one). This is not a pass.`;
+}
+
+// Whether every seal handed over beside the book was compared with it. One that was not (it gives another book
+// number, or could not be used) gives no pass, as one handed over with no recorder named does not.
+function heldAllCompared(result) {
+  return (result.held ?? []).filter((h) => h.kind === 'seal').every((h) => h.used);
 }
 
 function trustWords(s) {
@@ -581,6 +612,7 @@ if (args.sealKeys.length) options.sealKeys = args.sealKeys;
 if (args.stampServices.length) options.stampServices = args.stampServices;
 if (args.blocks.length) options.blocks = args.blocks;
 if (args.vouchers.length) options.vouchers = args.vouchers;
+if (args.witnesses.length) options.witnesses = args.witnesses;
 if (args.disclosures !== undefined) {
   try {
     options.disclosures = JSON.parse(readFileSync(args.disclosures, 'utf8'));
@@ -666,7 +698,7 @@ try {
     if (chain) printChain(chain, fromChain);
   }
   const s = result.summary;
-  code = s.problemFound ? 2 : s.intact && s.withinSlips && named(s) ? 0 : 1;
+  code = s.problemFound ? 2 : s.intact && s.withinSlips && named(s) && heldAllCompared(result) ? 0 : 1;
 } catch {
   // The checker is written never to throw. If it ever does, that is not a pass.
   console.error('The check could not be completed. This is not a pass.');

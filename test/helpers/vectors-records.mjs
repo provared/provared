@@ -1,6 +1,6 @@
 // Shared test cases for the approval, the refusal, a service's terms, the
 // cancellation, the acknowledgement, the vouching record, the withdrawal,
-// the pass and the denial.
+// the pass, the denial and the witness statement.
 //
 // The keys in the cases have the right shapes and made-up values: the
 // checks of content look only at shapes. Where a record is written, its
@@ -28,6 +28,7 @@ import {
   writeWithdrawal,
 } from '../../src/standing.js';
 import { DENIAL_SOURCES, FINDING_CODES, MAX_DENIAL_CODES, denialCodes, validateDenialContent, writeDenial } from '../../src/denial.js';
+import { validateWitnessContent, writeWitness } from '../../src/witness.js';
 import { answer, finish } from './vector-tools.mjs';
 
 const hex = (bytes) => Buffer.from(bytes).toString('hex');
@@ -99,6 +100,8 @@ export const ANSWER = {
   writeDenial: written(writeDenial),
   denialCodes: (c) => answer(() => denialCodes(c.answer)),
   denialConstants: () => answer(() => ({ DENIAL_SOURCES, FINDING_CODES, MAX_DENIAL_CODES })),
+  validateWitnessContent: valid(validateWitnessContent),
+  writeWitness: written(writeWitness),
 };
 
 // --- values the cases share ---
@@ -968,6 +971,70 @@ function passFields() {
   ]);
 }
 
+// --- the witness statement ---
+
+const WITNESS_BY = { name: 'Example witness (invented)', keys: KEY_SET };
+const WITNESS = { type: 'provared.witness.v0', id: ID, seal: FP, size: 12, root: FP2, by: WITNESS_BY, when: WHEN };
+
+function witnessContents() {
+  const sizes = [
+    ['1', 1],
+    ['0', 0],
+    ['-1', -1],
+    ['1.5', 1.5],
+    ['the largest whole number', 2 ** 53 - 1],
+    ['one more than the largest whole number', 2 ** 53],
+    ['text', '12'],
+    ['null', null],
+    ['true', true],
+    ['a list', [12]],
+  ];
+  return cases([
+    ['a witness statement', WITNESS],
+    ['a type of another kind, which this check does not read', { ...WITNESS, type: 'provared.seal.v0' }],
+    ['an unknown member', { ...WITNESS, colour: 'red' }],
+    ['a previous seal, which a statement does not hold', { ...WITNESS, previous: FP }],
+    ['time-stamps, which a statement does not hold', { ...WITNESS, stamps: [] }],
+    ['a member named __proto__', withProto(WITNESS)],
+    ...NOT_OBJECTS,
+    ...missing(WITNESS, ['by', 'id', 'root', 'seal', 'size', 'type', 'when']),
+    ...missing(WITNESS, ['keys', 'name'], 'by'),
+    ...each(WITNESS, 'id', IDS),
+    ...each(WITNESS, 'seal', FINGERPRINTS),
+    ...each(WITNESS, 'size', sizes),
+    ...each(WITNESS, 'root', FINGERPRINTS),
+    ['by: a list', { ...WITNESS, by: [WITNESS_BY] }],
+    ['by: null', { ...WITNESS, by: null }],
+    ['by: an extra member', { ...WITNESS, by: { ...WITNESS_BY, url: 'https://example.org' } }],
+    ...each(WITNESS, 'by.name', LABELS),
+    ...each(WITNESS, 'by.keys', KEY_SETS),
+    ...each(WITNESS, 'when', TIMES),
+    ['a faulty id, seal and size: the id is reported', { ...WITNESS, id: 'x', seal: 'x', size: 0 }],
+    ['a faulty seal and size: the seal is reported', { ...WITNESS, seal: 'x', size: 0 }],
+    ['a faulty size and root: the size is reported', { ...WITNESS, size: 0, root: 'x' }],
+    ['a faulty root and witness: the root is reported', { ...WITNESS, root: 'x', by: null }],
+    ['a faulty name and keys: the name is reported', { ...WITNESS, by: { name: '', keys: [] } }],
+    ['faulty keys and time: the keys are reported', { ...WITNESS, by: { ...WITNESS_BY, keys: [] }, when: 'x' }],
+  ]);
+}
+
+function witnessFields() {
+  const base = { id: ID, seal: FP, size: 12, root: FP2, by: WITNESS_BY, when: T };
+  return writes([
+    ['a witness statement', base],
+    ['an unknown field is left out', { ...base, previous: FP }],
+    ['a seal of one entry', { ...base, size: 1 }],
+    ['a seal of no entries', { ...base, size: 0 }],
+    ['no seal', drop(base, 'seal')],
+    ['a seal of 16 bytes', { ...base, seal: ID }],
+    ['no witness', drop(base, 'by')],
+    ['a witness with three keys', { ...base, by: { ...WITNESS_BY, keys: SEAL_SET } }],
+    ['a witness name with a lone surrogate', { ...base, by: { ...WITNESS_BY, name: 'a�' } }],
+    ['a time of 0', { ...base, when: 0 }],
+    ['the year 10000', { ...base, when: Date.parse('9999-12-31T23:59:59Z') + 1000 }],
+  ]);
+}
+
 // --- the denial ---
 
 const DENIAL = { type: 'provared.denial.v0', id: ID, slip: FP, action: 'supplies.order', source: 'check', codes: ['over-limit'], when: WHEN };
@@ -1120,6 +1187,8 @@ export const CASES = {
   'withdrawals-written': () => finish('Writing and signing a withdrawal (format description, section 23).', 'writeWithdrawal', withdrawalFields(), ANSWER),
   'pass-contents': () => finish("Confirming the members of a pass's content, with its own limits (format description, section 25).", 'validatePassContent', passContents(), ANSWER),
   'passes-written': () => finish('Writing and signing a pass (format description, section 25).', 'writePass', passFields(), ANSWER),
+  'witness-contents': () => finish("Confirming the members of a witness statement's content (format description, section 29.1).", 'validateWitnessContent', witnessContents(), ANSWER),
+  'witnesses-written': () => finish('Writing and signing a witness statement (format description, section 29.1).', 'writeWitness', witnessFields(), ANSWER),
   'denial-contents': () => finish("Confirming the members of a denial's content (format description, section 28).", 'validateDenialContent', denialContents(), ANSWER),
   'denials-written': () => finish('Writing and signing a denial (format description, section 28).', 'writeDenial', denialFields(), ANSWER),
   'denial-codes': () => finish('The reasons a denial by the check before acting names, from its answer (format description, section 28).', 'denialCodes', denialCodeCases(), ANSWER),

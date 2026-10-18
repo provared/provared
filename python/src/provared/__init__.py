@@ -20,6 +20,9 @@
 #            write_denial (the agent's side says it did not take an action, and why),
 #            write_vouching, write_withdrawal (an organisation vouches for a name),
 #            write_pass (an agent hands part of its permission to a helper agent),
+#            write_witness (a witness signs for a seal; there is no witness
+#            program here, since a witness checks SLH-DSA),
+#            consistency_proof, verify_consistency (RFC 9162, section 2.1.4),
 #            write_book, make_show
 # Beside an agent: open_recorder (the stub writer: ask first, act, write
 #            the receipt), record_tools (an agent's tools behind the stub
@@ -53,6 +56,8 @@ from .slip import COVERABLE, assemble_slip, check_slip, prepare_slip
 from .standing import VOUCHED_KINDS, assemble_cancellation, prepare_cancellation, write_acknowledgement, write_vouching, write_withdrawal
 from .stub import countersign, write_stub
 from .tools import NotTaken, arguments_fingerprint, record_function, record_tools
+from .tree import consistency_proof, inclusion_path, verify_consistency, verify_inclusion
+from .witness import MAX_WITNESSES, write_witness
 
 __all__ = [
     'MIN_BLOCKS_AFTER', 'blocks_in_chain', 'check_header_chain',
@@ -60,6 +65,7 @@ __all__ = [
     'SIGN_WITHIN_MS', 'Signer', 'signer_from_key',
     'DENIALS_PER_HOUR', 'DENIAL_SOURCES', 'FINDING_CODES', 'denial_codes', 'write_denial',
     'record_function', 'record_tools',
+    'MAX_WITNESSES', 'consistency_proof', 'inclusion_path', 'verify_consistency', 'verify_inclusion', 'write_witness',
     'ACTION_KINDS', 'CONDUCT_RULES', 'COVERABLE', 'LIMITS', 'REFUSAL_REASONS', 'RESERVED_PREFIX', 'SHARED_ACTIONS', 'VOUCHED_KINDS',
     'DOCUMENT_NAMES', 'RESERVED_DOCUMENT_PREFIX', 'http_request_fingerprint', 'http_response_fingerprint', 'identifier_fingerprint',
     'Refusal', 'action_kind', 'assemble_approval', 'assemble_cancellation', 'assemble_slip', 'block_fingerprint', 'block_stamp_item',

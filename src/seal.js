@@ -25,7 +25,7 @@ export const CLOCK_ALLOWANCE_MS = 300 * 1000;
  * @param {any} c
  */
 export function validateSealContent(c) {
-  f.members(c, ['by', 'id', 'root', 'size', 'type', 'when'], ['previous'], 'seal');
+  f.members(c, ['by', 'id', 'root', 'size', 'type', 'when'], ['book', 'previous'], 'seal');
   f.id(c.id, 'id');
   f.members(c.by, ['keys', 'name'], [], 'by');
   f.label(c.by.name, 'by.name');
@@ -34,6 +34,13 @@ export function validateSealContent(c) {
   if (c.size < 1) throw f.fail('size', 'must be 1 or more.');
   f.fingerprintText(c.root, 'root');
   if (Object.hasOwn(c, 'previous')) f.fingerprintText(c.previous, 'previous');
+  // The number of the book among the books a recorder keeps under one permission (section 21.6). Absent for the
+  // first book, so that every seal written before numbers existed reads as it did; written only from 2.
+  if (Object.hasOwn(c, 'book')) {
+    f.wholeNumber(c.book, 'book');
+    if (c.book < 2) throw f.fail('book', 'must be 2 or more: the first book has no number.');
+    if (!Object.hasOwn(c, 'previous')) throw f.fail('previous', 'is missing: every seal of a book after the first names the seal before it, and the first names the last seal of the book before.');
+  }
   f.time(c.when, 'when');
 }
 
@@ -102,7 +109,10 @@ export async function keySetFingerprint(keys) {
  * @param {string} book the book so far
  * @param {object} fields
  * @param {{keys: object[], name: string}} fields.by the recorder's public key set and its name (a label)
- * @param {string} [fields.previous] the fingerprint of the seal before this one in the book, if there is one
+ * @param {string} [fields.previous] the fingerprint of the seal before this one in the book, if there is one; for
+ *   the first seal of a book after the first, the fingerprint of the last seal of the book before
+ * @param {number} [fields.book] the book's number among the books the recorder keeps under one permission (section
+ *   21.6): 2 or more for a book after the first; 1 or none for the first, which carries no number
  * @param {number|Date} [fields.when] defaults to now
  * @param {any[]} privateKeys the recorder's private keys, or signers (signatures.js), in the order of the key set. A signer must hold the key "by" names in its place
  * @returns {Promise<{record: object, fingerprint: string, fingerprintBytes: Uint8Array}>}
@@ -120,6 +130,8 @@ export async function writeSeal(book, fields, privateKeys) {
     when: formatTime(fields.when ?? Date.now()),
   };
   if (fields.previous) content.previous = fields.previous;
+  // The book's number: 1, or none, for the first book, which then carries no number.
+  if (fields.book !== undefined && fields.book !== null && fields.book !== 1) content.book = fields.book;
   validateSealContent(content);
   const { contentBytes, payloadB64 } = encodeContent(content);
   const headers = protectedHeaders('seal');

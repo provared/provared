@@ -7,6 +7,11 @@
 //
 // The proof that one leaf is in the tree is the audit path of section
 // 2.1.1. It is checked with the steps of RFC 9162, section 2.1.3.2.
+//
+// The proof that a tree of m leaves is the first part of a tree of n leaves
+// (a consistency proof) is made as RFC 9162, section 2.1.4.1, sets out, and
+// checked with the steps of section 2.1.4.2. RFC 9162 builds the same tree
+// as RFC 6962.
 
 import { concatBytes, equalBytes, sha256 } from './encoding.js';
 
@@ -140,4 +145,117 @@ export async function verifyInclusion(index, size, leaf, path, root) {
     sn = Math.floor(sn / 2);
   }
   return sn === 0 && equalBytes(r, root);
+}
+
+// The largest power of two smaller than n, for n of 2 or more (RFC 9162,
+// section 2.1.1: "k be the largest power of two smaller than n").
+function splitAt(n) {
+  let k = 1;
+  while (k * 2 < n) k *= 2;
+  return k;
+}
+
+// The root of the tree over the leaves whose hashes are hashes[lo] to
+// hashes[hi - 1], for hi > lo: MTH of RFC 9162, section 2.1.1.
+async function rangeRoot(hashes, lo, hi) {
+  if (hi - lo === 1) return hashes[lo];
+  const k = splitAt(hi - lo);
+  return nodeHash(await rangeRoot(hashes, lo, lo + k), await rangeRoot(hashes, lo + k, hi));
+}
+
+// SUBPROOF(m, D[lo:hi], b) of RFC 9162, section 2.1.4.1, for 0 < m <= hi - lo.
+async function subproof(hashes, m, lo, hi, b) {
+  const n = hi - lo;
+  if (m === n) return b ? [] : [await rangeRoot(hashes, lo, hi)];
+  const k = splitAt(n);
+  if (m <= k) return [...(await subproof(hashes, m, lo, lo + k, b)), await rangeRoot(hashes, lo + k, hi)];
+  return [...(await subproof(hashes, m - k, lo + k, hi, false)), await rangeRoot(hashes, lo, lo + k)];
+}
+
+/**
+ * The proof that the first m leaves form a tree that the whole tree extends:
+ * the consistency proof of RFC 9162, section 2.1.4.1, from the tree of the
+ * first m leaves to the tree of all of them. For m equal to the number of
+ * leaves, and for m of 0, the proof is empty (RFC 9162 defines a proof only
+ * for 0 < m; every tree extends the empty one).
+ * @param {Uint8Array[]} leaves the data of each leaf
+ * @param {number} m how many leaves the earlier tree has, from 0 to the number of leaves
+ * @returns {Promise<Uint8Array[]>}
+ */
+export async function consistencyProof(leaves, m) {
+  if (!Array.isArray(leaves)) throw new TypeError('the leaves must be a list');
+  if (!Number.isSafeInteger(m) || m < 0 || m > leaves.length) throw new RangeError('no such earlier tree');
+  if (m === 0 || m === leaves.length) return [];
+  const hashes = [];
+  for (const leaf of leaves) hashes.push(await leafHash(leaf));
+  return subproof(hashes, m, 0, hashes.length, true);
+}
+
+const isHash = (value) => value instanceof Uint8Array && value.length === 32;
+
+/**
+ * Check a consistency proof (RFC 9162, section 2.1.4.2): that the tree of m
+ * leaves whose root is rootM is the first part of the tree of n leaves whose
+ * root is rootN. Where m equals n the proof must be empty and the two roots
+ * the same; where m is 0 the proof must be empty and rootM the root of the
+ * empty tree (the SHA-256 hash of nothing). Anything that is not a proof of
+ * these sizes gives false: the function never throws for a bad proof.
+ * @param {number} m
+ * @param {number} n
+ * @param {Uint8Array} rootM 32 bytes
+ * @param {Uint8Array} rootN 32 bytes
+ * @param {Uint8Array[]} proof each 32 bytes
+ * @returns {Promise<boolean>}
+ */
+export async function verifyConsistency(m, n, rootM, rootN, proof) {
+  if (!Number.isSafeInteger(m) || !Number.isSafeInteger(n) || m < 0 || m > n) return false;
+  if (!isHash(rootM) || !isHash(rootN) || !Array.isArray(proof)) return false;
+  // Read place by place, a gap included: a gap is not a fingerprint.
+  const path = [];
+  for (let i = 0; i < proof.length; i++) {
+    if (!isHash(proof[i])) return false;
+    path.push(proof[i]);
+  }
+  if (m === n) return path.length === 0 && equalBytes(rootM, rootN);
+  if (m === 0) return path.length === 0 && equalBytes(rootM, await sha256(new Uint8Array(0)));
+  // The steps of RFC 9162, section 2.1.4.2, in their order.
+  // 1. An empty proof fails.
+  if (path.length === 0) return false;
+  // 2. Where m is an exact power of two, the root of the earlier tree is the first value.
+  // (Worked out by doubling, not with the bit operators, which hold only 32 bits.)
+  let power = 1;
+  while (power < m) power *= 2;
+  if (power === m) path.unshift(rootM);
+  // 3.
+  let fn = m - 1;
+  let sn = n - 1;
+  // 4. Sizes are below 2 to the power 53, so halving with Math.floor is exact.
+  while (fn % 2 === 1) {
+    fn = Math.floor(fn / 2);
+    sn = Math.floor(sn / 2);
+  }
+  // 5.
+  let fr = path[0];
+  let sr = path[0];
+  // 6.
+  for (let i = 1; i < path.length; i++) {
+    const c = path[i];
+    if (sn === 0) return false;
+    if (fn % 2 === 1 || fn === sn) {
+      fr = await nodeHash(c, fr);
+      sr = await nodeHash(c, sr);
+      if (fn % 2 === 0) {
+        while (fn % 2 === 0 && fn !== 0) {
+          fn = Math.floor(fn / 2);
+          sn = Math.floor(sn / 2);
+        }
+      }
+    } else {
+      sr = await nodeHash(sr, c);
+    }
+    fn = Math.floor(fn / 2);
+    sn = Math.floor(sn / 2);
+  }
+  // 7.
+  return equalBytes(fr, rootM) && equalBytes(sr, rootN) && sn === 0;
 }

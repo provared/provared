@@ -22,6 +22,7 @@ const BOXES = [
   ['trust-sealer', 'sealKeys', 'whoever keeps and seals the book'],
   ['trust-stamps', 'stampServices', 'time-stamp services'],
   ['trust-vouchers', 'vouchers', 'organisations whose vouching you trust'],
+  ['trust-witnesses', 'witnesses', 'witnesses you trust'],
 ];
 
 function trusted() {

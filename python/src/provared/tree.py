@@ -146,3 +146,122 @@ def verify_inclusion(index, size, leaf, path, root):
         fn //= 2
         sn //= 2
     return sn == 0 and r == bytes(root)
+
+
+# --- consistency proofs: RFC 9162, section 2.1.4 ---
+
+
+def _split_at(n):
+    """The largest power of two smaller than n, for n of 2 or more (RFC 9162, section 2.1.1)."""
+    k = 1
+    while k * 2 < n:
+        k *= 2
+    return k
+
+
+def _range_root(hashes, lo, hi):
+    """The root of the tree over hashes[lo:hi], for hi > lo: MTH of RFC 9162, section 2.1.1."""
+    if hi - lo == 1:
+        return hashes[lo]
+    k = _split_at(hi - lo)
+    return _node_hash(_range_root(hashes, lo, lo + k), _range_root(hashes, lo + k, hi))
+
+
+def _subproof(hashes, m, lo, hi, b):
+    """SUBPROOF(m, D[lo:hi], b) of RFC 9162, section 2.1.4.1, for 0 < m <= hi - lo."""
+    n = hi - lo
+    if m == n:
+        return [] if b else [_range_root(hashes, lo, hi)]
+    k = _split_at(n)
+    if m <= k:
+        return [*_subproof(hashes, m, lo, lo + k, b), _range_root(hashes, lo + k, hi)]
+    return [*_subproof(hashes, m - k, lo + k, hi, False), _range_root(hashes, lo, lo + k)]
+
+
+def consistency_proof(leaves, m):
+    """The proof that the first m leaves form a tree that the whole tree
+    extends: the consistency proof of RFC 9162, section 2.1.4.1. For m equal
+    to the number of leaves, and for m of 0, the proof is empty.
+
+    leaves: the data of each leaf. Raises TypeError where the leaves are not
+    a list, and IndexError ("no such earlier tree") where JavaScript throws a
+    RangeError.
+    """
+    if not isinstance(leaves, (list, tuple)):
+        raise TypeError('the leaves must be a list')
+    leaves = list(leaves)
+    if not _js.is_safe_integer(m) or m < 0 or m > len(leaves):
+        raise IndexError('no such earlier tree')
+    m = int(m)
+    if m == 0 or m == len(leaves):
+        return []
+    hashes = [leaf_hash(leaf) for leaf in leaves]
+    return _subproof(hashes, m, 0, len(hashes), True)
+
+
+def _is_hash(value):
+    return isinstance(value, (bytes, bytearray)) and len(value) == 32
+
+
+def verify_consistency(m, n, root_m, root_n, proof):
+    """Check a consistency proof (RFC 9162, section 2.1.4.2): that the tree of
+    m leaves whose root is root_m is the first part of the tree of n leaves
+    whose root is root_n. Where m equals n the proof must be empty and the
+    two roots the same; where m is 0 the proof must be empty and root_m the
+    root of the empty tree. Returns True or False, and never raises for a bad
+    proof.
+    """
+    if not _js.is_safe_integer(m) or not _js.is_safe_integer(n) or m < 0 or m > n:
+        return False
+    if not _is_hash(root_m) or not _is_hash(root_n) or not isinstance(proof, (list, tuple)):
+        return False
+    path = []
+    for p in proof:
+        if not _is_hash(p):
+            return False
+        path.append(bytes(p))
+    m = int(m)
+    n = int(n)
+    root_m = bytes(root_m)
+    root_n = bytes(root_n)
+    if m == n:
+        return len(path) == 0 and root_m == root_n
+    if m == 0:
+        return len(path) == 0 and root_m == sha256(b'')
+    # The steps of RFC 9162, section 2.1.4.2, in their order.
+    # 1. An empty proof fails.
+    if len(path) == 0:
+        return False
+    # 2. Where m is an exact power of two, the root of the earlier tree is the first value.
+    power = 1
+    while power < m:
+        power *= 2
+    if power == m:
+        path.insert(0, root_m)
+    # 3.
+    fn = m - 1
+    sn = n - 1
+    # 4.
+    while fn % 2 == 1:
+        fn //= 2
+        sn //= 2
+    # 5.
+    fr = path[0]
+    sr = path[0]
+    # 6.
+    for c in path[1:]:
+        if sn == 0:
+            return False
+        if fn % 2 == 1 or fn == sn:
+            fr = _node_hash(c, fr)
+            sr = _node_hash(c, sr)
+            if fn % 2 == 0:
+                while fn % 2 == 0 and fn != 0:
+                    fn //= 2
+                    sn //= 2
+        else:
+            sr = _node_hash(sr, c)
+        fn //= 2
+        sn //= 2
+    # 7.
+    return fr == root_m and sr == root_n and sn == 0

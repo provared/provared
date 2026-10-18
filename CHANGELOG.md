@@ -2,6 +2,156 @@
 
 ## Unreleased
 
+- **Witnesses, and consistency proofs** (format description, section 29),
+  in both languages. Whoever keeps a book could show one history to one
+  reader and another to another, each sealed. A witness is a party, with
+  a key set of its own, that keeps for each book the latest seal it has
+  signed for, and signs a statement for a new seal only where the new
+  seal extends that one.
+  - *Consistency proofs*, exactly as RFC 9162, section 2.1.4, sets out:
+    `consistencyProof(leaves, m)` and `verifyConsistency(m, n, rootM,
+    rootN, proof)` (Python: `consistency_proof`, `verify_consistency`).
+    For m equal to n the proof is empty and the roots must be the same;
+    for m of 0 the proof is empty and the earlier root must be that of the
+    empty tree. A second implementation, written in the tests from the RFC
+    alone, is compared with the library's for every pair of sizes up to 64
+    leaves, with every value of every proof changed and left out.
+  - *A new kind of record, the witness statement*: label
+    `vnd.provared.witness.v0+json`, two signatures (Ed25519 and
+    ML-DSA-87), content `type`, `id`, `seal` (the seal's fingerprint),
+    `size` and `root` (repeated from the seal), `by` (`{keys, name}`)
+    and `when`. `writeWitness(fields, signers)` (Python:
+    `write_witness`); signers may be keys or signer objects. There are now
+    twenty-six labels.
+  - *Beside a seal*: a seal's line may hold `witnesses`, 1 to 4
+    statements, none from the same key set twice; and a seal handed over
+    beside the book (`seals`, `--seal`) may hold statements that came
+    later. A checker checks each: its signatures, that it speaks of that
+    very seal (its `seal`, `size` and `root`), and that it is not dated
+    more than 300 seconds before the seal. One new code,
+    `witness-invalid`; it joins the format's own list of finding codes.
+    A statement that does not pass is a problem with its entry, or, handed
+    over, with the whole check (the seal it came with is used all the
+    same).
+  - *Which witnesses count*: the option `witnesses` (the fingerprints of
+    the key sets of the witnesses the person trusts), `--witness
+    <fingerprint>` on the command line (may be repeated), and a box on the
+    checking page. A statement counts only where its witness is named,
+    both its signatures were checked on the device, **the book's first
+    line is a permission that passed, signed by a passkey the person
+    named (`issuerKeys`), the person named the recorders they expect
+    (`sealKeys`)**, and its seal passed with its Ed25519 and ML-DSA-87
+    signatures checked there (its third, SLH-DSA, may not be: the Python
+    version and browsers count on the first two). A witness knows a book
+    only by its permission and its recorder's keys, which the recorder
+    chooses; without both fixed by the reader, a recorder could start a
+    second history with another first line and have the same witness
+    sign for it (found by the independent review). Where a statement
+    from a trusted witness is not counted for that reason, the answer
+    says why. One from a witness not named is shown and not counted.
+  - *What the answer says*: each seal entry, and each seal handed over,
+    gains `witnesses` (each statement with its fingerprint, its witness's
+    key set fingerprint, its name as a label, its `when`, its signatures,
+    `state`, `trusted` and `counted`); the summary gains `witnessed`: the
+    latest seal for which a statement counts, the entries it covers, the
+    witnesses, and every seal witnessed, or null. Where a seal is
+    witnessed, the answer's list of what the check does not show says what
+    a witness shows and what it does not. Being witnessed excuses nothing,
+    is never said of a book with a problem, and is not needed for exit
+    code 0. The command-line checker prints "Witnessed by a witness you
+    trust?".
+  - *The witness itself*, in the library (it needs Node.js, because it
+    checks SLH-DSA): `openWitness({ by, signers, state, clock })`, with
+    `witness(entry, proof, firstLine)`, `update`, `ready`, `latest(book)`
+    and `state()`. It knows a sequence of books by the recorder's key set
+    with the passkey and the agent of the permission on the first line
+    (`bookIdentity`); ties the first
+    line to the seal with an audit path when it first sees a sequence and
+    at each new book, and keeps it
+    tied with each consistency proof (`witnessProof` makes the proof to
+    send); signs only for a seal whose three signatures it checked, which
+    names the seal it holds, is not dated before it, extends it, and is
+    dated no more than 300 seconds after its clock; never signs two
+    different seals of one book at one size (the same seal again gets the
+    same statement); checks every signature it makes before it keeps or
+    gives out a statement; and hands back its state with each statement,
+    to be saved first. Opened from a saved state, it signs nothing until
+    it has been brought up to date from a copy of what it gave out
+    (`update`) and told so (`ready`). A witness running as a service is
+    not part of this change. The Python version has no witness.
+  - The check before acting, the stub writer and a checker that is
+    carried on read statements as a whole check does; a statement's
+    signatures that the device cannot check leave the record not fully
+    checked, as for any record.
+  - *The books of one permission* (format description, section 21.6): a
+    seal may give `book`, its book's number among the books its recorder
+    keeps under one permission (2 or more; absent for the first book, so
+    every seal written before reads as it did; `1` is refused, and a seal
+    with `book` must give `previous`). The first seal of a later book
+    names, as `previous`, the last seal of the book before: a checker of
+    that book alone does not compare it, says so, and, handed that seal,
+    says whether the book follows on from it (`seal-chain-broken` where it
+    is by other keys, `time-went-backwards` where it is dated after the
+    first seal); a seal of another number is not compared by its place.
+    Every seal of a book gives the same number (`seal-chain-broken`).
+    `writeSeal` takes `book` (Python: `write_seal`). The recorder beside
+    Claude Code does not yet number its books.
+  - *The witness keeps every book of one recorder, person and agent as
+    one sequence*: it knows a sequence by the recorder's keys with the
+    passkey and the agent's key set of the permission on the book's first
+    line, so a renewal (another permission from the same passkey to the
+    same agent) is the same sequence, and a book that starts with it must
+    follow on from the seal the witness holds (found by the second round
+    of the review: known by the permission alone, a book that began with
+    a renewal forked the history). It keeps no book whose first line is
+    not a permission (`slip-missing`; a first line given with its line
+    feed is `bad-field`), signs for the first seal of the next book only
+    where that seal names the latest seal it holds and its first line is
+    tied to it, and never again signs for the book before; a fork across
+    books is refused. Its state names each sequence by its passkey and
+    agent. One recorder key set keeps one sequence for each person and
+    agent: books kept side by side for one agent need recorder keys of
+    their own.
+  - *Every permission before a witnessed seal must name the first line's
+    passkey and agent* (found by the third round of the review: a book
+    that started with agent Y's permission, then held agent X's
+    permission and stubs with the one over the limit left out, was signed
+    as the first book of the person and agent Y and read as witnessed).
+    A statement now counts only where every permission among the entries
+    its seal covers names the same passkey key and agent key set as the
+    first line's; otherwise a note says why. A renewal by the same person
+    for the same agent, and each agent's own book under one recorder (as
+    the gateway keeps them), are witnessed as before. A Show counts a
+    statement only where its pages hold every entry the seal covers, so it
+    never counts one the whole book would not. The witness cannot apply
+    this itself: it sees a book's first line, not its entries.
+  - *A seal held elsewhere that gives another book number than the book
+    is not compared with it, and gives no pass* (found by the second
+    round of the review: a book cut short and sealed again as "book 2"
+    otherwise hid the cut). It is not used; its note says what it shows
+    and that this book does not show whether that book was cut short;
+    the command-line checker says "Seals held elsewhere compared? NO" and
+    does not end with code 0, and the checking page gives no green
+    answer.
+  - New shared test files: `tree-consistency`, `tree-consistency-checks`,
+    `witness-contents`, `witnesses-written`, `witness-books`,
+    `witness-shows`, `witness-before`, `seal-books`, `chained-books`,
+    `chained-shows`, `renewal-books`, `renewal-shows`, `two-agent-books`
+    and `two-agent-shows`. **Every stored answer of a whole
+    book, a Show or the stub writer changes**, and only by the new
+    members: `summary.witnessed: null`, and `witnesses: []` on every seal
+    entry and every seal handed over; `denial-constants` gains
+    `witness-invalid`. Eleven files change, each checked case by case to
+    differ in those members alone (`books`, `denial-books`,
+    `denial-constants`, `denial-scenarios`, `denial-shows`,
+    `held-seal-shows`, `held-seals`, `recorder-details-after`,
+    `recorder-scenarios`, `shows`, `tool-scenarios`); no record was
+    signed again.
+  - Section 28's list of finding codes now also names `book-cut-short`
+    and `seal-not-in-book`, which the library already gave.
+  - **A checker of version 0.5.0 or earlier refuses a seal's line that
+    holds `witnesses`** (`unknown-entry`), **and a seal that gives `book`**
+    (`bad-field`).
 - **The recorder beside Claude Code offers its books to a reader on this
   computer, through a feed on its own port** (`integrations/claude-code`,
   `feed.mjs`), so that no other program need open a book file. On

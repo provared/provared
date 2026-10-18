@@ -24,7 +24,7 @@ time-stamp that covers it, before the checker reports it."""
 
 def validate_seal_content(c):
     """Confirm every member of a seal's content."""
-    f.members(c, ['by', 'id', 'root', 'size', 'type', 'when'], ['previous'], 'seal')
+    f.members(c, ['by', 'id', 'root', 'size', 'type', 'when'], ['book', 'previous'], 'seal')
     f.id_(c['id'], 'id')
     f.members(c['by'], ['keys', 'name'], [], 'by')
     f.label(c['by']['name'], 'by.name')
@@ -35,6 +35,14 @@ def validate_seal_content(c):
     f.fingerprint_text(c['root'], 'root')
     if 'previous' in c:
         f.fingerprint_text(c['previous'], 'previous')
+    # The number of the book among the books a recorder keeps under one permission (section 21.6). Absent for the
+    # first book, so that every seal written before numbers existed reads as it did; written only from 2.
+    if 'book' in c:
+        f.whole_number(c['book'], 'book')
+        if c['book'] < 2:
+            raise f.fail('book', 'must be 2 or more: the first book has no number.')
+        if 'previous' not in c:
+            raise f.fail('previous', 'is missing: every seal of a book after the first names the seal before it, and the first names the last seal of the book before.')
     f.time(c['when'], 'when')
 
 
@@ -97,7 +105,11 @@ def write_seal(book, seal_fields, private_keys):
 
     seal_fields: "by" (the recorder's public key set and its name, a label),
     "previous" (the fingerprint of the seal before this one in the book, if
-    there is one), "when" (milliseconds since 1970; defaults to now).
+    there is one; for the first seal of a book after the first, the last seal
+    of the book before), "book" (the book's number among the books the
+    recorder keeps under one permission: 2 or more, or 1 or none for the
+    first book, which carries no number; section 21.6), "when"
+    (milliseconds since 1970; defaults to now).
     private_keys: the recorder's private keys, or signers (provared.signatures.Signer), in the order of
     the key set; a signer must hold the key "by" names in its place.
 
@@ -121,6 +133,10 @@ def write_seal(book, seal_fields, private_keys):
     }
     if seal_fields.get('previous'):
         content['previous'] = seal_fields['previous']
+    # The book's number: 1, or none, for the first book, which then carries no number.
+    book_number = seal_fields.get('book')
+    if book_number is not None and not (_js.is_number(book_number) and book_number == 1):
+        content['book'] = book_number
     validate_seal_content(content)
     if not method_available(SLH):
         raise RuntimeError('SLH-DSA is not built into this device.')

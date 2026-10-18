@@ -115,6 +115,9 @@ def _only_seal_third_unchecked(result):
             else:
                 note(sigs)
             stamps(e.get('stamps') or [])
+            # The witness statements beside it: each of their signatures counts, as for any record.
+            for w in e.get('witnesses') or []:
+                note(w.get('signatures') or [])
         elif kind == 'slip':
             sig = e.get('signature')
             if not sig or sig.get('state') == 'unavailable':
@@ -154,6 +157,8 @@ def _only_seal_third_unchecked(result):
                 for x in sigs:
                     if x.get('state') == 'unavailable':
                         missing.add(x.get('method'))
+            for w in h.get('witnesses') or []:
+                note(w.get('signatures') or [])
     if not state['skipped'] and len(missing) == 0 and state['excused'] > 0:
         return [SEAL_THIRD]
     return None

@@ -14,3 +14,4 @@ export { blockFingerprint } from './blockstamp.js';
 export { checkHeaderChain, blocksInChain, MIN_BLOCKS_AFTER } from './headers.js';
 export { thumbprint } from './keys.js';
 export { methodAvailable } from './signatures.js';
+export { verifyConsistency, verifyInclusion } from './tree.js';

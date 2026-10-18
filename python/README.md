@@ -173,7 +173,7 @@ agent's keys between runs as two 32-byte seeds.
 
 Names follow Python's way (`check_book`, `write_stub`). Options may be
 given as keyword arguments (`issuer_keys`, `expected_root`,
-`stamp_services`, `seal_keys`, `vouchers`, `disclosures`,
+`stamp_services`, `seal_keys`, `vouchers`, `witnesses`, `disclosures`,
 `cancellations`, `seals`, `without_methods`), or as one dict with the names the
 JavaScript library uses (`issuerKeys` and so on). Records and answers
 are dicts and lists, with the same member names as in the format.
@@ -188,6 +188,16 @@ signature (SLH-DSA), so such a seal counts on its Ed25519 and ML-DSA-87
 signatures, and the answer says so (format description, section 21.5).
 Hand over only seals of the book being checked: nothing in a seal names
 its book.
+
+A seal's line may hold witness statements, and statements that came
+later may be handed over with a copy of the seal (`{"seal": ..., "witnesses": [...]}`).
+Name the witnesses you trust with `witnesses` (the fingerprints of their
+key sets): `summary["witnessed"]` then gives the latest seal witnessed
+(format description, section 29). `write_witness` writes a statement,
+and `consistency_proof` and `verify_consistency` make and check the proof
+that one tree extends another (RFC 9162, section 2.1.4). There is no
+witness program in this version: a witness checks a seal's three
+signatures, and this version cannot check SLH-DSA.
 
 `provared.check` holds the checker alone, for anyone who audits the
 checking.

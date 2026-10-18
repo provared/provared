@@ -10,7 +10,7 @@ from provared.encoding import from_base64url, problem_from
 from provared.headers import answer_for, blocks_in_chain, check_header_chain, next_bits, read_header_chain, start_header_chain
 from provared.seal import decode_stamps, key_set_fingerprint, validate_seal_content
 from provared.timestamp import check_stamp
-from provared.tree import inclusion_path, leaf_hash, tree_builder, tree_root, verify_inclusion
+from provared.tree import consistency_proof, inclusion_path, leaf_hash, tree_builder, tree_root, verify_consistency, verify_inclusion
 
 
 def _answer(work):
@@ -195,7 +195,30 @@ def _next_bits(c):
     return next_bits(c['bits'], c['firstTime'], c['lastTime']) if rules is None else next_bits(c['bits'], c['firstTime'], c['lastTime'], rules)
 
 
+def _bytes_of(value):
+    """Text is hexadecimal bytes; anything else is handed over as it is."""
+    return _bytes(value) if isinstance(value, str) else value
+
+
+def _list_of(value):
+    """A list is read item by item; anything else is handed over as it is."""
+    return [_bytes_of(x) for x in value] if isinstance(value, list) else value
+
+
+def _consistency_proof(c):
+    """For each earlier size m: the proof, and whether it checks against the roots this library works out."""
+    leaves = _list_of(c['leaves'])
+    out = []
+    for m in c['ms']:
+        proof = consistency_proof(leaves, m)
+        checks = verify_consistency(m, len(leaves), tree_root(leaves[: int(m)]), tree_root(leaves), proof)
+        out.append({'m': m, 'proof': [p.hex() for p in proof], 'checks': checks})
+    return out
+
+
 ANSWER = {
+    'consistencyProof': lambda c: _answer(lambda: _consistency_proof(c)),
+    'verifyConsistency': lambda c: _answer(lambda: verify_consistency(c['m'], c['n'], _bytes_of(c['rootM']), _bytes_of(c['rootN']), _list_of(c['proof']))),
     'nextBits': lambda c: _answer(lambda: _next_bits(c)),
     'readHeaderChain': lambda c: _answer(lambda: _read_header_chain(c)),
     'checkHeaderChain': lambda c: _answer(lambda: _check_header_chain(c)),

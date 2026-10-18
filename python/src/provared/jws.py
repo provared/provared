@@ -33,6 +33,7 @@ KINDS = {
     'withdrawal': {'type': 'provared.withdrawal.v0', 'protected': _two('withdrawal')},
     'pass': {'type': 'provared.pass.v0', 'protected': _two('pass')},
     'denial': {'type': 'provared.denial.v0', 'protected': _two('denial')},
+    'witness': {'type': 'provared.witness.v0', 'protected': _two('witness')},
     'seal': {
         'type': 'provared.seal.v0',
         'protected': _two('seal') + ['{"typ":"vnd.provared.seal.v0+json","alg":"SLH-DSA-SHA2-256s"}'],

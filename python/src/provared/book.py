@@ -28,6 +28,7 @@ from .signatures import verify_signature
 from .slip import _UNDEFINED, check_passkey_signature, check_slip
 from .standing import validate_acknowledgement_content, validate_cancellation_content, validate_vouching_content, validate_withdrawal_content
 from .denial import validate_denial_content
+from .witness import MAX_WITNESSES, validate_witness_content
 from .stub import validate_countersignature_content, validate_stub_content
 from .timestamp import check_stamp
 from .tree import inclusion_path, tree_builder, tree_root, verify_inclusion
@@ -71,6 +72,23 @@ def _stamped_words(sealed):
         f"An outside time-stamp covers the first {sealed['entries']} entries: they existed by {sealed['when']}, as the time-stamp service states. What came "
         'after is not time-stamped, and a later seal with everything after it could have been removed: compare the top fingerprint and the number of entries '
         "with a copy you trust. Time-stamp services sign with methods of today's kind, which are not quantum-safe."
+    )
+
+
+def _witnessed_words(w):
+    """What a witness the reader trusts shows, and what it does not (format description, section 29.4)."""
+    return (
+        f"A witness you named as trusted signed for the seal at entry {w['seal']}, which covers the first {w['entries']} "
+        "entries. This book starts from a permission signed by a passkey you named, every permission before the seal is "
+        "from that passkey for the same agent, and the book is sealed by a recorder you named. For that recorder, that passkey and the agent the permission names, the witness states that it saw this "
+        "seal, and that it will sign for no seal that does not extend it, in this book or a later one, whichever "
+        "permission from that passkey to that agent the book starts from. So a second history of those entries, sealed "
+        "by the same recorder and starting from a permission that passkey gave that agent, shown to someone else, would "
+        "need that witness to sign for it too. It does not cover a history sealed with other keys, even keys you also "
+        "named, nor one that starts from a permission for another agent. It does not show when the seal was made, that "
+        "nothing was cut off after a later seal, nor anything never shown to the witness: to see whether the end of the "
+        "book is missing, ask the witness for the latest seal it holds for this recorder, passkey and agent, and hand "
+        "that seal over beside the book it is of."
     )
 
 
@@ -196,7 +214,7 @@ class _Reader:
         # The seals so far: the last one, how far an outside time-stamp reaches,
         # and the tree as it grows, so that each seal can be compared with the
         # entries before it.
-        self.seals = {'count': 0, 'last': None, 'lastWhen': -INF, 'lastStampTime': -INF, 'latest': -INF, 'next': 0, 'sealed': None}
+        self.seals = {'count': 0, 'last': None, 'lastWhen': -INF, 'lastStampTime': -INF, 'latest': -INF, 'next': 0, 'sealed': None, 'book': None, 'firstPrevious': None}
         self.tree = tree_builder() if whole else None
         # Problems with what was handed over beside the record (disclosures), which are not faults of an entry.
         self.handed_problems = []
@@ -302,7 +320,7 @@ def _read_line(reader, index, line, disclosures=_UNDEFINED):
         elif names == 'terms':
             entry['kind'] = 'terms'
             _check_terms_entry(entry, value, reader.terms, reader.ids, without)
-        elif names in ('seal', 'seal,stamps'):
+        elif names in _SEAL_ENTRIES:
             entry['kind'] = 'seal'
             # The line itself is kept, out of sight, so that a seal held elsewhere can be compared with it (_check_held_seals).
             entry.line = line
@@ -396,7 +414,7 @@ def _settle_late(reader):
     return late
 
 
-def _answered(entry, late, entries):
+def _answered(entry, late, entries, why=lambda seal: None):
     """An entry as an answer gives it: with the findings that were worked out
     last, and with no time of its own if it did not pass its check. The
     entry the reader keeps is left as it is."""
@@ -412,6 +430,9 @@ def _answered(entry, late, entries):
         _fail_acknowledgement(out)
     if out['problems']:
         out.pop('stampedAt', None)
+    # Whether each witness statement counts is settled now that the seal's own check is complete.
+    if out['kind'] == 'seal' and isinstance(out.get('witnesses'), list):
+        out.update(_witnesses_counted(out, why(out)))
     return out
 
 
@@ -513,7 +534,7 @@ def _fork_reader(reader, whole=False):
 
 # --- the options a checker reads ---
 
-OPTION_NAMES = ['issuerKeys', 'sealKeys', 'stampServices', 'blocks', 'vouchers', 'disclosures', 'cancellations', 'seals', 'expectedRoot', 'expectedSize', 'withoutMethods']
+OPTION_NAMES = ['issuerKeys', 'sealKeys', 'stampServices', 'blocks', 'vouchers', 'witnesses', 'disclosures', 'cancellations', 'seals', 'expectedRoot', 'expectedSize', 'withoutMethods']
 
 # The same options, as a Python caller may name them.
 _SNAKE = {
@@ -522,6 +543,7 @@ _SNAKE = {
     'stamp_services': 'stampServices',
     'blocks': 'blocks',
     'vouchers': 'vouchers',
+    'witnesses': 'witnesses',
     'disclosures': 'disclosures',
     'cancellations': 'cancellations',
     'seals': 'seals',
@@ -1296,6 +1318,12 @@ def _later_than_seals(seal, pages):
         # If the seal it names is among the pages, that seal comes before it, with no other seal between the two.
         named = next((p for p in others if p['fingerprint'] == seal['content']['previous']), None)
         broken = named is not None and (not (named['index'] < seal['index']) or any(p['index'] > named['index'] for p in earlier_seals))
+    # The seals of one book all give the same book number (section 21.6).
+    def number(s):
+        return s['content']['book'] if 'book' in s['content'] else 1
+
+    if any(number(p) != number(seal) for p in earlier_seals):
+        broken = True
     if broken:
         seal['problems'].append({'code': 'seal-chain-broken', 'message': 'The seal does not name the seal before it among the pages: a seal is missing, moved or changed.'})
 
@@ -1378,6 +1406,7 @@ def _check_seal_entry(entry, value, seals, ids, options, before, entries, as_pag
     without = _without(options)
     entry['signatures'] = []
     entry['stamps'] = []
+    entry['witnesses'] = []
     parsed = parse_record(value.get('seal'), 'seal')
     entry['fingerprint'] = parsed.fingerprint
     validate_seal_content(parsed.content)
@@ -1413,8 +1442,23 @@ def _check_seal_entry(entry, value, seals, ids, options, before, entries, as_pag
     if at:
         if c['size'] != at['size'] or c['root'] != at['root']:
             entry['problems'].append({'code': 'seal-mismatch', 'message': 'The seal does not fit the entries before it: an entry was changed, added or removed after the seal was made.'})
-        if (c['previous'] if 'previous' in c else None) != seals['last']:
+        # The book's number (section 21.6): absent is the first book. The first seal of a book after the first names,
+        # as the seal before it, the last seal of the book before, which is not in this book: it is not compared here,
+        # and is kept, so that a copy of that seal handed over beside the book can be (_check_held_seals).
+        number = c['book'] if 'book' in c else 1
+        if seals['last'] is None and number > 1:
+            seals['firstPrevious'] = c['previous']
+            entry['notes'].append(
+                f'This is the first seal of book {number} in this book. It names, as the seal before it, the last seal of '
+                f'book {number - 1}, which is not in this book and was not compared. To compare the two, check book {number - 1} with that seal '
+                'handed over beside it.'
+            )
+        elif (c['previous'] if 'previous' in c else None) != seals['last']:
             entry['problems'].append({'code': 'seal-chain-broken', 'message': 'The seal does not name the seal before it: a seal is missing, moved or changed.'})
+        if seals['last'] is not None and number != seals['book']:
+            entry['problems'].append({'code': 'seal-chain-broken', 'message': 'The seal gives another book number than the seals before it in this book.'})
+        if seals['last'] is None:
+            seals['book'] = number
         if when < seals['lastWhen']:
             entry['problems'].append({'code': 'time-went-backwards', 'message': 'This seal is dated before the seal ahead of it.'})
         seals['last'] = parsed.fingerprint
@@ -1439,6 +1483,14 @@ def _check_seal_entry(entry, value, seals, ids, options, before, entries, as_pag
         stamped_time = _check_stamps(entry, value['stamps'], parsed.fingerprint, when, options, entry['verified'] == 'all', floor)
     if 'stamps' in value and _overall(entry['signatures']) == 'invalid':
         decode_stamps(value['stamps'])
+
+    # The witness statements on the seal's own line. (Those handed over beside
+    # a seal held elsewhere are checked apart: see _own_checks.)
+    if not held and 'witnesses' in value:
+        items, problems = _check_witnesses(value['witnesses'], parsed, options, without, ids)
+        entry['witnesses'] = items
+        entry['problems'].extend(problems)
+        _note_witnesses(entry)
 
     # A seal counts as signed only if all three of its signatures were
     # checked. Only then is a time-stamp on it credited.
@@ -1491,9 +1543,165 @@ def _check_seal_entry(entry, value, seals, ids, options, before, entries, as_pag
     seals['sealed'] = {'entries': c['size'], 'when': entry['stampedAt'], 'seal': entry['index'], 'by': by}
 
 
+def _check_witnesses(items_given, seal, options, without, ids):
+    """The witness statements beside a seal (format description, section
+    29.2): on the seal's line, or handed over with a seal held elsewhere.
+    Each is checked by itself: its envelope and content, its two signatures
+    against the keys it gives, and that it speaks of this seal. One that does
+    not pass is a problem. One from a witness the reader did not name is
+    shown, and not counted. Whether a statement counts is settled with the
+    answer (_witnesses_counted). ids: the unique numbers of the book so far,
+    for statements on a line of the book, or None. Returns (items, problems)."""
+    items = []
+    problems = []
+    try:
+        f.list_of(items_given, 1, MAX_WITNESSES, 'witnesses')
+    except Exception as e:
+        return items, [problem_from(e)]
+    seen = set()
+    for i, record in enumerate(items_given):
+        item = {'fingerprint': None, 'witness': None, 'name': None, 'when': None, 'state': 'invalid', 'trusted': False, 'counted': False, 'signatures': []}
+        items.append(item)
+        try:
+            parsed = parse_record(record, 'witness')
+            item['fingerprint'] = parsed.fingerprint
+            validate_witness_content(parsed.content)
+            c = parsed.content
+            item['witness'] = key_set_fingerprint(c['by']['keys'])
+            item['name'] = c['by']['name']
+            item['when'] = c['when']
+            if ids is not None:
+                if c['id'] in ids:
+                    raise Refusal('duplicate-id', 'Another record has the same unique number.')
+                ids.add(c['id'])
+            item['signatures'] = _check_key_set_signatures(parsed, c['by']['keys'], without)
+            if _overall(item['signatures']) == 'invalid':
+                raise Refusal('witness-invalid', 'A signature on the witness statement does not fit the keys it gives.')
+            if c['seal'] != seal.fingerprint or c['size'] != seal.content['size'] or c['root'] != seal.content['root']:
+                raise Refusal('witness-invalid', "The witness statement speaks of another seal: its seal, its number of entries or its top fingerprint is not this seal's.")
+            if nan_time(c['when']) < nan_time(seal.content['when']) - CLOCK_ALLOWANCE_MS:
+                raise Refusal('witness-invalid', 'The witness statement is dated more than 300 seconds before the seal it speaks of.')
+            if item['witness'] in seen:
+                raise f.fail('witnesses', 'the same witness signs twice.')
+            seen.add(item['witness'])
+            item['state'] = 'valid' if _overall(item['signatures']) == 'valid' else 'unavailable'
+            trusted = options.get('witnesses')
+            item['trusted'] = isinstance(trusted, list) and _js.includes(trusted, item['witness'])
+        except Exception as e:
+            item['state'] = 'invalid'
+            p = problem_from(e)
+            problems.append({'code': p['code'], 'message': f"Witness statement {i + 1} beside the seal did not pass its check. {p['message']}"})
+    return items, problems
+
+
+def _note_witnesses(entry):
+    """What a reader is told of the statements beside a seal that passed their check."""
+    for i, w in enumerate(entry['witnesses']):
+        if w['state'] == 'unavailable':
+            entry['notes'].append(f'This device could not check witness statement {i + 1} beside this seal, so it was not counted.')
+        elif w['state'] == 'valid' and not w['trusted']:
+            entry['notes'].append(
+                f"Witness statement {i + 1} beside this seal is from a witness you did not name as trusted, so it was not counted. "
+                f"The fingerprint of its key set is {w['witness']}."
+            )
+
+
+def _first_two_checked(signatures):
+    """Whether a seal's first two signatures (Ed25519 and ML-DSA-87) were both
+    checked on this device. A statement counts on those two, as a seal held
+    elsewhere does: its third (SLH-DSA) may be one this device cannot check."""
+    def state(method):
+        return next((s['state'] for s in signatures if s['method'] == method), None)
+
+    return state('Ed25519') == 'valid' and state('ML-DSA-87') == 'valid'
+
+
+def _unfixed_start(entries, options):
+    """Why a witness's statement cannot count for this book, or None where it
+    can (format description, section 29.2). A witness knows a book by the
+    permission on its first line and the keys of its recorder, and the
+    recorder chooses both. So a statement counts only where the reader fixed
+    both: the book's first line is a permission that passed its check, signed
+    by a passkey the reader named, and the reader named the recorders they
+    expect (so that a seal by any other recorder is a problem)."""
+    if not isinstance(options.get('issuerKeys'), list):
+        return 'you named no passkey you trust, so the permission this book starts from is not fixed'
+    if not isinstance(options.get('sealKeys'), list):
+        return 'you named no recorder you expect, so anyone could have sealed it'
+    first = entries[0] if entries else None
+    if first is None or first['index'] != 0 or first['kind'] != 'slip' or first['problems'] or not first.get('signature') or first['signature']['state'] != 'valid':
+        return 'this book does not start with a permission that passed its check here, signed by a passkey you named'
+    return None
+
+
+def _why_for(entries, options, pages=None):
+    """For each seal: why a witness's statement cannot count for it, or None
+    where it can (format description, section 29.2). Beyond a start the
+    reader fixed (_unfixed_start), every permission among the entries the
+    seal covers must name the passkey and the agent's key set of the
+    permission the book starts from. Among the pages of a Show, the pages
+    must hold every entry the seal covers. pages: for a Show, the places of
+    its pages. Returns a function of the seal."""
+    start = _unfixed_start(entries, options)
+    if start is not None:
+        return lambda seal: start
+    first = entries[0]
+    agent = canonical_json(first['content']['agent']['keys'])
+    others = [
+        e for e in entries
+        if e['kind'] == 'slip' and (not e.get('content') or e.get('issuerKey') != first.get('issuerKey') or canonical_json(e['content']['agent']['keys']) != agent)
+    ]
+
+    def why(seal):
+        size = seal['content']['size'] if seal.get('content') else 0
+        if pages is not None:
+            for i in range(size):
+                if i not in pages:
+                    return (
+                        'the pages do not hold every entry this seal covers, and single pages cannot show that every permission among them '
+                        'is from the passkey and for the agent of the permission the book starts from'
+                    )
+        if any(e['index'] < size for e in others):
+            return (
+                'the entries this seal covers hold a permission from another passkey, or for another agent, than the permission the book '
+                'starts from, and a witness keeps the books of each person and agent apart'
+            )
+        return None
+
+    return why
+
+
+def _unfixed_words(why):
+    return (
+        f'The statements beside this seal from witnesses you trust were not counted: {why}. A witness knows a book only by the '
+        'passkey and the agent of the permission it starts from and the keys of its recorder, which the recorder chooses, so a '
+        'statement counts only for a book that starts with a permission signed by a passkey you named, sealed by a recorder you named.'
+    )
+
+
+def _witnesses_counted(seal, why, sound=None):
+    """The statements beside a seal, each with whether it counts: it passed
+    its check, its witness is one the reader named, the book's start is one
+    the reader fixed (_unfixed_start), and the seal passed its own check with
+    its first two signatures checked on this device. New lists: those the
+    reader keeps are left as they are. Where a statement from a witness the
+    reader trusts is not counted because the start is not fixed, the reader
+    is told why, in "notes". Returns {"witnesses", "notes"}."""
+    if sound is None:
+        sound = len(seal['problems']) == 0
+    ok = sound and why is None and _first_two_checked(seal.get('signatures') or [])
+    witnesses = [{**w, 'counted': ok and w['state'] == 'valid' and w['trusted']} for w in seal.get('witnesses') or []]
+    notes = seal['notes']
+    if why is not None and sound and any(w['state'] == 'valid' and w['trusted'] for w in witnesses):
+        notes = [*seal['notes'], _unfixed_words(why)]
+    return {'witnesses': witnesses, 'notes': notes}
+
+
 # A stub may have with it, on the same line, the service's countersignature
 # and the person's approval.
 _STUB_ENTRIES = ['stub', 'countersignature,stub', 'approval,stub', 'approval,countersignature,stub']
+# A seal may have beside it, on the same line, time-stamps and witness statements.
+_SEAL_ENTRIES = ['seal', 'seal,stamps', 'seal,witnesses', 'seal,stamps,witnesses']
 
 
 def _find_slip(slips, fp, whole):
@@ -1760,7 +1968,32 @@ def _check_stub_entry(entry, value, slips, terms, passes, ids, without, whole):
         entry['breaches'].append({'code': 'approval-missing', 'message': "The slip asks for the person's own approval of this action, and there is none."})
 
 
-def _summarise(entries, book_problems, sealed=None, held=()):
+def _witnessed_reach(entries, held_witnessed):
+    """How far a witness the reader trusts reaches: the seals that passed
+    their own check, with their first two signatures checked on this device,
+    for which at least one statement counts (on the seal's line, or handed
+    over beside the book with a copy of the seal). None where there is none."""
+    seals = []
+    last = None
+    for e in entries:
+        if e['kind'] != 'seal' or not e.get('content') or e['problems'] or not _first_two_checked(e.get('signatures') or []):
+            continue
+        by = [w['witness'] for w in e.get('witnesses') or [] if w['counted']] + list(held_witnessed.get(e['index'], []))
+        if not by:
+            continue
+        seals.append(e['index'])
+        last = {'seal': e['index'], 'entries': e['content']['size'], 'by': _js.sort_strings(set(by))}
+    return {**last, 'seals': seals} if last else None
+
+
+_SHOW_WITNESSED_WORDS = (
+    'These are single pages of a book: they cannot show that a limit over the whole book was kept (section 11), so being '
+    'witnessed says nothing here about totals.'
+)
+"""Beside a Show's witnessed answer: the limit of a Show (format description, section 11)."""
+
+
+def _summarise(entries, book_problems, sealed=None, held=(), held_witnessed=None, is_show=False):
     # Methods this device lacked, and whether any signature was never reached
     # because its entry, or the whole record, could not be read or used.
     missing = set()
@@ -1808,6 +2041,8 @@ def _summarise(entries, book_problems, sealed=None, held=()):
         elif kind == 'seal':
             counts['seals'] += 1
             note(e.get('signatures') or [])
+            for w in e.get('witnesses') or []:
+                note(w['signatures'])
             for s in e.get('stamps') or []:
                 if s['state'] == 'unavailable':
                     missing.add("the time-stamp service's method")
@@ -1842,8 +2077,12 @@ def _summarise(entries, book_problems, sealed=None, held=()):
         for s in h['signatures'] if h['kind'] == 'seal' else []:
             if s['state'] == 'unavailable':
                 missing.add(s['method'])
+        # And those of the witness statements handed over with it.
+        for w in h['witnesses'] if h['kind'] == 'seal' else []:
+            note(w['signatures'])
     problem_found = len(book_problems) > 0 or any(e['problems'] for e in entries)
     fully_checked = not skipped and len(missing) == 0
+    witnessed = None if problem_found else _witnessed_reach(entries, held_witnessed or {})
     first_breach = next((e for e in entries if e['breaches']), None)
     # "Within its slip" is said only if every stub, and every pass, was
     # compared with what it rests on, and none was found outside it.
@@ -1858,7 +2097,9 @@ def _summarise(entries, book_problems, sealed=None, held=()):
         'counts': counts,
         # How far an outside time-stamp from a trusted service reaches, if any does.
         'sealed': None if problem_found else sealed,
-        'limits': [*LIMITS[:-1], _stamped_words(sealed)] if sealed and not problem_found else list(LIMITS),
+        # How far a witness the reader trusts reaches, if any does.
+        'witnessed': witnessed,
+        'limits': [*([*LIMITS[:-1], _stamped_words(sealed)] if sealed and not problem_found else list(LIMITS)), *([f'{_witnessed_words(witnessed)} {_SHOW_WITNESSED_WORDS}' if is_show else _witnessed_words(witnessed)] if witnessed else [])],
     }
 
 
@@ -2028,79 +2269,167 @@ def _check_held_seals(result, carried, options):
     it counted.
 
     Its time-stamps are checked and shown, but are not used for the entries
-    of the book. Nothing the reader keeps is changed."""
+    of the book. Nothing the reader keeps is changed.
+
+    Witness statements handed over with it (format description, section
+    29.2) are checked as statements on a seal's line are. One that does not
+    pass is a problem with the whole check, and is not used; the seal is
+    used all the same. A statement that counts, for a seal the book holds at
+    its place, counts for the book's seal there.
+
+    Returns, for each entry of the book that is a seal, the key set
+    fingerprints of the witnesses whose statements, handed over beside the
+    book, count for it."""
+    witnessed = {}
     if 'seals' not in options:
-        return
+        return witnessed
     handed = options['seals']
     # Up to sixty-four, none included: an empty list is none.
     f.list_of(handed, 0, MAX_HELD_SEALS, 'seals')
     own = _own_checks(carried, handed, options)
     entries = carried.reader.entries
+    # Whether the book's start is one the reader fixed, which a statement handed over needs too (_unfixed_start).
+    why = _why_for(entries, carried.options)
+    # This book's number (section 21.6), from its first seal; None where it holds no seal.
+    book = {'number': carried.reader.seals['book'], 'firstPrevious': carried.reader.seals['firstPrevious'], 'firstSeal': next((e for e in entries if e['kind'] == 'seal' and e.get('content')), None)}
     # The problems, in the order of the seals handed over.
     found = []
     for i, item in enumerate(own):
         n = i + 1
         held = copy.deepcopy(item['held'])
         result['held'].append(held)
-        if held['problems']:
-            for p in held['problems']:
-                found.append({'code': p['code'], 'message': f"Seal {n} of those handed over beside the book did not pass its check, so it was not used. {p['message']}"})
-            continue
-        # It counts only where the person named its recorder.
-        if not isinstance(options.get('sealKeys'), list):
-            held['notes'].append('It was not used: a seal handed over beside the book counts only where you named its recorder as one you expect.')
-            continue
-
-        def state(method):
-            return next((s['state'] for s in held['signatures'] if s['method'] == method), None)
-
-        if state('Ed25519') != 'valid' or state('ML-DSA-87') != 'valid':
-            held['notes'].append(
-                'It was not used: a seal handed over beside the book counts only where this device checked its Ed25519 and ML-DSA-87 signatures, '
-                'and this device could not check both.'
-            )
-            continue
-        if state(_SEAL_THIRD) != 'valid':
-            held['notes'].append(f'This device could not check its third signature ({_SEAL_THIRD}). It was used on the strength of its Ed25519 and ML-DSA-87 signatures, which were checked here.')
-        held['used'] = True
-        at = held['place']
-        if at >= len(entries):
+        for p in item['witnessProblems']:
             found.append({
-                'code': 'book-cut-short',
-                'message': f'Seal {n} of those handed over beside the book stands at entry {at}, but the book ends at entry {len(entries) - 1}. '
-                'The end of the book was cut off after that seal was made.',
+                'code': p['code'],
+                'message': f"A witness statement handed over with seal {n} of those beside the book did not pass its check, so it was not used. "
+                f"The seal itself was not set aside because of it. {p['message']}",
             })
-            continue
-        # The book holds this seal at its place where the seal there has the
-        # same content: its fingerprint fixes the number of entries and their
-        # top fingerprint, and so the entries before it.
-        there = entries[at]
-        if there['kind'] != 'seal' or there['fingerprint'] != held['fingerprint']:
-            found.append({
-                'code': 'seal-not-in-book',
-                'message': f'Seal {n} of those handed over beside the book stands at entry {at}, but the book holds another line there. '
-                'The book was changed after that seal was made, or the seal is of another book.',
-            })
-            continue
-        held['inBook'] = at
-        if there['problems']:
-            held['notes'].append(f'The book holds this seal at entry {at}, but that entry did not pass its check.')
-        # The same content with other signatures, or with other time-stamps
-        # beside it, is not a fault of the book: it is said.
-        line = _js.parse(there.line)
-        if canonical_json(line['seal']) != item['sealText']:
-            held['notes'].append(
-                f'The book holds this seal at entry {at} with the same content, but with other signatures than this copy. '
-                'The same content fixes the same entries, so this is not a fault of the book. '
-                "Only someone who holds the recorder's keys can sign a seal again."
-            )
-        if (canonical_json(line['stamps']) if 'stamps' in line else None) != item['stampsText']:
-            held['notes'].append(
-                f'The book holds this seal at entry {at}, with other time-stamps beside it than this copy. '
-                "Time-stamps stand outside a seal's signatures, so either side may have added one. "
-                "This copy's own are shown here, and are not used for the entries of the book."
-            )
+        try:
+            _held_seal(held, item, n, options, entries, found, book)
+        finally:
+            # Whether each statement handed over with it counts is settled once it is known whether the seal is used.
+            held.update(_witnesses_counted(held, why(held), held['used']))
+            # A statement that counts, for a seal the book holds at its place, counts for the book's seal there.
+            if held['inBook'] is not None:
+                by = [w['witness'] for w in held['witnesses'] if w['counted']]
+                if by:
+                    witnessed[held['inBook']] = [*witnessed.get(held['inBook'], []), *by]
     result['problems'].extend(found)
+    return witnessed
+
+
+def _held_seal(held, item, n, options, entries, found, book):
+    """One seal held elsewhere, against the book: whether it is used, and where the book holds it."""
+    if held['problems']:
+        for p in held['problems']:
+            found.append({'code': p['code'], 'message': f"Seal {n} of those handed over beside the book did not pass its check, so it was not used. {p['message']}"})
+        return
+    # It counts only where the person named its recorder.
+    if not isinstance(options.get('sealKeys'), list):
+        held['notes'].append('It was not used: a seal handed over beside the book counts only where you named its recorder as one you expect.')
+        return
+
+    def state(method):
+        return next((s['state'] for s in held['signatures'] if s['method'] == method), None)
+
+    if state('Ed25519') != 'valid' or state('ML-DSA-87') != 'valid':
+        held['notes'].append(
+            'It was not used: a seal handed over beside the book counts only where this device checked its Ed25519 and ML-DSA-87 signatures, '
+            'and this device could not check both.'
+        )
+        return
+    if state(_SEAL_THIRD) != 'valid':
+        held['notes'].append(f'This device could not check its third signature ({_SEAL_THIRD}). It was used on the strength of its Ed25519 and ML-DSA-87 signatures, which were checked here.')
+    held['used'] = True
+    # A seal of another book of the same permission is not compared by its place (section 21.6), so it is not
+    # used: it never counts as compared with the book, whatever it shows about the books around this one. The
+    # number is the recorder's own word, and a book cut short could be sealed again under another number.
+    held_number = held['content']['book'] if 'book' in held['content'] else 1
+    book_number = book['number']
+    if book_number is not None and held_number != book_number:
+        held['used'] = False
+        not_compared = 'It was not compared with this book, so it gives no pass: a book is compared only with seals that give its own book number.'
+        first_seal = book['firstSeal']
+        named = next((e for e in entries if e['kind'] == 'seal' and e['fingerprint'] == held['content'].get('previous')), None) if 'previous' in held['content'] else None
+        if held_number == book_number - 1 and held['fingerprint'] == book['firstPrevious']:
+            # The last seal of the book before, which the first seal of this book names.
+            if held['sealer'] != first_seal['sealer']:
+                found.append({
+                    'code': 'seal-chain-broken',
+                    'message': f"Seal {n} of those handed over beside the book is the seal the first seal of this book names as the last seal of the book before, "
+                    "but it was signed with other keys than this book's first seal.",
+                })
+            elif nan_time(held['content']['when']) > nan_time(first_seal['content']['when']):
+                found.append({
+                    'code': 'time-went-backwards',
+                    'message': f'Seal {n} of those handed over beside the book is the last seal of the book before, which the first seal of this book names, '
+                    'but it is dated after that first seal.',
+                })
+            else:
+                held['notes'].append(
+                    f'It is the last seal of book {held_number}, which the first seal of this book (book {book_number}) names as the seal before it: '
+                    f'this book follows on from it. It does not show whether book {held_number} was cut short after it: check book {held_number} with it. '
+                    f'{not_compared}'
+                )
+        elif held_number == book_number - 1:
+            held['notes'].append(
+                f'It is a seal of book {held_number}, but the first seal of this book (book {book_number}) names another seal as the last seal of '
+                f'book {held_number}. So this book does not show whether book {held_number} was cut short, nor that this book follows on from that '
+                f'book: check book {held_number} with this seal. {not_compared}'
+            )
+        elif held_number == book_number + 1 and named is not None:
+            held['notes'].append(
+                f"It is a seal of book {held_number}, the next book, and names the seal at entry {named['index']} of this book as the seal before it: "
+                f'the next book follows on from this one there. It does not show whether this book was cut short. {not_compared}'
+            )
+        elif held_number > book_number:
+            held['notes'].append(
+                f'It is a seal of book {held_number}, a later book than this one (book {book_number}). This book does not show whether the books '
+                f'after it were cut short. Hand over seals of the book being checked. {not_compared}'
+            )
+        else:
+            held['notes'].append(
+                f'It is a seal of book {held_number}, an earlier book than this one (book {book_number}). This book does not show whether that book '
+                f'was cut short. Hand over seals of the book being checked. {not_compared}'
+            )
+        return
+    at = held['place']
+    if at >= len(entries):
+        found.append({
+            'code': 'book-cut-short',
+            'message': f'Seal {n} of those handed over beside the book stands at entry {at}, but the book ends at entry {len(entries) - 1}. '
+            'The end of the book was cut off after that seal was made.',
+        })
+        return
+    # The book holds this seal at its place where the seal there has the
+    # same content: its fingerprint fixes the number of entries and their
+    # top fingerprint, and so the entries before it.
+    there = entries[at]
+    if there['kind'] != 'seal' or there['fingerprint'] != held['fingerprint']:
+        found.append({
+            'code': 'seal-not-in-book',
+            'message': f'Seal {n} of those handed over beside the book stands at entry {at}, but the book holds another line there. '
+            'The book was changed after that seal was made, or the seal is of another book.',
+        })
+        return
+    held['inBook'] = at
+    if there['problems']:
+        held['notes'].append(f'The book holds this seal at entry {at}, but that entry did not pass its check.')
+    # The same content with other signatures, or with other time-stamps
+    # beside it, is not a fault of the book: it is said.
+    line = _js.parse(there.line)
+    if canonical_json(line['seal']) != item['sealText']:
+        held['notes'].append(
+            f'The book holds this seal at entry {at} with the same content, but with other signatures than this copy. '
+            'The same content fixes the same entries, so this is not a fault of the book. '
+            "Only someone who holds the recorder's keys can sign a seal again."
+        )
+    if (canonical_json(line['stamps']) if 'stamps' in line else None) != item['stampsText']:
+        held['notes'].append(
+            f'The book holds this seal at entry {at}, with other time-stamps beside it than this copy. '
+            "Time-stamps stand outside a seal's signatures, so either side may have added one. "
+            "This copy's own are shown here, and are not used for the entries of the book."
+        )
 
 
 def _own_checks(carried, handed, options):
@@ -2109,18 +2438,20 @@ def _own_checks(carried, handed, options):
     book, so a checker that is carried on, and the stub writer, make it once
     and keep it for as long as they are given the same seals with the same
     options; each answer starts from a copy of it."""
-    key = [handed, options.get('sealKeys'), options.get('stampServices'), options.get('blocks'), options.get('withoutMethods')]
+    key = [handed, options.get('sealKeys'), options.get('stampServices'), options.get('blocks'), options.get('witnesses'), options.get('withoutMethods')]
     kept = carried.held_seals
     if kept is not None and all(a is b for a, b in zip(kept['key'], key)):
         return kept['items']
     seen = set()
     items = []
     for i, value in enumerate(handed):
-        held = {'kind': 'seal', 'fingerprint': None, 'sealer': None, 'place': None, 'inBook': None, 'used': False, 'verified': 'none', 'problems': [], 'notes': [], 'signatures': [], 'stamps': []}
+        held = {'kind': 'seal', 'fingerprint': None, 'sealer': None, 'place': None, 'inBook': None, 'used': False, 'verified': 'none', 'problems': [], 'notes': [], 'signatures': [], 'stamps': [], 'witnesses': []}
         seal_text = None
         stamps_text = None
+        # The problems with the witness statements handed over with it: reported, without setting the seal aside.
+        witness_problems = []
         try:
-            f.members(value, ['seal'], ['stamps'], f'seals[{i}]')
+            f.members(value, ['seal'], ['stamps', 'witnesses'], f'seals[{i}]')
             parsed = parse_record(value.get('seal'), 'seal')
             held['fingerprint'] = parsed.fingerprint
             if parsed.fingerprint in seen:
@@ -2132,11 +2463,19 @@ def _own_checks(carried, handed, options):
             _check_seal_entry(held, value, fresh, set(), options, None, [], False, True)
             seal_text = canonical_json(value['seal'])
             stamps_text = canonical_json(value['stamps']) if 'stamps' in value else None
+            # Witness statements that arrived after the seal was written into the book, handed over with it.
+            # They are not entries of the book, so their unique numbers are not held against its own.
+            if not held['problems'] and 'witnesses' in value:
+                statements, witness_problems = _check_witnesses(value['witnesses'], parsed, options, _without(options), None)
+                held['witnesses'] = statements
+                _note_witnesses(held)
+                if witness_problems:
+                    held['notes'].append('A witness statement handed over with it did not pass its check, so that statement was not used. See the problems at the top.')
         except Exception as e:
             held['problems'].append(problem_from(e))
         if held.get('content'):
             held['place'] = held['content']['size']
-        items.append({'held': held, 'sealText': seal_text, 'stampsText': stamps_text})
+        items.append({'held': held, 'sealText': seal_text, 'stampsText': stamps_text, 'witnessProblems': witness_problems})
     carried.held_seals = {'key': key, 'items': items}
     return items
 
@@ -2264,6 +2603,8 @@ def answer_of(carried, options=None):
     sealed = None
     late = _js.IdentityMap()
     beside = set()
+    # For each seal of the book, the witnesses whose statements, handed over beside it, count for it.
+    held_witnessed = {}
     if not isinstance(options, Mapping):
         options = _Fixed()
     try:
@@ -2282,13 +2623,15 @@ def answer_of(carried, options=None):
         result['problems'].extend(reader.handed_problems)
         _unused_disclosures(result, options)
         _check_held(result, reader, options, late, beside)
-        _check_held_seals(result, carried, options)
+        held_witnessed = _check_held_seals(result, carried, options)
         _compare_trusted(result, options)
     except Exception as e:
         result['problems'].append(problem_from(e))
     read = result['entries']
-    result['entries'] = [_answered(e, late, read) for e in read]
-    result['summary'] = _summarise(result['entries'], result['problems'], sealed, result['held'])
+    # Whether the book's start is one the reader fixed, which a witness's statement needs (_unfixed_start).
+    why = _why_for(read, carried.options)
+    result['entries'] = [_answered(e, late, read, why) for e in read]
+    result['summary'] = _summarise(result['entries'], result['problems'], sealed, result['held'], held_witnessed)
     return {'result': result, 'state': state, 'beside': beside}
 
 
@@ -2463,7 +2806,7 @@ def check_show(show, options=None, **named):
             entry = _new_entry(show['size'], 'seal')
             result['entries'].append(entry)
             try:
-                f.members(show['seal'], ['seal'], ['stamps'], 'show.seal')
+                f.members(show['seal'], ['seal'], ['stamps', 'witnesses'], 'show.seal')
                 # It is held to the pages as a seal in a whole book is held to the
                 # entries before it: no unique number twice, and no block
                 # time-stamp counted that states a time before a service's
@@ -2522,5 +2865,10 @@ def check_show(show, options=None, **named):
     for e in result['entries']:
         if e['problems']:
             e.pop('stampedAt', None)
-    result['summary'] = _summarise(result['entries'], result['problems'], sealed)
+    # Whether each witness statement counts, now that each seal's own check is complete.
+    why = _why_for(result['entries'], options, {e['index'] for e in result['entries']})
+    for e in result['entries']:
+        if e['kind'] == 'seal' and isinstance(e.get('witnesses'), list):
+            e.update(_witnesses_counted(e, why(e)))
+    result['summary'] = _summarise(result['entries'], result['problems'], sealed, (), None, True)
     return result

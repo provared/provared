@@ -320,7 +320,8 @@
         "when": "2026-10-05T11:30:00Z"
        },
        "sealer": "N085zwikug_d8m8zQdtEH4JkogJX4m_2FE35Kk8kryk",
-       "vouched": null
+       "vouched": null,
+       "witnesses": []
       },
       {
        "index": 4,
@@ -445,7 +446,8 @@
         "when": "2026-10-05T12:30:00Z"
        },
        "sealer": "N085zwikug_d8m8zQdtEH4JkogJX4m_2FE35Kk8kryk",
-       "vouched": null
+       "vouched": null,
+       "witnesses": []
       },
       {
        "index": 6,
@@ -573,7 +575,8 @@
         "size": 5,
         "type": "provared.seal.v0",
         "when": "2026-10-05T12:30:00Z"
-       }
+       },
+       "witnesses": []
       }
      ],
      "summary": {
@@ -610,7 +613,8 @@
        "It does not show who was holding the device when the passkey signed.",
        "A name in a record is a label. Only keys are checked.",
        "Nothing here is time-stamped by an outside service that you named as trusted. So it does not show when the record was made, and the latest stubs under a slip or a pass, or a slip or a pass with all its stubs, could have been removed."
-      ]
+      ],
+      "witnessed": null
      }
     }
    }
@@ -955,7 +959,8 @@
         "when": "2026-10-05T11:30:00Z"
        },
        "sealer": "N085zwikug_d8m8zQdtEH4JkogJX4m_2FE35Kk8kryk",
-       "vouched": null
+       "vouched": null,
+       "witnesses": []
       },
       {
        "index": 4,
@@ -1080,7 +1085,8 @@
         "when": "2026-10-05T12:30:00Z"
        },
        "sealer": "N085zwikug_d8m8zQdtEH4JkogJX4m_2FE35Kk8kryk",
-       "vouched": null
+       "vouched": null,
+       "witnesses": []
       },
       {
        "index": 6,
@@ -1208,7 +1214,8 @@
         "size": 5,
         "type": "provared.seal.v0",
         "when": "2026-10-05T12:30:00Z"
-       }
+       },
+       "witnesses": []
       },
       {
        "kind": "seal",
@@ -1274,7 +1281,8 @@
         "size": 3,
         "type": "provared.seal.v0",
         "when": "2026-10-05T11:30:00Z"
-       }
+       },
+       "witnesses": []
       }
      ],
      "summary": {
@@ -1311,7 +1319,8 @@
        "It does not show who was holding the device when the passkey signed.",
        "A name in a record is a label. Only keys are checked.",
        "Nothing here is time-stamped by an outside service that you named as trusted. So it does not show when the record was made, and the latest stubs under a slip or a pass, or a slip or a pass with all its stubs, could have been removed."
-      ]
+      ],
+      "witnessed": null
      }
     }
    }
@@ -1639,7 +1648,8 @@
         "when": "2026-10-05T11:30:00Z"
        },
        "sealer": "N085zwikug_d8m8zQdtEH4JkogJX4m_2FE35Kk8kryk",
-       "vouched": null
+       "vouched": null,
+       "witnesses": []
       }
      ],
      "held": [
@@ -1708,7 +1718,8 @@
         "size": 5,
         "type": "provared.seal.v0",
         "when": "2026-10-05T12:30:00Z"
-       }
+       },
+       "witnesses": []
       }
      ],
      "summary": {
@@ -1745,7 +1756,8 @@
        "It does not show who was holding the device when the passkey signed.",
        "A name in a record is a label. Only keys are checked.",
        "Nothing here is time-stamped by an outside service that you named as trusted. So it does not show when the record was made, and the latest stubs under a slip or a pass, or a slip or a pass with all its stubs, could have been removed."
-      ]
+      ],
+      "witnessed": null
      }
     }
    }
@@ -2044,7 +2056,8 @@
         "when": "2026-10-05T11:30:00Z"
        },
        "sealer": "N085zwikug_d8m8zQdtEH4JkogJX4m_2FE35Kk8kryk",
-       "vouched": null
+       "vouched": null,
+       "witnesses": []
       }
      ],
      "held": [],
@@ -2082,7 +2095,8 @@
        "It does not show who was holding the device when the passkey signed.",
        "A name in a record is a label. Only keys are checked.",
        "Nothing here is time-stamped by an outside service that you named as trusted. So it does not show when the record was made, and the latest stubs under a slip or a pass, or a slip or a pass with all its stubs, could have been removed."
-      ]
+      ],
+      "witnessed": null
      }
     }
    }
@@ -2410,7 +2424,8 @@
         "when": "2026-10-05T11:30:00Z"
        },
        "sealer": "N085zwikug_d8m8zQdtEH4JkogJX4m_2FE35Kk8kryk",
-       "vouched": null
+       "vouched": null,
+       "witnesses": []
       },
       {
        "index": 4,
@@ -2538,7 +2553,8 @@
         "size": 5,
         "type": "provared.seal.v0",
         "when": "2026-10-05T12:30:00Z"
-       }
+       },
+       "witnesses": []
       }
      ],
      "summary": {
@@ -2575,7 +2591,8 @@
        "It does not show who was holding the device when the passkey signed.",
        "A name in a record is a label. Only keys are checked.",
        "Nothing here is time-stamped by an outside service that you named as trusted. So it does not show when the record was made, and the latest stubs under a slip or a pass, or a slip or a pass with all its stubs, could have been removed."
-      ]
+      ],
+      "witnessed": null
      }
     }
    }
@@ -2903,7 +2920,8 @@
         "when": "2026-10-05T11:30:00Z"
        },
        "sealer": "N085zwikug_d8m8zQdtEH4JkogJX4m_2FE35Kk8kryk",
-       "vouched": null
+       "vouched": null,
+       "witnesses": []
       },
       {
        "index": 4,
@@ -3017,7 +3035,8 @@
         "when": "2026-10-05T12:30:01Z"
        },
        "sealer": "N085zwikug_d8m8zQdtEH4JkogJX4m_2FE35Kk8kryk",
-       "vouched": null
+       "vouched": null,
+       "witnesses": []
       },
       {
        "index": 6,
@@ -3145,7 +3164,8 @@
         "size": 5,
         "type": "provared.seal.v0",
         "when": "2026-10-05T12:30:00Z"
-       }
+       },
+       "witnesses": []
       }
      ],
      "summary": {
@@ -3182,7 +3202,8 @@
        "It does not show who was holding the device when the passkey signed.",
        "A name in a record is a label. Only keys are checked.",
        "Nothing here is time-stamped by an outside service that you named as trusted. So it does not show when the record was made, and the latest stubs under a slip or a pass, or a slip or a pass with all its stubs, could have been removed."
-      ]
+      ],
+      "witnessed": null
      }
     }
    }
@@ -3505,7 +3526,8 @@
         "when": "2026-10-05T11:30:00Z"
        },
        "sealer": "N085zwikug_d8m8zQdtEH4JkogJX4m_2FE35Kk8kryk",
-       "vouched": null
+       "vouched": null,
+       "witnesses": []
       },
       {
        "index": 4,
@@ -3630,7 +3652,8 @@
         "when": "2026-10-05T12:30:00Z"
        },
        "sealer": "N085zwikug_d8m8zQdtEH4JkogJX4m_2FE35Kk8kryk",
-       "vouched": null
+       "vouched": null,
+       "witnesses": []
       },
       {
        "index": 6,
@@ -3759,7 +3782,8 @@
         "size": 5,
         "type": "provared.seal.v0",
         "when": "2026-10-05T12:30:00Z"
-       }
+       },
+       "witnesses": []
       }
      ],
      "summary": {
@@ -3796,7 +3820,8 @@
        "It does not show who was holding the device when the passkey signed.",
        "A name in a record is a label. Only keys are checked.",
        "Nothing here is time-stamped by an outside service that you named as trusted. So it does not show when the record was made, and the latest stubs under a slip or a pass, or a slip or a pass with all its stubs, could have been removed."
-      ]
+      ],
+      "witnessed": null
      }
     }
    }
@@ -4124,7 +4149,8 @@
         "when": "2026-10-05T11:30:00Z"
        },
        "sealer": "N085zwikug_d8m8zQdtEH4JkogJX4m_2FE35Kk8kryk",
-       "vouched": null
+       "vouched": null,
+       "witnesses": []
       },
       {
        "index": 4,
@@ -4311,7 +4337,8 @@
         "size": 5,
         "type": "provared.seal.v0",
         "when": "2026-10-05T12:30:00Z"
-       }
+       },
+       "witnesses": []
       }
      ],
      "summary": {
@@ -4348,7 +4375,8 @@
        "It does not show who was holding the device when the passkey signed.",
        "A name in a record is a label. Only keys are checked.",
        "Nothing here is time-stamped by an outside service that you named as trusted. So it does not show when the record was made, and the latest stubs under a slip or a pass, or a slip or a pass with all its stubs, could have been removed."
-      ]
+      ],
+      "witnessed": null
      }
     }
    }
@@ -4668,7 +4696,8 @@
         "when": "2026-10-05T11:30:00Z"
        },
        "sealer": "N085zwikug_d8m8zQdtEH4JkogJX4m_2FE35Kk8kryk",
-       "vouched": null
+       "vouched": null,
+       "witnesses": []
       },
       {
        "index": 4,
@@ -4793,7 +4822,8 @@
         "when": "2026-10-05T12:30:00Z"
        },
        "sealer": "N085zwikug_d8m8zQdtEH4JkogJX4m_2FE35Kk8kryk",
-       "vouched": null
+       "vouched": null,
+       "witnesses": []
       },
       {
        "index": 6,
@@ -4912,7 +4942,8 @@
         "size": 5,
         "type": "provared.seal.v0",
         "when": "2026-10-05T12:30:00Z"
-       }
+       },
+       "witnesses": []
       }
      ],
      "summary": {
@@ -4949,7 +4980,8 @@
        "It does not show who was holding the device when the passkey signed.",
        "A name in a record is a label. Only keys are checked.",
        "Nothing here is time-stamped by an outside service that you named as trusted. So it does not show when the record was made, and the latest stubs under a slip or a pass, or a slip or a pass with all its stubs, could have been removed."
-      ]
+      ],
+      "witnessed": null
      }
     }
    }
@@ -5272,7 +5304,8 @@
         "when": "2026-10-05T11:30:00Z"
        },
        "sealer": "N085zwikug_d8m8zQdtEH4JkogJX4m_2FE35Kk8kryk",
-       "vouched": null
+       "vouched": null,
+       "witnesses": []
       },
       {
        "index": 4,
@@ -5402,7 +5435,8 @@
         "when": "2026-10-05T12:30:00Z"
        },
        "sealer": "N085zwikug_d8m8zQdtEH4JkogJX4m_2FE35Kk8kryk",
-       "vouched": null
+       "vouched": null,
+       "witnesses": []
       },
       {
        "index": 6,
@@ -5529,7 +5563,8 @@
         "size": 5,
         "type": "provared.seal.v0",
         "when": "2026-10-05T12:30:00Z"
-       }
+       },
+       "witnesses": []
       }
      ],
      "summary": {
@@ -5566,7 +5601,8 @@
        "It does not show who was holding the device when the passkey signed.",
        "A name in a record is a label. Only keys are checked.",
        "Nothing here is time-stamped by an outside service that you named as trusted. So it does not show when the record was made, and the latest stubs under a slip or a pass, or a slip or a pass with all its stubs, could have been removed."
-      ]
+      ],
+      "witnessed": null
      }
     }
    }
@@ -5887,7 +5923,8 @@
         "when": "2026-10-05T11:30:00Z"
        },
        "sealer": "N085zwikug_d8m8zQdtEH4JkogJX4m_2FE35Kk8kryk",
-       "vouched": null
+       "vouched": null,
+       "witnesses": []
       }
      ],
      "held": [
@@ -5957,7 +5994,8 @@
         "size": 5,
         "type": "provared.seal.v0",
         "when": "2026-10-05T12:30:00Z"
-       }
+       },
+       "witnesses": []
       }
      ],
      "summary": {
@@ -5994,7 +6032,8 @@
        "It does not show who was holding the device when the passkey signed.",
        "A name in a record is a label. Only keys are checked.",
        "Nothing here is time-stamped by an outside service that you named as trusted. So it does not show when the record was made, and the latest stubs under a slip or a pass, or a slip or a pass with all its stubs, could have been removed."
-      ]
+      ],
+      "witnessed": null
      }
     }
    }
@@ -6322,7 +6361,8 @@
         "when": "2026-10-05T11:30:00Z"
        },
        "sealer": "N085zwikug_d8m8zQdtEH4JkogJX4m_2FE35Kk8kryk",
-       "vouched": null
+       "vouched": null,
+       "witnesses": []
       }
      ],
      "held": [
@@ -6394,7 +6434,8 @@
         "size": 2,
         "type": "provared.seal.v0",
         "when": "2026-10-05T10:30:00Z"
-       }
+       },
+       "witnesses": []
       }
      ],
      "summary": {
@@ -6431,7 +6472,8 @@
        "It does not show who was holding the device when the passkey signed.",
        "A name in a record is a label. Only keys are checked.",
        "Nothing here is time-stamped by an outside service that you named as trusted. So it does not show when the record was made, and the latest stubs under a slip or a pass, or a slip or a pass with all its stubs, could have been removed."
-      ]
+      ],
+      "witnessed": null
      }
     }
    }
@@ -6759,7 +6801,8 @@
         "when": "2026-10-05T11:30:00Z"
        },
        "sealer": "N085zwikug_d8m8zQdtEH4JkogJX4m_2FE35Kk8kryk",
-       "vouched": null
+       "vouched": null,
+       "witnesses": []
       },
       {
        "index": 4,
@@ -6884,7 +6927,8 @@
         "when": "2026-10-05T12:30:00Z"
        },
        "sealer": "N085zwikug_d8m8zQdtEH4JkogJX4m_2FE35Kk8kryk",
-       "vouched": null
+       "vouched": null,
+       "witnesses": []
       },
       {
        "index": 6,
@@ -7005,7 +7049,8 @@
         "size": 5,
         "type": "provared.seal.v0",
         "when": "2026-10-05T12:30:00Z"
-       }
+       },
+       "witnesses": []
       }
      ],
      "summary": {
@@ -7042,7 +7087,8 @@
        "It does not show who was holding the device when the passkey signed.",
        "A name in a record is a label. Only keys are checked.",
        "Nothing here is time-stamped by an outside service that you named as trusted. So it does not show when the record was made, and the latest stubs under a slip or a pass, or a slip or a pass with all its stubs, could have been removed."
-      ]
+      ],
+      "witnessed": null
      }
     }
    }
@@ -7370,7 +7416,8 @@
         "when": "2026-10-05T11:30:00Z"
        },
        "sealer": "N085zwikug_d8m8zQdtEH4JkogJX4m_2FE35Kk8kryk",
-       "vouched": null
+       "vouched": null,
+       "witnesses": []
       },
       {
        "index": 4,
@@ -7495,7 +7542,8 @@
         "when": "2026-10-05T12:30:00Z"
        },
        "sealer": "N085zwikug_d8m8zQdtEH4JkogJX4m_2FE35Kk8kryk",
-       "vouched": null
+       "vouched": null,
+       "witnesses": []
       },
       {
        "index": 6,
@@ -7624,7 +7672,8 @@
         "size": 5,
         "type": "provared.seal.v0",
         "when": "2026-10-05T12:30:00Z"
-       }
+       },
+       "witnesses": []
       }
      ],
      "summary": {
@@ -7661,7 +7710,8 @@
        "It does not show who was holding the device when the passkey signed.",
        "A name in a record is a label. Only keys are checked.",
        "Nothing here is time-stamped by an outside service that you named as trusted. So it does not show when the record was made, and the latest stubs under a slip or a pass, or a slip or a pass with all its stubs, could have been removed."
-      ]
+      ],
+      "witnessed": null
      }
     }
    }
@@ -7985,7 +8035,8 @@
         "when": "2026-10-05T11:30:00Z"
        },
        "sealer": "N085zwikug_d8m8zQdtEH4JkogJX4m_2FE35Kk8kryk",
-       "vouched": null
+       "vouched": null,
+       "witnesses": []
       }
      ],
      "held": [
@@ -8054,7 +8105,8 @@
         "size": 5,
         "type": "provared.seal.v0",
         "when": "2026-10-05T12:30:00Z"
-       }
+       },
+       "witnesses": []
       }
      ],
      "summary": {
@@ -8092,7 +8144,8 @@
        "It does not show who was holding the device when the passkey signed.",
        "A name in a record is a label. Only keys are checked.",
        "Nothing here is time-stamped by an outside service that you named as trusted. So it does not show when the record was made, and the latest stubs under a slip or a pass, or a slip or a pass with all its stubs, could have been removed."
-      ]
+      ],
+      "witnessed": null
      }
     }
    }
@@ -8416,7 +8469,8 @@
         "when": "2026-10-05T11:30:00Z"
        },
        "sealer": "N085zwikug_d8m8zQdtEH4JkogJX4m_2FE35Kk8kryk",
-       "vouched": null
+       "vouched": null,
+       "witnesses": []
       }
      ],
      "held": [
@@ -8485,7 +8539,8 @@
         "size": 5,
         "type": "provared.seal.v0",
         "when": "2026-10-05T12:30:00Z"
-       }
+       },
+       "witnesses": []
       }
      ],
      "summary": {
@@ -8523,7 +8578,8 @@
        "It does not show who was holding the device when the passkey signed.",
        "A name in a record is a label. Only keys are checked.",
        "Nothing here is time-stamped by an outside service that you named as trusted. So it does not show when the record was made, and the latest stubs under a slip or a pass, or a slip or a pass with all its stubs, could have been removed."
-      ]
+      ],
+      "witnessed": null
      }
     }
    }
@@ -8846,7 +8902,8 @@
         "when": "2026-10-05T11:30:00Z"
        },
        "sealer": "N085zwikug_d8m8zQdtEH4JkogJX4m_2FE35Kk8kryk",
-       "vouched": null
+       "vouched": null,
+       "witnesses": []
       },
       {
        "index": 4,
@@ -8971,7 +9028,8 @@
         "when": "2026-10-05T12:30:00Z"
        },
        "sealer": "N085zwikug_d8m8zQdtEH4JkogJX4m_2FE35Kk8kryk",
-       "vouched": null
+       "vouched": null,
+       "witnesses": []
       },
       {
        "index": 6,
@@ -9100,7 +9158,8 @@
         "size": 5,
         "type": "provared.seal.v0",
         "when": "2026-10-05T12:30:00Z"
-       }
+       },
+       "witnesses": []
       }
      ],
      "summary": {
@@ -9137,7 +9196,8 @@
        "It does not show who was holding the device when the passkey signed.",
        "A name in a record is a label. Only keys are checked.",
        "Nothing here is time-stamped by an outside service that you named as trusted. So it does not show when the record was made, and the latest stubs under a slip or a pass, or a slip or a pass with all its stubs, could have been removed."
-      ]
+      ],
+      "witnessed": null
      }
     }
    }
@@ -9508,7 +9568,8 @@
         "when": "2026-10-05T11:30:00Z"
        },
        "sealer": "N085zwikug_d8m8zQdtEH4JkogJX4m_2FE35Kk8kryk",
-       "vouched": null
+       "vouched": null,
+       "witnesses": []
       },
       {
        "index": 4,
@@ -9633,7 +9694,8 @@
         "when": "2026-10-05T12:30:00Z"
        },
        "sealer": "N085zwikug_d8m8zQdtEH4JkogJX4m_2FE35Kk8kryk",
-       "vouched": null
+       "vouched": null,
+       "witnesses": []
       },
       {
        "index": 6,
@@ -9730,7 +9792,8 @@
        "It does not show who was holding the device when the passkey signed.",
        "A name in a record is a label. Only keys are checked.",
        "Nothing here is time-stamped by an outside service that you named as trusted. So it does not show when the record was made, and the latest stubs under a slip or a pass, or a slip or a pass with all its stubs, could have been removed."
-      ]
+      ],
+      "witnessed": null
      }
     }
    }
@@ -10030,7 +10093,8 @@
         "when": "2026-10-05T11:30:00Z"
        },
        "sealer": "N085zwikug_d8m8zQdtEH4JkogJX4m_2FE35Kk8kryk",
-       "vouched": null
+       "vouched": null,
+       "witnesses": []
       },
       {
        "index": 4,
@@ -10155,7 +10219,8 @@
         "when": "2026-10-05T12:30:00Z"
        },
        "sealer": "N085zwikug_d8m8zQdtEH4JkogJX4m_2FE35Kk8kryk",
-       "vouched": null
+       "vouched": null,
+       "witnesses": []
       },
       {
        "index": 6,
@@ -10252,7 +10317,8 @@
        "It does not show who was holding the device when the passkey signed.",
        "A name in a record is a label. Only keys are checked.",
        "Nothing here is time-stamped by an outside service that you named as trusted. So it does not show when the record was made, and the latest stubs under a slip or a pass, or a slip or a pass with all its stubs, could have been removed."
-      ]
+      ],
+      "witnessed": null
      }
     }
    }
@@ -10557,7 +10623,8 @@
         "when": "2026-10-05T11:30:00Z"
        },
        "sealer": "N085zwikug_d8m8zQdtEH4JkogJX4m_2FE35Kk8kryk",
-       "vouched": null
+       "vouched": null,
+       "witnesses": []
       },
       {
        "index": 4,
@@ -10682,7 +10749,8 @@
         "when": "2026-10-05T12:30:00Z"
        },
        "sealer": "N085zwikug_d8m8zQdtEH4JkogJX4m_2FE35Kk8kryk",
-       "vouched": null
+       "vouched": null,
+       "witnesses": []
       },
       {
        "index": 6,
@@ -10779,7 +10847,8 @@
        "It does not show who was holding the device when the passkey signed.",
        "A name in a record is a label. Only keys are checked.",
        "Nothing here is time-stamped by an outside service that you named as trusted. So it does not show when the record was made, and the latest stubs under a slip or a pass, or a slip or a pass with all its stubs, could have been removed."
-      ]
+      ],
+      "witnessed": null
      }
     }
    }
@@ -11129,7 +11198,8 @@
         "when": "2026-10-05T11:30:00Z"
        },
        "sealer": "N085zwikug_d8m8zQdtEH4JkogJX4m_2FE35Kk8kryk",
-       "vouched": null
+       "vouched": null,
+       "witnesses": []
       },
       {
        "index": 4,
@@ -11254,7 +11324,8 @@
         "when": "2026-10-05T12:30:00Z"
        },
        "sealer": "N085zwikug_d8m8zQdtEH4JkogJX4m_2FE35Kk8kryk",
-       "vouched": null
+       "vouched": null,
+       "witnesses": []
       },
       {
        "index": 6,
@@ -11382,7 +11453,8 @@
         "size": 5,
         "type": "provared.seal.v0",
         "when": "2026-10-05T12:30:00Z"
-       }
+       },
+       "witnesses": []
       },
       {
        "kind": "seal",
@@ -11400,7 +11472,8 @@
        ],
        "notes": [],
        "signatures": [],
-       "stamps": []
+       "stamps": [],
+       "witnesses": []
       }
      ],
      "summary": {
@@ -11437,7 +11510,8 @@
        "It does not show who was holding the device when the passkey signed.",
        "A name in a record is a label. Only keys are checked.",
        "Nothing here is time-stamped by an outside service that you named as trusted. So it does not show when the record was made, and the latest stubs under a slip or a pass, or a slip or a pass with all its stubs, could have been removed."
-      ]
+      ],
+      "witnessed": null
      }
     }
    }
@@ -11744,7 +11818,8 @@
         "when": "2026-10-05T11:30:00Z"
        },
        "sealer": "N085zwikug_d8m8zQdtEH4JkogJX4m_2FE35Kk8kryk",
-       "vouched": null
+       "vouched": null,
+       "witnesses": []
       },
       {
        "index": 4,
@@ -11869,7 +11944,8 @@
         "when": "2026-10-05T12:30:00Z"
        },
        "sealer": "N085zwikug_d8m8zQdtEH4JkogJX4m_2FE35Kk8kryk",
-       "vouched": null
+       "vouched": null,
+       "witnesses": []
       },
       {
        "index": 6,
@@ -11948,7 +12024,8 @@
        ],
        "notes": [],
        "signatures": [],
-       "stamps": []
+       "stamps": [],
+       "witnesses": []
       }
      ],
      "summary": {
@@ -11985,7 +12062,8 @@
        "It does not show who was holding the device when the passkey signed.",
        "A name in a record is a label. Only keys are checked.",
        "Nothing here is time-stamped by an outside service that you named as trusted. So it does not show when the record was made, and the latest stubs under a slip or a pass, or a slip or a pass with all its stubs, could have been removed."
-      ]
+      ],
+      "witnessed": null
      }
     }
    }
@@ -12292,7 +12370,8 @@
         "when": "2026-10-05T11:30:00Z"
        },
        "sealer": "N085zwikug_d8m8zQdtEH4JkogJX4m_2FE35Kk8kryk",
-       "vouched": null
+       "vouched": null,
+       "witnesses": []
       },
       {
        "index": 4,
@@ -12417,7 +12496,8 @@
         "when": "2026-10-05T12:30:00Z"
        },
        "sealer": "N085zwikug_d8m8zQdtEH4JkogJX4m_2FE35Kk8kryk",
-       "vouched": null
+       "vouched": null,
+       "witnesses": []
       },
       {
        "index": 6,
@@ -12496,7 +12576,8 @@
        ],
        "notes": [],
        "signatures": [],
-       "stamps": []
+       "stamps": [],
+       "witnesses": []
       }
      ],
      "summary": {
@@ -12533,7 +12614,8 @@
        "It does not show who was holding the device when the passkey signed.",
        "A name in a record is a label. Only keys are checked.",
        "Nothing here is time-stamped by an outside service that you named as trusted. So it does not show when the record was made, and the latest stubs under a slip or a pass, or a slip or a pass with all its stubs, could have been removed."
-      ]
+      ],
+      "witnessed": null
      }
     }
    }
@@ -12862,7 +12944,8 @@
         "when": "2026-10-05T11:30:00Z"
        },
        "sealer": "N085zwikug_d8m8zQdtEH4JkogJX4m_2FE35Kk8kryk",
-       "vouched": null
+       "vouched": null,
+       "witnesses": []
       },
       {
        "index": 4,
@@ -12987,7 +13070,8 @@
         "when": "2026-10-05T12:30:00Z"
        },
        "sealer": "N085zwikug_d8m8zQdtEH4JkogJX4m_2FE35Kk8kryk",
-       "vouched": null
+       "vouched": null,
+       "witnesses": []
       },
       {
        "index": 6,
@@ -13066,7 +13150,8 @@
        ],
        "notes": [],
        "signatures": [],
-       "stamps": []
+       "stamps": [],
+       "witnesses": []
       }
      ],
      "summary": {
@@ -13103,7 +13188,8 @@
        "It does not show who was holding the device when the passkey signed.",
        "A name in a record is a label. Only keys are checked.",
        "Nothing here is time-stamped by an outside service that you named as trusted. So it does not show when the record was made, and the latest stubs under a slip or a pass, or a slip or a pass with all its stubs, could have been removed."
-      ]
+      ],
+      "witnessed": null
      }
     }
    }
@@ -13424,7 +13510,8 @@
         "when": "2026-10-05T11:30:00Z"
        },
        "sealer": "N085zwikug_d8m8zQdtEH4JkogJX4m_2FE35Kk8kryk",
-       "vouched": null
+       "vouched": null,
+       "witnesses": []
       },
       {
        "index": 4,
@@ -13549,7 +13636,8 @@
         "when": "2026-10-05T12:30:00Z"
        },
        "sealer": "N085zwikug_d8m8zQdtEH4JkogJX4m_2FE35Kk8kryk",
-       "vouched": null
+       "vouched": null,
+       "witnesses": []
       },
       {
        "index": 6,
@@ -13628,7 +13716,8 @@
        ],
        "notes": [],
        "signatures": [],
-       "stamps": []
+       "stamps": [],
+       "witnesses": []
       }
      ],
      "summary": {
@@ -13665,7 +13754,8 @@
        "It does not show who was holding the device when the passkey signed.",
        "A name in a record is a label. Only keys are checked.",
        "Nothing here is time-stamped by an outside service that you named as trusted. So it does not show when the record was made, and the latest stubs under a slip or a pass, or a slip or a pass with all its stubs, could have been removed."
-      ]
+      ],
+      "witnessed": null
      }
     }
    }
@@ -13994,7 +14084,8 @@
         "when": "2026-10-05T11:30:00Z"
        },
        "sealer": "N085zwikug_d8m8zQdtEH4JkogJX4m_2FE35Kk8kryk",
-       "vouched": null
+       "vouched": null,
+       "witnesses": []
       }
      ],
      "held": [
@@ -14063,7 +14154,8 @@
         "size": 5,
         "type": "provared.seal.v0",
         "when": "2026-10-05T12:30:00Z"
-       }
+       },
+       "witnesses": []
       }
      ],
      "summary": {
@@ -14100,7 +14192,8 @@
        "It does not show who was holding the device when the passkey signed.",
        "A name in a record is a label. Only keys are checked.",
        "Nothing here is time-stamped by an outside service that you named as trusted. So it does not show when the record was made, and the latest stubs under a slip or a pass, or a slip or a pass with all its stubs, could have been removed."
-      ]
+      ],
+      "witnessed": null
      }
     }
    }
