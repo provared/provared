@@ -86,6 +86,9 @@ agent = create_agent(model, tools=[order_supplies, send_message],
                      })])   # last among the middleware that wrap tool calls
 ```
 
+The package is listed among the middleware in
+[LangChain's own documentation](https://docs.langchain.com/oss/python/integrations/middleware).
+
 ## The four parts
 
 | Part | What it is |

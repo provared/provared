@@ -107,7 +107,7 @@ agent = create_agent(model, tools=[order_supplies, send_message],
                          'send_message': 'provared.message.send',
                      })])   # last among the middleware that wrap tool calls</pre>
 
-<p>A call the permission does not allow is not run, nothing is written, and the model is told why. The <a href="https://github.com/provared/provared/blob/main/docs/guide.md">guide</a> covers the stub writer, the connector for an agent's tools, seals, time-stamps, cancelling, passing a permission on, and covered names.</p>
+<p>A call the permission does not allow is not run, nothing is written, and the model is told why. The package is listed among the middleware in <a href="https://docs.langchain.com/oss/python/integrations/middleware">LangChain's own documentation</a>. The <a href="https://github.com/provared/provared/blob/main/docs/guide.md">guide</a> covers the stub writer, the connector for an agent's tools, seals, time-stamps, cancelling, passing a permission on, and covered names.</p>
 
 <h2 id="checker">What the checker says</h2>
 
