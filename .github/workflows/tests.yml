@@ -1,0 +1,222 @@
+# Runs the tests of the library and of every package built on it.
+#
+# When: on every pull request, so that a change is tested before it reaches
+# main; on every push to main, except the daily record page; and every
+# Monday, so that a new release of LangChain, Pydantic AI or Agno that
+# breaks one of the framework packages is found before the people who use
+# them find it. Nothing is cached: every run installs the newest release of
+# each framework that the package allows.
+#
+# Nothing here is published, pushed or sent anywhere: the workflow can only
+# read the repository, and it uses no secret. The tests call no AI service;
+# the framework tests run their agents with stand-in models, inside a guard
+# that refuses any connection.
+#
+# The actions are GitHub's own, each pinned to the exact commit of a
+# released version (the comment gives the version), so that a later change
+# to a tag cannot change what runs here.
+
+name: Tests
+
+on:
+  push:
+    branches: [main]
+    # The record page is remade each day and holds no code.
+    paths-ignore: ['site/records/**']
+  pull_request:
+  schedule:
+    # Every Monday at 06:00 UTC.
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# On a pull request, a newer push stops the older run. On main every commit
+# keeps its own result. The weekly run has a group of its own.
+concurrency:
+  group: tests-${{ github.event_name }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: '1'
+  PYTHONUNBUFFERED: '1'
+
+jobs:
+  # The library's own tests. "npm test" at the top of the repository would
+  # also run the tests of the two packages below; here they are run apart,
+  # so that a failure says which part broke, and each set runs once.
+  javascript:
+    name: JavaScript library
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Node.js 24.7 is the first with ML-DSA built in; 24 gives the latest 24.x.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: Run the tests
+        run: node --disable-warning=ExperimentalWarning --test 'test/**/*.test.mjs'
+
+  # The recorder beside Claude Code, and the gateway. Their tests point the
+  # name "provared" at this repository's own library (test/local-library.mjs
+  # in each folder), so nothing is installed: they test the library as it
+  # is in this commit, not a published version.
+  javascript-packages:
+    name: ${{ matrix.package }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [integrations/claude-code, gateway]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: Run the tests
+        working-directory: ${{ matrix.package }}
+        run: npm test
+
+  # The library in Python, on the oldest and the newest Python it supports.
+  python:
+    name: Python library (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.11', '3.14']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install the library from this commit
+        run: python -m pip install ./python
+      - name: Run the tests
+        working-directory: python
+        run: python -m unittest discover -s tests
+
+  # The packages for LangChain, Pydantic AI and Agno. Each is installed
+  # beside the library from this commit, with no versions pinned, so pip
+  # takes the newest release of the framework that the package's own
+  # bounds allow. Their tests use the invented world in python/examples/.
+  python-frameworks:
+    name: ${{ matrix.package }} (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [provared-langchain, pydantic-ai-provared, provared-agno]
+        python: ['3.11', '3.14']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+      # Both in one command, so that pip uses the library from this commit,
+      # not the one on the Python Package Index.
+      - name: Install the library and the package
+        run: python -m pip install ./python ./python/integrations/${{ matrix.package }}
+      - name: Show the versions being tested
+        run: python -m pip list
+      - name: Run the tests
+        working-directory: python/integrations/${{ matrix.package }}
+        run: python -m unittest discover -s tests
+
+  # The plugin for Hermes Agent. Hermes is not taken from the Python Package
+  # Index (its "hermes-agent" there stopped at 0.19.0), so its source is
+  # fetched from its public repository (MIT licence) at the commit of
+  # version 0.21.7, the version the plugin is tested with. The plugin
+  # refuses other versions of Hermes by design, so Hermes is not taken at
+  # its newest here; to test a newer one, change the commit below.
+  python-hermes:
+    name: provared-hermes (Python 3.14)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Fetch Hermes Agent 0.21.7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: NousResearch/hermes-agent
+          ref: 71d34bad1045610252eda02ee79549436896e784 # v0.21.7
+          path: _hermes
+          persist-credentials: false
+      # Hermes reads its own version from git tags, which a fetch of one
+      # commit does not bring; without one it calls itself "unknown" and the
+      # plugin refuses every call. The commit above is the one the tag
+      # names, so the tag is put back here.
+      - name: Give Hermes its version tag
+        run: |
+          test "$(git -C _hermes rev-parse HEAD)" = 71d34bad1045610252eda02ee79549436896e784
+          git -C _hermes tag v0.21.7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14'
+      # Installed so that its source can be read in place, as the plugin's
+      # README does: the tests use Hermes's own stand-in model from it.
+      - name: Install Hermes Agent
+        run: python -m pip install -e ./_hermes
+      # The plugin asks for provared below 0.6. Installed in the ordinary
+      # way, once this repository's library reaches 0.6, pip would quietly
+      # replace it with an older one from the Python Package Index, and the
+      # tests would not test this commit. So the plugin is installed without
+      # its dependencies (its only one is provared, installed just before),
+      # and the next step fails whenever the bound no longer fits, so that
+      # the bound is raised with the library's version.
+      - name: Install the library and the plugin
+        run: |
+          python -m pip install ./python packaging
+          python -m pip install --no-deps ./python/integrations/provared-hermes
+      - name: Check the plugin's bound on the library
+        shell: python
+        run: |
+          from importlib.metadata import requires, version
+          from packaging.requirements import Requirement
+          have = version('provared')
+          for line in requires('provared-hermes') or []:
+              wanted = Requirement(line)
+              if wanted.name == 'provared' and not wanted.specifier.contains(have, prereleases=True):
+                  print(f'::error::provared-hermes asks for provared{wanted.specifier}, but the library in this commit is {have}. Raise the plugin\'s bound.')
+                  raise SystemExit(1)
+          print(f'provared {have} fits the plugin\'s bound.')
+      - name: Show the versions being tested
+        run: python -m pip list
+      - name: Run the tests
+        working-directory: python/integrations/provared-hermes
+        run: python -m unittest discover -s tests
+
+  # The examples, with each framework at the exact version that
+  # python/examples/requirements.txt names. The framework packages above
+  # test the newest versions; this checks the examples as they are written.
+  python-examples:
+    name: Python examples (Python 3.14)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14'
+      - name: Install the examples' requirements and the library
+        run: python -m pip install -r python/examples/requirements.txt ./python
+      - name: Run the tests
+        working-directory: python/examples
+        run: python -m unittest test_examples -v

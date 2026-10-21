@@ -1195,9 +1195,11 @@ class WhereItStands(Runs, unittest.TestCase):
 class Asynchronous(Runs, unittest.TestCase):
     def test_the_second_part_is_asynchronous_only_where_an_event_loop_runs(self):
         # So that Agno skips it in no ordinary run, and in an asynchronous
-        # run takes every call through its asynchronous path.
+        # run takes every call through its asynchronous path. Python 3.11
+        # cannot mark it so only on the event loop, so there it is always
+        # asynchronous, as the README says.
         last = ProvaredToolHook(World().writer, TOOLS).hooks[1]
-        self.assertFalse(inspect.iscoroutinefunction(last))
+        self.assertEqual(inspect.iscoroutinefunction(last), sys.version_info < (3, 12))
 
         async def on_the_loop():
             return inspect.iscoroutinefunction(last)
@@ -1299,18 +1301,18 @@ class Asynchronous(Runs, unittest.TestCase):
         # An ordinary tool cannot be stopped once it runs: the next action
         # waits for it, and its stub is written, since it completed.
         world = World()
-        times = {}
+        happened = []  # in order, not by the clock, which on Windows can give two moments one time
 
         def order_supplies(item: str, quantity: int, total_gbp: int) -> str:
             """Order office supplies."""
             time.sleep(1)
             world.orders.append(item)
-            times['ordered'] = time.monotonic()
+            happened.append('ordered')
             return 'ordered'
 
         def send_message(to: str, text: str) -> str:
             """Send a short message."""
-            times['sent'] = time.monotonic()
+            happened.append('sent')
             world.messages.append({'to': to, 'text': text})
             return 'sent'
 
@@ -1325,7 +1327,7 @@ class Asynchronous(Runs, unittest.TestCase):
 
         with offline():
             in_time(self, lambda: asyncio.run(main()), 30)
-        self.assertLess(times['ordered'], times['sent'])
+        self.assertEqual(happened, ['ordered', 'sent'])
         self.assertEqual([s['action'] for s in stubs(world)], [ORDER, MESSAGE])
 
     def test_the_same_holds_where_the_program_s_event_loop_ends_at_once(self):
@@ -1402,6 +1404,7 @@ class Asynchronous(Runs, unittest.TestCase):
         # next action starts only once it has ended, and its stub is written.
         world = World()
         times = {}
+        happened = []  # in order, not by the clock, which on Windows can give two moments one time
 
         async def order_supplies(item: str, quantity: int, total_gbp: int) -> str:
             """Order office supplies."""
@@ -1411,12 +1414,12 @@ class Asynchronous(Runs, unittest.TestCase):
             except asyncio.CancelledError:
                 await asyncio.sleep(1)  # it finishes its order all the same
             world.orders.append(item)
-            times['ordered'] = time.monotonic()
+            happened.append('ordered')
             return 'ordered'
 
         def send_message(to: str, text: str) -> str:
             """Send a short message."""
-            times['sent'] = time.monotonic()
+            happened.append('sent')
             world.messages.append({'to': to, 'text': text})
             return 'sent'
 
@@ -1437,7 +1440,7 @@ class Asynchronous(Runs, unittest.TestCase):
         with offline():
             in_time(self, lambda: asyncio.run(main()), 30)
         self.assertEqual((world.orders, len(world.messages)), (['printer paper'], 1))
-        self.assertLess(times['ordered'], times['sent'])
+        self.assertEqual(happened, ['ordered', 'sent'])
         self.assertEqual([s['action'] for s in stubs(world)], [ORDER, MESSAGE])
 
     def test_an_ordinary_tool_needs_none_of_the_event_loop_s_shared_threads(self):
