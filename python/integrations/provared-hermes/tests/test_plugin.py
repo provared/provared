@@ -30,6 +30,11 @@ PACKAGE = HERE.parent
 sys.path.insert(0, str(PACKAGE.parents[1] / 'examples'))
 sys.path.insert(0, str(PACKAGE / 'src'))
 
+# The temporary folder named before Hermes is imported. Where none is named (Linux sets no
+# TMPDIR), Hermes points it into the Hermes home of the moment, which these tests delete.
+for _name in ('TMPDIR', 'TMP', 'TEMP'):
+    os.environ.setdefault(_name, tempfile.gettempdir())
+
 # A Hermes home of its own, before Hermes is imported: its logging and state go there.
 os.environ['HERMES_HOME'] = tempfile.mkdtemp(prefix='provared-hermes-tests-')
 logging.disable(logging.CRITICAL)

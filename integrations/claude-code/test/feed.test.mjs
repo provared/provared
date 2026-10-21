@@ -897,9 +897,12 @@ test('a kept book on disk of exactly 4 MiB that ends part way through a line: on
 test('many questions at once: at most 16 are taken on, the rest are told to ask again at once, and the hook is answered meanwhile', async () => {
   const w = await running(30);
   try {
+    // A kept book large enough that finding its lines takes several pieces, so that each answer
+    // holds the feed for a while on a fast computer too, and the questions pile up.
+    writeFileSync(join(w.folder, 'book-1.jsonl'), Array.from({ length: 12000 }, (_, i) => `{"a":"${String(i).padEnd(3000, 'x')}"}\n`).join(''));
     const reader = feedReader({ address: `http://127.0.0.1:${w.port}`, token: tokenOf(w.folder) });
     await reader.get('/books');
-    const flood = Array.from({ length: 200 }, () => reader.get('/lines?wait=0').then((r) => r.code));
+    const flood = Array.from({ length: 200 }, () => reader.get('/lines?book=book-1.jsonl&wait=0').then((r) => r.code));
     const started = Date.now();
     assert.equal((await runHook(w.port, 'PreToolUse', 'Bash', { command: 'npm test' })).out, '', 'the hook is answered');
     const hookTook = Date.now() - started;
