@@ -61,13 +61,18 @@ fake = _hermes_test_module('tests/fakes/fake_llm_provider.py')
 ToolCall, Text = fake.ToolCall, fake.Text
 
 # Hermes reads its own version from git, and describes the computer to the
-# model by starting python and pip, once, and keeps both: done here, before
-# the guard opens, so that no program is started while it is open.
+# model by starting python and pip, once, and keeps both; and on Linux Python
+# starts "uname" the first time the model's client asks which processor this
+# is. All done here, before the guard opens, so that no program is started
+# while it is open.
+import platform  # noqa: E402
+
 from hermes_cli.version_info import get_version_info  # noqa: E402
 from tools.env_probe import get_environment_probe_line  # noqa: E402
 
 get_version_info()
 get_environment_probe_line()
+platform.uname().processor
 
 ORDER = 'provared.order.place'
 MESSAGE = 'provared.message.send'

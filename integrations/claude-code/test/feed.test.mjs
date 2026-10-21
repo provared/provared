@@ -894,20 +894,37 @@ test('a kept book on disk of exactly 4 MiB that ends part way through a line: on
   }
 });
 
-test('many questions at once: at most 16 are taken on, the rest are told to ask again at once, and the hook is answered meanwhile', async () => {
+test('one question more than the feed takes on is told to ask again at once; within the number it is answered', async () => {
+  const memory = (dir) => [{ key: 1, path: join(dir, 'book.jsonl'), text: () => '{"slip":1}\n', inForce: true }];
+  // With room for none, every question is one too many.
+  const full = await unitFeed({ memory, maxBusy: 0 });
+  try {
+    const r = await full.get('/lines?wait=0');
+    assert.equal(r.code, 429);
+    assert.match(r.body.error, /ask again/);
+  } finally {
+    await full.close();
+  }
+  const room = await unitFeed({ memory, maxBusy: 1 });
+  try {
+    assert.equal((await room.get('/lines?wait=0')).code, 200);
+  } finally {
+    await room.close();
+  }
+});
+
+test('many questions at once: each is answered or told to ask again, and the hook is answered meanwhile', async () => {
+  // How many pile up at once depends on how fast the computer answers; the
+  // limit itself is held by the test above.
   const w = await running(30);
   try {
-    // A kept book large enough that finding its lines takes several pieces, so that each answer
-    // holds the feed for a while on a fast computer too, and the questions pile up.
-    writeFileSync(join(w.folder, 'book-1.jsonl'), Array.from({ length: 12000 }, (_, i) => `{"a":"${String(i).padEnd(3000, 'x')}"}\n`).join(''));
     const reader = feedReader({ address: `http://127.0.0.1:${w.port}`, token: tokenOf(w.folder) });
     await reader.get('/books');
-    const flood = Array.from({ length: 200 }, () => reader.get('/lines?book=book-1.jsonl&wait=0').then((r) => r.code));
+    const flood = Array.from({ length: 200 }, () => reader.get('/lines?wait=0').then((r) => r.code));
     const started = Date.now();
     assert.equal((await runHook(w.port, 'PreToolUse', 'Bash', { command: 'npm test' })).out, '', 'the hook is answered');
     const hookTook = Date.now() - started;
     const codes = await Promise.all(flood);
-    assert.ok(codes.filter((c) => c === 429).length > 0, 'some told to ask again');
     assert.ok(codes.filter((c) => c === 200).length >= FEED_MAX_BUSY, 'at least 16 answered');
     assert.ok(codes.every((c) => c === 200 || c === 429));
     assert.ok(hookTook < 10000, `the hook took ${hookTook} ms`);

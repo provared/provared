@@ -77,8 +77,8 @@ def hermes_class(module, name):
     """One of Hermes's own classes, from Hermes's source installed beside these
     tests (with a Hermes home of its own where none is set yet). The temporary
     folder is named first: where none is named, Hermes points it into its home."""
-    for name in ('TMPDIR', 'TMP', 'TEMP'):
-        os.environ.setdefault(name, tempfile.gettempdir())
+    for variable in ('TMPDIR', 'TMP', 'TEMP'):
+        os.environ.setdefault(variable, tempfile.gettempdir())
     os.environ.setdefault('HERMES_HOME', tempfile.mkdtemp(prefix='provared-hermes-tests-'))
     return getattr(importlib.import_module(module), name)
 
