@@ -509,7 +509,10 @@ test('init: a hook of the person\'s own that only mentions this recorder\'s file
   assert.deepEqual(settings.hooks.PreToolUse[0], { matcher: 'Bash', hooks: mine }, 'every one of the person\'s hooks stays, as it was');
   assert.deepEqual(settings.hooks.SessionStart[0], { hooks: [status] });
   assert.deepEqual(settings.hooks.PreToolUse[1], ours.PreToolUse[0]);
-  assert.ok(written.others.length >= 3, 'each one that names this recorder\'s files is pointed out');
+  // A hook is pointed out where its command says "provared": here through the
+  // folder's path, so the number depends on where the repository sits.
+  const naming = [...mine, status].filter((h) => /provared/i.test(JSON.stringify([h.command, h.args]))).length;
+  assert.equal(written.others.length, naming, 'each one that names Provared is pointed out');
   // This recorder's own command, written as one line with nothing more, is its own: replaced, not doubled.
   const again = project(JSON.stringify({ hooks: { SessionStart: [{ hooks: [{ type: 'command', command: `node "${recorderPath}" ensure` }] }] } }));
   assert.equal(writeHooks(again.dir).replaced, 1);
