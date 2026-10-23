@@ -51,6 +51,12 @@ def answers(result):
     return [part for message in result.all_messages() for part in message.parts if part.part_kind in ('tool-return', 'retry-prompt')]
 
 
+def kinds(result):
+    # Pydantic AI 2.60 tells the model of a retry with a tool return marked 'retried'; earlier versions with a retry prompt.
+    return ['retry' if a.part_kind == 'retry-prompt' or getattr(a, 'outcome', None) == 'retried' else a.part_kind
+            for a in answers(result)]
+
+
 class Runs:
     """Runs an agent with the stand-in model, inside the guard."""
 
@@ -107,7 +113,7 @@ class Capability(Runs, unittest.TestCase):
         world = World()
         result = self.run_agent(world, [call('order_supplies', {**PAPER, 'quantity': 'many'}, 1), DONE],
                                 ProvaredCapability(world.writer, TOOLS))
-        self.assertEqual([a.part_kind for a in answers(result)], ['retry-prompt'])
+        self.assertEqual(kinds(result), ['retry'])
         self.assertEqual((world.orders, stubs(world)), ([], []))
 
     def test_a_tool_that_fails_or_asks_to_be_retried_leaves_no_stub(self):
@@ -141,7 +147,7 @@ class Capability(Runs, unittest.TestCase):
                 result = self.run_agent(world, [call('order_supplies', PAPER, 1), DONE], ProvaredCapability(world.writer, TOOLS),
                                         tools=[dataclasses.replace(pydantic_ai.Tool(retrying), name='order_supplies')],
                                         asynchronous=asynchronous)
-                self.assertEqual([a.part_kind for a in answers(result)], ['retry-prompt'])
+                self.assertEqual(kinds(result), ['retry'])
                 self.assertEqual(stubs(world), [])
 
     def test_arguments_that_are_not_plain_data_are_not_run_and_the_model_is_told(self):
@@ -279,7 +285,7 @@ class AfterTheReview(Runs, unittest.TestCase):
 
         result = in_time(self, lambda: self.run_agent(world, [call('order_supplies', PAPER, 1), DONE], ProvaredCapability(world.writer, TOOLS),
                                                       tools=[pydantic_ai.Tool(order_supplies, timeout=1)]), 30)
-        self.assertEqual([a.part_kind for a in answers(result)], ['retry-prompt'])
+        self.assertEqual(kinds(result), ['retry'])
         in_time(self, world.writer.snapshot, 5)
         self.assertEqual((world.orders, stubs(world)), ([], []))
 
