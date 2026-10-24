@@ -16,10 +16,12 @@
   gateway and the Hermes plugin, which name their documents themselves.
   No rule of the format changes. Shared test files: `tool-scenarios.json`
   and `denial-scenarios.json` are made again; their stored answers differ
-  only in that name, and every record in them is signed afresh. The two
-  published framework packages follow, each requiring `provared` 0.6.0 or
-  later: `provared-langchain` 0.2.0 and `pydantic-ai-provared` 0.2.0,
-  whose READMEs say what changes; `provared-agno` (not published)
+  only in that name, and every record in them is signed afresh. The name
+  comes with the library: a framework package of an earlier version writes
+  the new name too once `provared` is upgraded to 0.6.0. The two published
+  framework packages gain versions that require it, `provared-langchain`
+  0.2.0 and `pydantic-ai-provared` 0.2.0, whose READMEs say what changes,
+  and which can be installed only once `provared` 0.6.0 is published; `provared-agno` (not published)
   requires 0.6.0 too. The Hermes plugin's bound is raised to below 0.7;
   it does not use the default. The version in `package.json` and
   `python/pyproject.toml` is now 0.6.0, so that the packages' bounds hold

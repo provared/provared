@@ -138,14 +138,16 @@ How to make a slip, a book and the agent's keys is in Provared's
 
 ## Versions
 
-- **0.2.0.** A stub names the fingerprint of the call's arguments
+- **0.2.0.** Needs `provared` 0.6.0 or later. The name of the
+  fingerprint of the call's arguments comes from the library, not from
+  this package: from `provared` 0.6.0 on, `record_tools` names it
   `provared.arguments`, the reserved name of section 27 of the format
-  description, where 0.1.0 named it `arguments`. The fingerprint is the
-  same; only the name changes, and every checker reads both (one of
-  Provared 0.5.0 or later knows the reserved name; an earlier one reads
-  it as a label). Nothing else in what the capability records changes.
-  It needs `provared` 0.6.0 or later, whose `record_tools` makes the
-  same change.
+  description, where earlier versions named it `arguments`. So 0.1.0
+  writes the new name too once `provared` is upgraded to 0.6.0, and
+  0.2.0 only makes sure of it. The fingerprint is the same; only the name
+  changes, and every checker reads both (one of Provared 0.5.0 or later
+  knows the reserved name; an earlier one reads it as a label). Nothing
+  else in what the capability records changes.
 - **0.1.0.** The first version.
 
 ## Tests
