@@ -11,10 +11,32 @@
 import math
 
 from . import _js
-from .encoding import sha256
+from .encoding import Refusal, sha256, utf8
 
 _LEAF = b'\x00'
 _NODE = b'\x01'
+# The most bytes a line of a book holds (book.MAX_LINE_BYTES).
+_MAX_LINE_BYTES = 131072
+
+
+def leaf_fingerprint(line):
+    """The leaf fingerprint of one line of a book: the SHA-256 of the byte 0x00
+    and the line's bytes, without its line feed (RFC 6962, section 2.1;
+    format description, section 10). This is what a recorder sends a central
+    sealer in place of the line. There is no sealer in Python: a sealer
+    checks every seal it signs, and this version cannot check SLH-DSA."""
+    if not isinstance(line, str):
+        raise Refusal('bad-field', 'line: must be text: one line of a book, without its line feed.')
+    if len(line) == 0:
+        raise Refusal('bad-field', 'line: must not be empty: no line of a book is.')
+    if '\n' in line:
+        raise Refusal('bad-field', 'line: must be one line of a book, without its line feed.')
+    if any(0xD800 <= ord(ch) <= 0xDFFF for ch in line):
+        raise Refusal('bad-field', 'line: must be well-formed Unicode text: a line of a book is written in UTF-8.')
+    data = utf8(line)
+    if len(data) > _MAX_LINE_BYTES:
+        raise Refusal('bad-field', 'line: must be at most 131,072 bytes, as a line of a book is.')
+    return leaf_hash(data)
 
 
 def leaf_hash(data):
@@ -72,7 +94,13 @@ class TreeBuilder:
 
     def add(self, leaf):
         """leaf: the data of the next leaf."""
-        node_hash, size = leaf_hash(leaf), 1
+        self.add_leaf_hash(leaf_hash(leaf))
+
+    def add_leaf_hash(self, leaf_fingerprint):
+        """Add the next leaf by its fingerprint alone (leaf_hash of its data), as a sealer that never sees the lines does."""
+        if not isinstance(leaf_fingerprint, (bytes, bytearray)) or len(leaf_fingerprint) != 32:
+            raise Refusal('bad-field', 'leaf: must be a leaf fingerprint: 32 bytes.')
+        node_hash, size = bytes(leaf_fingerprint), 1
         while self._parts and self._parts[-1][1] == size:
             left_hash, left_size = self._parts.pop()
             node_hash, size = _node_hash(left_hash, node_hash), left_size * 2

@@ -1,0 +1,46 @@
+{
+  "name": "provared-sealer",
+  "version": "0.1.0",
+  "description": "A central sealer for Provared books: it holds a recorder's keys apart from the agent, is sent only the fingerprints of a book's lines, never the lines, and signs seals over the tree it built from them. Evidence, not a verdict.",
+  "author": "Pavel Izmaylov",
+  "license": "Apache-2.0 AND CC-BY-4.0",
+  "homepage": "https://prova.red",
+  "bugs": "https://github.com/provared/provared/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/provared/provared.git",
+    "directory": "sealer"
+  },
+  "keywords": [
+    "ai-agent",
+    "agent",
+    "audit-trail",
+    "tamper-evident",
+    "merkle-tree",
+    "seal",
+    "evidence"
+  ],
+  "type": "module",
+  "main": "./sealer.mjs",
+  "exports": {
+    ".": "./sealer.mjs",
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "provared-sealer": "bin.mjs"
+  },
+  "files": [
+    "sealer.mjs",
+    "bin.mjs",
+    "LICENSE-CC-BY-4.0.txt"
+  ],
+  "engines": {
+    "node": ">=24.7"
+  },
+  "scripts": {
+    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "provared": "^0.6.0"
+  }
+}

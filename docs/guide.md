@@ -341,6 +341,110 @@ passkey and the agent of the permission on the book's first line. Whoever can ch
 state can make it forget a sequence: keep it as safely as its keys. A
 witness needs SLH-DSA, so it needs Node.js; the Python version has none.
 
+### A central sealer
+
+The recorder's three keys need not sit on the agent's computer. A
+central sealer, run by a team other than the one that runs the agent,
+holds them and seals books it never sees: the recorder sends it the
+leaf fingerprint of each new line (`leafFingerprint(line)`: the SHA-256
+of the byte 0x00 and the line), and asks for a seal; the sealer builds
+the same tree as the checker, signs a seal over its own number of
+entries and top fingerprint, and hands back the seal's entry, which the
+recorder adds to its book with the stub writer's `add` (format
+description, section 21.7). A sealer sent a wrong fingerprint signs a
+seal the book refuses (`seal-mismatch`).
+
+```js
+import { leafFingerprint, openSealer, toBase64url } from 'provared';
+
+const sealer = await openSealer({ by: { keys, name: 'Our central sealer' }, signers, state });
+const first = toBase64url(await leafFingerprint(lines[0]));       // a book is known by its first line
+await sealer.extend(first, 0, await Promise.all(lines.map(leafFingerprint)));
+const made = await sealer.seal(first, { previous: null });         // the seal the book's latest seal names, or null
+// save made.state first, then hand made.entry to the book
+```
+
+`extend(book, at, leaves)` takes lines only at the place it holds, so a
+line is never taken twice. `seal(book, { previous })` signs only where
+`previous` is the latest seal it holds of that book: a sealer whose
+state is behind the book signs nothing until it is brought up to date
+with `update(book, entry, leaves)` (the book's latest seal, and the leaf
+fingerprints since the latest seal it holds); a book that lost a seal
+the sealer gave takes it back with `latest(book)`. A later book is named
+`{ first, number }`, and its first `extend` names the book it follows
+(`{ follows }`); its first seal names the last seal of that book, which
+is then closed, and so is a book brought up to date from such a first
+seal (bring books up to date in their order: a later book's first seal
+is refused, `not-up-to-date`, while the sealer holds the book before at
+an earlier seal than the one it names). Every book with one first line
+is one chain: a book whose first line the sealer holds starts only as
+the next book after the latest with that first line (`not-next-book`). A sealer that serves several
+recorders gives each its own calls, `sealer.forRecorder(name)`: a book,
+and every book after it, belongs to the recorder that started it, and
+another recorder's calls about it are refused (`other-recorder`) or
+answered as if the sealer did not hold it. Recorders that do not trust
+each other are given rules, `sealer.forRecorder(name, { agents, books })`:
+the fingerprints of the key sets of the agents whose permissions each may
+start books with (an agent belongs to one recorder), and the most books
+each may hold. Then every book is started with its first line itself
+(`extend(book, 0, leaves, { line })`, or `update(book, entry, leaves, {
+line })` for a book brought in), which must be a permission for one of
+the recorder's own agents (`agent-not-allowed`, or `other-recorder` for
+another recorder's agent); so no recorder can start a book whose first
+line is a permission for another recorder's agent. `releaseUnsealed()` takes off the
+books that hold no seal, for which nothing was signed. Save the state
+handed back with a seal, with a book started (`extend`) and with
+`update` before the answer is given out, and the one `releaseUnsealed`
+hands back. Of a seal entry brought in with `update`, the sealer keeps
+the seal, whose three signatures it checks, and its time-stamps, read
+for their form only: it checks no time-stamp's signature, so one that
+`latest` gives back is not vouched for by the sealer. A book is
+kept in the state at its latest seal, or with none at its first line:
+started again, the sealer asks for the lines since. It keeps at most
+1,000 books, about 52 KB of state for each sealed book. It checks every
+seal it signs, so it needs Node.js; the Python version has
+`leaf_fingerprint` only.
+
+What a central sealer adds, and what still needs a witness. With its
+state kept, it never signs two different histories of one first line.
+With rules, it starts a recorder's books only from permissions for that
+recorder's own agents, and so learns each first line. It sees only
+fingerprints after the first line, so it cannot tell that a book which
+starts from another first line (another permission for the same agent,
+or, with no rules, any record the agent's side can sign) repeats lines
+of a book it has sealed. A sealer that loses its state, or is put back
+to an older copy, can be made to sign a second history, and two states
+kept with one key set are two sealers. A witness is the check for these
+(format description, sections 21.7 and 29).
+
+One case a witness does not settle. A recorder, through its own calls
+alone, can start a book from a permission for one of its own agents and
+copy into it the permissions and stubs of another recorder's agent,
+leaving out any it chooses (a stub over a limit, say); the sealer seals
+it. Where one person's passkey signed the permissions for both agents,
+a reader who names that passkey and the sealer's key set finds the book
+intact and within its slips. A witness statement on its seal is not
+counted (the seal covers a permission for an agent other than the first
+line's), so the seal reads as not witnessed, but nothing reports why.
+What shows it: a seal of the other recorder's own book, held elsewhere
+and handed to the checker with this book (`seals`, `--seal`), gives
+`book-cut-short` or `seal-not-in-book`; or, where the two books'
+numbers differ, it cannot be compared, and the checker says so and
+gives no pass. So readers of books from a
+sealer shared by recorders that do not trust each other should hold
+each recorder's own seals elsewhere, or the organisation should run a
+sealer, with its own key set, for each recorder (format description,
+section 21.7).
+
+The folder `sealer/` of the repository holds `provared-sealer`, a small
+program around it: it listens on 127.0.0.1, takes questions only from the
+recorders it was given (each proves that it holds its token, which never
+travels), names each recorder with its agents and its number of books,
+keeps one state for all of them, keeps its keys in a file for its owner
+alone or reaches them through signer modules named in its settings, and
+makes sure the state is on the disk before it answers a question that
+changed it. See its README.
+
 ### Knowing that a block is part of the chain
 
 **Experimental.** `provared-headers` is new in version 0.1.0 and may

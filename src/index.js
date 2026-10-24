@@ -13,6 +13,8 @@
 //            (a proof from a public blockchain, to put beside a seal),
 //            writeWitness (a witness signs for a seal), openWitness (a witness
 //            that signs only for a seal that extends the last one it holds),
+//            openSealer (a central sealer, which seals books it is sent only
+//            the leaf fingerprints of: leafFingerprint),
 //            prepareCancellation + assembleCancellation (the person ends a slip),
 //            writeAcknowledgement (the agent's side says it was handed a cancellation),
 //            writeDenial (the agent's side says it did not take an action, and why),
@@ -38,6 +40,7 @@ export { writePass } from './pass.js';
 export { writeSeal } from './seal.js';
 export { writeWitness, MAX_WITNESSES } from './witness.js';
 export { openWitness, bookIdentity, witnessProof } from './witnessing.js';
+export { openSealer, leafFingerprint } from './sealer.js';
 export { consistencyProof, inclusionPath } from './tree.js';
 export { blockStampItem } from './blockstamp.js';
 export { prepareCancellation, assembleCancellation, writeAcknowledgement, writeVouching, writeWithdrawal, VOUCHED_KINDS } from './standing.js';
