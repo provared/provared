@@ -121,12 +121,28 @@ export async function keySetFingerprint(keys) {
 export async function writeSeal(book, fields, privateKeys) {
   const lines = book.split('\n');
   if (lines[lines.length - 1] === '') lines.pop();
+  return sealOver(lines.length, await treeRoot(lines.map(utf8)), fields, privateKeys);
+}
+
+/**
+ * Sign a seal over a number of entries and their top fingerprint, worked out
+ * by the caller: writeSeal from the book, and the central sealer (sealer.js)
+ * from the tree it built from the leaf fingerprints it was sent. One path, so
+ * that the two give the same seal for the same book. Not part of the public
+ * interface: a size and a top fingerprint handed in from outside are never
+ * signed (choice 388).
+ * @param {number} size
+ * @param {Uint8Array} root
+ * @param {object} fields as writeSeal takes them
+ * @param {any[]} privateKeys
+ */
+export async function sealOver(size, root, fields, privateKeys) {
   const content = {
     type: KINDS.seal.type,
     id: fields.id ?? randomId(),
     by: fields.by,
-    size: lines.length,
-    root: toBase64url(await treeRoot(lines.map(utf8))),
+    size,
+    root: toBase64url(root),
     when: formatTime(fields.when ?? Date.now()),
   };
   if (fields.previous) content.previous = fields.previous;

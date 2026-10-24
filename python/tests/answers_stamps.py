@@ -10,7 +10,7 @@ from provared.encoding import from_base64url, problem_from
 from provared.headers import answer_for, blocks_in_chain, check_header_chain, next_bits, read_header_chain, start_header_chain
 from provared.seal import decode_stamps, key_set_fingerprint, validate_seal_content
 from provared.timestamp import check_stamp
-from provared.tree import consistency_proof, inclusion_path, leaf_hash, tree_builder, tree_root, verify_consistency, verify_inclusion
+from provared.tree import consistency_proof, inclusion_path, leaf_fingerprint, leaf_hash, tree_builder, tree_root, verify_consistency, verify_inclusion
 
 
 def _answer(work):
@@ -67,6 +67,20 @@ def _tree_builder(c):
             fork.add(_bytes(leaf))
             fork_roots.append(fork.root().hex())
     return {'roots': roots, 'forkRoots': fork_roots, 'after': builder.root().hex()}
+
+
+def _sealer_tree(c):
+    """A central sealer's tree: shaped as the answer in test/helpers/vectors-sealer.mjs."""
+    if 'lines' in c:
+        leaves = [leaf_fingerprint(line) for line in c['lines']]
+    else:
+        leaves = [bytes.fromhex(leaf) for leaf in c['leaves']]
+    builder = tree_builder()
+    after = []
+    for leaf in leaves:
+        builder.add_leaf_hash(leaf)
+        after.append({'size': len(after) + 1, 'root': builder.root().hex()})
+    return {'leaves': [leaf.hex() for leaf in leaves], 'after': after}
 
 
 # --- DER ---
@@ -228,6 +242,7 @@ ANSWER = {
     'leafHash': lambda c: _answer(lambda: leaf_hash(_bytes(c['leaf'])).hex()),
     'treeRoot': lambda c: _answer(lambda: tree_root([_bytes(x) for x in c['leaves']]).hex()),
     'treeBuilder': lambda c: _answer(lambda: _tree_builder(c)),
+    'sealerTree': lambda c: _answer(lambda: _sealer_tree(c)),
     'inclusionPath': lambda c: _answer(lambda: [p.hex() for p in inclusion_path([_bytes(x) for x in c['leaves']], c['index'])]),
     'verifyInclusion': lambda c: _answer(lambda: verify_inclusion(c['index'], c['size'], _bytes(c['leaf']), [_bytes(p) for p in c['path']], _bytes(c['root']))),
     'readElement': lambda c: _answer(lambda: read_element(_bytes(c['bytes']), c['at'], c.get('end')).as_dict()),

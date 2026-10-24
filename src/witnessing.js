@@ -50,8 +50,8 @@ const identityOf = async (recorder, { agent, passkey }) => fingerprint(encodeCon
 
 // The passkey and the agent that the permission on a book's first line names. The passkey's signature is not
 // checked here: a witness knows a sequence by them, and a reader counts a statement only where the permission
-// passed and its passkey is one they named.
-async function sequenceOf(firstLine) {
+// passed and its passkey is one they named. A central sealer reads a book's first line the same way (sealer.js).
+export async function sequenceOf(firstLine) {
   if (!(firstLine instanceof Uint8Array) || firstLine.length === 0) throw f.fail('firstLine', 'must be the bytes of the book\'s first line.');
   if (firstLine[firstLine.length - 1] === 0x0a || firstLine[firstLine.length - 1] === 0x0d) {
     throw f.fail('firstLine', 'must be the book\'s first line without its line feed.');

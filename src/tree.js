@@ -13,7 +13,7 @@
 // checked with the steps of section 2.1.4.2. RFC 9162 builds the same tree
 // as RFC 6962.
 
-import { concatBytes, equalBytes, sha256 } from './encoding.js';
+import { Refusal, concatBytes, equalBytes, sha256 } from './encoding.js';
 
 const LEAF = new Uint8Array([0x00]);
 const NODE = new Uint8Array([0x01]);
@@ -66,6 +66,15 @@ export async function treeRoot(leaves) {
 export function treeBuilder(from = []) {
   /** @type {{hash: Uint8Array, size: number}[]} */
   const parts = from.slice();
+  const addLeafHash = async (hash) => {
+    if (!(hash instanceof Uint8Array) || hash.length !== 32) throw new Refusal('bad-field', 'leaf: must be a leaf fingerprint: 32 bytes.');
+    let node = { hash: hash.slice(), size: 1 };
+    while (parts.length && parts[parts.length - 1].size === node.size) {
+      const left = parts.pop();
+      node = { hash: await nodeHash(left.hash, node.hash), size: left.size * 2 };
+    }
+    parts.push(node);
+  };
   return {
     /** A builder that carries on from here by itself: what is added to one is not added to the other. */
     fork() {
@@ -73,12 +82,17 @@ export function treeBuilder(from = []) {
     },
     /** @param {Uint8Array} leaf the data of the next leaf */
     async add(leaf) {
-      let node = { hash: await leafHash(leaf), size: 1 };
-      while (parts.length && parts[parts.length - 1].size === node.size) {
-        const left = parts.pop();
-        node = { hash: await nodeHash(left.hash, node.hash), size: left.size * 2 };
-      }
-      parts.push(node);
+      await addLeafHash(await leafHash(leaf));
+    },
+    /**
+     * Add the next leaf by its fingerprint alone (leafHash of its data), as a
+     * sealer that never sees the lines does.
+     * @param {Uint8Array} hash 32 bytes
+     */
+    addLeafHash,
+    /** One fingerprint for each complete part of the tree, the largest first: what a sealer saves. */
+    parts() {
+      return parts.map((p) => ({ hash: p.hash.slice(), size: p.size }));
     },
     /** @returns {Promise<Uint8Array>} the root of the leaves added so far */
     async root() {

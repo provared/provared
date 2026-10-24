@@ -1498,6 +1498,110 @@ from is the last of this book, or a seal of the next book handed over is
 its first. Nor does a checker count a limit across books: it counts within the
 book it checks.
 
+### 21.7 A seal made by a sealer that sees only fingerprints
+
+The recorder's keys need not sit beside the agent. A seal MAY be signed
+by a **central sealer**: a party that holds the recorder's keys and is
+sent, for each line of the book, only its leaf fingerprint (the SHA-256
+of the byte 0x00 and the line, without its line feed, as section 10
+sets out), never the line. From these it builds the same tree as a
+checker builds from the lines, and signs a seal over its own number of
+entries and its own top fingerprint. Nothing in any record changes: such
+a seal is the same record, byte for byte in its content, as one signed
+over the book itself, and it is checked exactly as section 21.1 sets
+out. A sealer sent a wrong fingerprint signs a seal the book does not
+pass (`seal-mismatch`).
+
+A sealer SHOULD sign only over a tree it built itself from the
+fingerprints it was sent, never over a number of entries and a top
+fingerprint handed to it; SHOULD take each line's fingerprint once, at
+its place, so that no line it has sealed can be replaced; SHOULD name,
+as `previous`, the latest seal it signed of that book (for the first
+seal of a later book, the last seal of the book before, section 21.6);
+SHOULD treat every book that starts with the same first line as one
+chain, so that a book whose first line it already holds starts only as
+the next book after the latest book with that first line, following it;
+SHOULD, where it serves several recorders with one key set, keep one
+record of every book for all of them, each book, and every book after
+it, belonging to the recorder that started it; SHOULD, where it serves
+recorders that do not trust each other, start a book only from its
+first line itself, a permission (section 4) for an agent that the
+recorder was named for, each agent named for one recorder only, so that
+no recorder can start a book whose first line is a permission for
+another recorder's agent; SHOULD limit the books each recorder may hold;
+SHOULD keep, of a seal entry it is handed, only what it checks, the
+seal, and what is bounded, its time-stamps, read for their form only
+(sections 21.2 and 21.4: how many, how long, in base64url, none
+twice; a sealer that checks no time-stamp's signature vouches for
+none), and
+refuse an entry
+longer than a line of a book may be, so that no recorder can make its
+record too large to keep; and MUST keep what it has signed safely
+before it gives a seal out.
+
+What such a sealer shows, and what it does not. With its record kept, it
+never signs two different histories of one first line: each line is
+taken once at its place, and the books of one first line follow one
+another. Where it starts books only from permissions for each
+recorder's own agents, one recorder cannot have a book sealed whose
+first line is a permission for another recorder's agent (a renewal that
+stands in that recorder's book, say), and so cannot hold that
+permission back from the recorder whose book it is; nor, with its
+record begun again, bring another recorder's book in first. It sees
+only fingerprints after the first line, so it cannot tell that a book
+which starts from another first line (another permission for the same
+agent, or, where it does not read first lines, any record the agent's
+side can sign) repeats lines of a book it has sealed; nor that a later
+book repeats lines of the book before (section 21.6).
+
+In particular, a recorder, through its own calls alone, can start a book from a permission for one of its own agents and copy into
+it permissions and stubs of another recorder's agent, leaving out any
+it chooses, and the sealer seals it. Where one person's passkey signed
+the permissions for agents of both recorders, a reader who names that
+passkey and the sealer's key set finds that book intact and within its
+slips, and nothing reports the copy. A seal of the other recorder's own
+book held elsewhere (section 21.5), handed to the checker with the
+copied book, shows a problem with it (`book-cut-short` or
+`seal-not-in-book`); where the two books' numbers differ, it cannot be
+compared (sections 21.5 and 21.6), and a checker says so and gives no
+pass. A
+witness statement on such a seal is never
+counted, because the seal covers a permission for another agent than
+the first line's (section 29.2, "When a statement counts"), so the seal does not read as
+witnessed; but nothing reports why. Readers of books from a sealer that
+serves recorders which do not trust each other SHOULD hold each
+recorder's own seals elsewhere and hand them to the checker; an
+organisation MAY instead run a sealer, with a key set of its own, for
+each recorder.
+
+A sealer that loses its record, or is put back to an older copy, can be
+made to sign a second history of a book, as a witness can (section
+29.3), and two records kept with one key set are two sealers. Witnesses
+(section 29) are the outside check for these: a witness knows a
+sequence by the recorder's keys, the person's passkey and the agent, so
+a second history shown to it would need it to sign for it too, and a
+book that does not start from a permission of the passkey the reader
+named is never read as witnessed. A checker cannot tell whether a seal
+was made by a central sealer or beside the agent: who holds the
+recorder's keys is not in the record.
+
+The library's `openSealer` is such a sealer. Its record keeps, for each
+book, the first line's leaf fingerprint, the book's number, the recorder
+it belongs to, the book it follows, whether a later book follows it, and
+its latest seal with the tree at that seal; a book with no seal yet is
+kept at its first line. Lines that no seal covers are not kept: a sealer
+opened again asks for them again. A recorder may be named with the
+fingerprints of the key sets of its agents (section 21.1 gives the
+form), and with the most books it may hold; where any recorder is named
+with agents, every book is started with its first line itself, which
+the sealer reads as a permission and does not check further (the
+passkey's signature is the book's own check), and the sealer so learns
+that permission. A book that holds no seal can be released: nothing was
+signed for it. It keeps at most 1,000 books, and its record is written
+whole at each change that must last, so its size grows with the number
+of books (about 52 KB for each sealed book, most of it the latest
+seal's three signatures).
+
 
 ## 22. Cancelling a slip
 

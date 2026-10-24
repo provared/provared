@@ -802,6 +802,87 @@ export function openWitness(o: {
   withoutMethods?: string[];
 }): Promise<Witness>;
 
+/** The leaf fingerprint of one line of a book, without its line feed: SHA-256 of 0x00 and the line (RFC 6962, section 2.1). What a recorder sends a central sealer. */
+export function leafFingerprint(line: string): Promise<Uint8Array>;
+/** Which book a sealer call is about: the leaf fingerprint of its first line (a first book), or that with the book's number (section 21.6). */
+export type SealerBook = Fingerprint | { first: Fingerprint; number?: number };
+/** A central sealer's state, as it hands it back: to be saved before the answer is given out. At most 1,000 books. */
+export interface SealerState {
+  type: 'provared.sealer-state.v0';
+  /** The fingerprint of the sealer's key set. */
+  by: Fingerprint;
+  /**
+   * For each book: its first line's leaf fingerprint and number, the recorder it belongs to (absent for the sealer's own calls),
+   * the book it follows, whether a later book follows it, and its latest seal with the tree's parts at that seal. A book is kept at
+   * its latest seal, or with none at its first line: lines that no seal covers are asked for again after a start.
+   */
+  books: {
+    first: Fingerprint;
+    number: number;
+    recorder?: string;
+    follows?: Fingerprint;
+    closed: boolean;
+    /** The latest seal and its time-stamps (at most four); witness statements are never kept. */
+    latest?: { entry: { seal: SignedRecord; stamps?: StampItem[] }; parts: Base64url[] };
+  }[];
+}
+export type SealerAnswer<T> = T | { refused: Finding; size?: number };
+/** The calls of a central sealer, made as one recorder (forRecorder) or as none (the sealer's own). */
+export interface SealerCalls {
+  /**
+   * Take in the leaf fingerprints of new lines of one book, in order, from place "at" (the number of lines it holds). A later book
+   * names the book it follows; a book whose first line the sealer holds starts only as the next book after the latest with that
+   * first line. "line" is the book's first line itself: where any recorder has a list of agents, a book is started only with it,
+   * and it must be a permission for an agent of the caller's own. Where the call started a book, the answer holds the state: save it first.
+   */
+  extend(book: SealerBook, at: number, leaves: Uint8Array[], more?: { follows?: Fingerprint; line?: string }): Promise<SealerAnswer<{ size: number; state?: SealerState }>>;
+  /** Sign a seal over the tree this sealer holds; "previous" is the seal the new seal must name, as the book shows it. The state handed back holds the new seal: save it first. */
+  seal(
+    book: SealerBook,
+    more: { previous: Fingerprint | null; when?: number | Date; id?: Base64url },
+  ): Promise<SealerAnswer<{ entry: { seal: SignedRecord; stamps?: StampItem[] }; line: string; fingerprint: Fingerprint; fingerprintBytes: Uint8Array; state: SealerState; stampProblem?: Finding }>>;
+  /**
+   * Bring the sealer up to date for a book from a later seal it signed, with the leaf fingerprints from its own latest seal to that one.
+   * Where it is the first seal of a later book, the book before is closed; where the sealer holds that book at an earlier seal than the
+   * one named, it is refused until that book is brought up to date. A book it does not hold is started here under the same rules
+   * as with extend, "line" included. It signs nothing. It keeps the seal, whose three signatures it checks, and its time-stamps
+   * (at most four), read for their form only: no time-stamp's signature is checked. It keeps no witness statements; an entry longer
+   * than a line of a book may be is refused (too-large). The entry is read once, and only that copy is used.
+   */
+  update(
+    book: SealerBook,
+    entry: { seal: SignedRecord; stamps?: StampItem[]; witnesses?: SignedRecord[] },
+    leaves: Uint8Array[],
+    more?: { line?: string },
+  ): Promise<SealerAnswer<{ size: number; state: SealerState }>>;
+  latest(book: SealerBook): { entry: { seal: SignedRecord; stamps?: StampItem[] }; line: string; fingerprint: Fingerprint } | null;
+  held(book: SealerBook): { first: Fingerprint; number: number; follows: Fingerprint | null; size: number; closed: boolean; latest: Fingerprint | null; sealed: number } | null;
+}
+export interface Sealer extends SealerCalls {
+  state(): SealerState;
+  /**
+   * The same calls for one named recorder (a label): its books, and every book after them, are its own. "rules": the fingerprints
+   * of the key sets of the agents whose permissions it may start books with (1 to 64; an agent belongs to one recorder), and the
+   * most books it may hold (1 to 1,000). A recorder's rules are fixed by the first call that gives them.
+   */
+  forRecorder(recorder: string, rules?: { agents?: Fingerprint[]; books?: number }): SealerCalls;
+  /**
+   * Take off the books that hold no seal (nothing was signed for them): every recorder's, or one recorder's (null for the sealer's
+   * own calls). The state handed back is to be saved.
+   */
+  releaseUnsealed(o?: { recorder?: string | null }): Promise<{ released: { first: Fingerprint; number: number; recorder: string | null }[]; state: SealerState }>;
+}
+/** A central sealer: it seals books it is sent only the leaf fingerprints of. It checks every seal it signs, so it needs Node.js. */
+export function openSealer(o: {
+  by: { keys: SealKeySet; name: string };
+  signers: unknown[];
+  /** Ask a time-stamp service for a stamp over a seal's fingerprint: an item of "stamps", or null. */
+  stamp?: (fingerprintBytes: Uint8Array) => Promise<StampItem | null> | StampItem | null;
+  state?: SealerState;
+  clock?: () => number;
+  signWithin?: number;
+}): Promise<Sealer>;
+
 /** A proof from a public blockchain and the 80-byte header of its block, in the form they have in "stamps". */
 export function blockStampItem(proof: Uint8Array, header: Uint8Array): { block: Base64url; proof: Base64url };
 

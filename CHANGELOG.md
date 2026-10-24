@@ -152,6 +152,125 @@
   - **A checker of version 0.5.0 or earlier refuses a seal's line that
     holds `witnesses`** (`unknown-entry`), **and a seal that gives `book`**
     (`bad-field`).
+- **A witness that runs as a service, and the recorder beside Claude Code
+  numbering its books and asking witnesses** (`integrations/claude-code`:
+  `witness.mjs`, the new command `provared-witness`, `witnessed.mjs` and
+  `proofs.mjs`). The package now needs `provared` 0.6.0 or later.
+  - *The recorder numbers and chains its books* (format description,
+    section 21.6). The first seal of a new book gives the book's number
+    and names the last seal of the book before; its later seals give the
+    same number. "The book before" is the latest kept book whose first
+    line is a permission from the same passkey, for the same agent, sealed
+    with the recorder's keys, as a witness knows a sequence; it is read
+    from the kept files, so the numbers hold across a restart, and a kept
+    book that cannot be read stops the seal rather than give it a number
+    that may be wrong. A book that begins with another passkey's
+    permission begins a sequence of its own, with no number. The first
+    book gives no number, so the record so far reads as it did, and a book
+    whose seals give no number goes on giving none. Before the book in
+    force is first sealed, every kept book a late call could still come
+    back to is closed, and sealed again where something came after its
+    seal; such a call is then recorded in the book in force. Every seal's
+    line is made sure to be on the disk (fsync), and a book is kept as
+    `book-<n>.jsonl` only once it is.
+  - *`provared-witness`*, a small service on 127.0.0.1 (port 8796 by
+    default) around the library's witness (`openWitness`), in a folder of
+    its own: its keys (Ed25519 and ML-DSA-87), a token for the recorders
+    it serves and another for its operator, its settings (`witness.json`:
+    its name, the fingerprints of the recorders it serves, its port and
+    limits), a journal, a state and a checkpoint. For each new statement
+    the journal line and then the state are made sure to be on the disk
+    (fsync) before the statement is given out; what it says it holds
+    (`/latest`, `status`) is what it last saved, never what the library's
+    witness holds in memory, and once anything cannot be saved it gives
+    out nothing more, by any route, until it is started again. Every 256
+    journal lines it writes a checkpoint (the latest seal of each sequence,
+    with its statement) and begins the journal again; a start reads the
+    journal a line at a time, and in full only the lines its state does
+    not yet reflect. At every start, the first included, it signs nothing
+    (`witness-not-ready`) until its operator says that its folder was not
+    put back to an older copy (`ready`, or `start --ready`); `update <book>
+    [--seal <file>]` hands it, from a copy, the statements it signed for a
+    book's seals, and `forget <sequence>` makes it hold a sequence no more
+    (it then signs whatever it is next shown for that sequence). It
+    refuses to start where its journal has gone while its keys are there,
+    where a journal line is not one it writes or lines are numbered out of
+    order, where its state reflects more lines than the journal holds, or
+    where the journal follows a checkpoint it does not have; a last journal
+    line cut off by a stop is taken off; a lost state is rebuilt from the
+    checkpoint and the journal; a stop between the steps of a checkpoint
+    is mended at the next start. One witness at a time on a folder
+    (`witness.lock`, taken over from a process that has ended under a
+    second file only one start can make). Who may ask: a program proves
+    that it holds the token, which never travels, as for the recorder's
+    feed (a hello, then HMAC-SHA-256 over the question, its body included,
+    and over the answer), one question to a conversation; the operator's
+    commands (`status`, `ready`, `update`, `forget`, `stop`) take the
+    operator's token; it signs only for seals of the recorders named, and
+    starts a new sequence only from a permission whose passkey signature
+    the library's checker passes. Limits: 120 new statements in any hour
+    (shared by every recorder it serves), 64 sequences, 8 questions that
+    sign at once, bodies of 1 MiB. Library refusals keep the library's
+    codes.
+  - *The recorder asks the witnesses named in `witnesses.json`* (at most
+    four, each on 127.0.0.1, with the fingerprint of its key set and its
+    token; written by the new commands `add-witness`, which checks that the
+    witness answers, holds the token and signs with that key set, and
+    `remove-witness`). After each seal it asks each witness what it holds
+    and whether it signs now, and shows one that does, in order, the seals
+    it has not signed for whose lines are on the disk, with the proof RFC
+    9162 sets out, made from the book's line fingerprints kept as the book
+    grows (`proofs.mjs`, the same proofs as the library's `witnessProof`
+    without reading the book again), and the book's first line; a witness
+    that holds none of this sequence is shown the latest only. For the
+    seal that `seal` makes, the seal's entry is first kept apart on the
+    disk (`pending-seal.json`, written at its place at the next start if a
+    stop comes first, or let go where its line is in the book or in a book
+    kept since; one at a time), the witnesses are asked, and the
+    statements that come within five seconds stand beside the seal on its
+    line; the wait ends at once when any other request arrives, so no tool
+    call waits for a witness. A statement is taken only where the
+    library's checker passes it for that seal, as signed by the witness
+    named; one that comes later is kept beside the book in
+    `witnessed/<seal>.json`, in the form the checker takes with `--seal`,
+    and `check` hands those of the book checked over, names the witnesses,
+    and says plainly that those copies are the book's own seals from the
+    recorder's folder, not seals held elsewhere, and cannot show the book
+    cut short. A witness that is down, refuses, could not save, or hands
+    back what does not pass never stops recording: `status` shows, for
+    each, the seal it holds, whether that is the latest, and why not; one
+    that holds a seal of this sequence in none of the recorder's books is
+    reported (`witness-holds-another`) and is sent no seal. The record page
+    tool, tried on a numbered book with statements, reads the books as
+    before (it names no witness, and hands over no statement kept beside
+    the book); the application's uploader reads the books through the
+    feed, which is unchanged. Measured on a book of 93.5 MB with four
+    witnesses: a tool call's two questions took at most 67 and 99
+    thousandths of a second after a seal; during any seal a call waits for
+    the seal itself, about 3.3 seconds on such a book, with or without
+    witnesses.
+  - *After its independent review*: a statement that could not be
+    journaled was still given out through `/latest`, and after a restart
+    the witness signed a different seal at the same size (fixed: only what
+    is saved is given out, and nothing once a save has failed); a folder
+    put back to a copy taken before the first statement started ready and
+    signed a fork (fixed: never ready at a start until told); the journal
+    was read whole at each start and could no longer be read at about
+    8,000 lines (fixed: checkpoints, and a line at a time); proofs read the
+    whole book each time (fixed: line fingerprints kept); and the low
+    findings on the seal kept apart, the lock, the agent in the book
+    before, `check`'s words and the passkey signature of a new sequence.
+  - Stated: on one computer under one user account the agent can reach
+    the witness's folder, so a witness means more under another account,
+    on another computer through a tunnel, or run by someone else; a
+    witness on another computer reached directly is not built; what
+    travels is proved, not encrypted; one token serves every recorder the
+    witness serves, and each can read what it holds for any of them, fill
+    its sequences with permissions signed by passkeys of its own, and use
+    up the shared statements; a witness put back to an older copy and told
+    it is ready can be made to sign a fork (a test shows it); forgetting a
+    sequence a recorder still uses lets that recorder have a second
+    history witnessed. 51 new tests in the package (181 in all). Of 61 checks broken in turn, before and after the review, 59 are caught by a test; the two that are not (a stale lock taken without the second file, which only a race between two starts reaches, and the in-time ask kept to a book that passes its check, which no book the recorder holds fails) are stated.
 - **The recorder beside Claude Code offers its books to a reader on this
   computer, through a feed on its own port** (`integrations/claude-code`,
   `feed.mjs`), so that no other program need open a book file. On
@@ -499,6 +618,123 @@
   put back a lost line ending; and the README lists which honest path
   forms are refused. 68 tests, all on 127.0.0.1, with a file of 145 calls
   and the action, amount and service each must map to.
+- **A central sealer** (format description, section 21.7, new; no record
+  changes). The recorder's three keys can now sit apart from the agent,
+  with a party that never sees the book.
+  - *In the library*: `leafFingerprint(line)` (Python:
+    `leaf_fingerprint`), the SHA-256 of the byte 0x00 and one line of a
+    book, refused where the line is empty, holds a line feed, is not
+    well-formed Unicode or is over 131,072 bytes; and `openSealer({by,
+    signers, stamp, state, clock, signWithin})`, which takes the leaf
+    fingerprints of each book's lines (`extend(book, at, leaves)`, only
+    at the place it holds, so a line is never taken twice), keeps the
+    same running tree the checker keeps, and signs a seal over its own
+    number of entries and top fingerprint (`seal(book, {previous})`),
+    through the same keys and signers `writeSeal` takes, each signer
+    given 30 seconds. The seal is the one `writeSeal` signs over the same
+    book, with the same time and unique number. It signs only where
+    `previous`, the seal the caller's book names, is the latest it
+    holds of that book (`not-up-to-date`): a sealer whose state is
+    behind the book signs nothing until it is brought up to date with
+    `update(book, entry, leaves)`, from a later seal it signed and the
+    leaf fingerprints since its own latest seal, which must give that
+    seal's top fingerprint; it is never moved back. `latest(book)` hands
+    back its latest seal, for a book that lost it. A book is known by
+    its first line's leaf fingerprint and its number; a later book names
+    the book it follows, its first seal names that book's last seal, and
+    that book is then closed (also where that first seal is brought in
+    with `update`, which waits, `not-up-to-date`, while the sealer holds
+    that book at an earlier seal than the one named). Every book with one first line is one chain: a book
+    whose first line the sealer holds starts only as the next book after
+    the latest with that first line (`not-next-book`). One sealer may
+    serve several recorders, through `forRecorder(name)`: a book, and
+    every book after it, belongs to the recorder that started it
+    (`other-recorder`). A recorder may be given rules,
+    `forRecorder(name, {agents, books})`: the fingerprints of the key
+    sets of the agents whose permissions it may start books with (an
+    agent belongs to one recorder), and the most books it may hold
+    (`too-large`). Where any recorder has a list of agents, every book is
+    started with its first line itself (`line`, beside `extend`, or
+    `update` for a book brought in), which must be a permission for one
+    of the caller's own agents (`agent-not-allowed`, `other-recorder`);
+    so no recorder can start a book whose first line is a permission for
+    another recorder's agent, nor bring another's book in first after a
+    lost state. The sealer then learns each first line; it does not check the
+    passkey's signature. `releaseUnsealed({recorder})` takes off books
+    that hold no seal, for which nothing was signed. A book started
+    after a book that another book now follows takes no first seal
+    (`book-closed`). Every seal is checked (all three signatures)
+    before it is kept; the state is handed back with a seal, a book
+    started and `update`, to be saved before the answer is given out. Of
+    a seal entry brought in with `update` only the seal, whose three
+    signatures it checks, and its time-stamps are kept, the time-stamps
+    read for their form only (at most four, each at most 12,288 bytes,
+    in base64url, none twice; no time-stamp's signature is checked); its
+    witness statements are not, and an entry longer than a line of a
+    book is refused (`too-large`), so that no recorder can make the
+    state too large to save. The entry is read once, and what is
+    measured, checked and kept is that one copy, so a member that gives
+    another value at each reading cannot slip past the checks. A
+    book is kept in the state at its latest seal, or with none at its
+    first line, so a sealer started again asks for the lines since; at
+    most 1,000 books, about 52 KB of state for each sealed book. With
+    its state kept it never signs two histories of one first line; a
+    book from another permission for the same agent that repeats sealed
+    lines, and a lost or older state, still need a witness. It sees only
+    fingerprints after the first line, so a recorder can start a book
+    from a permission for its own agent, copy into it another
+    recorder's agent's permissions and stubs with some left out, and
+    have it sealed: where one person's passkey signed the permissions
+    for both agents,
+    the book reads as intact and within its slips, and a witness
+    statement on its seal is not counted. A seal of the other
+    recorder's own book held elsewhere shows it (`book-cut-short` or
+    `seal-not-in-book`; where the two books' numbers differ, it cannot
+    be compared, and gives no pass); readers of books from a shared sealer should
+    hold each recorder's own seals elsewhere, or run a sealer for each
+    recorder. It needs SLH-DSA built in, so
+    Node.js; Python has no sealer. `writeSeal` and the sealer share one
+    signing path (`sealOver`, not exported). The tree builder gains
+    `addLeafHash` and `parts` (Python: `add_leaf_hash`).
+  - *A new shared test file*, `sealer-trees.json`: lines or leaf
+    fingerprints, and the number of entries and top fingerprint after
+    each; both languages give every answer.
+  - *`provared-sealer`* (`sealer/`, version 0.1.0, not published): the
+    sealer as a program on 127.0.0.1 (port 8797 by default), with its
+    keys in a file for its owner alone or reached through signer modules
+    named in its settings, a token for each recorder, the agents whose
+    permissions each recorder may start books with and the most books
+    it may hold (100 unless it says; all recorders' books add up to at
+    most 1,000), and one state for every recorder's books, each book
+    bound to its recorder; `release-unsealed` takes off, while it is
+    stopped, the books that hold no seal. A question proves its
+    recorder, and an answer its sealer, with HMAC-SHA-256 under the
+    token over a time, a number used once and the body; the token never
+    travels; each recorder's numbers used once are kept apart, for as
+    long as its question's time could be taken by a clock that never
+    goes back; the recorder's name, the time, the number and a first
+    proof over the body's declared length are checked before the body
+    is read, so no body is read for a program without the token, and at
+    most 16 MiB of bodies being read are held for one recorder. A
+    question waits for its turn as the bytes of its body only, at most
+    16 questions and 32 MiB for one recorder, and its body is read as
+    JSON only in its turn, so one read body exists at a time. A body
+    must be a JSON object, and may hold only the members its path takes
+    (`bad-field`); `connectSealer`, the recorder's side, refuses before
+    sending any member of `more` the path does not take (`id` for a
+    seal among them), so `more` cannot replace `book`, `at`, `leaves`
+    or `entry`, and sends a `when` given as a `Date` as its
+    milliseconds. A question
+    turned away as `busy` keeps no number. Questions are answered one at a
+    time; the state is made sure to be on the disk before an answer to a
+    question that changed it; a seal is never given out before the state
+    that holds it is saved, and after a failed save every question taken
+    up is answered `sealer-stopped` until it is started again. A missing
+    state stops the start, and adding a recorder (`--fresh` begins it
+    again); `add-recorder` refuses a name that has books in the state
+    (a recorder written into `recorders.json` by hand is not checked so); one
+    sealer on a folder at a time. It names no time-stamp service and
+    asks no witness yet.
 
 ## 0.5.0 (17 October 2026)
 
