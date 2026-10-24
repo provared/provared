@@ -804,6 +804,11 @@ is frozen.
     not a point on its curve is refused as a key. The check of S against
     L restates RFC 8032, section 5.1.7, and is made by the checker
     itself, whatever the library beneath it does.
+22. Where a time-stamp names the certificate that signed it in both
+    forms of RFC 5035 (section 21.2, item 3), the newer form names it
+    and the older is not compared with it. RFC 5035, section 7, lets a
+    reader refuse a time-stamp whose two forms disagree, and leaves the
+    choice to the reader.
 
 ## 16. The shared list: actions, kinds of action, rules of conduct
 
@@ -1114,12 +1119,23 @@ signatures failed. For each time-stamp it MUST confirm all of these, and
 otherwise report a problem:
 
 1. It is laid out as RFC 3161 and RFC 5652 set out, in strict DER
-   (`stamp-bad-data`). Every part is read, including parts the checker
-   does not otherwise use: a whole number or an object identifier that is
-   not in its shortest form, a string of bits that counts more than seven
-   unused bits or whose unused bits are not zero (X.690, section 11.2.1),
-   a part that does not fill what holds it, or a
-   part the standards do not allow in that place, is refused. The signed
+   (`stamp-bad-data`). Every part the checker can tell apart is read,
+   including parts it does not otherwise use: a whole number or an object
+   identifier that is not in its shortest form, a string of bits that
+   counts more than seven unused bits or whose unused bits are not zero
+   (X.690, section 11.2.1), a string of bits, bytes or characters, or a
+   time, written in parts (the constructed form, which X.690, section
+   10.2, forbids in DER), a set whose items are not in the order of X.690,
+   section 11.6 (their encodings compared as bytes, the shorter padded at
+   its end with zeros; equal items may stand side by side), a part that
+   does not fill what holds it, or a part the standards do not allow in
+   that place, is refused. The order of a set is held wherever a set is
+   written with its own tag, and for the two sets that carry a tag of
+   their own: the signed attributes (RFC 5652, section 5.3) and the list
+   of certificates (RFC 5652, section 10.2.3). What a part holds as bytes
+   (the value of an octet string, such as an extension's) or under a tag
+   that hides its kind is read as bytes only, so a string of bits inside
+   one is not held to these rules. The signed
    data is of version 3, with exactly one signer. The public key in the
    certificate that signed is written exactly as its own standard sets
    out, with no unused bits: RSA as RFC 3279, section 2.3.1 (the
@@ -1132,10 +1148,13 @@ otherwise report a problem:
    fingerprint of the statement, and name the certificate that signed, by
    the "signing certificate" attribute that RFC 3161, section 2.4.2,
    requires (in the form of RFC 5035, or the older form of RFC 2634). Each
-   of the two forms appears at most once, as RFC 5652, section 5.3, and
-   RFC 5035 require: a time-stamp in which either form appears twice is
+   of the two forms appears at most once, as RFC 5035 requires (section 3
+   for the newer form; section 5, which writes section 5.4.2 of RFC 2634,
+   for the older): a time-stamp in which either form appears twice is
    refused (`stamp-invalid`). Where both forms appear once each, the
-   newer form names the certificate. The
+   newer form names the certificate and the older is not compared with it:
+   a choice of this format (section 15, item 22), where RFC 5035, section
+   7, lets a reader refuse a time-stamp whose two forms disagree. The
    time-stamp carries that certificate, and the signature over the
    attributes fits its public key (`stamp-invalid`). A certificate with
    the same key and other contents is another certificate.
@@ -1147,9 +1166,13 @@ otherwise report a problem:
    under which anyone can make a signature that checks), ECDSA on the
    curves P-256 and P-384, and Ed25519 (not a key of small order, and
    not a signature whose S is not below L, as section 3.8 sets out; the
-   signer MUST name SHA-512 as the fingerprint method, as RFC 8419,
-   section 3.1, requires, so a time-stamp signed with Ed25519 that names
-   SHA-256 or SHA-384 is refused, `stamp-invalid`). A key of any other kind, or on another curve,
+   signer MUST name SHA-512 as the fingerprint method, with no
+   parameters, and MUST give the signing method no parameters, as RFC
+   8419, section 3.1, requires, so a time-stamp signed with Ed25519 that
+   names SHA-256 or SHA-384, or gives either method parameters, is
+   refused, `stamp-invalid`, in words that say so; the list of
+   fingerprint methods in the signed data is read for its form only). A
+   key of any other kind, or on another curve,
    is refused (`stamp-invalid`). The checker does not try to find out
    whether an RSA modulus can be factored: a service's key is the
    service's business, and a checker trusts a service only by the

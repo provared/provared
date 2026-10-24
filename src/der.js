@@ -81,6 +81,30 @@ export function contentOf(bytes, element) {
   return bytes.subarray(element.start, element.end);
 }
 
+/**
+ * Whether the items of a set are in the order DER requires (X.690, section
+ * 11.6): their encodings compared as strings of bytes, the shorter padded
+ * at its end with zero bytes. Two equal encodings may stand side by side.
+ * @param {Uint8Array} bytes
+ * @param {{from: number, end: number}[]} items the elements of the set, in the order they appear
+ */
+export function setInOrder(bytes, items) {
+  for (let i = 1; i < items.length; i++) {
+    const a = items[i - 1];
+    const b = items[i];
+    const longest = Math.max(a.end - a.from, b.end - b.from);
+    for (let k = 0; k < longest; k++) {
+      const x = a.from + k < a.end ? bytes[a.from + k] : 0;
+      const y = b.from + k < b.end ? bytes[b.from + k] : 0;
+      if (x !== y) {
+        if (x > y) return false;
+        break;
+      }
+    }
+  }
+  return true;
+}
+
 /** The whole element, tag and length included. */
 export function wholeOf(bytes, element) {
   return bytes.subarray(element.from, element.end);
@@ -147,11 +171,15 @@ export function ecdsaToRaw(der, size) {
 /**
  * Walk a whole element and everything inside it, and refuse anything that
  * is not strict DER: a constructed part whose items do not fill it exactly,
+ * a string (of bits, bytes or characters) or a time written in parts
+ * (X.690, section 10.2), a set whose items are not in order (section 11.6),
  * a whole number or an object identifier that is not in its shortest form,
  * a truth value that is not written in the one way DER allows, a string of
  * bits whose unused bits are not zero. Parts this checker does not otherwise
  * read are still read here, so that two checkers cannot disagree about
- * whether a time-stamp is well formed.
+ * whether a time-stamp is well formed. What a part holds as bytes (the value
+ * of an octet string) or under a tag that hides its kind is read as bytes
+ * only.
  * @param {Uint8Array} bytes
  * @param {{tag: number, start: number, end: number}} element
  */
@@ -161,12 +189,20 @@ export function validateDer(bytes, element) {
     if (--budget < 0 || depth > 24) throw badStamp('it holds too many parts, or parts nested too deeply.');
     const length = e.end - e.start;
     if (e.tag & 0x20) {
+      // Of the universal kinds, only a sequence and a set are written in
+      // parts; a string or a time is written in one piece (X.690, section 10.2).
+      if ((e.tag & 0xc0) === 0 && e.tag !== TAG.SEQUENCE && e.tag !== TAG.SET) {
+        throw badStamp('a string of bits, bytes or characters, or a time, is written in parts, which DER does not allow.');
+      }
+      const items = [];
       let at = e.start;
       while (at < e.end) {
         const child = readElement(bytes, at, e.end);
         walk(child, depth + 1);
+        items.push(child);
         at = child.end;
       }
+      if (e.tag === TAG.SET && !setInOrder(bytes, items)) throw badStamp('the items of a set are not in the order DER requires.');
       return;
     }
     const first = bytes[e.start];

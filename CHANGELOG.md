@@ -25,6 +25,81 @@
   `python/pyproject.toml` is now 0.6.0, so that the packages' bounds hold
   against the library in this repository. Tests:
   `test/documents.test.mjs` and `python/tests/test_record_function.py`.
+- **Five fixes from the independent review of the audit fixes (24 October
+  2026)**, in both languages. None changes the bytes of any record; four
+  narrow what a checker accepts, and one adds to the shared test files.
+  - *Strict DER is now what the checker enforces.* A string of bits, bytes
+    or characters, or a time, written in parts (the constructed form,
+    which X.690, section 10.2, forbids in DER) is refused
+    (`stamp-bad-data`); before, a certificate whose signature was a bit
+    string in two parts passed in both languages. The items of every set
+    the checker reads as a set must be in the order X.690, section 11.6,
+    requires: a set written with its own tag wherever it appears, and the
+    signed attributes and the list of certificates, which carry tags of
+    their own (RFC 5652, sections 5.3 and 10.2.3). Every real time-stamp
+    the repository holds was checked first: the three made with the
+    OpenSSL program (`test/fixtures/stamps.json`) and the two in the
+    sample record hold 53 sets between them, every one in that order. The
+    made-up services of the tests now write their sets in that order, as
+    a real service does; before, the one that makes the shared test files
+    wrote the signed attributes of its SHA-512 cases out of order (format
+    description, section 21.2, item 1).
+  - *A time-stamp signed with Ed25519 gives its fingerprint method and
+    its signing method no parameters*, as RFC 8419, section 3.1, requires
+    (`stamp-invalid`); before, only the method's name was checked, and
+    the made-up services wrote NULL parameters, which that section
+    forbids. The refusal has words of its own that name the cause (a
+    method other than SHA-512, or parameters), where before it said the
+    signature did not fit the certificate. The list of fingerprint methods
+    in the signed data is read for its form only (section 21.2, item 4).
+  - *A second written form of a P-256 key* is in the shared test files:
+    the point with x = 5 and the point with y = 5, each as itself
+    (accepted) and with that half written as 5 plus the prime (refused as
+    `bad-key`), so that a checker that reduced a half instead of refusing
+    it would fail `keys.json`. Before, every case at or above the prime
+    also failed the curve's equation.
+  - *Citations.* The one-instance rule for the signing-certificate
+    attribute is RFC 5035's (section 3 for the newer form; section 5,
+    which writes section 5.4.2 of RFC 2634, for the older), not RFC 5652
+    section 5.3's, which requires DER and forbids repeats only of the
+    content-type and message-digest attributes (section 11). Corrected in
+    the entry below, the format description, the list of threats and the
+    code. The format description now says that using the newer form where
+    both are present, without comparing the two, is this format's choice
+    (section 15, item 22): RFC 5035, section 7, lets a reader refuse such
+    a time-stamp.
+  - *Reach.* "Every bit string in a time-stamp" and "every part is read"
+    now say what the checker reads as such: a value inside an octet string
+    (an extension's value) or under a tag that hides its kind is read as
+    bytes only.
+  - *Shared test files remade:* `keys` (four cases added: the point of
+    P-256 with x = 5 and the point with y = 5, each as itself and with
+    that half written as 5 plus the prime); `der-strict` (thirteen added,
+    for strings written in parts and sets in and out of DER order; twelve
+    stored answers change: "a constructed octet string", "an unknown
+    constructed tag", which is a character string in parts, and ten random
+    cases are now refused, or refused in other words, for a string in
+    parts or a set out of order); `stamps` (eleven added, among them an
+    Ed25519 service with parameters in each place and sets out of DER
+    order; "attributes: in another order" is now refused as not DER,
+    "signing method: Ed25519 named with parameters" is now refused, and
+    the two Ed25519 cases that name another method have the new words;
+    the "unused bits" cases of a certificate's key are now two each, one
+    with the unused bit zero and one with it set, where before the answer
+    depended on the last bit of a key made at random);
+    `stamps-strict-keys` (the same split of its three "unused bit"
+    cases); `stamps-openssl`, `stamps-flips-ecdsa` and `stamps-flips-rsa`
+    (thirteen, fourteen and fifteen changed bytes of the real and made-up
+    time-stamps now trip the order of a set before anything else, and
+    fifty cases of the RSA set hit other bytes because its signed
+    attributes are now written in DER order); `stamps-flips-ed25519` (the
+    time-stamp is four bytes shorter, its two NULLs gone, so its cases do
+    not compare by name with the earlier set). The reviewer's probes were
+    run again on the fixed code: its 16 ways round the checks and 2,534
+    random cases give the same answer in both languages, words included.
+    The tests are `test/audit-fixes.test.mjs` and
+    `python/tests/test_audit_fixes.py`; each new refusal fails without its
+    fix.
 - **Eight fixes from the audit of the Internet-Draft (24 October 2026)**,
   in both languages, for version 0.6.0. None changes the bytes of any
   record. Five narrow what a checker accepts, so that two checkers built
@@ -32,16 +107,19 @@
   only.
   - *A time-stamp that names the certificate that signed it more than once
     in the same form* (two ESSCertIDv2 attributes, or two ESSCertID
-    attributes) is refused (`stamp-invalid`), as RFC 5652, section 5.3,
-    and RFC 5035 require. Before, the last ESSCertIDv2 was used or, where
-    there was none, the first ESSCertID. Where both forms appear once each,
-    the newer still names the certificate (format description, section
-    21.2, item 3).
+    attributes) is refused (`stamp-invalid`), as RFC 5035 requires
+    (section 3 for the newer form; section 5, which writes section 5.4.2
+    of RFC 2634, for the older). Before, the last ESSCertIDv2 was used or,
+    where there was none, the first ESSCertID. Where both forms appear
+    once each, the newer still names the certificate (format description,
+    section 21.2, item 3).
   - *A DER bit string whose unused bits are not zero* is not strict DER
     and is refused (`stamp-bad-data`), as X.690, section 11.2.1, requires;
     before, only the count of unused bits was checked. A string of no bits
-    must count none. This reaches every bit string in a time-stamp, not
-    only the key's (section 21.2, item 1).
+    must count none. This reaches every bit string the checker reads as
+    such (not one inside an octet string's value, such as an extension's,
+    nor one under a tag that hides its kind), not only the key's (section
+    21.2, item 1).
   - *An ES256 key that is not a point on the curve P-256*, or either half
     of which is not below the curve's prime, is refused as `bad-key`
     wherever a key is checked, before any signature is tried (section
@@ -67,7 +145,8 @@
     mismatched method is for RSA and ECDSA (section 21.2, item 4). This
     settles open issue 4 of the Internet-Draft. A service that follows RFC
     8419 produces nothing else; the made-up service of the tests now does
-    the same.
+    the same, and writes the method with no parameters, as that section
+    also requires (see the entry above).
   - *The format description* now says that a time-stamp's time is read to
     the millisecond and compared in milliseconds between seals (sections
     21.2 and 21.3), which is what the code always did ("taken to the

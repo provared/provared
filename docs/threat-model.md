@@ -709,10 +709,12 @@ person checking gives.
   8032 requires and some libraries do not check, and an ES256 passkey key
   that is not a point on its curve (`bad-key`), which can check nothing
   and which libraries report in different ways. A time-stamp signed with
-  Ed25519 must name SHA-512 as its fingerprint method, as RFC 8419
-  requires, and may name the certificate that signed it only once in each
-  form (RFC 5652, section 5.3): two checkers could otherwise pick
-  different certificates. The key in a
+  Ed25519 must name SHA-512 as its fingerprint method, with no
+  parameters, as RFC 8419 requires, and may name the certificate that
+  signed it only once in each form (RFC 5035, sections 3 and 5): two
+  checkers could otherwise pick different certificates. A time-stamp is
+  read as strict DER throughout, every set it holds in the order DER
+  requires, so that two checkers cannot read one time-stamp in two ways. The key in a
   certificate must be written exactly as its standard sets out, so that
   two checkers cannot disagree about whether it can be read.
 

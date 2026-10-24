@@ -77,7 +77,7 @@ test('finding 9: a time-stamp must say which certificate signed it, state its ti
 test('findings 7 and 9: the certificate that counts is the one the signed part names, wherever it sits', async () => {
   const service = await makeStampService();
   const o = { trusted: [service.fingerprint] };
-  // A second certificate for the same key, put in front: the time-stamp is still the trusted service's.
+  // A second certificate for the same key beside it (the two written in the order DER requires): the time-stamp is still the trusted service's.
   const inFront = await service.stamp(stamped, WHEN, { certificates: [service.secondCertificate, service.certificate] });
   assert.deepEqual(await checkStamp(inFront, stamped, o), { state: 'valid', when: '2026-10-05T12:00:00Z', time: WHEN, authority: service.fingerprint });
   // Shown under the second certificate alone, it is refused: that is not the one it names.

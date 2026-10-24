@@ -270,6 +270,12 @@ const WEAK_ED25519 = [
   ['y of 2^255 - 1', 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f'],
 ];
 
+// Points of P-256 with a small half: x = 5 and its y; y = 5 and its x (found
+// by solving the curve's equation); and 5 + p, the second written form of 5.
+const P256_X5 = ['0000000000000000000000000000000000000000000000000000000000000005', '459243b9aa581806fe913bce99817ade11ca503c64d9a3c533415c083248fbcc'];
+const P256_Y5 = ['d7325d7646cd60d80a92738ceb345f844cffaf35841022cab176f692de8de1d7', '0000000000000000000000000000000000000000000000000000000000000005'];
+const P256_PLUS_5 = 'ffffffff00000001000000000000000000000001000000000000000000000004';
+
 /** A copy of some bytes with the last byte changed by one. */
 const changedLastByte = (bytes) => {
   const out = Uint8Array.from(bytes);
@@ -314,6 +320,11 @@ async function keyCases() {
     ['a P-256 key with x equal to the prime of the curve', { ...es, x: toBase64url(Buffer.from('ffffffff00000001000000000000000000000000ffffffffffffffffffffffff', 'hex')) }, all],
     ['a P-256 key with y equal to the prime of the curve', { ...es, y: toBase64url(Buffer.from('ffffffff00000001000000000000000000000000ffffffffffffffffffffffff', 'hex')) }, all],
     ['the base point of P-256', { ...es, x: toBase64url(Buffer.from('6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296', 'hex')), y: toBase64url(Buffer.from('4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5', 'hex')) }, all],
+    // Two points with a small half, and the same points with that half written as itself plus the prime: a second written form of one point, which is refused, not reduced.
+    ['the point of P-256 with x equal to 5', { ...es, x: toBase64url(Buffer.from(P256_X5[0], 'hex')), y: toBase64url(Buffer.from(P256_X5[1], 'hex')) }, all],
+    ['a P-256 key with x written as 5 plus the prime', { ...es, x: toBase64url(Buffer.from(P256_PLUS_5, 'hex')), y: toBase64url(Buffer.from(P256_X5[1], 'hex')) }, all],
+    ['the point of P-256 with y equal to 5', { ...es, x: toBase64url(Buffer.from(P256_Y5[0], 'hex')), y: toBase64url(Buffer.from(P256_Y5[1], 'hex')) }, all],
+    ['a P-256 key with y written as 5 plus the prime', { ...es, x: toBase64url(Buffer.from(P256_Y5[0], 'hex')), y: toBase64url(Buffer.from(P256_PLUS_5, 'hex')) }, all],
     ['an EC key on another curve', { ...es, crv: 'P-384' }, all],
     ['an RSA key with another exponent', { ...rs, e: 'Aw' }, all],
     ['an RSA key of 1,024 bits', { ...rs, n: toBase64url(fromBase64url(rs.n).subarray(0, 128)) }, all],

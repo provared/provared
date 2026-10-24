@@ -13,7 +13,7 @@ from cryptography.hazmat.primitives.asymmetric import ec, ed25519
 
 import provared.signatures as signatures
 import provared.timestamp as timestamp
-from provared.der import read_element, time_of, validate_der
+from provared.der import Element, read_element, set_in_order, time_of, validate_der
 from provared.encoding import Refusal, from_base64url, to_base64url
 from provared.keys import bad_ed25519_signature, check_key, on_p256
 from provared.signatures import generate_key_set, sign, verify_signature
@@ -62,6 +62,15 @@ def stamp_case(name):
     for c in data['cases']:
         if c['name'] == name:
             return from_base64url(c['token']), from_base64url(c['stamped']), c.get('options')
+    raise KeyError(name)
+
+
+def shared_case(file, name):
+    """A case of a shared test file, by name."""
+    data = json.loads((VECTORS / file).read_text(encoding='utf-8'))
+    for c in data['cases']:
+        if c['name'] == name:
+            return c
     raise KeyError(name)
 
 
@@ -119,6 +128,26 @@ class P256Keys(unittest.TestCase):
             self.assertIn('point on the curve', caught.exception.message, name)
         self.assertTrue(on_p256(from_base64url(genuine['x']), from_base64url(genuine['y'])))
         self.assertFalse(on_p256(from_base64url(genuine['x']), from_base64url(changed(genuine['y']))))
+        # A second written form of one point, a half written as itself plus the
+        # prime, is refused and not reduced: the point with x = 5, and the point
+        # with y = 5 (its x found by solving the curve's equation), each as itself
+        # and with that half written as 5 + p. Both halves of 5 + p fit 32 bytes.
+        five = to_base64url(bytes.fromhex('0000000000000000000000000000000000000000000000000000000000000005'))
+        five_plus_p = to_base64url(bytes.fromhex('ffffffff00000001000000000000000000000001000000000000000000000004'))
+        y_of_x5 = to_base64url(bytes.fromhex('459243b9aa581806fe913bce99817ade11ca503c64d9a3c533415c083248fbcc'))
+        x_of_y5 = to_base64url(bytes.fromhex('d7325d7646cd60d80a92738ceb345f844cffaf35841022cab176f692de8de1d7'))
+        self.assertEqual(check_key({**genuine, 'x': five, 'y': y_of_x5}, ['ES256'], 'key'), 'ES256')
+        self.assertEqual(check_key({**genuine, 'x': x_of_y5, 'y': five}, ['ES256'], 'key'), 'ES256')
+        for name, key in (
+            ('x written as 5 plus the prime', {**genuine, 'x': five_plus_p, 'y': y_of_x5}),
+            ('y written as 5 plus the prime', {**genuine, 'x': x_of_y5, 'y': five_plus_p}),
+        ):
+            with self.assertRaises(Refusal, msg=name) as caught:
+                check_key(key, ['ES256'], 'key')
+            self.assertEqual(caught.exception.code, 'bad-key', name)
+            self.assertIn('point on the curve', caught.exception.message, name)
+        for name in ('a P-256 key with x written as 5 plus the prime', 'a P-256 key with y written as 5 plus the prime'):
+            self.assertEqual(shared_case('keys.json', name)['expected']['refused']['code'], 'bad-key', name)
 
 
 class Ed25519Signatures(unittest.TestCase):
@@ -152,7 +181,77 @@ class Ed25519Signatures(unittest.TestCase):
             self.assertEqual(check_stamp(sound, stamped, options)['state'], 'valid')
 
 
+class StrictDer(unittest.TestCase):
+    """Added after the independent review of these fixes (24 October 2026)."""
+
+    def check(self, hex_text):
+        data = bytes.fromhex(hex_text)
+        validate_der(data, read_element(data, 0))
+
+    def test_a_string_written_in_parts_is_not_strict_der(self):
+        # X.690, section 10.2: a string of bits, bytes or characters, or a time, is written in one piece.
+        for bad in ('2308030200ff030200ff', '2406040101040102', '2c0a0c036162630c03646566', '3811180f32303236313030353132303030305a'):
+            with self.assertRaises(Refusal, msg=bad) as caught:
+                self.check(bad)
+            self.assertEqual(caught.exception.code, 'stamp-bad-data', bad)
+            self.assertIn('written in parts', caught.exception.message, bad)
+        for name in ('a constructed bit string', 'a constructed octet string', 'a constructed character string', 'a constructed time'):
+            self.assertEqual(shared_case('der-strict.json', name)['expected']['refused']['code'], 'stamp-bad-data', name)
+
+    def test_a_set_out_of_der_order_is_not_strict_der(self):
+        # X.690, section 11.6: the items of a set in the order of their encodings, compared as bytes; equal items may stand side by side.
+        for bad in ('3106020102020101', '310702020100020101', '310a30030201023003020101', '30083106020102020101'):
+            with self.assertRaises(Refusal, msg=bad) as caught:
+                self.check(bad)
+            self.assertEqual(caught.exception.code, 'stamp-bad-data', bad)
+            self.assertIn('order DER requires', caught.exception.message, bad)
+        # A sequence is not sorted, and a set under a tag that hides its kind cannot be told from one.
+        for good in ('3106020101020102', '3106020101020101', '310702010102020100', '310a30030201013003020102', '3006020102020101', 'a006020102020101'):
+            self.check(good)
+        data = bytes.fromhex('020101020102')
+        self.assertTrue(set_in_order(data, [read_element(data, 0), read_element(data, 3)]))
+        data = bytes.fromhex('020102020101')
+        self.assertFalse(set_in_order(data, [read_element(data, 0), read_element(data, 3)]))
+        data = bytes.fromhex('020101020101')
+        self.assertTrue(set_in_order(data, [read_element(data, 0), read_element(data, 3)]))
+        # Compared as bytes, the shorter padded with zeros: a shorter item is not for that reason the lesser.
+        data = bytes.fromhex('0201020005')
+        self.assertFalse(set_in_order(data, [Element(2, 0, 2, 2), Element(2, 2, 4, 5)]))
+        data = bytes.fromhex('0200050201')
+        self.assertTrue(set_in_order(data, [Element(2, 0, 2, 3), Element(2, 3, 5, 5)]))
+
+
 class TimeStamps(unittest.TestCase):
+    def test_the_signed_attributes_and_the_certificates_are_sets_and_must_be_in_der_order(self):
+        for name, words in (
+            ('attributes: in another order', 'signed attributes are not in the order'),
+            ('certificates: two certificates out of DER order', 'certificates are not in the order'),
+            ('wrapper: two fingerprint methods listed out of DER order', 'items of a set are not in the order'),
+        ):
+            token, stamped, options = stamp_case(name)
+            with self.assertRaises(Refusal, msg=name) as caught:
+                check_stamp(token, stamped, options)
+            self.assertEqual(caught.exception.code, 'stamp-bad-data', name)
+            self.assertIn(words, caught.exception.message, name)
+        for name in ('attributes: in DER order, written out', 'certificates: two certificates in DER order, written out', 'wrapper: two fingerprint methods listed'):
+            token, stamped, options = stamp_case(name)
+            self.assertEqual(check_stamp(token, stamped, options)['state'], 'valid', name)
+
+    def test_an_ed25519_time_stamp_gives_its_methods_no_parameters_as_rfc_8419_requires(self):
+        for name, words in (
+            ('Ed25519 with SHA-512, the fingerprint method with parameters', 'gives the method parameters, which RFC 8419'),
+            ('signing method: Ed25519 named with parameters', 'signing method parameters, which RFC 8419'),
+            ('Ed25519 with SHA-256 named by the signer', 'fingerprint method other than SHA-512'),
+        ):
+            token, stamped, options = stamp_case(name)
+            with self.assertRaises(Refusal, msg=name) as caught:
+                check_stamp(token, stamped, options)
+            self.assertEqual(caught.exception.code, 'stamp-invalid', name)
+            self.assertIn(words, caught.exception.message, name)
+        # The list of fingerprint methods in the signed data is read for its form only.
+        token, stamped, options = stamp_case('Ed25519 with SHA-512, parameters on the list of fingerprint methods only')
+        self.assertEqual(check_stamp(token, stamped, options)['state'], 'valid')
+
     def test_a_time_stamp_signed_with_ed25519_names_sha_512_as_rfc_8419_requires(self):
         token, stamped, options = stamp_case('Ed25519 with SHA-512, as RFC 8419 requires')
         self.assertEqual(check_stamp(token, stamped, options)['state'], 'valid')

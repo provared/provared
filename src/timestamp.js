@@ -9,7 +9,7 @@
 // service's certificate. It follows no chain of certificates and asks no
 // outside party: the person checking decides whom to trust.
 
-import { TAG, badStamp, children, contentOf, ecdsaToRaw, expect, hexOf, readElement, timeOf, validateDer, wholeOf } from './der.js';
+import { TAG, badStamp, children, contentOf, ecdsaToRaw, expect, hexOf, readElement, setInOrder, timeOf, validateDer, wholeOf } from './der.js';
 import { Refusal, equalBytes, formatTime, sha256, toBase64url } from './encoding.js';
 import { badEd25519Signature, weakEd25519 } from './keys.js';
 
@@ -204,14 +204,17 @@ function signingCertificateOf(bytes, value, v2) {
 }
 
 const KIND_NOT_ACCEPTED = 'A time-stamp was signed with a kind of key that is not accepted: RSA, ECDSA on the curves P-256 and P-384, and Ed25519 are.';
+const ED25519_DIGEST = 'A time-stamp signed with Ed25519 names a fingerprint method other than SHA-512, or gives the method parameters, which RFC 8419 does not allow.';
+const ED25519_PARAMETERS = 'A time-stamp signed with Ed25519 gives its signing method parameters, which RFC 8419 does not allow.';
 
 // Check the service's signature with the public key of its certificate.
 // Returns "valid", "invalid", or "unavailable" where this device has no
 // built-in support for the method. The fingerprint method is the one the
 // signer names (RFC 5652 section 5.4); a signing method that names another
 // is refused; a key of a kind that is not accepted is refused in words that
-// say so.
-async function verifyWith(certificate, bytes, signatureOid, digestName, signature, signed, without) {
+// say so. "parameters" holds the parameters, if any, of the signing method
+// and of the signer's fingerprint method.
+async function verifyWith(certificate, bytes, signatureOid, digestName, signature, signed, without, parameters) {
   const subtle = globalThis.crypto.subtle;
   let importParams;
   let verifyParams;
@@ -237,8 +240,11 @@ async function verifyWith(certificate, bytes, signatureOid, digestName, signatur
       return 'invalid';
     }
   } else if (certificate.keyOid === OID.ed25519) {
-    // With Ed25519 the signer's fingerprint method is SHA-512 (RFC 8419, section 3.1).
-    if (signatureOid !== OID.ed25519 || digestName !== 'SHA-512') return 'invalid';
+    // With Ed25519 the signer's fingerprint method is SHA-512 with no
+    // parameters, and the signing method carries none (RFC 8419, section 3.1).
+    if (signatureOid !== OID.ed25519) return 'invalid';
+    if (digestName !== 'SHA-512' || parameters.digest !== undefined) throw invalid(ED25519_DIGEST);
+    if (parameters.signature !== undefined) throw invalid(ED25519_PARAMETERS);
     checkKeyEncoding(bytes, certificate, 'Ed25519');
     method = 'Ed25519';
     importParams = { name: 'Ed25519' };
@@ -289,7 +295,8 @@ export async function checkStamp(token, fingerprintBytes, options) {
   if (!(fingerprintBytes instanceof Uint8Array)) throw badStamp('there is no fingerprint to compare it with.');
 
   // The outer wrapper, and the signed data inside it (RFC 5652 sections 3
-  // and 5.1). Every part is read, and must be strict DER.
+  // and 5.1). Every part the reader can tell apart is read, and must be
+  // strict DER.
   const wrapper = expect(readElement(token, 0), TAG.SEQUENCE, 'the wrapper');
   if (wrapper.end !== token.length) throw badStamp('it has bytes left over.');
   validateDer(token, wrapper);
@@ -311,7 +318,10 @@ export async function checkStamp(token, fingerprintBytes, options) {
   let next = 3;
   const certificates = [];
   if (parts[next] && parts[next].tag === TAG.CONTEXT_0) {
-    for (const c of children(token, parts[next], 8)) {
+    // A set under a tag of its own (RFC 5652 section 10.2.3), so its order is held to DER here.
+    const items = children(token, parts[next], 8);
+    if (!setInOrder(token, items)) throw badStamp('the certificates are not in the order DER requires.');
+    for (const c of items) {
       // Other kinds of certificate may sit here; only the ordinary kind is read.
       if (c.tag === TAG.SEQUENCE) certificates.push(readCertificate(token, c));
     }
@@ -326,9 +336,14 @@ export async function checkStamp(token, fingerprintBytes, options) {
   if (!signer[1] || !((signerVersion === '01' && signer[1].tag === TAG.SEQUENCE) || (signerVersion === '03' && signer[1].tag === 0x80))) {
     throw badStamp('the signer is not named as its standard sets out.');
   }
-  const digestName = HASHES[algorithmOf(token, signer[2], 'the signer\'s fingerprint method').oid];
+  const digesting = algorithmOf(token, signer[2], 'the signer\'s fingerprint method');
+  const digestName = HASHES[digesting.oid];
   const attributes = expect(signer[3], TAG.CONTEXT_0, 'the signed attributes');
-  const signatureOid = algorithmOf(token, signer[4], 'the signing method').oid;
+  // A set under a tag of its own, in DER (RFC 5652 section 5.3), so its order is held to DER here.
+  const attributeList = children(token, attributes, 16);
+  if (!setInOrder(token, attributeList)) throw badStamp('the signed attributes are not in the order DER requires.');
+  const signing = algorithmOf(token, signer[4], 'the signing method');
+  const signatureOid = signing.oid;
   const signature = contentOf(token, expect(signer[5], TAG.OCTET_STRING, 'the signature'));
   if (signer.length > 7 || (signer.length === 7 && signer[6].tag !== TAG.CONTEXT_1)) throw badStamp('the signer holds parts that are not in the order its standard sets out.');
 
@@ -348,7 +363,7 @@ export async function checkStamp(token, fingerprintBytes, options) {
   let named = null;
   let newerNamed = false;
   let olderNamed = false;
-  for (const attribute of children(token, attributes, 16)) {
+  for (const attribute of attributeList) {
     const pair = children(token, expect(attribute, TAG.SEQUENCE, 'an attribute'), 2);
     const name = hexOf(token, expect(pair[0], TAG.OID, 'the name of an attribute'));
     const values = children(token, expect(pair[1], TAG.SET, 'the value of an attribute'), 4);
@@ -364,8 +379,11 @@ export async function checkStamp(token, fingerprintBytes, options) {
       digestNamed = true;
     } else if (name === OID.signingCertificateV2 || name === OID.signingCertificate) {
       if (values.length !== 1) throw invalid('A time-stamp does not say, in one way, which certificate signed it.');
-      // Each form at most once (RFC 5652 section 5.3; RFC 5035 sections 3
-      // and 4). Where both forms are present, the newer one is used.
+      // Each form at most once: RFC 5035 section 3 for the newer form, and
+      // for the older section 5.4.2 of RFC 2634 as RFC 5035 section 5 writes
+      // it. Where both forms are present, the newer one is used: this
+      // format's choice, where RFC 5035 section 7 lets a reader refuse a
+      // time-stamp whose two forms disagree.
       const newer = name === OID.signingCertificateV2;
       if (newer ? newerNamed : olderNamed) throw invalid('A time-stamp names the certificate that signed it more than once in the same form, which its standard does not allow.');
       if (newer) newerNamed = true;
@@ -391,7 +409,7 @@ export async function checkStamp(token, fingerprintBytes, options) {
   // 5.4). The bytes are copied, so that the caller's time-stamp is not changed.
   const signed = new Uint8Array(wholeOf(token, attributes));
   signed[0] = TAG.SET;
-  const state = await verifyWith(certificate, token, signatureOid, digestName, signature, signed, without);
+  const state = await verifyWith(certificate, token, signatureOid, digestName, signature, signed, without, { signature: signing.parameters, digest: digesting.parameters });
   if (state === 'unavailable') return { state: 'unavailable', when: null, time: NaN, authority: null };
   if (state !== 'valid') throw invalid('A time-stamp\'s signature does not fit the certificate it names.');
   if (statement.time < certificate.notBefore || statement.time > certificate.notAfter) {

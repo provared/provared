@@ -105,6 +105,24 @@ def content_of(data, element):
     return bytes(data[element.start:element.end])
 
 
+def set_in_order(data, items):
+    """Whether the items of a set are in the order DER requires (X.690, section
+    11.6): their encodings compared as strings of bytes, the shorter padded
+    at its end with zero bytes. Two equal encodings may stand side by side."""
+    for i in range(1, len(items)):
+        a = items[i - 1]
+        b = items[i]
+        longest = max(a.end - a.from_, b.end - b.from_)
+        for k in range(longest):
+            x = data[a.from_ + k] if a.from_ + k < a.end else 0
+            y = data[b.from_ + k] if b.from_ + k < b.end else 0
+            if x != y:
+                if x > y:
+                    return False
+                break
+    return True
+
+
 def whole_of(data, element):
     """The whole element, tag and length included."""
     return bytes(data[element.from_:element.end])
@@ -185,11 +203,15 @@ def ecdsa_to_raw(der, size):
 def validate_der(data, element):
     """Walk a whole element and everything inside it, and refuse anything that
     is not strict DER: a constructed part whose items do not fill it exactly,
+    a string (of bits, bytes or characters) or a time written in parts
+    (X.690, section 10.2), a set whose items are not in order (section 11.6),
     a whole number or an object identifier that is not in its shortest form,
     a truth value that is not written in the one way DER allows, a string of
     bits whose unused bits are not zero. Parts this checker does not otherwise
     read are still read here, so that two checkers cannot disagree about
-    whether a time-stamp is well formed."""
+    whether a time-stamp is well formed. What a part holds as bytes (the value
+    of an octet string) or under a tag that hides its kind is read as bytes
+    only."""
     budget = [4000]
 
     def walk(e, depth):
@@ -198,11 +220,19 @@ def validate_der(data, element):
             raise bad_stamp('it holds too many parts, or parts nested too deeply.')
         length = e.end - e.start
         if e.tag & 0x20:
+            # Of the universal kinds, only a sequence and a set are written in
+            # parts; a string or a time is written in one piece (X.690, section 10.2).
+            if (e.tag & 0xC0) == 0 and e.tag != TAG.SEQUENCE and e.tag != TAG.SET:
+                raise bad_stamp('a string of bits, bytes or characters, or a time, is written in parts, which DER does not allow.')
+            items = []
             at = e.start
             while at < e.end:
                 child = read_element(data, at, e.end)
                 walk(child, depth + 1)
+                items.append(child)
                 at = child.end
+            if e.tag == TAG.SET and not set_in_order(data, items):
+                raise bad_stamp('the items of a set are not in the order DER requires.')
             return
         if e.tag == TAG.INTEGER:
             if length == 0:

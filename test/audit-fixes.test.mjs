@@ -6,13 +6,13 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { readElement, timeOf, validateDer } from '../src/der.js';
+import { readElement, setInOrder, timeOf, validateDer } from '../src/der.js';
 import { concatBytes, fromBase64url, sha256, toBase64url, utf8 } from '../src/encoding.js';
 import { badEd25519Signature, checkKey, onP256 } from '../src/keys.js';
 import { generateKeySet, sign, verifySignature } from '../src/signatures.js';
 import { checkStamp } from '../src/timestamp.js';
 import { makePasskey } from './helpers/passkey.mjs';
-import { makeStampService } from './helpers/stamp.mjs';
+import { makeStampService, oid, sequence, sorted } from './helpers/stamp.mjs';
 
 const H = (text) => Uint8Array.from(Buffer.from(text, 'hex'));
 const code = (expected) => (e) => e.code === expected;
@@ -78,6 +78,22 @@ test('a P-256 key that is not a point on the curve is refused as bad-key, before
   }
   assert.equal(onP256(fromBase64url(genuine.x), fromBase64url(genuine.y)), true);
   assert.equal(onP256(fromBase64url(genuine.x), fromBase64url(changed(genuine.y))), false);
+  // A second written form of one point, a half written as itself plus the
+  // prime, is refused and not reduced: the point with x = 5, and the point
+  // with y = 5 (its x found by solving the curve's equation), each as itself
+  // and with that half written as 5 + p. Both halves of 5 + p fit 32 bytes.
+  const five = toBase64url(H('0000000000000000000000000000000000000000000000000000000000000005'));
+  const fivePlusP = toBase64url(H('ffffffff00000001000000000000000000000001000000000000000000000004'));
+  const yOfX5 = toBase64url(H('459243b9aa581806fe913bce99817ade11ca503c64d9a3c533415c083248fbcc'));
+  const xOfY5 = toBase64url(H('d7325d7646cd60d80a92738ceb345f844cffaf35841022cab176f692de8de1d7'));
+  assert.equal(checkKey({ ...genuine, x: five, y: yOfX5 }, ['ES256'], 'key'), 'ES256');
+  assert.equal(checkKey({ ...genuine, x: xOfY5, y: five }, ['ES256'], 'key'), 'ES256');
+  for (const [name, key] of [
+    ['x written as 5 plus the prime', { ...genuine, x: fivePlusP, y: yOfX5 }],
+    ['y written as 5 plus the prime', { ...genuine, x: xOfY5, y: fivePlusP }],
+  ]) {
+    assert.throws(() => checkKey(key, ['ES256'], 'key'), (e) => e.code === 'bad-key' && /point on the curve/.test(e.message), name);
+  }
 });
 
 test('an Ed25519 signature whose S is not below L is refused by the library itself, whatever the device would say', async () => {
@@ -146,4 +162,65 @@ test('a time-stamp\'s time is read to the millisecond, a finer fraction dropped 
   assert.equal(read('20261005120000.123Z'), WHEN + 123);
   assert.equal(read('20261005120000.1239Z'), WHEN + 123);
   assert.equal(read('20261005120000.0009Z'), WHEN);
+});
+
+// --- added after the independent review of these fixes (24 October 2026) ---
+
+test('a string written in parts, or a set out of DER order, is not strict DER', () => {
+  const check = (hex) => validateDer(H(hex), readElement(H(hex), 0));
+  // X.690, section 10.2: a string of bits, bytes or characters, or a time, is written in one piece.
+  for (const bad of ['2308030200ff030200ff', '2406040101040102', '2c0a0c036162630c03646566', '3811180f32303236313030353132303030305a']) {
+    assert.throws(() => check(bad), (e) => e.code === 'stamp-bad-data' && /written in parts/.test(e.message), bad);
+  }
+  // X.690, section 11.6: the items of a set in the order of their encodings, compared as bytes; equal items may stand side by side.
+  for (const bad of ['3106020102020101', '310702020100020101', '310a30030201023003020101', '30083106020102020101']) {
+    assert.throws(() => check(bad), (e) => e.code === 'stamp-bad-data' && /order DER requires/.test(e.message), bad);
+  }
+  // A sequence is not sorted, and a set under a tag that hides its kind cannot be told from one.
+  for (const good of ['3106020101020102', '3106020101020101', '310702010102020100', '310a30030201013003020102', '3006020102020101', 'a006020102020101']) {
+    assert.doesNotThrow(() => check(good), good);
+  }
+  assert.equal(setInOrder(H('020101020102'), [{ from: 0, end: 3 }, { from: 3, end: 6 }]), true);
+  assert.equal(setInOrder(H('020102020101'), [{ from: 0, end: 3 }, { from: 3, end: 6 }]), false);
+  assert.equal(setInOrder(H('020101020101'), [{ from: 0, end: 3 }, { from: 3, end: 6 }]), true);
+  // Compared as bytes, the shorter padded with zeros: a shorter item is not for that reason the lesser.
+  assert.equal(setInOrder(H('0201020005'), [{ from: 0, end: 2 }, { from: 2, end: 5 }]), false);
+  assert.equal(setInOrder(H('0200050201'), [{ from: 0, end: 3 }, { from: 3, end: 5 }]), true);
+});
+
+test('the signed attributes and the certificates of a time-stamp are sets, and must be in DER order', async () => {
+  const service = await makeStampService();
+  const trusted = [service.fingerprint];
+  // The helper's attributes are the kind, the fingerprint and the signing certificate, which is DER order as they stand.
+  assert.equal((await checkStamp(await service.stamp(stamped, WHEN, { attributes: (a) => a }), stamped, { trusted })).state, 'valid');
+  const reversed = await service.stamp(stamped, WHEN, { attributes: (a) => [a[2], a[1], a[0]] });
+  await assert.rejects(checkStamp(reversed, stamped, { trusted }), (e) => e.code === 'stamp-bad-data' && /signed attributes are not in the order/.test(e.message));
+  // Two certificates for one key: which comes first in DER order rests on their bytes (their lengths before their serial numbers), so it is computed.
+  const [first, second] = sorted([service.certificate, service.secondCertificate]);
+  const inOrder = await service.stamp(stamped, WHEN, { certificates: [first, second], keepOrder: true });
+  assert.equal((await checkStamp(inOrder, stamped, { trusted })).state, 'valid');
+  const outOfOrder = await service.stamp(stamped, WHEN, { certificates: [second, first], keepOrder: true });
+  await assert.rejects(checkStamp(outOfOrder, stamped, { trusted }), (e) => e.code === 'stamp-bad-data' && /certificates are not in the order/.test(e.message));
+  // Given in the other order without "keepOrder", the helper writes them as a service does.
+  assert.equal((await checkStamp(await service.stamp(stamped, WHEN, { certificates: [service.certificate, service.secondCertificate] }), stamped, { trusted })).state, 'valid');
+});
+
+test('a time-stamp signed with Ed25519 gives its fingerprint method and its signing method no parameters, as RFC 8419 requires', async () => {
+  const service = await makeStampService('Ed25519');
+  const trusted = [service.fingerprint];
+  const NULL = new Uint8Array([0x05, 0x00]);
+  const sha512 = '608648016503040203';
+  assert.equal((await checkStamp(await service.stamp(stamped, WHEN), stamped, { trusted })).state, 'valid');
+  const digestParameters = await service.stamp(stamped, WHEN, { digestAlgorithm: sequence(oid(sha512), NULL) });
+  await assert.rejects(checkStamp(digestParameters, stamped, { trusted }), (e) => e.code === 'stamp-invalid' && /gives the method parameters, which RFC 8419/.test(e.message));
+  const signingParameters = await service.stamp(stamped, WHEN, { signatureAlgorithm: sequence(oid('2b6570'), NULL) });
+  await assert.rejects(checkStamp(signingParameters, stamped, { trusted }), (e) => e.code === 'stamp-invalid' && /signing method parameters, which RFC 8419/.test(e.message));
+  // Naming another method is refused in words that name the cause.
+  const sha256Named = await service.stamp(stamped, WHEN, { digestName: 'SHA-256' });
+  await assert.rejects(checkStamp(sha256Named, stamped, { trusted }), (e) => e.code === 'stamp-invalid' && /fingerprint method other than SHA-512/.test(e.message));
+  // The list of fingerprint methods in the signed data is read for its form only.
+  assert.equal((await checkStamp(await service.stamp(stamped, WHEN, { digestAlgorithms: sequence(oid(sha512), NULL) }), stamped, { trusted })).state, 'valid');
+  // For the other signing methods the parameters stay NULL, as the OpenSSL program writes them.
+  const ecdsa = await makeStampService('ECDSA');
+  assert.equal((await checkStamp(await ecdsa.stamp(stamped, WHEN), stamped, { trusted: [ecdsa.fingerprint] })).state, 'valid');
 });

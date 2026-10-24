@@ -18,7 +18,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec, ed25519, padding, rsa
 from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
 
-from .der import TAG, bad_stamp, children, content_of, ecdsa_to_raw, expect, hex_of, item, read_element, time_of, validate_der, whole_of
+from .der import TAG, bad_stamp, children, content_of, ecdsa_to_raw, expect, hex_of, item, read_element, set_in_order, time_of, validate_der, whole_of
 from .encoding import Refusal, format_time, sha256, to_base64url
 from .keys import bad_ed25519_signature, weak_ed25519
 
@@ -246,14 +246,17 @@ def _public_key(certificate):
 
 
 _KIND_NOT_ACCEPTED = 'A time-stamp was signed with a kind of key that is not accepted: RSA, ECDSA on the curves P-256 and P-384, and Ed25519 are.'
+_ED25519_DIGEST = 'A time-stamp signed with Ed25519 names a fingerprint method other than SHA-512, or gives the method parameters, which RFC 8419 does not allow.'
+_ED25519_PARAMETERS = 'A time-stamp signed with Ed25519 gives its signing method parameters, which RFC 8419 does not allow.'
 
 
-def _verify_with(certificate, data, signature_oid, digest_name, signature, signed, without):
+def _verify_with(certificate, data, signature_oid, digest_name, signature, signed, without, parameters):
     """Check the service's signature with the public key of its certificate.
     Returns "valid", "invalid", or "unavailable" where this device has no
     built-in support for the method. The fingerprint method is the one the
     signer names (RFC 5652 section 5.4); a signing method that names another
-    is refused."""
+    is refused. "parameters" holds the parameters, if any, of the signing
+    method and of the signer's fingerprint method."""
     raw = signature
     curve = None
     if certificate['keyOid'] == OID['rsaEncryption']:
@@ -277,9 +280,14 @@ def _verify_with(certificate, data, signature_oid, digest_name, signature, signe
         except Exception:
             return 'invalid'
     elif certificate['keyOid'] == OID['ed25519']:
-        # With Ed25519 the signer's fingerprint method is SHA-512 (RFC 8419, section 3.1).
-        if signature_oid != OID['ed25519'] or digest_name != 'SHA-512':
+        # With Ed25519 the signer's fingerprint method is SHA-512 with no
+        # parameters, and the signing method carries none (RFC 8419, section 3.1).
+        if signature_oid != OID['ed25519']:
             return 'invalid'
+        if digest_name != 'SHA-512' or parameters['digest'] is not None:
+            raise _invalid(_ED25519_DIGEST)
+        if parameters['signature'] is not None:
+            raise _invalid(_ED25519_PARAMETERS)
         _check_key_encoding(data, certificate, 'Ed25519')
         method = 'Ed25519'
     else:
@@ -344,7 +352,8 @@ def check_stamp(token, fingerprint_bytes, options=None):
     token = bytes(token)
 
     # The outer wrapper, and the signed data inside it (RFC 5652 sections 3
-    # and 5.1). Every part is read, and must be strict DER.
+    # and 5.1). Every part the reader can tell apart is read, and must be
+    # strict DER.
     wrapper = expect(read_element(token, 0), TAG.SEQUENCE, 'the wrapper')
     if wrapper.end != len(token):
         raise bad_stamp('it has bytes left over.')
@@ -369,7 +378,11 @@ def check_stamp(token, fingerprint_bytes, options=None):
     following = 3
     certificates = []
     if item(parts, following) is not None and parts[following].tag == TAG.CONTEXT_0:
-        for c in children(token, parts[following], 8):
+        # A set under a tag of its own (RFC 5652 section 10.2.3), so its order is held to DER here.
+        items = children(token, parts[following], 8)
+        if not set_in_order(token, items):
+            raise bad_stamp('the certificates are not in the order DER requires.')
+        for c in items:
             # Other kinds of certificate may sit here; only the ordinary kind is read.
             if c.tag == TAG.SEQUENCE:
                 certificates.append(_read_certificate(token, c))
@@ -385,9 +398,15 @@ def check_stamp(token, fingerprint_bytes, options=None):
     second = item(signer, 1)
     if second is None or not ((signer_version == '01' and second.tag == TAG.SEQUENCE) or (signer_version == '03' and second.tag == 0x80)):
         raise bad_stamp('the signer is not named as its standard sets out.')
-    digest_name = HASHES.get(_algorithm_of(token, item(signer, 2), "the signer's fingerprint method")['oid'])
+    digesting = _algorithm_of(token, item(signer, 2), "the signer's fingerprint method")
+    digest_name = HASHES.get(digesting['oid'])
     attributes = expect(item(signer, 3), TAG.CONTEXT_0, 'the signed attributes')
-    signature_oid = _algorithm_of(token, item(signer, 4), 'the signing method')['oid']
+    # A set under a tag of its own, in DER (RFC 5652 section 5.3), so its order is held to DER here.
+    attribute_list = children(token, attributes, 16)
+    if not set_in_order(token, attribute_list):
+        raise bad_stamp('the signed attributes are not in the order DER requires.')
+    signing = _algorithm_of(token, item(signer, 4), 'the signing method')
+    signature_oid = signing['oid']
     signature = content_of(token, expect(item(signer, 5), TAG.OCTET_STRING, 'the signature'))
     if len(signer) > 7 or (len(signer) == 7 and signer[6].tag != TAG.CONTEXT_1):
         raise bad_stamp('the signer holds parts that are not in the order its standard sets out.')
@@ -410,7 +429,7 @@ def check_stamp(token, fingerprint_bytes, options=None):
     named = None
     newer_named = False
     older_named = False
-    for attribute in children(token, attributes, 16):
+    for attribute in attribute_list:
         pair = children(token, expect(attribute, TAG.SEQUENCE, 'an attribute'), 2)
         name = hex_of(token, expect(item(pair, 0), TAG.OID, 'the name of an attribute'))
         values = children(token, expect(item(pair, 1), TAG.SET, 'the value of an attribute'), 4)
@@ -425,8 +444,11 @@ def check_stamp(token, fingerprint_bytes, options=None):
         elif name == OID['signingCertificateV2'] or name == OID['signingCertificate']:
             if len(values) != 1:
                 raise _invalid('A time-stamp does not say, in one way, which certificate signed it.')
-            # Each form at most once (RFC 5652 section 5.3; RFC 5035 sections 3
-            # and 4). Where both forms are present, the newer one is used.
+            # Each form at most once: RFC 5035 section 3 for the newer form, and
+            # for the older section 5.4.2 of RFC 2634 as RFC 5035 section 5 writes
+            # it. Where both forms are present, the newer one is used: this
+            # format's choice, where RFC 5035 section 7 lets a reader refuse a
+            # time-stamp whose two forms disagree.
             newer = name == OID['signingCertificateV2']
             if newer_named if newer else older_named:
                 raise _invalid('A time-stamp names the certificate that signed it more than once in the same form, which its standard does not allow.')
@@ -455,7 +477,7 @@ def check_stamp(token, fingerprint_bytes, options=None):
     # 5.4). The bytes are copied, so that the caller's time-stamp is not changed.
     signed = bytearray(whole_of(token, attributes))
     signed[0] = TAG.SET
-    state = _verify_with(certificate, token, signature_oid, digest_name, signature, bytes(signed), without)
+    state = _verify_with(certificate, token, signature_oid, digest_name, signature, bytes(signed), without, {'signature': signing['parameters'], 'digest': digesting['parameters']})
     if state == 'unavailable':
         return {'state': 'unavailable', 'when': None, 'time': float('nan'), 'authority': None}
     if state != 'valid':

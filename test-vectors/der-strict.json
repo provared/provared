@@ -322,12 +322,130 @@
    "name": "a constructed octet string",
    "bytes": "2403020101",
    "expected": {
-    "ok": true
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a string of bits, bytes or characters, or a time, is written in parts, which DER does not allow."
+    }
+   }
+  },
+  {
+   "name": "a constructed octet string of two parts",
+   "bytes": "2406040101040102",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a string of bits, bytes or characters, or a time, is written in parts, which DER does not allow."
+    }
+   }
+  },
+  {
+   "name": "a constructed bit string",
+   "bytes": "2308030200ff030200ff",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a string of bits, bytes or characters, or a time, is written in parts, which DER does not allow."
+    }
+   }
+  },
+  {
+   "name": "a constructed character string",
+   "bytes": "2c0a0c036162630c03646566",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a string of bits, bytes or characters, or a time, is written in parts, which DER does not allow."
+    }
+   }
+  },
+  {
+   "name": "a constructed time",
+   "bytes": "3811180f32303236313030353132303030305a",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a string of bits, bytes or characters, or a time, is written in parts, which DER does not allow."
+    }
    }
   },
   {
    "name": "a set",
    "bytes": "3106020101020102",
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "a set out of DER order",
+   "bytes": "3106020102020101",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: the items of a set are not in the order DER requires."
+    }
+   }
+  },
+  {
+   "name": "a set of two equal items",
+   "bytes": "3106020101020101",
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "a set in DER order, items of different lengths",
+   "bytes": "310702010102020100",
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "a set out of DER order, items of different lengths",
+   "bytes": "310702020100020101",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: the items of a set are not in the order DER requires."
+    }
+   }
+  },
+  {
+   "name": "a set of sets in DER order",
+   "bytes": "310a30030201013003020102",
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "a set of sets out of DER order",
+   "bytes": "310a30030201023003020101",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: the items of a set are not in the order DER requires."
+    }
+   }
+  },
+  {
+   "name": "a set out of DER order inside a sequence",
+   "bytes": "30083106020102020101",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: the items of a set are not in the order DER requires."
+    }
+   }
+  },
+  {
+   "name": "a sequence whose items are not in DER order",
+   "bytes": "3006020102020101",
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "a constructed context tag whose items are not in DER order",
+   "bytes": "a006020102020101",
    "expected": {
     "ok": true
    }
@@ -390,7 +508,10 @@
    "name": "an unknown constructed tag",
    "bytes": "2c020500",
    "expected": {
-    "ok": true
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a string of bits, bytes or characters, or a time, is written in parts, which DER does not allow."
+    }
    }
   },
   {
@@ -950,7 +1071,10 @@
    "name": "random 55",
    "bytes": "31100301003008a306040449cb5d810101ff",
    "expected": {
-    "ok": true
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: the items of a set are not in the order DER requires."
+    }
    }
   },
   {
@@ -1023,7 +1147,10 @@
    "name": "random 65",
    "bytes": "a30433023100",
    "expected": {
-    "ok": true
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a string of bits, bytes or characters, or a time, is written in parts, which DER does not allow."
+    }
    }
   },
   {
@@ -1429,7 +1556,10 @@
    "name": "random 114",
    "bytes": "310b06032b657004046715e2ab",
    "expected": {
-    "ok": true
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: the items of a set are not in the order DER requires."
+    }
    }
   },
   {
@@ -1455,7 +1585,7 @@
    "expected": {
     "refused": {
      "code": "stamp-bad-data",
-     "message": "A time-stamp is not laid out as its standard sets out: a string of bits is not written as DER allows."
+     "message": "A time-stamp is not laid out as its standard sets out: the items of a set are not in the order DER requires."
     }
    }
   },
@@ -1623,7 +1753,10 @@
    "name": "random 137",
    "bytes": "2304a0003000",
    "expected": {
-    "ok": true
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a string of bits, bytes or characters, or a time, is written in parts, which DER does not allow."
+    }
    }
   },
   {
@@ -2126,7 +2259,7 @@
    "expected": {
     "refused": {
      "code": "stamp-bad-data",
-     "message": "A time-stamp is not laid out as its standard sets out: it is cut short."
+     "message": "A time-stamp is not laid out as its standard sets out: a string of bits, bytes or characters, or a time, is written in parts, which DER does not allow."
     }
    }
   },
@@ -2213,7 +2346,10 @@
    "name": "random 205",
    "bytes": "a319a309a3050101ffa3000500310c31083006a004040242493000",
    "expected": {
-    "ok": true
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: the items of a set are not in the order DER requires."
+    }
    }
   },
   {
@@ -2636,7 +2772,10 @@
    "name": "random 256",
    "bytes": "3108a30405008000a000",
    "expected": {
-    "ok": true
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: the items of a set are not in the order DER requires."
+    }
    }
   },
   {
@@ -2848,7 +2987,10 @@
    "name": "random 282",
    "bytes": "310431003000",
    "expected": {
-    "ok": true
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: the items of a set are not in the order DER requires."
+    }
    }
   },
   {
@@ -2884,7 +3026,7 @@
    "expected": {
     "refused": {
      "code": "stamp-bad-data",
-     "message": "A time-stamp is not laid out as its standard sets out: a string of bits is not written as DER allows."
+     "message": "A time-stamp is not laid out as its standard sets out: the items of a set are not in the order DER requires."
     }
    }
   },

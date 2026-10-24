@@ -371,6 +371,24 @@ const intBytes = (bytes) => {
   return der(0x02, digits[0] & 0x80 ? concatBytes(new Uint8Array([0]), digits) : digits);
 };
 const bitString = (bytes, unused = 0) => der(0x03, new Uint8Array([unused]), bytes);
+/** A copy of some bytes with the lowest "count" bits of the last byte set to "value", so that a case does not depend on a key made at random. */
+function withLastBits(bytes, count, value) {
+  const out = Uint8Array.from(bytes);
+  out[out.length - 1] = (out[out.length - 1] & ~((1 << count) - 1)) | value;
+  return out;
+}
+/** The order DER requires of the items of a set (X.690, section 11.6): compared as strings of bytes, the shorter padded at its end with zeros. */
+function compareDer(a, b) {
+  const longest = Math.max(a.length, b.length);
+  for (let i = 0; i < longest; i++) {
+    const x = i < a.length ? a[i] : 0;
+    const y = i < b.length ? b[i] : 0;
+    if (x !== y) return x - y;
+  }
+  return 0;
+}
+const inDerOrder = (items) => [...items].sort(compareDer);
+const outOfDerOrder = (items) => inDerOrder(items).reverse();
 const gtime = (text) => der(0x18, utf8(text));
 const utime = (text) => der(0x17, utf8(text));
 const gtimeOf = (ms) => gtime(new Date(ms).toISOString().slice(0, 19).replace(/[-:T]/g, '') + 'Z');
@@ -494,7 +512,20 @@ function validateDerCases() {
     ['a constructed context tag', 'a003020101'],
     ['a constructed context tag with a bad integer', 'a00402020001'],
     ['a constructed octet string', '2403020101'],
+    ['a constructed octet string of two parts', '2406040101040102'],
+    ['a constructed bit string', '2308030200ff030200ff'],
+    ['a constructed character string', '2c0a0c036162630c03646566'],
+    ['a constructed time', '3811180f32303236313030353132303030305a'],
     ['a set', '3106020101020102'],
+    ['a set out of DER order', '3106020102020101'],
+    ['a set of two equal items', '3106020101020101'],
+    ['a set in DER order, items of different lengths', '310702010102020100'],
+    ['a set out of DER order, items of different lengths', '310702020100020101'],
+    ['a set of sets in DER order', '310a30030201013003020102'],
+    ['a set of sets out of DER order', '310a30030201023003020101'],
+    ['a set out of DER order inside a sequence', '30083106020102020101'],
+    ['a sequence whose items are not in DER order', '3006020102020101'],
+    ['a constructed context tag whose items are not in DER order', 'a006020102020101'],
     ['a sequence whose item is longer than it', '30030202000102'],
     ['a sequence with an item cut short', '3004020301'],
     ['a sequence with a stray byte', '300302010100'],
@@ -732,8 +763,13 @@ function certificate(key, o = {}) {
  * A time-stamp, as a service writes one, with every part open to change.
  * "hash" is the signer's fingerprint method.
  */
+/** How a fingerprint method is named: with Ed25519, no parameters (RFC 8419, section 3.1); otherwise parameters that are NULL, as the OpenSSL program writes them. */
+const digestAlgorithm = (key, hash) => (key.type === 'ed25519' ? seq(oid(HASH_OID[hash])) : seq(oid(HASH_OID[hash]), NULL));
+
 function makeToken(key, o = {}) {
   // An Ed25519 signer names SHA-512 (RFC 8419, section 3.1), unless a case says otherwise.
+  // The signed attributes and the certificates are written in the order DER
+  // requires, as a service writes them, unless a case keeps its own order ("keepOrder").
   const hash = o.hash ?? (key.type === 'ed25519' ? 'SHA-512' : 'SHA-256');
   const cert = o.cert ?? certificate(key, o.certOptions);
   const statement =
@@ -751,13 +787,14 @@ function makeToken(key, o = {}) {
     seq(oid(OID.messageDigest), set(octets(digest(hash, statement)))),
     seq(oid(OID.signingCertificateV2), set(seq(seq(seq(octets(digest('SHA-256', o.namedCertificate ?? cert))))))),
   ];
-  const signedAttributes = set(...(o.attributes ? o.attributes(attributes, { cert, statement, hash }) : attributes));
+  const chosen = o.attributes ? o.attributes(attributes, { cert, statement, hash }) : attributes;
+  const signedAttributes = set(...(o.keepOrder ? chosen : inDerOrder(chosen)));
   let signature = o.sign ? o.sign(signedAttributes) : signWith(key, o.signHash ?? hash, signedAttributes);
   if (o.signature) signature = o.signature(signature);
   const signer = seq(
     o.signerVersion ?? int(1),
     o.signerName ?? seq(NAME, int(1)),
-    o.signerDigestAlgorithm ?? seq(oid(HASH_OID[hash]), NULL),
+    o.signerDigestAlgorithm ?? digestAlgorithm(key, hash),
     concatBytes(new Uint8Array([0xa0]), signedAttributes.subarray(1)),
     o.signatureAlgorithm ?? signatureAlgorithm(key, hash),
     octets(signature),
@@ -765,9 +802,9 @@ function makeToken(key, o = {}) {
   );
   const signedData = seq(
     o.signedDataVersion ?? int(3),
-    o.digestAlgorithms ?? set(seq(oid(HASH_OID[hash]), NULL)),
+    o.digestAlgorithms ?? set(digestAlgorithm(key, hash)),
     o.encapsulated ?? seq(oid(OID.tstInfo), der(0xa0, octets(statement))),
-    ...(o.certificates === null ? [] : [der(0xa0, ...(o.certificates ?? [cert]))]),
+    ...(o.certificates === null ? [] : [der(0xa0, ...(o.keepOrder ? o.certificates ?? [cert] : inDerOrder(o.certificates ?? [cert])))]),
     ...(o.beforeSigners ?? []),
     o.signerInfos ?? set(...Array(o.signerCount ?? 1).fill(signer)),
     ...(o.afterSigners ?? []),
@@ -857,6 +894,8 @@ async function stampCases() {
   add('ECDSA P-384 with SHA-384', token('p384', { hash: 'SHA-384' }), { options: trustFor('p384') });
   add('ECDSA P-384 with SHA-256', token('p384'), { options: trustFor('p384') });
   add('Ed25519 with SHA-512, as RFC 8419 requires', token('ed'), { options: trustFor('ed') });
+  add('Ed25519 with SHA-512, the fingerprint method with parameters', token('ed', { signerDigestAlgorithm: seq(oid(OID.sha512), NULL) }), { options: trustFor('ed') });
+  add('Ed25519 with SHA-512, parameters on the list of fingerprint methods only', token('ed', { digestAlgorithms: set(seq(oid(OID.sha512), NULL)) }), { options: trustFor('ed') });
   add('Ed25519 with SHA-256 named by the signer', token('ed', { hash: 'SHA-256' }), { options: trustFor('ed') });
   add('Ed25519 with SHA-384 named by the signer', token('ed', { hash: 'SHA-384' }), { options: trustFor('ed') });
   add('RSA 2048 with SHA-256', token('rsa'), { options: trustFor('rsa') });
@@ -1009,7 +1048,8 @@ async function stampCases() {
     ['a key that is not on the curve', certWith('p256', { spki: concatBytes(keys.p256.spki.subarray(0, keys.p256.spki.length - 1), new Uint8Array([keys.p256.spki.at(-1) ^ 1])) })],
     ['a key cut short', certWith('p256', { spki: seq(seq(oid(OID.ecPublicKey), oid(OID.p256)), bitString(keys.p256.spki.subarray(26, 60))) })],
     ['a key with a byte after its point', certWith('p256', { spki: seq(seq(oid(OID.ecPublicKey), oid(OID.p256)), bitString(concatBytes(keys.p256.spki.subarray(26), H('00')))) })],
-    ['a key with unused bits', certWith('p256', { spki: seq(seq(oid(OID.ecPublicKey), oid(OID.p256)), bitString(keys.p256.spki.subarray(26), 1)) })],
+    ['a key with an unused bit, that bit zero', certWith('p256', { spki: seq(seq(oid(OID.ecPublicKey), oid(OID.p256)), bitString(withLastBits(keys.p256.spki.subarray(26), 1, 0), 1)) })],
+    ['a key with an unused bit, that bit set', certWith('p256', { spki: seq(seq(oid(OID.ecPublicKey), oid(OID.p256)), bitString(withLastBits(keys.p256.spki.subarray(26), 1, 1), 1)) })],
     ['a key with three parts', certWith('p256', { spki: seq(seq(oid(OID.ecPublicKey), oid(OID.p256)), bitString(keys.p256.spki.subarray(26)), NULL) })],
   ]) {
     add(`certificate: ${name}`, withCert('p256', cert), { options: { trusted: [authorityOf(cert)] } });
@@ -1019,7 +1059,8 @@ async function stampCases() {
   for (const [name, spki] of [
     ['an Ed25519 key with parameters', seq(seq(oid(OID.ed25519), NULL), bitString(edPoint))],
     ['an Ed25519 key of 31 bytes', seq(seq(oid(OID.ed25519)), bitString(edPoint.subarray(1)))],
-    ['an Ed25519 key with unused bits', seq(seq(oid(OID.ed25519)), bitString(edPoint, 3))],
+    ['an Ed25519 key with unused bits, all zero', seq(seq(oid(OID.ed25519)), bitString(withLastBits(edPoint, 3, 0), 3))],
+    ['an Ed25519 key with unused bits, one set', seq(seq(oid(OID.ed25519)), bitString(withLastBits(edPoint, 3, 4), 3))],
     ['an Ed25519 key that is another', seq(seq(oid(OID.ed25519)), bitString(makeKey('Ed25519').spki.subarray(12)))],
   ]) {
     const cert = certWith('ed', { spki });
@@ -1172,7 +1213,9 @@ async function stampCases() {
     ['no signing certificate', (a) => [a[0], a[1]]],
     ['the kind twice', (a) => [a[0], a[0], a[1], a[2]]],
     ['the fingerprint twice', (a) => [a[0], a[1], a[1], a[2]]],
-    ['in another order', (a) => [a[2], a[1], a[0]]],
+    ['in another order', (a) => [a[2], a[1], a[0]], { keepOrder: true }],
+    ['in DER order, written out', (a) => inDerOrder(a), { keepOrder: true }],
+    ['a signing time beside them, out of DER order', (a) => [...a, seq(oid(OID.signingTime), set(utime('261005120000Z')))], { keepOrder: true }],
     ['the kind is data', (a) => [seq(oid(OID.contentType), set(oid(OID.data))), a[1], a[2]]],
     ['the kind given twice in one set', (a) => [seq(oid(OID.contentType), set(oid(OID.tstInfo), oid(OID.tstInfo))), a[1], a[2]]],
     ['the kind as an octet string', (a) => [seq(oid(OID.contentType), set(octets(H(OID.tstInfo)))), a[1], a[2]]],
@@ -1226,6 +1269,8 @@ async function stampCases() {
     ['an empty list of certificates', { certificates: [] }],
     ['only another certificate', { certificates: [otherCert] }],
     ['another certificate first', { certificates: [otherCert, certs.p256] }],
+    ['two certificates out of DER order', { certificates: outOfDerOrder([otherCert, certs.p256]), keepOrder: true }],
+    ['two certificates in DER order, written out', { certificates: inDerOrder([otherCert, certs.p256]), keepOrder: true }],
     ['the certificate twice', { certificates: [certs.p256, certs.p256] }],
     ['a second certificate for the same key, not named', { certificates: [p256Second] }],
     ['a second certificate for the same key, named', { certificates: [p256Second], namedCertificate: p256Second }, p256Second],
@@ -1275,7 +1320,8 @@ async function stampCases() {
     ['version 1 of the signed data', { signedDataVersion: int(1) }],
     ['version 4 of the signed data', { signedDataVersion: int(4) }],
     ['no fingerprint methods listed', { digestAlgorithms: set() }],
-    ['two fingerprint methods listed', { digestAlgorithms: set(seq(oid(OID.sha256), NULL), seq(oid(OID.sha512))) }],
+    ['two fingerprint methods listed', { digestAlgorithms: set(...inDerOrder([seq(oid(OID.sha256), NULL), seq(oid(OID.sha512))])) }],
+    ['two fingerprint methods listed out of DER order', { digestAlgorithms: set(...outOfDerOrder([seq(oid(OID.sha256), NULL), seq(oid(OID.sha512))])) }],
     ['a fingerprint method that is not a sequence', { digestAlgorithms: set(oid(OID.sha256)) }],
     ['the fingerprint methods as a sequence', { digestAlgorithms: seq(seq(oid(OID.sha256), NULL)) }],
     ['nine fingerprint methods', { digestAlgorithms: set(...Array(9).fill(seq(oid(OID.sha256)))) }],
@@ -2007,7 +2053,8 @@ function strictKeyCases() {
     add(`ECDSA ${curve}, a compressed point`, ec, spkiOf(algorithm, bitString(concatBytes(new Uint8Array([2 + (y[size - 1] & 1)]), x))));
     add(`ECDSA ${curve}, a point in the hybrid form`, ec, spkiOf(algorithm, bitString(concatBytes(new Uint8Array([6 + (y[size - 1] & 1)]), x, y))));
     add(`ECDSA ${curve}, a point cut short`, ec, spkiOf(algorithm, bitString(concatBytes(H('04'), x, y.subarray(1)))));
-    add(`ECDSA ${curve}, an unused bit`, ec, spkiOf(algorithm, bitString(concatBytes(H('04'), x, y), 1)));
+    add(`ECDSA ${curve}, an unused bit, that bit zero`, ec, spkiOf(algorithm, bitString(withLastBits(concatBytes(H('04'), x, y), 1, 0), 1)));
+    add(`ECDSA ${curve}, an unused bit, that bit set`, ec, spkiOf(algorithm, bitString(withLastBits(concatBytes(H('04'), x, y), 1, 1), 1)));
   }
   // Honest keys of other sizes and public numbers, and keys that are not accepted.
   for (const kind of ['RSA-3072', 'RSA-4096', 'RSA-2048-e3', 'RSA-2049']) {
@@ -2029,7 +2076,8 @@ function strictKeyCases() {
   add('Ed25519 written with y not below p', ed, spkiOf(seq(oid('2b6570')), bitString(H('edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f'))), { sign: anyone });
   add('Ed25519 with parameters', ed, spkiOf(seq(oid('2b6570'), NULL), bitString(edKey)));
   add('Ed25519 of 33 bytes', ed, spkiOf(seq(oid('2b6570')), bitString(concatBytes(edKey, H('00')))));
-  add('Ed25519 with an unused bit', ed, spkiOf(seq(oid('2b6570')), bitString(edKey, 1)));
+  add('Ed25519 with an unused bit, that bit zero', ed, spkiOf(seq(oid('2b6570')), bitString(withLastBits(edKey, 1, 0), 1)));
+  add('Ed25519 with an unused bit, that bit set', ed, spkiOf(seq(oid('2b6570')), bitString(withLastBits(edKey, 1, 1), 1)));
   return cases;
 }
 

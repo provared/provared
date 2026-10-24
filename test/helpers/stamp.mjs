@@ -37,11 +37,17 @@ const generalizedTime = (ms) => der(0x18, utf8(new Date(ms).toISOString().slice(
 const NULL = new Uint8Array([0x05, 0x00]);
 const TRUE = new Uint8Array([0x01, 0x01, 0xff]);
 
-// A set is written with its items in the order of their bytes.
-function sorted(items) {
+// A set is written with its items in the order DER requires (X.690, section
+// 11.6): compared as strings of bytes, the shorter padded at its end with zeros.
+export function sorted(items) {
   return [...items].sort((a, b) => {
-    for (let i = 0; i < Math.min(a.length, b.length); i++) if (a[i] !== b[i]) return a[i] - b[i];
-    return a.length - b.length;
+    const longest = Math.max(a.length, b.length);
+    for (let i = 0; i < longest; i++) {
+      const x = i < a.length ? a[i] : 0;
+      const y = i < b.length ? b[i] : 0;
+      if (x !== y) return x - y;
+    }
+    return 0;
   });
 }
 
@@ -87,6 +93,10 @@ const METHODS = {
   },
 };
 const DIGEST_OID = { 'SHA-256': OID.sha256, 'SHA-512': OID.sha512 };
+// How a fingerprint method is named: with Ed25519, SHA-512 with no
+// parameters (RFC 8419, section 3.1); with the other methods, parameters
+// that are NULL, as the OpenSSL program writes them.
+const digestAlgorithm = (name, method) => (method === 'Ed25519' ? sequence(oid(DIGEST_OID[name])) : sequence(oid(DIGEST_OID[name]), NULL));
 const digestOf = async (name, bytes) => new Uint8Array(await subtle.digest(name, bytes));
 
 /**
@@ -131,7 +141,9 @@ export async function makeStampService(method = 'ECDSA', o = {}) {
      * @param {Uint8Array} fingerprintBytes the 32 bytes to stamp
      * @param {number} when the time to state, in milliseconds
      * @param {object} [change] overrides, to build the time-stamps a checker must refuse
-     *   ("digestName": the fingerprint method the signer names, 'SHA-256' or 'SHA-512')
+     *   ("digestName": the fingerprint method the signer names, 'SHA-256' or 'SHA-512';
+     *   "digestAlgorithm": how the signer writes it; "keepOrder": write the
+     *   certificates in the order given, not the order DER requires)
      * @returns {Promise<Uint8Array>} the time-stamp
      */
     async stamp(fingerprintBytes, when, change = {}) {
@@ -167,7 +179,7 @@ export async function makeStampService(method = 'ECDSA', o = {}) {
       const signer = sequence(
         change.signerVersion ?? integer(1),
         change.signerName ?? sequence(name, serial),
-        sequence(oid(DIGEST_OID[digestName]), NULL),
+        change.digestAlgorithm ?? digestAlgorithm(digestName, method),
         // The same bytes, with the tag that marks them as the signer's attributes.
         concatBytes(new Uint8Array([0xa0]), signedAttributes.subarray(1)),
         change.signatureAlgorithm ?? m.algorithm,
@@ -177,9 +189,9 @@ export async function makeStampService(method = 'ECDSA', o = {}) {
       const certificates = change.certificates ?? [change.certificate ?? certificate];
       const signedData = sequence(
         change.signedDataVersion ?? integer(3),
-        set(change.digestAlgorithms ?? sequence(oid(DIGEST_OID[digestName]), NULL)),
+        set(change.digestAlgorithms ?? digestAlgorithm(digestName, method)),
         sequence(oid(OID.tstInfo), der(0xa0, octets(change.enclosed ?? statement))),
-        ...(change.noCertificate ? [] : [der(0xa0, ...certificates)]),
+        ...(change.noCertificate ? [] : [der(0xa0, ...(change.keepOrder ? certificates : sorted(certificates)))]),
         set(signer),
         ...(change.afterSigners ? [change.afterSigners] : []),
       );
