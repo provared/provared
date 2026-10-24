@@ -719,6 +719,10 @@ const P256_ORDER = 0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc6
 const WHEN = Date.parse('2026-10-05T12:00:00Z');
 const STAMPED = digest('SHA-256', utf8('what was stamped'));
 const NAME = seq(set(seq(oid(OID.commonName), der(0x0c, utf8('Made-up time-stamp service (for tests)')))));
+// A name whose one relative distinguished name holds two attributes out of DER order: the organisation's (type 2.5.4.10,
+// the greater encoding) before the common name's. Refused inside a certificate (RFC 5280 section 4.1 requires DER) and
+// inside the statement (RFC 3161 section 2.4.2), where every set is held to the order of X.690 section 11.6.
+const UNSORTED_NAME = seq(set(seq(oid('55040a'), der(0x0c, utf8('Made-up time-stamp service (for tests)'))), seq(oid(OID.commonName), der(0x0c, utf8('Made-up time-stamp service (for tests)')))));
 
 function makeKey(kind) {
   let pair;
@@ -986,6 +990,7 @@ async function stampCases() {
     ['ordering', stmt({ tail: [H('0101ff')] })],
     ['a number used once', stmt({ tail: [int(123456789)] })],
     ['the service named', stmt({ tail: [der(0xa0, der(0xa4, NAME))] })],
+    ['the service named with its attributes out of DER order', stmt({ tail: [der(0xa0, der(0xa4, UNSORTED_NAME))] })],
     ['every optional part, in order', stmt({ tail: [accuracy(int(1)), H('010100'), int(42), der(0xa0, der(0xa4, NAME)), extension()] })],
     ['a number used once before ordering', stmt({ tail: [int(42), H('0101ff')] })],
     ['accuracy after ordering', stmt({ tail: [H('0101ff'), accuracy(int(1))] })],
@@ -1035,6 +1040,7 @@ async function stampCases() {
     ['a body that is a set', certWith('p256', { body: set(int(1)) })],
     ['a body with a serial number that is text', certWith('p256', { body: seq(der(0xa0, int(2)), der(0x0c, utf8('1')), seq(oid(OID.ecdsaWithSha256)), NAME, seq(gtimeOf(0), gtimeOf(WHEN * 2)), NAME, keys.p256.spki) })],
     ['a body with an issuer that is a set', certWith('p256', { body: seq(der(0xa0, int(2)), int(1), seq(oid(OID.ecdsaWithSha256)), set(), seq(gtimeOf(0), gtimeOf(WHEN * 2)), NAME, keys.p256.spki) })],
+    ['a name whose attributes are out of DER order', certWith('p256', { body: seq(der(0xa0, int(2)), int(1), seq(oid(OID.ecdsaWithSha256)), UNSORTED_NAME, seq(gtimeOf(0), gtimeOf(WHEN * 2)), UNSORTED_NAME, keys.p256.spki) })],
     ['a key that is not a sequence', certWith('p256', { spki: octets(H('00')) })],
     ['a key with no bits', certWith('p256', { spki: seq(seq(oid(OID.ecPublicKey), oid(OID.p256))) })],
     ['a key whose bits are an octet string', certWith('p256', { spki: seq(seq(oid(OID.ecPublicKey), oid(OID.p256)), octets(keys.p256.spki.subarray(26))) })],
@@ -1223,6 +1229,8 @@ async function stampCases() {
     ['the fingerprint of something else', (a) => [a[0], seq(oid(OID.messageDigest), set(octets(digest('SHA-256', utf8('x'))))), a[2]]],
     ['the fingerprint as an object identifier', (a) => [a[0], seq(oid(OID.messageDigest), set(oid(OID.policy))), a[2]]],
     ['the fingerprint given twice in one set', (a) => [a[0], seq(oid(OID.messageDigest), set(...setValues(a[1]), ...setValues(a[1]))), a[2]]],
+    // A set inside a signed attribute is held to DER order too (33 bytes of 0xff sort after any 32-byte value).
+    ['the fingerprint with a second, larger value before it', (a) => [a[0], seq(oid(OID.messageDigest), set(octets(new Uint8Array(33).fill(0xff)), ...setValues(a[1]))), a[2]]],
     ['a signing time beside them', (a) => [...a, seq(oid(OID.signingTime), set(utime('261005120000Z')))]],
     ['an unknown attribute with five values', (a) => [...a, seq(oid(OID.policy), set(NULL, NULL, NULL, NULL, NULL))]],
     ['an attribute with no value set', (a) => [...a, seq(oid(OID.policy))]],

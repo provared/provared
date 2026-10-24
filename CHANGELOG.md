@@ -62,9 +62,9 @@
     parts nor held to the order of a set; and one written in one piece is
     read as bytes only. The format description, the code's own notes and
     the two entries below now say so.
-  - *RFC 5652, section 11*, forbids more than one value of the
-    signing-time attribute too (section 11.3), not of the content-type
-    and message-digest attributes only; corrected below.
+  - *RFC 5652, section 11*, forbids a second instance, and a second value,
+    of the signing-time attribute too (section 11.3), not of the
+    content-type and message-digest attributes only; corrected below.
   - *The count of sets in the real time-stamps*, below, was wrong: the
     sample record holds one time-stamp (`samples/office-supplies.jsonl`,
     line 10), repeated in its Show, not two; and the four real time-stamps
@@ -81,8 +81,16 @@
     three of `stamps-flips-ed25519`, two of `stamps-flips-rsa`) are now
     refused for what the changed byte does next. Every other difference
     is a made-up service's fresh key (`stamps-flips-ecdsa` has one case
-    more, its signature a byte longer). The tests are
-    `test/audit-fixes.test.mjs` and `python/tests/test_audit_fixes.py`.
+    more, its signature a byte longer). A re-check then found the three
+    re-walks held by no deliberate case (weakened, every test still
+    passed), so `stamps` gains three refused cases, each caught in both
+    languages: a message-digest attribute whose second, larger value
+    stands before its first; a relative distinguished name out of DER
+    order inside a certificate; and one inside the statement's name of
+    the service. The JavaScript unit test builds the first of these too,
+    and checks that the list of fingerprint methods may be in any order,
+    as the Python test did. The tests are `test/audit-fixes.test.mjs` and
+    `python/tests/test_audit_fixes.py`.
 - **Five fixes from the independent review of the audit fixes (24 October
   2026)**, in both languages. None changes the bytes of any record; four
   narrow what a checker accepts, and one adds to the shared test files.
@@ -119,9 +127,10 @@
   - *Citations.* The one-instance rule for the signing-certificate
     attribute is RFC 5035's (section 3 for the newer form; section 5,
     which writes section 5.4.2 of RFC 2634, for the older), not RFC 5652
-    section 5.3's, which requires DER; RFC 5652 forbids more than one
-    value of the content-type, message-digest and signing-time attributes
-    (sections 11.1 to 11.3) and says nothing of this one. Corrected in
+    section 5.3's, which requires DER; RFC 5652 forbids a second instance,
+    and a second value, of the content-type, message-digest and
+    signing-time attributes (sections 11.1 to 11.3) and says nothing of
+    this one. Corrected in
     the entry below, the format description, the list of threats and the
     code. The format description now says that using the newer form where
     both are present, without comparing the two, is this format's choice

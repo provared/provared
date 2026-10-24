@@ -12,7 +12,7 @@ import { badEd25519Signature, checkKey, onP256 } from '../src/keys.js';
 import { generateKeySet, sign, verifySignature } from '../src/signatures.js';
 import { checkStamp } from '../src/timestamp.js';
 import { makePasskey } from './helpers/passkey.mjs';
-import { makeStampService, oid, sequence, sorted } from './helpers/stamp.mjs';
+import { der, makeStampService, octets, oid, sequence, sorted } from './helpers/stamp.mjs';
 
 const H = (text) => Uint8Array.from(Buffer.from(text, 'hex'));
 const code = (expected) => (e) => e.code === expected;
@@ -210,6 +210,22 @@ test('the signed attributes of a time-stamp must be in DER order; the certificat
   // of 24 October 2026, after three genuine time-stamps of a public service were refused).
   const outOfOrder = await service.stamp(stamped, WHEN, { certificates: [second, first], keepOrder: true });
   assert.equal((await checkStamp(outOfOrder, stamped, { trusted })).state, 'valid');
+  // The list of fingerprint methods is a set of the signed data's own too, so its order is not held either.
+  const NULL = new Uint8Array([0x05, 0x00]);
+  const sha256 = sequence(oid('608648016503040201'), NULL);
+  const sha512 = sequence(oid('608648016503040203'), NULL);
+  const methodsOutOfOrder = await service.stamp(stamped, WHEN, { digestAlgorithms: concatBytes(sha512, sha256) });
+  assert.equal((await checkStamp(methodsOutOfOrder, stamped, { trusted })).state, 'valid');
+  // Inside the signed attributes every set is held to DER order: a message-digest attribute whose second, larger value
+  // (33 bytes of 0xff) stands before its first is refused for the order of that set, before the attribute is read.
+  const twoValues = await service.stamp(stamped, WHEN, {
+    attributes: (a) => {
+      assert.equal(a[1].length, 49); // 30 2f | 06 09 <message-digest> | 31 22 | 04 20 <the 32-byte digest>
+      const value = a[1].subarray(15);
+      return sorted([a[0], sequence(oid('2a864886f70d010904'), der(0x31, octets(new Uint8Array(33).fill(0xff)), value)), a[2]]);
+    },
+  });
+  await assert.rejects(checkStamp(twoValues, stamped, { trusted }), (e) => e.code === 'stamp-bad-data' && /items of a set are not in the order/.test(e.message));
   // Given in the other order without "keepOrder", the helper writes them as a service does.
   assert.equal((await checkStamp(await service.stamp(stamped, WHEN, { certificates: [service.certificate, service.secondCertificate] }), stamped, { trusted })).state, 'valid');
 });

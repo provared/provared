@@ -235,6 +235,10 @@ class TimeStamps(unittest.TestCase):
     def test_the_signed_attributes_must_be_in_der_order_and_the_signed_datas_own_sets_may_be_in_any_order(self):
         for name, words in (
             ('attributes: in another order', 'signed attributes are not in the order'),
+            # Every set inside the signed attributes, inside a certificate and inside the statement is held to DER order.
+            ('attributes: the fingerprint with a second, larger value before it', 'items of a set are not in the order'),
+            ('certificate: a name whose attributes are out of DER order', 'items of a set are not in the order'),
+            ('statement: the service named with its attributes out of DER order', 'items of a set are not in the order'),
         ):
             token, stamped, options = stamp_case(name)
             with self.assertRaises(Refusal, msg=name) as caught:
