@@ -701,34 +701,48 @@ const heapUsed = () => {
   return process.memoryUsage().heapUsed;
 };
 
+// The test waits for events, not for a length of time: the seal is let go only once the sealer has read all 16
+// questions whole and decided on each, so every one of them was decided while the seal held the queue.
 test('one recorder may have at most 16 questions waiting (T1)', async () => {
   const { running, client, first, sealing, letGo } = await heldQueue();
+  const emit = http.Server.prototype.emit;
   try {
+    // The sealer decides on a question (it waits, or it is turned away) in its own handler for the end of the body,
+    // with nothing awaited before the decision; a handler added after the sealer's runs after it.
+    let decided = 0;
+    let allDecided;
+    const everyOne = new Promise((ok) => {
+      allDecided = ok;
+    });
+    http.Server.prototype.emit = function (event, req, ...rest) {
+      const handled = emit.call(this, event, req, ...rest);
+      if (event === 'request' && req.url === '/held') {
+        req.once('end', () => {
+          if (++decided === 16) allDecided();
+        });
+      }
+      return handled;
+    };
     // The seal holds the queue and counts as one of the 16: of 16 more questions, 15 wait and one is turned away at
     // once, whatever order they arrive in.
-    let turnedAway;
-    const firstBusy = new Promise((ok) => {
-      turnedAway = ok;
-    });
     const asked = Array.from({ length: 16 }, () =>
       client.held(first).then(
         (value) => ({ value }),
-        (reason) => {
-          turnedAway(reason);
-          return { reason };
-        },
+        (reason) => ({ reason }),
       ),
     );
-    const busy = await within(firstBusy, 10000);
-    assert.equal(busy?.code, 'busy', String(busy));
-    assert.equal(busy.status, 503);
+    await everyOne;
     // Let go: the 15 that waited are answered in their turn, and no other was turned away.
     letGo();
     assert.ok((await sealing).entry, 'the seal');
     const answers = await Promise.all(asked);
-    assert.equal(answers.filter((a) => a.reason).length, 1, JSON.stringify(answers.map((a) => a.reason?.code ?? a.value?.size)));
+    const turnedAway = answers.filter((a) => a.reason);
+    assert.equal(turnedAway.length, 1, JSON.stringify(answers.map((a) => a.reason?.code ?? a.value?.size)));
+    assert.equal(turnedAway[0].reason.code, 'busy', String(turnedAway[0].reason));
+    assert.equal(turnedAway[0].reason.status, 503);
     for (const a of answers) if (!a.reason) assert.equal(a.value.size, 3);
   } finally {
+    http.Server.prototype.emit = emit;
     letGo();
     await running.close();
   }

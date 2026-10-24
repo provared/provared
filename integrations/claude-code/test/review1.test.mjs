@@ -4,7 +4,9 @@
 
 import './local-library.mjs'; // first: "provared" is this repository's own library
 import assert from 'node:assert/strict';
+import { once } from 'node:events';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import http from 'node:http';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -399,17 +401,68 @@ test('calls caught by a renewal are each recorded under the permission they were
   }
 });
 
+// Each step waits for an event, not for a length of time: the seal holds the
+// service because the first signature check it makes is held back until the
+// test lets it go; the renewal is given up only once the service has read it
+// whole and it waits its turn; and the seal is let go only once the service
+// has seen the caller go.
 test('a renewal whose caller gave up waiting is not made', async () => {
   const { folder, passkey, agent, slip: first } = await world([]);
+  const second = await signSlip({ agentKeys: agent.keys, passkey, purpose: 'renewed' });
   const service = await startService({ folder, port: 0 });
+  const subtle = globalThis.crypto.subtle;
+  const verify = subtle.verify;
+  const emit = http.Server.prototype.emit;
+  let letGo;
+  const gate = new Promise((ok) => {
+    letGo = ok;
+  });
   try {
-    const sealing = service.seal(); // holds the service for about a second and a half
-    const second = await signSlip({ agentKeys: agent.keys, passkey, purpose: 'renewed' });
-    await assert.rejects(fetch(`http://127.0.0.1:${service.port}/renew`, { method: 'POST', body: JSON.stringify({ slip: second }), signal: AbortSignal.timeout(150) }));
+    // The next signature check, the seal's own, waits for the gate; every other check goes on as before.
+    let reached;
+    const holding = new Promise((ok) => {
+      reached = ok;
+    });
+    let armed = true;
+    subtle.verify = async function (...args) {
+      if (armed) {
+        armed = false;
+        reached();
+        await gate;
+      }
+      return verify.apply(this, args);
+    };
+    const sealing = service.seal();
+    const settled = sealing.then(() => 'sealed', () => 'sealed');
+    await holding;
+    // The renewal, once the service has read its body: its turn is asked for in the same round, before setImmediate runs.
+    let arrived;
+    const waiting = new Promise((ok) => {
+      arrived = ok;
+    });
+    http.Server.prototype.emit = function (event, req, res, ...rest) {
+      if (event === 'request' && req.url === '/renew') req.once('end', () => setImmediate(() => arrived(res)));
+      return emit.call(this, event, req, res, ...rest);
+    };
+    const giveUp = new AbortController();
+    const asked = fetch(`http://127.0.0.1:${service.port}/renew`, { method: 'POST', body: JSON.stringify({ slip: second }), signal: giveUp.signal });
+    const answered = asked.then(() => 'answered', () => 'given up');
+    const res = await Promise.race([waiting, answered]);
+    assert.notEqual(res, 'answered', 'the renewal was answered while the seal held the service');
+    assert.equal(await Promise.race([settled, Promise.resolve('holding')]), 'holding', 'the seal holds the service while the renewal waits');
+    const gone = once(res, 'close');
+    giveUp.abort();
+    await assert.rejects(asked);
+    await gone;
+    letGo();
     await sealing;
-    await new Promise((r) => setTimeout(r, 500));
+    // A question asked after the renewal waits its turn behind it, so once it is answered the renewal's turn is over.
+    assert.equal((await runHook(service.port, 'PreToolUse', 'Read', { file_path: 'after' })).out, '', 'allowed');
     assert.equal((await status(service.port)).slip, await slipFingerprint(first), 'the person was told it failed, and it was not made');
   } finally {
+    letGo();
+    subtle.verify = verify;
+    http.Server.prototype.emit = emit;
     await service.close();
   }
 });
