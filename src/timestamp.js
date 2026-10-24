@@ -162,6 +162,8 @@ function checkKeyEncoding(bytes, certificate, method, size) {
 // force, and its public key.
 function readCertificate(bytes, element) {
   const whole = wholeOf(bytes, expect(element, TAG.SEQUENCE, 'a certificate'));
+  // A certificate is DER (RFC 5280 section 4.1), so the order of every set inside it is held here.
+  validateDer(bytes, element);
   const tbs = expect(children(bytes, element, 3)[0], TAG.SEQUENCE, 'the body of a certificate');
   const parts = children(bytes, tbs, 12);
   // The version, in [0], is absent only in the oldest kind of certificate.
@@ -296,10 +298,17 @@ export async function checkStamp(token, fingerprintBytes, options) {
 
   // The outer wrapper, and the signed data inside it (RFC 5652 sections 3
   // and 5.1). Every part the reader can tell apart is read, and must be
-  // strict DER.
+  // strict DER, except that the order of a set is held only where a standard
+  // requires DER: the signed attributes (RFC 5652 section 5.3), the statement
+  // (RFC 3161 section 2.4.2) and each certificate (RFC 5280 section 4.1),
+  // each walked again below with the order held. The signed data's own sets
+  // (the fingerprint methods, the certificates, the withdrawn certificates,
+  // the signers) and the rest of the signer may be in any order: CMS does not
+  // require DER of them, and real services list their certificates in chain
+  // order, the signing certificate before its issuer.
   const wrapper = expect(readElement(token, 0), TAG.SEQUENCE, 'the wrapper');
   if (wrapper.end !== token.length) throw badStamp('it has bytes left over.');
-  validateDer(token, wrapper);
+  validateDer(token, wrapper, false);
   const outer = children(token, wrapper, 2);
   if (outer.length !== 2 || hexOf(token, expect(outer[0], TAG.OID, 'the kind of content')) !== OID.signedData) throw badStamp('it is not signed data.');
   const inner = children(token, expect(outer[1], TAG.CONTEXT_0, 'the signed data'), 1);
@@ -318,9 +327,10 @@ export async function checkStamp(token, fingerprintBytes, options) {
   let next = 3;
   const certificates = [];
   if (parts[next] && parts[next].tag === TAG.CONTEXT_0) {
-    // A set under a tag of its own (RFC 5652 section 10.2.3), so its order is held to DER here.
+    // A set of the signed data's own (RFC 5652 section 10.2.3), which CMS does
+    // not require to be in DER order; each certificate inside it is DER (RFC
+    // 5280 section 4.1), and is held to it when it is read.
     const items = children(token, parts[next], 8);
-    if (!setInOrder(token, items)) throw badStamp('the certificates are not in the order DER requires.');
     for (const c of items) {
       // Other kinds of certificate may sit here; only the ordinary kind is read.
       if (c.tag === TAG.SEQUENCE) certificates.push(readCertificate(token, c));
@@ -339,9 +349,11 @@ export async function checkStamp(token, fingerprintBytes, options) {
   const digesting = algorithmOf(token, signer[2], 'the signer\'s fingerprint method');
   const digestName = HASHES[digesting.oid];
   const attributes = expect(signer[3], TAG.CONTEXT_0, 'the signed attributes');
-  // A set under a tag of its own, in DER (RFC 5652 section 5.3), so its order is held to DER here.
+  // A set under a tag of its own, in DER (RFC 5652 section 5.3), so its order,
+  // and the order of every set inside it, is held to DER here.
   const attributeList = children(token, attributes, 16);
   if (!setInOrder(token, attributeList)) throw badStamp('the signed attributes are not in the order DER requires.');
+  for (const a of attributeList) validateDer(token, a);
   const signing = algorithmOf(token, signer[4], 'the signing method');
   const signatureOid = signing.oid;
   const signature = contentOf(token, expect(signer[5], TAG.OCTET_STRING, 'the signature'));

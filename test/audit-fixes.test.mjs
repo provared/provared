@@ -186,9 +186,15 @@ test('a string written in parts, or a set out of DER order, is not strict DER', 
   // Compared as bytes, the shorter padded with zeros: a shorter item is not for that reason the lesser.
   assert.equal(setInOrder(H('0201020005'), [{ from: 0, end: 2 }, { from: 2, end: 5 }]), false);
   assert.equal(setInOrder(H('0200050201'), [{ from: 0, end: 3 }, { from: 3, end: 5 }]), true);
+  // Where no standard requires DER of a set, the walk is told not to hold its order, and holds everything else.
+  const unordered = H('3106020102020101');
+  assert.throws(() => validateDer(unordered, readElement(unordered, 0)), /order DER requires/);
+  validateDer(unordered, readElement(unordered, 0), false);
+  const notShortest = H('310702010202020001');
+  assert.throws(() => validateDer(notShortest, readElement(notShortest, 0), false), /shortest form/);
 });
 
-test('the signed attributes and the certificates of a time-stamp are sets, and must be in DER order', async () => {
+test('the signed attributes of a time-stamp must be in DER order; the certificates, a set of the signed data\'s own, may be in any order', async () => {
   const service = await makeStampService();
   const trusted = [service.fingerprint];
   // The helper's attributes are the kind, the fingerprint and the signing certificate, which is DER order as they stand.
@@ -199,8 +205,11 @@ test('the signed attributes and the certificates of a time-stamp are sets, and m
   const [first, second] = sorted([service.certificate, service.secondCertificate]);
   const inOrder = await service.stamp(stamped, WHEN, { certificates: [first, second], keepOrder: true });
   assert.equal((await checkStamp(inOrder, stamped, { trusted })).state, 'valid');
+  // Real services list the signing certificate before its issuer (chain order), which is not DER order, and CMS does not
+  // require DER of the signed data's own sets (RFC 5652 section 10.2.3): so the order is accepted (the founder's decision
+  // of 24 October 2026, after three genuine time-stamps of a public service were refused).
   const outOfOrder = await service.stamp(stamped, WHEN, { certificates: [second, first], keepOrder: true });
-  await assert.rejects(checkStamp(outOfOrder, stamped, { trusted }), (e) => e.code === 'stamp-bad-data' && /certificates are not in the order/.test(e.message));
+  assert.equal((await checkStamp(outOfOrder, stamped, { trusted })).state, 'valid');
   // Given in the other order without "keepOrder", the helper writes them as a service does.
   assert.equal((await checkStamp(await service.stamp(stamped, WHEN, { certificates: [service.certificate, service.secondCertificate] }), stamped, { trusted })).state, 'valid');
 });

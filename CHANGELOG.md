@@ -27,6 +27,62 @@
   `python/pyproject.toml` is now 0.6.0, so that the packages' bounds hold
   against the library in this repository. Tests:
   `test/documents.test.mjs` and `python/tests/test_record_function.py`.
+- **One correction and three smaller changes from a narrow review of the
+  five fixes below (24 October 2026)**, in both languages. None changes
+  the bytes of any record; one widens what a checker accepts back to what
+  services in use write.
+  - *The order of a set is held only where a standard requires DER.* The
+    five fixes held every set the checker reads as a set to the order of
+    X.690, section 11.6, the list of certificates among them. The review
+    found three genuine time-stamps of 2017 from a public service, kept
+    as test data by the open-source Go library digitorus/timestamp
+    (nothing of which is copied here), that list their two certificates
+    in chain order, the signing certificate before its issuer, which is
+    the reverse of DER order: before the five fixes they checked as valid,
+    and the five fixes refused them in both languages. RFC 5652 requires
+    DER of the signed attributes alone, "even if the rest of the structure
+    is BER encoded" (section 5.3). So now the signed attributes (RFC 5652,
+    section 5.3) and every set inside them, the statement (RFC 3161,
+    section 2.4.2) and every set inside it, and each certificate (RFC
+    5280, section 4.1) and every set inside it are held to that order;
+    the signed data's own sets (the list of fingerprint methods, the list
+    of certificates, the list of withdrawn certificates and the list of
+    signers) and the parts of a signer outside its signed attributes may
+    be in any order. Every other rule of strict DER still holds everywhere
+    (format description, section 21.2, item 1, which now names the sets
+    held to order). A test in each language builds a time-stamp with its
+    certificates out of DER order and expects it to pass; the made-up
+    time-stamps are enough for that.
+  - *What is walked under a tag that hides its kind*, said exactly. The
+    five fixes said such a part "is read as bytes only". In both
+    languages a part written in parts under such a tag has the parts
+    inside it read like any other (the review's probe, an `otherName`
+    holding a whole number not in its shortest form, is refused as such);
+    the tagged part itself is only neither refused as a string written in
+    parts nor held to the order of a set; and one written in one piece is
+    read as bytes only. The format description, the code's own notes and
+    the two entries below now say so.
+  - *RFC 5652, section 11*, forbids more than one value of the
+    signing-time attribute too (section 11.3), not of the content-type
+    and message-digest attributes only; corrected below.
+  - *The count of sets in the real time-stamps*, below, was wrong: the
+    sample record holds one time-stamp (`samples/office-supplies.jsonl`,
+    line 10), repeated in its Show, not two; and the four real time-stamps
+    hold 43 sets between them, not 53. Each of the 43 is in DER order, so
+    the five fixes refused none of them.
+  - *Shared test files remade:* `stamps`, `stamps-openssl`,
+    `stamps-flips-ecdsa`, `stamps-flips-ed25519` and `stamps-flips-rsa`.
+    Three stored answers of `stamps` change in substance: "certificates:
+    two certificates out of DER order" and "wrapper: two fingerprint
+    methods listed out of DER order" are now valid, and "wrapper: the
+    signed data that is a set" is refused for its kind, not its order.
+    Fifteen changed-byte cases that tripped the order of a set before
+    anything else (four of `stamps-openssl`, six of `stamps-flips-ecdsa`,
+    three of `stamps-flips-ed25519`, two of `stamps-flips-rsa`) are now
+    refused for what the changed byte does next. Every other difference
+    is a made-up service's fresh key (`stamps-flips-ecdsa` has one case
+    more, its signature a byte longer). The tests are
+    `test/audit-fixes.test.mjs` and `python/tests/test_audit_fixes.py`.
 - **Five fixes from the independent review of the audit fixes (24 October
   2026)**, in both languages. None changes the bytes of any record; four
   narrow what a checker accepts, and one adds to the shared test files.
@@ -34,18 +90,18 @@
     or characters, or a time, written in parts (the constructed form,
     which X.690, section 10.2, forbids in DER) is refused
     (`stamp-bad-data`); before, a certificate whose signature was a bit
-    string in two parts passed in both languages. The items of every set
-    the checker reads as a set must be in the order X.690, section 11.6,
-    requires: a set written with its own tag wherever it appears, and the
-    signed attributes and the list of certificates, which carry tags of
-    their own (RFC 5652, sections 5.3 and 10.2.3). Every real time-stamp
-    the repository holds was checked first: the three made with the
-    OpenSSL program (`test/fixtures/stamps.json`) and the two in the
-    sample record hold 53 sets between them, every one in that order. The
-    made-up services of the tests now write their sets in that order, as
-    a real service does; before, the one that makes the shared test files
-    wrote the signed attributes of its SHA-512 cases out of order (format
-    description, section 21.2, item 1).
+    string in two parts passed in both languages. The items of a set must
+    be in the order X.690, section 11.6, requires, where a standard
+    requires DER of the set (narrowed to those places by the review
+    above; as first made, every set the checker read as a set was held to
+    it). Every real time-stamp the repository holds was checked first:
+    the three made with the OpenSSL program (`test/fixtures/stamps.json`)
+    and the one in the sample record (repeated in its Show) hold 43 sets
+    between them, every one in that order. The made-up services of the
+    tests now write their sets in that order, as a real service does;
+    before, the one that makes the shared test files wrote the signed
+    attributes of its SHA-512 cases out of order (format description,
+    section 21.2, item 1).
   - *A time-stamp signed with Ed25519 gives its fingerprint method and
     its signing method no parameters*, as RFC 8419, section 3.1, requires
     (`stamp-invalid`); before, only the method's name was checked, and
@@ -63,8 +119,9 @@
   - *Citations.* The one-instance rule for the signing-certificate
     attribute is RFC 5035's (section 3 for the newer form; section 5,
     which writes section 5.4.2 of RFC 2634, for the older), not RFC 5652
-    section 5.3's, which requires DER and forbids repeats only of the
-    content-type and message-digest attributes (section 11). Corrected in
+    section 5.3's, which requires DER; RFC 5652 forbids more than one
+    value of the content-type, message-digest and signing-time attributes
+    (sections 11.1 to 11.3) and says nothing of this one. Corrected in
     the entry below, the format description, the list of threats and the
     code. The format description now says that using the newer form where
     both are present, without comparing the two, is this format's choice
@@ -72,8 +129,10 @@
     a time-stamp.
   - *Reach.* "Every bit string in a time-stamp" and "every part is read"
     now say what the checker reads as such: a value inside an octet string
-    (an extension's value) or under a tag that hides its kind is read as
-    bytes only.
+    (an extension's value) is read as bytes only, as is a part written in
+    one piece under a tag that hides its kind; one written in parts has
+    the parts inside it read like any other (made exact by the review
+    above).
   - *Shared test files remade:* `keys` (four cases added: the point of
     P-256 with x = 5 and the point with y = 5, each as itself and with
     that half written as 5 plus the prime); `der-strict` (thirteen added,
@@ -120,8 +179,8 @@
     before, only the count of unused bits was checked. A string of no bits
     must count none. This reaches every bit string the checker reads as
     such (not one inside an octet string's value, such as an extension's,
-    nor one under a tag that hides its kind), not only the key's (section
-    21.2, item 1).
+    nor one written in one piece under a tag that hides its kind), not
+    only the key's (section 21.2, item 1).
   - *An ES256 key that is not a point on the curve P-256*, or either half
     of which is not below the curve's prime, is refused as `bad-key`
     wherever a key is checked, before any signature is tried (section

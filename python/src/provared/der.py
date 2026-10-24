@@ -200,18 +200,24 @@ def ecdsa_to_raw(der, size):
     return bytes(out)
 
 
-def validate_der(data, element):
+def validate_der(data, element, hold_set_order=True):
     """Walk a whole element and everything inside it, and refuse anything that
     is not strict DER: a constructed part whose items do not fill it exactly,
     a string (of bits, bytes or characters) or a time written in parts
-    (X.690, section 10.2), a set whose items are not in order (section 11.6),
-    a whole number or an object identifier that is not in its shortest form,
-    a truth value that is not written in the one way DER allows, a string of
-    bits whose unused bits are not zero. Parts this checker does not otherwise
-    read are still read here, so that two checkers cannot disagree about
-    whether a time-stamp is well formed. What a part holds as bytes (the value
-    of an octet string) or under a tag that hides its kind is read as bytes
-    only."""
+    (X.690, section 10.2), a set whose items are not in order (section 11.6;
+    only where "hold_set_order" is true), a whole number or an object
+    identifier that is not in its shortest form, a truth value that is not
+    written in the one way DER allows, a string of bits whose unused bits are
+    not zero. Parts this checker does not otherwise read are still read here,
+    so that two checkers cannot disagree about whether a time-stamp is well
+    formed. What a part holds as bytes (the value of an octet string) is read
+    as bytes only. A part under a tag that hides its kind (a context tag):
+    written in parts, the parts inside it are read like any other, but the
+    tagged part itself is neither refused as a string written in parts nor
+    held to the order of a set, since its tag does not say which it is;
+    written in one piece, its value is read as bytes only. The order of a set
+    is held only where a standard requires DER; check_stamp says where, and
+    passes False for the rest of a time-stamp."""
     budget = [4000]
 
     def walk(e, depth):
@@ -231,7 +237,7 @@ def validate_der(data, element):
                 walk(child, depth + 1)
                 items.append(child)
                 at = child.end
-            if e.tag == TAG.SET and not set_in_order(data, items):
+            if hold_set_order and e.tag == TAG.SET and not set_in_order(data, items):
                 raise bad_stamp('the items of a set are not in the order DER requires.')
             return
         if e.tag == TAG.INTEGER:

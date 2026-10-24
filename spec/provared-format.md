@@ -1129,13 +1129,25 @@ otherwise report a problem:
    section 11.6 (their encodings compared as bytes, the shorter padded at
    its end with zeros; equal items may stand side by side), a part that
    does not fill what holds it, or a part the standards do not allow in
-   that place, is refused. The order of a set is held wherever a set is
-   written with its own tag, and for the two sets that carry a tag of
-   their own: the signed attributes (RFC 5652, section 5.3) and the list
-   of certificates (RFC 5652, section 10.2.3). What a part holds as bytes
-   (the value of an octet string, such as an extension's) or under a tag
-   that hides its kind is read as bytes only, so a string of bits inside
-   one is not held to these rules. The signed
+   that place, is refused. The order of a set is held only where a
+   standard requires DER: the signed attributes, which RFC 5652, section
+   5.3, requires to be DER, and every set inside them; the statement
+   (TSTInfo), which RFC 3161, section 2.4.2, requires to be DER, and
+   every set inside it; and each certificate, which RFC 5280, section
+   4.1, requires to be DER, and every set inside it. The signed data's
+   own sets (the list of fingerprint methods, the list of certificates,
+   the list of withdrawn certificates and the list of signers), and the
+   parts of a signer outside its signed attributes, may be in any order:
+   CMS does not require DER of them, and services in use list their
+   certificates in chain order, the signing certificate before its
+   issuer. What a part holds as bytes (the value of an octet string, such
+   as an extension's) is read as bytes only, so a string of bits inside
+   one is not held to these rules; the statement, which sits in an octet
+   string, is read in full as DER. A part under a tag that hides its kind
+   (a context tag) that is written in parts has the parts inside it read
+   like any other, but is itself neither refused as a string written in
+   parts nor held to the order of a set, since its tag does not say which
+   it is; written in one piece, its value is read as bytes only. The signed
    data is of version 3, with exactly one signer. The public key in the
    certificate that signed is written exactly as its own standard sets
    out, with no unused bits: RSA as RFC 3279, section 2.3.1 (the

@@ -185,6 +185,8 @@ def _read_certificate(data, element):
     """What is needed from a certificate (RFC 5280 section 4.1): when it is in
     force, and its public key."""
     whole = whole_of(data, expect(element, TAG.SEQUENCE, 'a certificate'))
+    # A certificate is DER (RFC 5280 section 4.1), so the order of every set inside it is held here.
+    validate_der(data, element)
     tbs = expect(item(children(data, element, 3), 0), TAG.SEQUENCE, 'the body of a certificate')
     parts = children(data, tbs, 12)
     # The version, in [0], is absent only in the oldest kind of certificate.
@@ -353,11 +355,18 @@ def check_stamp(token, fingerprint_bytes, options=None):
 
     # The outer wrapper, and the signed data inside it (RFC 5652 sections 3
     # and 5.1). Every part the reader can tell apart is read, and must be
-    # strict DER.
+    # strict DER, except that the order of a set is held only where a standard
+    # requires DER: the signed attributes (RFC 5652 section 5.3), the statement
+    # (RFC 3161 section 2.4.2) and each certificate (RFC 5280 section 4.1),
+    # each walked again below with the order held. The signed data's own sets
+    # (the fingerprint methods, the certificates, the withdrawn certificates,
+    # the signers) and the rest of the signer may be in any order: CMS does not
+    # require DER of them, and real services list their certificates in chain
+    # order, the signing certificate before its issuer.
     wrapper = expect(read_element(token, 0), TAG.SEQUENCE, 'the wrapper')
     if wrapper.end != len(token):
         raise bad_stamp('it has bytes left over.')
-    validate_der(token, wrapper)
+    validate_der(token, wrapper, False)
     outer = children(token, wrapper, 2)
     if len(outer) != 2 or hex_of(token, expect(outer[0], TAG.OID, 'the kind of content')) != OID['signedData']:
         raise bad_stamp('it is not signed data.')
@@ -378,10 +387,10 @@ def check_stamp(token, fingerprint_bytes, options=None):
     following = 3
     certificates = []
     if item(parts, following) is not None and parts[following].tag == TAG.CONTEXT_0:
-        # A set under a tag of its own (RFC 5652 section 10.2.3), so its order is held to DER here.
+        # A set of the signed data's own (RFC 5652 section 10.2.3), which CMS does
+        # not require to be in DER order; each certificate inside it is DER (RFC
+        # 5280 section 4.1), and is held to it when it is read.
         items = children(token, parts[following], 8)
-        if not set_in_order(token, items):
-            raise bad_stamp('the certificates are not in the order DER requires.')
         for c in items:
             # Other kinds of certificate may sit here; only the ordinary kind is read.
             if c.tag == TAG.SEQUENCE:
@@ -401,10 +410,13 @@ def check_stamp(token, fingerprint_bytes, options=None):
     digesting = _algorithm_of(token, item(signer, 2), "the signer's fingerprint method")
     digest_name = HASHES.get(digesting['oid'])
     attributes = expect(item(signer, 3), TAG.CONTEXT_0, 'the signed attributes')
-    # A set under a tag of its own, in DER (RFC 5652 section 5.3), so its order is held to DER here.
+    # A set under a tag of its own, in DER (RFC 5652 section 5.3), so its order,
+    # and the order of every set inside it, is held to DER here.
     attribute_list = children(token, attributes, 16)
     if not set_in_order(token, attribute_list):
         raise bad_stamp('the signed attributes are not in the order DER requires.')
+    for a in attribute_list:
+        validate_der(token, a)
     signing = _algorithm_of(token, item(signer, 4), 'the signing method')
     signature_oid = signing['oid']
     signature = content_of(token, expect(item(signer, 5), TAG.OCTET_STRING, 'the signature'))

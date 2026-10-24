@@ -553,7 +553,7 @@
    "expected": {
     "refused": {
      "code": "stamp-bad-data",
-     "message": "A time-stamp is not laid out as its standard sets out: the items of a set are not in the order DER requires."
+     "message": "A time-stamp is not laid out as its standard sets out: a fingerprint method is missing or of the wrong kind."
     }
    }
   },
@@ -1926,8 +1926,8 @@
    },
    "expected": {
     "refused": {
-     "code": "stamp-bad-data",
-     "message": "A time-stamp is not laid out as its standard sets out: the items of a set are not in the order DER requires."
+     "code": "stamp-invalid",
+     "message": "A time-stamp carries no certificate to check it with."
     }
    }
   },
@@ -8219,7 +8219,7 @@
    "expected": {
     "refused": {
      "code": "stamp-bad-data",
-     "message": "A time-stamp is not laid out as its standard sets out: the items of a set are not in the order DER requires."
+     "message": "A time-stamp is not laid out as its standard sets out: the signer is not named as its standard sets out."
     }
    }
   },
@@ -9221,7 +9221,7 @@
    "expected": {
     "refused": {
      "code": "stamp-bad-data",
-     "message": "A time-stamp is not laid out as its standard sets out: the items of a set are not in the order DER requires."
+     "message": "A time-stamp is not laid out as its standard sets out: the signer's fingerprint method is missing or of the wrong kind."
     }
    }
   },

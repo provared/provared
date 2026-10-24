@@ -172,18 +172,25 @@ export function ecdsaToRaw(der, size) {
  * Walk a whole element and everything inside it, and refuse anything that
  * is not strict DER: a constructed part whose items do not fill it exactly,
  * a string (of bits, bytes or characters) or a time written in parts
- * (X.690, section 10.2), a set whose items are not in order (section 11.6),
- * a whole number or an object identifier that is not in its shortest form,
- * a truth value that is not written in the one way DER allows, a string of
- * bits whose unused bits are not zero. Parts this checker does not otherwise
- * read are still read here, so that two checkers cannot disagree about
- * whether a time-stamp is well formed. What a part holds as bytes (the value
- * of an octet string) or under a tag that hides its kind is read as bytes
- * only.
+ * (X.690, section 10.2), a set whose items are not in order (section 11.6;
+ * only where "holdSetOrder" is true), a whole number or an object identifier
+ * that is not in its shortest form, a truth value that is not written in the
+ * one way DER allows, a string of bits whose unused bits are not zero. Parts
+ * this checker does not otherwise read are still read here, so that two
+ * checkers cannot disagree about whether a time-stamp is well formed. What a
+ * part holds as bytes (the value of an octet string) is read as bytes only.
+ * A part under a tag that hides its kind (a context tag): written in parts,
+ * the parts inside it are read like any other, but the tagged part itself is
+ * neither refused as a string written in parts nor held to the order of a
+ * set, since its tag does not say which it is; written in one piece, its
+ * value is read as bytes only. The order of a set is held only where a
+ * standard requires DER; checkStamp says where, and passes false for the
+ * rest of a time-stamp.
  * @param {Uint8Array} bytes
  * @param {{tag: number, start: number, end: number}} element
+ * @param {boolean} [holdSetOrder=true] whether the items of a set must be in DER order
  */
-export function validateDer(bytes, element) {
+export function validateDer(bytes, element, holdSetOrder = true) {
   let budget = 4000;
   const walk = (e, depth) => {
     if (--budget < 0 || depth > 24) throw badStamp('it holds too many parts, or parts nested too deeply.');
@@ -202,7 +209,7 @@ export function validateDer(bytes, element) {
         items.push(child);
         at = child.end;
       }
-      if (e.tag === TAG.SET && !setInOrder(bytes, items)) throw badStamp('the items of a set are not in the order DER requires.');
+      if (holdSetOrder && e.tag === TAG.SET && !setInOrder(bytes, items)) throw badStamp('the items of a set are not in the order DER requires.');
       return;
     }
     const first = bytes[e.start];

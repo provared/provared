@@ -219,21 +219,38 @@ class StrictDer(unittest.TestCase):
         self.assertFalse(set_in_order(data, [Element(2, 0, 2, 2), Element(2, 2, 4, 5)]))
         data = bytes.fromhex('0200050201')
         self.assertTrue(set_in_order(data, [Element(2, 0, 2, 3), Element(2, 3, 5, 5)]))
+        # Where no standard requires DER of a set, the walk is told not to hold its order, and holds everything else.
+        unordered = bytes.fromhex('3106020102020101')
+        with self.assertRaises(Refusal) as caught:
+            validate_der(unordered, read_element(unordered, 0))
+        self.assertIn('order DER requires', caught.exception.message)
+        validate_der(unordered, read_element(unordered, 0), False)
+        not_shortest = bytes.fromhex('310702010202020001')
+        with self.assertRaises(Refusal) as caught:
+            validate_der(not_shortest, read_element(not_shortest, 0), False)
+        self.assertIn('shortest form', caught.exception.message)
 
 
 class TimeStamps(unittest.TestCase):
-    def test_the_signed_attributes_and_the_certificates_are_sets_and_must_be_in_der_order(self):
+    def test_the_signed_attributes_must_be_in_der_order_and_the_signed_datas_own_sets_may_be_in_any_order(self):
         for name, words in (
             ('attributes: in another order', 'signed attributes are not in the order'),
-            ('certificates: two certificates out of DER order', 'certificates are not in the order'),
-            ('wrapper: two fingerprint methods listed out of DER order', 'items of a set are not in the order'),
         ):
             token, stamped, options = stamp_case(name)
             with self.assertRaises(Refusal, msg=name) as caught:
                 check_stamp(token, stamped, options)
             self.assertEqual(caught.exception.code, 'stamp-bad-data', name)
             self.assertIn(words, caught.exception.message, name)
-        for name in ('attributes: in DER order, written out', 'certificates: two certificates in DER order, written out', 'wrapper: two fingerprint methods listed'):
+        # Real services list the signing certificate before its issuer (chain order), which is not DER order, and CMS does
+        # not require DER of the signed data's own sets (RFC 5652 section 10.2.3): so these pass (the founder's decision
+        # of 24 October 2026, after three genuine time-stamps of a public service were refused).
+        for name in (
+            'attributes: in DER order, written out',
+            'certificates: two certificates in DER order, written out',
+            'certificates: two certificates out of DER order',
+            'wrapper: two fingerprint methods listed',
+            'wrapper: two fingerprint methods listed out of DER order',
+        ):
             token, stamped, options = stamp_case(name)
             self.assertEqual(check_stamp(token, stamped, options)['state'], 'valid', name)
 
