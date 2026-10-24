@@ -186,9 +186,10 @@ def validate_der(data, element):
     """Walk a whole element and everything inside it, and refuse anything that
     is not strict DER: a constructed part whose items do not fill it exactly,
     a whole number or an object identifier that is not in its shortest form,
-    a truth value that is not written in the one way DER allows. Parts this
-    checker does not otherwise read are still read here, so that two checkers
-    cannot disagree about whether a time-stamp is well formed."""
+    a truth value that is not written in the one way DER allows, a string of
+    bits whose unused bits are not zero. Parts this checker does not otherwise
+    read are still read here, so that two checkers cannot disagree about
+    whether a time-stamp is well formed."""
     budget = [4000]
 
     def walk(e, depth):
@@ -224,7 +225,13 @@ def validate_der(data, element):
             if length != 0:
                 raise bad_stamp('an empty value is not empty.')
         elif e.tag == TAG.BIT_STRING:
-            if length == 0 or data[e.start] > 7:
+            # The first byte counts the unused bits of the last byte, 0 to 7; a
+            # string of no bits has none; and the unused bits are zero (X.690,
+            # sections 8.6.2 and 11.2.1).
+            if length == 0:
+                raise bad_stamp('a string of bits is not written as DER allows.')
+            unused = data[e.start]
+            if unused > 7 or (length == 1 and unused != 0) or (length > 1 and data[e.end - 1] & ((1 << unused) - 1)):
                 raise bad_stamp('a string of bits is not written as DER allows.')
 
     walk(element, 0)

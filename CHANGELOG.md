@@ -2,6 +2,78 @@
 
 ## Unreleased
 
+- **Eight fixes from the audit of the Internet-Draft (24 October 2026)**,
+  in both languages, for version 0.6.0. None changes the bytes of any
+  record. Five narrow what a checker accepts, so that two checkers built
+  from the format description cannot disagree; three change the documents
+  only.
+  - *A time-stamp that names the certificate that signed it more than once
+    in the same form* (two ESSCertIDv2 attributes, or two ESSCertID
+    attributes) is refused (`stamp-invalid`), as RFC 5652, section 5.3,
+    and RFC 5035 require. Before, the last ESSCertIDv2 was used or, where
+    there was none, the first ESSCertID. Where both forms appear once each,
+    the newer still names the certificate (format description, section
+    21.2, item 3).
+  - *A DER bit string whose unused bits are not zero* is not strict DER
+    and is refused (`stamp-bad-data`), as X.690, section 11.2.1, requires;
+    before, only the count of unused bits was checked. A string of no bits
+    must count none. This reaches every bit string in a time-stamp, not
+    only the key's (section 21.2, item 1).
+  - *An ES256 key that is not a point on the curve P-256*, or either half
+    of which is not below the curve's prime, is refused as `bad-key`
+    wherever a key is checked, before any signature is tried (section
+    3.8). Before, it passed the key check and was reported as
+    `signature-invalid` when a signature was checked under it. A slip, an
+    approval, a cancellation or a vouching record that names such a key
+    now fails on the key.
+  - *An Ed25519 signature whose number S is not below the order L* is
+    refused by the library itself, in every record and in a time-stamp, as
+    RFC 8032, section 5.1.7, requires (section 3.8). Before, both
+    languages relied on the library beneath them (OpenSSL), which refuses
+    it; a third implementation on another library might not. The twelve
+    cases of the paper "Taming the many EdDSAs" (Chalkias, Garillot, Kondi
+    and Nikolaenko, 2020) are a new shared test file,
+    `test-vectors/ed25519-signatures.json`, with ten cases made here, each
+    with the answer the format's rules give, so that the rules are pinned
+    and not the library: a small-order or non-canonical key is `bad-key`;
+    a small-order or non-canonical R, or an S not below L, is invalid; a
+    mixed-order key is checked without the cofactor and may pass.
+  - *A time-stamp signed with Ed25519 must name SHA-512* as the signer's
+    fingerprint method, as RFC 8419, section 3.1, requires; one that names
+    SHA-256 or SHA-384 is refused (`stamp-invalid`), on every device, as a
+    mismatched method is for RSA and ECDSA (section 21.2, item 4). This
+    settles open issue 4 of the Internet-Draft. A service that follows RFC
+    8419 produces nothing else; the made-up service of the tests now does
+    the same.
+  - *The format description* now says that a time-stamp's time is read to
+    the millisecond and compared in milliseconds between seals (sections
+    21.2 and 21.3), which is what the code always did ("taken to the
+    second, rounded down" described only how it is shown); that a checker
+    SHOULD bound the total size of a book it accepts and MAY stop at the
+    first problem, since 100,000 entries of 131,072 bytes would be about
+    13 gigabytes (section 9); and the rules above, in sections 3.8, 14, 15
+    and 21.2.
+  - *The list of threats, section 3,* states a limit the audit found: a
+    passkey used for anything else at the same website is a signing
+    oracle. Any page at an origin under the slip's `rpId` can hand the
+    device a record's fingerprint as an ordinary sign-in challenge and have
+    it signed; the person sees a sign-in prompt. So records should be
+    signed only with a passkey registered to a relying party used for
+    nothing else, and a signing page should show the record first. The
+    checker has no option yet to name the origin a reader expects.
+  - *Shared test files remade:* `keys` (six cases added for P-256);
+    `der-strict` (six added; "a bit string with 7 bits unused" and
+    thirteen random cases now refused); `stamps` (nine added and two
+    removed, the sound Ed25519 cases being remade with SHA-512; the four
+    cases with the signing-certificate attribute twice now refused);
+    `stamps-strict-keys`, `stamps-openssl`, `stamps-flips-ecdsa`,
+    `stamps-flips-rsa` and `stamps-flips-ed25519` (changed bytes that now
+    trip the bit-string rule first; the Ed25519 token names SHA-512);
+    `vouching-contents` and `vouchings-written` (the made-up passkey is
+    now a point on the curve). New: `ed25519-signatures`. The tests are
+    `test/audit-fixes.test.mjs` and `python/tests/test_audit_fixes.py`;
+    each refusal fails without its fix.
+
 - **Witnesses, and consistency proofs** (format description, section 29),
   in both languages. Whoever keeps a book could show one history to one
   reader and another to another, each sealed. A witness is a party, with

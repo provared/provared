@@ -123,7 +123,8 @@ const SEED = '07'.repeat(32);
 const ED = { alg: 'Ed25519', crv: 'Ed25519', kty: 'OKP', x: b64(32, 4) };
 const ML = { alg: 'ML-DSA-87', kty: 'AKP', pub: b64(2592, 5) };
 const SLH = { alg: 'SLH-DSA-SHA2-256s', kty: 'AKP', pub: b64(64, 6) };
-const ES = { alg: 'ES256', crv: 'P-256', kty: 'EC', x: b64(32, 7), y: b64(32, 8) };
+// A P-256 key must be a point on the curve, so this one is a fixed point whose private key was not kept.
+const ES = { alg: 'ES256', crv: 'P-256', kty: 'EC', x: toBase64url(Buffer.from('e88f1ea8fab4eee255dbbc9b88c570e9f7b3f24152be79c69d5bbe281b661045', 'hex')), y: toBase64url(Buffer.from('5f70fcf287eabdcea76f896f97bc9726d8cc1d9e23bd01f2504b4852f8370fb5', 'hex')) };
 const RS = { alg: 'RS256', e: 'AQAB', kty: 'RSA', n: b64(256, 0xc1) };
 const KEY_SET = [ED, ML];
 const SEAL_SET = [ED, ML, SLH];

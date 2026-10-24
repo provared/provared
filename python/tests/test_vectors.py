@@ -12,9 +12,10 @@ import answers_records
 import answers_stamps
 from provared import _js
 from provared.documents import DOCUMENT_NAMES, http_request_base, http_request_fingerprint, http_response_base, http_response_fingerprint, identifier_fingerprint
-from provared.encoding import count_characters, from_base64url, parse_canonical, parse_time, problem_from
+from provared.encoding import count_characters, from_base64url, parse_canonical, parse_time, problem_from, to_base64url
 from provared.jws import parse_record
 from provared.keys import check_key, thumbprint
+from provared.signatures import verify_signature
 from provared.slip import _UNDEFINED, _check_origin, check_slip
 from provared.stub import validate_countersignature_content, validate_stub_content
 from provared.webauthn import ecdsa_der_to_raw
@@ -64,12 +65,20 @@ def _key(c):
     return {'alg': alg, 'thumbprint': thumbprint(c['key'])}
 
 
+def _ed25519_signature(c):
+    """The key is checked first, as a checker checks it before any signature under it."""
+    key = {'alg': 'Ed25519', 'crv': 'Ed25519', 'kty': 'OKP', 'x': to_base64url(bytes.fromhex(c['key']))}
+    check_key(key, ['Ed25519'], 'key')
+    return verify_signature(key, bytes.fromhex(c['signature']), bytes.fromhex(c['message']), c.get('without', ()))
+
+
 ANSWER = {
     'parseCanonical': lambda c: _answer(lambda: parse_canonical(c['text'])),
     'fromBase64url': lambda c: _answer(lambda: from_base64url(c['text']).hex()),
     'parseTime': lambda c: {'ok': parse_time(c['text'])},
     'countCharacters': lambda c: {'ok': count_characters(c['text'])},
     'checkKey': lambda c: _answer(lambda: _key(c)),
+    'checkEd25519Signature': lambda c: _answer(lambda: _ed25519_signature(c)),
     'ecdsaDerToRaw': lambda c: _answer(lambda: ecdsa_der_to_raw(bytes.fromhex(c['der'])).hex()),
     'parseRecord': lambda c: _answer(lambda: _record(c)),
     'validateStubContent': lambda c: _answer(lambda: _true(validate_stub_content)(c['content'])),

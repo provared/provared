@@ -5,9 +5,10 @@
 import { checkSlip, assembleSlip, generateKeySet } from '../../src/index.js';
 import { coverMembers } from '../../src/cover.js';
 import { DOCUMENT_NAMES, httpRequestBase, httpRequestFingerprint, httpResponseBase, httpResponseFingerprint, identifierFingerprint } from '../../src/documents.js';
-import { countCharacters, fromBase64url, parseCanonical, parseTime, sha256, toBase64url, utf8 } from '../../src/encoding.js';
+import { concatBytes, countCharacters, fromBase64url, parseCanonical, parseTime, sha256, toBase64url, utf8 } from '../../src/encoding.js';
 import { encodeContent, parseRecord, protectedHeaders, signingInput } from '../../src/jws.js';
 import { PASSKEY_METHODS, checkKey, thumbprint } from '../../src/keys.js';
+import { sign, verifySignature } from '../../src/signatures.js';
 import { checkOriginForTests } from '../../src/slip.js';
 import { validateCountersignatureContent, validateStubContent } from '../../src/stub.js';
 import { ecdsaDerToRaw } from '../../src/webauthn.js';
@@ -40,6 +41,15 @@ export const ANSWER = {
       return { alg, thumbprint: await thumbprint(c.key) };
     }),
   ecdsaDerToRaw: (c) => answer(() => hex(ecdsaDerToRaw(Uint8Array.from(Buffer.from(c.der, 'hex'))))),
+  // The key (32 bytes), the signature and the message are hexadecimal. The key
+  // is checked first, as a checker checks it before any signature under it.
+  checkEd25519Signature: (c) =>
+    answer(async () => {
+      const H = (text) => Uint8Array.from(Buffer.from(text, 'hex'));
+      const key = { alg: 'Ed25519', crv: 'Ed25519', kty: 'OKP', x: toBase64url(H(c.key)) };
+      checkKey(key, ['Ed25519'], 'key');
+      return verifySignature(key, H(c.signature), H(c.message), c.without);
+    }),
   parseRecord: (c) =>
     answer(async () => {
       const p = await parseRecord(c.record, c.kind);
@@ -179,6 +189,68 @@ function countCases() {
   ].map(([name, text]) => ({ name, text }));
 }
 
+// --- Ed25519 signatures ---
+
+// The twelve cases of the paper "Taming the many EdDSAs" (Chalkias,
+// Garillot, Kondi and Nikolaenko, 2020; https://eprint.iacr.org/2020/1244),
+// as its authors published them under the Apache License 2.0: what each
+// tests, then the message, the public key A and the signature (R, then S),
+// each in hexadecimal. "Mixed order" means a point of large order with a
+// small-order part. The format's rules decide each one (format description,
+// section 3.8): a small-order or non-canonical A is refused as a key; a
+// small-order or non-canonical R, or an S not below L, is invalid; a
+// mixed-order key is checked without the cofactor.
+const TAMING_CASES = [
+  ['small-order A and small-order R, S of 0', '8c93255d71dcab10e8f379c26200f3c7bd5f09d9bc3068d3ef4edeb4853022b6', 'c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa', 'c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a0000000000000000000000000000000000000000000000000000000000000000'],
+  ['small-order A, mixed-order R', '9bd9f44f4dcc75bd531b56b2cd280b0bb38fc1cd6d1230e14861d861de092e79', 'c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa', 'f7badec5b8abeaf699583992219b7b223f1df3fbbea919844e3f7c554a43dd43a5bb704786be79fc476f91d3f3f89b03984d8068dcf1bb7dfc6637b45450ac04'],
+  ['mixed-order A, small-order R', 'aebf3f2601a0c8c5d39cc7d8911642f740b78168218da8471772b35f9d35b9ab', 'f7badec5b8abeaf699583992219b7b223f1df3fbbea919844e3f7c554a43dd43', 'c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa8c4bd45aecaca5b24fb97bc10ac27ac8751a7dfe1baff8b953ec9f5833ca260e'],
+  ['mixed-order A and R, accepted with or without the cofactor', '9bd9f44f4dcc75bd531b56b2cd280b0bb38fc1cd6d1230e14861d861de092e79', 'cdb267ce40c5cd45306fa5d2f29731459387dbf9eb933b7bd5aed9a765b88d4d', '9046a64750444938de19f227bb80485e92b83fdb4b6506c160484c016cc1852f87909e14428a7a1d62e9f22f3d3ad7802db02eb2e688b6c52fcd6648a98bd009'],
+  ['mixed-order A and R, accepted only with the cofactor', 'e47d62c63f830dc7a6851a0b1f33ae4bb2f507fb6cffec4011eaccd55b53f56c', 'cdb267ce40c5cd45306fa5d2f29731459387dbf9eb933b7bd5aed9a765b88d4d', '160a1cb0dc9c0258cd0a7d23e94d8fa878bcb1925f2c64246b2dee1796bed5125ec6bc982a269b723e0668e540911a9a6a58921d6925e434ab10aa7940551a09'],
+  ['mixed-order A, accepted only with the cofactor and with k not reduced before multiplying', 'e47d62c63f830dc7a6851a0b1f33ae4bb2f507fb6cffec4011eaccd55b53f56c', 'cdb267ce40c5cd45306fa5d2f29731459387dbf9eb933b7bd5aed9a765b88d4d', '21122a84e0b5fca4052f5b1235c80a537878b38f3142356b2c2384ebad4668b7e40bc836dac0f71076f9abe3a53f9c03c1ceeeddb658d0030494ace586687405'],
+  ['S above L', '85e241a07d148b41e47d62c63f830dc7a6851a0b1f33ae4bb2f507fb6cffec40', '442aad9f089ad9e14647b1ef9099a1ff4798d78589e66f28eca69c11f582a623', 'e96f66be976d82e60150baecff9906684aebb1ef181f67a7189ac78ea23b6c0e547f7690a0e2ddcd04d87dbc3490dc19b3b3052f7ff0538cb68afb369ba3a514'],
+  ['S far above L, with the top bit set', '85e241a07d148b41e47d62c63f830dc7a6851a0b1f33ae4bb2f507fb6cffec40', '442aad9f089ad9e14647b1ef9099a1ff4798d78589e66f28eca69c11f582a623', '8ce5b96c8f26d0ab6c47958c9e68b937104cd36e13c33566acd2fe8d38aa19427e71f98a473474f2f13f06f97c20d58cc3f54b8bd0d272f42b695dd7e89a8c22'],
+  ['R not in canonical form, reduced for the hash', '9bedc267423725d473888631ebf45988bad3db83851ee85c85e241a07d148b41', 'f7badec5b8abeaf699583992219b7b223f1df3fbbea919844e3f7c554a43dd43', 'ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff03be9678ac102edcd92b0210bb34d7428d12ffc5df5f37e359941266a4e35f0f'],
+  ['R not in canonical form, not reduced for the hash', '9bedc267423725d473888631ebf45988bad3db83851ee85c85e241a07d148b41', 'f7badec5b8abeaf699583992219b7b223f1df3fbbea919844e3f7c554a43dd43', 'ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffca8c5b64cd208982aa38d4936621a4775aa233aa0505711d8fdcfdaa943d4908'],
+  ['A not in canonical form, reduced for the hash', 'e96b7021eb39c1a163b6da4e3093dcd3f21387da4cc4572be588fafae23c155b', 'ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', 'a9d55260f765261eb9b84e106f665e00b867287a761990d7135963ee0a7d59dca5bb704786be79fc476f91d3f3f89b03984d8068dcf1bb7dfc6637b45450ac04'],
+  ['A not in canonical form, not reduced for the hash', '39a591f5321bbe07fd5a23dc2f39d025d74526615746727ceefd6e82ae65c06f', 'ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', 'a9d55260f765261eb9b84e106f665e00b867287a761990d7135963ee0a7d59dca5bb704786be79fc476f91d3f3f89b03984d8068dcf1bb7dfc6637b45450ac04'],
+];
+
+async function ed25519Cases() {
+  const agent = await generateKeySet();
+  const key = agent.keys[0];
+  const message = utf8('a message signed for the shared test files');
+  const genuine = await sign('Ed25519', agent.privateKeys[0], message);
+  const L = (1n << 252n) + 27742317777372353535851937790883648493n;
+  const sOf = (signature) => {
+    let s = 0n;
+    for (let i = 63; i >= 32; i--) s = (s << 8n) | BigInt(signature[i]);
+    return s;
+  };
+  const withS = (signature, s) => {
+    const out = Uint8Array.from(signature);
+    for (let i = 32; i < 64; i++) {
+      out[i] = Number(s & 0xffn);
+      s >>= 8n;
+    }
+    return out;
+  };
+  const neutral = new Uint8Array(32);
+  neutral[0] = 1;
+  const cases = TAMING_CASES.map(([name, m, a, signature]) => ({ name: `the paper: ${name}`, key: a, signature, message: m }));
+  const own = (name, signature, more = {}) => cases.push({ name, key: hex(fromBase64url(key.x)), signature: hex(signature), message: hex(message), ...more });
+  own('a genuine signature', genuine);
+  own('a genuine signature, Ed25519 said to be missing', genuine, { without: ['Ed25519'] });
+  own('a genuine signature over another message', genuine, { message: hex(utf8('another message')) });
+  own('S raised by L: the same number modulo L, written a second way', withS(genuine, sOf(genuine) + L));
+  own('S equal to L', withS(genuine, L));
+  own('S of L minus 1, under a genuine R', withS(genuine, L - 1n));
+  own('S with its top bit set', withS(genuine, sOf(genuine) | (1n << 255n)));
+  own('R replaced by the neutral point', concatBytes(neutral, genuine.subarray(32)));
+  own('63 bytes', genuine.subarray(0, 63));
+  own('65 bytes', concatBytes(genuine, new Uint8Array(1)));
+  return cases;
+}
+
 // --- keys ---
 
 // The Ed25519 public keys under which anyone can sign (the points of small
@@ -197,6 +269,13 @@ const WEAK_ED25519 = [
   ['y of p + 1, the neutral point written again', 'eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f'],
   ['y of 2^255 - 1', 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f'],
 ];
+
+/** A copy of some bytes with the last byte changed by one. */
+const changedLastByte = (bytes) => {
+  const out = Uint8Array.from(bytes);
+  out[out.length - 1] ^= 1;
+  return out;
+};
 
 async function keyCases() {
   const agent = await generateKeySet();
@@ -229,6 +308,12 @@ async function keyCases() {
     ['an ML-DSA-87 key of the wrong type', { ...ml, kty: 'OKP' }, all],
     ['a short SLH-DSA key', { alg: 'SLH-DSA-SHA2-256s', kty: 'AKP', pub: toBase64url(new Uint8Array(32)) }, all],
     ['a P-256 key with a short half', { ...es, y: toBase64url(new Uint8Array(31)) }, all],
+    ['a P-256 key that is not on the curve: y changed', { ...es, y: toBase64url(changedLastByte(fromBase64url(es.y))) }, all],
+    ['a P-256 key that is not on the curve: x changed', { ...es, x: toBase64url(changedLastByte(fromBase64url(es.x))) }, all],
+    ['a P-256 key whose halves are not a point', { ...es, x: toBase64url(new Uint8Array(32).fill(1)), y: toBase64url(new Uint8Array(32).fill(2)) }, all],
+    ['a P-256 key with x equal to the prime of the curve', { ...es, x: toBase64url(Buffer.from('ffffffff00000001000000000000000000000000ffffffffffffffffffffffff', 'hex')) }, all],
+    ['a P-256 key with y equal to the prime of the curve', { ...es, y: toBase64url(Buffer.from('ffffffff00000001000000000000000000000000ffffffffffffffffffffffff', 'hex')) }, all],
+    ['the base point of P-256', { ...es, x: toBase64url(Buffer.from('6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296', 'hex')), y: toBase64url(Buffer.from('4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5', 'hex')) }, all],
     ['an EC key on another curve', { ...es, crv: 'P-384' }, all],
     ['an RSA key with another exponent', { ...rs, e: 'Aw' }, all],
     ['an RSA key of 1,024 bits', { ...rs, n: toBase64url(fromBase64url(rs.n).subarray(0, 128)) }, all],
@@ -723,6 +808,12 @@ export const CASES = {
   characters: () => set('Counting the characters of a text, as Unicode code points.', 'countCharacters', countCases()),
   keys: async () => set('Confirming the shape of a public key, and its thumbprint (format description, section 3.8).', 'checkKey', await keyCases()),
   'ecdsa-der': () => set("Reading a passkey's ES256 signature from its DER form (format description, section 4.4).", 'ecdsaDerToRaw', derCases()),
+  'ed25519-signatures': async () =>
+    set(
+      'Checking an Ed25519 signature under a key (format description, section 3.8): the cases of the paper "Taming the many EdDSAs" (Chalkias, Garillot, Kondi and Nikolaenko, 2020), and cases made here, each with the answer the format\'s rules give, so that the rules are pinned and not the library beneath.',
+      'checkEd25519Signature',
+      await ed25519Cases(),
+    ),
   records: async () => set('Reading the envelope of a record as a given kind (format description, sections 3.1 to 3.5).', 'parseRecord', await recordCases()),
   'stub-contents': () => set("Confirming the members of a stub's content (format description, section 5.1).", 'validateStubContent', stubContents()),
   'http-fingerprints': () =>

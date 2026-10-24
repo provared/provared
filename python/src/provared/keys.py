@@ -42,6 +42,43 @@ def weak_ed25519(data):
     return y >= _P or y in _SMALL_ORDER_Y
 
 
+# The order L of the Ed25519 base point (RFC 8032, section 5.1). The number
+# S of a signature must be below it (RFC 8032, section 5.1.7); libraries
+# differ in whether they check, so a checker checks itself.
+_L = 2**252 + 27742317777372353535851937790883648493
+
+
+def bad_ed25519_signature(signature):
+    """Whether bytes are an Ed25519 signature that can never be valid, whatever
+    the key: not 64 bytes; or its first half (the point R) is one under which
+    anyone can sign or is written in more than one way; or its second half
+    (the number S, little-endian) is not below L."""
+    signature = bytes(signature)
+    if len(signature) != 64:
+        return True
+    if weak_ed25519(signature[:32]):
+        return True
+    return int.from_bytes(signature[32:], 'little') >= _L
+
+
+# The curve P-256 (FIPS 186-5, section D.1.2.3): y^2 = x^3 - 3x + b over
+# the whole numbers modulo p. A key whose two halves are not a point on it
+# can check no signature, and libraries report it in different ways, so a
+# checker refuses it itself.
+_P256_P = 2**256 - 2**224 + 2**192 + 2**96 - 1
+_P256_B = 0x5AC635D8AA3A93E7B3EBBD55769886BC651D06B0CC53B0F63BCE3C3E27D2604B
+
+
+def on_p256(x, y):
+    """Whether two halves of 32 bytes each (x and y, big-endian) are a point on
+    the curve P-256, each below p."""
+    big_x = int.from_bytes(bytes(x), 'big')
+    big_y = int.from_bytes(bytes(y), 'big')
+    if big_x >= _P256_P or big_y >= _P256_P:
+        return False
+    return (big_y * big_y) % _P256_P == (big_x * big_x * big_x - 3 * big_x + _P256_B) % _P256_P
+
+
 def _bad(where, why):
     return Refusal('bad-key', f'{where}: {why}')
 
@@ -90,8 +127,12 @@ def check_key(jwk, allowed, where):
     elif alg == 'ES256':
         if jwk['kty'] != 'EC' or jwk['crv'] != 'P-256':
             raise _bad(where, 'an ES256 key has kty EC and crv P-256.')
-        if len(_bytes_of(jwk, 'x', where)) != 32 or len(_bytes_of(jwk, 'y', where)) != 32:
+        x = _bytes_of(jwk, 'x', where)
+        y = _bytes_of(jwk, 'y', where)
+        if len(x) != 32 or len(y) != 32:
             raise _bad(where, 'the two halves of a P-256 public key are 32 bytes each.')
+        if not on_p256(x, y):
+            raise _bad(where, 'a P-256 public key must be a point on the curve, each half below the prime of the curve.')
     else:
         if jwk['kty'] != 'RSA' or jwk['e'] != 'AQAB':
             raise _bad(where, 'an RS256 key has kty RSA and e AQAB.')

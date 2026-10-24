@@ -11,7 +11,7 @@
 
 import { TAG, badStamp, children, contentOf, ecdsaToRaw, expect, hexOf, readElement, timeOf, validateDer, wholeOf } from './der.js';
 import { Refusal, equalBytes, formatTime, sha256, toBase64url } from './encoding.js';
-import { weakEd25519 } from './keys.js';
+import { badEd25519Signature, weakEd25519 } from './keys.js';
 
 /** The largest time-stamp, in bytes. */
 export const MAX_STAMP_BYTES = 12288;
@@ -237,7 +237,8 @@ async function verifyWith(certificate, bytes, signatureOid, digestName, signatur
       return 'invalid';
     }
   } else if (certificate.keyOid === OID.ed25519) {
-    if (signatureOid !== OID.ed25519) return 'invalid';
+    // With Ed25519 the signer's fingerprint method is SHA-512 (RFC 8419, section 3.1).
+    if (signatureOid !== OID.ed25519 || digestName !== 'SHA-512') return 'invalid';
     checkKeyEncoding(bytes, certificate, 'Ed25519');
     method = 'Ed25519';
     importParams = { name: 'Ed25519' };
@@ -253,8 +254,8 @@ async function verifyWith(certificate, bytes, signatureOid, digestName, signatur
     // A device with no Ed25519 says so when the key is loaded.
     return method === 'Ed25519' && e && e.name === 'NotSupportedError' ? 'unavailable' : 'invalid';
   }
-  // An Ed25519 signature whose first half is a point of small order is refused, as everywhere (format description, section 3.8).
-  if (method === 'Ed25519' && (raw.length !== 64 || weakEd25519(raw.subarray(0, 32)))) return 'invalid';
+  // An Ed25519 signature whose first half is a point of small order, or whose number S is not below L, is refused, as everywhere (format description, section 3.8).
+  if (method === 'Ed25519' && badEd25519Signature(raw)) return 'invalid';
   try {
     return (await subtle.verify(verifyParams, key, raw, signed)) ? 'valid' : 'invalid';
   } catch {
@@ -275,7 +276,8 @@ async function verifyWith(certificate, bytes, signatureOid, digestName, signatur
  *   soundly, by a service the checker did not name. "unavailable": this
  *   device cannot check the service's signing method; no time is given.
  *   "authority" is the fingerprint of the certificate that signed. "when"
- *   is the stated time, to the second, rounded down.
+ *   is the stated time, to the second, rounded down; "time" is it in
+ *   milliseconds, a fraction of a second kept to the millisecond.
  * @throws {Refusal} "stamp-bad-data", "stamp-wrong-data" or "stamp-invalid"
  */
 export async function checkStamp(token, fingerprintBytes, options) {
@@ -344,6 +346,8 @@ export async function checkStamp(token, fingerprintBytes, options) {
   let kindNamed = false;
   let digestNamed = false;
   let named = null;
+  let newerNamed = false;
+  let olderNamed = false;
   for (const attribute of children(token, attributes, 16)) {
     const pair = children(token, expect(attribute, TAG.SEQUENCE, 'an attribute'), 2);
     const name = hexOf(token, expect(pair[0], TAG.OID, 'the name of an attribute'));
@@ -360,8 +364,13 @@ export async function checkStamp(token, fingerprintBytes, options) {
       digestNamed = true;
     } else if (name === OID.signingCertificateV2 || name === OID.signingCertificate) {
       if (values.length !== 1) throw invalid('A time-stamp does not say, in one way, which certificate signed it.');
-      // Where both forms are present, the newer one is used.
-      if (named === null || name === OID.signingCertificateV2) named = signingCertificateOf(token, values[0], name === OID.signingCertificateV2);
+      // Each form at most once (RFC 5652 section 5.3; RFC 5035 sections 3
+      // and 4). Where both forms are present, the newer one is used.
+      const newer = name === OID.signingCertificateV2;
+      if (newer ? newerNamed : olderNamed) throw invalid('A time-stamp names the certificate that signed it more than once in the same form, which its standard does not allow.');
+      if (newer) newerNamed = true;
+      else olderNamed = true;
+      if (named === null || newer) named = signingCertificateOf(token, values[0], newer);
     }
   }
   if (!kindNamed || !digestNamed) throw invalid('A time-stamp\'s signature does not cover its statement.');

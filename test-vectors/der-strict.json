@@ -203,7 +203,10 @@
    "name": "a bit string with 7 bits unused",
    "bytes": "030207ff",
    "expected": {
-    "ok": true
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a string of bits is not written as DER allows."
+    }
    }
   },
   {
@@ -229,6 +232,57 @@
   {
    "name": "a bit string of no bits",
    "bytes": "030100",
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "a bit string of no bits, with unused bits",
+   "bytes": "030101",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a string of bits is not written as DER allows."
+    }
+   }
+  },
+  {
+   "name": "a bit string with 1 bit unused, that bit zero",
+   "bytes": "030201fe",
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "a bit string with 1 bit unused, that bit set",
+   "bytes": "030201ff",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a string of bits is not written as DER allows."
+    }
+   }
+  },
+  {
+   "name": "a bit string with 7 bits unused, all zero",
+   "bytes": "03020780",
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "a bit string with 3 bits unused, one of them set",
+   "bytes": "0303030004",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a string of bits is not written as DER allows."
+    }
+   }
+  },
+  {
+   "name": "a bit string with 3 bits unused, all zero",
+   "bytes": "0303030008",
    "expected": {
     "ok": true
    }
@@ -462,7 +516,10 @@
    "name": "random 5",
    "bytes": "030207ff",
    "expected": {
-    "ok": true
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a string of bits is not written as DER allows."
+    }
    }
   },
   {
@@ -496,7 +553,10 @@
    "name": "random 9",
    "bytes": "3009030207ff3100030100",
    "expected": {
-    "ok": true
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a string of bits is not written as DER allows."
+    }
    }
   },
   {
@@ -660,7 +720,10 @@
    "name": "random 29",
    "bytes": "31100a021a44a306040432f98a7a030207ff",
    "expected": {
-    "ok": true
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a string of bits is not written as DER allows."
+    }
    }
   },
   {
@@ -1061,7 +1124,7 @@
    "expected": {
     "refused": {
      "code": "stamp-bad-data",
-     "message": "A time-stamp is not laid out as its standard sets out: a truth value is not written as DER allows."
+     "message": "A time-stamp is not laid out as its standard sets out: a string of bits is not written as DER allows."
     }
    }
   },
@@ -1301,7 +1364,10 @@
    "name": "random 106",
    "bytes": "030207ff",
    "expected": {
-    "ok": true
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a string of bits is not written as DER allows."
+    }
    }
   },
   {
@@ -1469,7 +1535,10 @@
    "name": "random 127",
    "bytes": "030207ff",
    "expected": {
-    "ok": true
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a string of bits is not written as DER allows."
+    }
    }
   },
   {
@@ -1573,7 +1642,7 @@
    "expected": {
     "refused": {
      "code": "stamp-bad-data",
-     "message": "A time-stamp is not laid out as its standard sets out: a whole number is not in its shortest form."
+     "message": "A time-stamp is not laid out as its standard sets out: a string of bits is not written as DER allows."
     }
    }
   },
@@ -1727,7 +1796,10 @@
    "name": "random 157",
    "bytes": "030207ff",
    "expected": {
-    "ok": true
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a string of bits is not written as DER allows."
+    }
    }
   },
   {
@@ -1825,7 +1897,10 @@
    "name": "random 168",
    "bytes": "310e800149030207ffa305b0008001c4",
    "expected": {
-    "ok": true
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a string of bits is not written as DER allows."
+    }
    }
   },
   {
@@ -2020,7 +2095,7 @@
    "expected": {
     "refused": {
      "code": "stamp-bad-data",
-     "message": "A time-stamp is not laid out as its standard sets out: a truth value is not written as DER allows."
+     "message": "A time-stamp is not laid out as its standard sets out: a string of bits is not written as DER allows."
     }
    }
   },
@@ -2212,7 +2287,7 @@
    "expected": {
     "refused": {
      "code": "stamp-bad-data",
-     "message": "A time-stamp is not laid out as its standard sets out: a whole number is not in its shortest form."
+     "message": "A time-stamp is not laid out as its standard sets out: a string of bits is not written as DER allows."
     }
    }
   },
@@ -2809,7 +2884,7 @@
    "expected": {
     "refused": {
      "code": "stamp-bad-data",
-     "message": "A time-stamp is not laid out as its standard sets out: an empty value is not empty."
+     "message": "A time-stamp is not laid out as its standard sets out: a string of bits is not written as DER allows."
     }
    }
   },
@@ -2817,7 +2892,10 @@
    "name": "random 287",
    "bytes": "a309030207ff020300b6b3",
    "expected": {
-    "ok": true
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a string of bits is not written as DER allows."
+    }
    }
   },
   {

@@ -959,7 +959,7 @@
    "expected": {
     "refused": {
      "code": "stamp-bad-data",
-     "message": "A time-stamp is not laid out as its standard sets out: the version of the statement is missing or of the wrong kind."
+     "message": "A time-stamp is not laid out as its standard sets out: a string of bits is not written as DER allows."
     }
    }
   },
@@ -2036,8 +2036,8 @@
    },
    "expected": {
     "refused": {
-     "code": "stamp-invalid",
-     "message": "A time-stamp does not carry the certificate it says signed it."
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a string of bits is not written as DER allows."
     }
    }
   },

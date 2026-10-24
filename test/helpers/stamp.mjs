@@ -52,6 +52,7 @@ const OID = {
   messageDigest: '2a864886f70d010904',
   signingCertificateV2: '2a864886f70d010910022f',
   sha256: '608648016503040201',
+  sha512: '608648016503040203',
   ecdsaWithSha256: '2a8648ce3d040302',
   sha256WithRsa: '2a864886f70d01010b',
   ed25519: '2b6570',
@@ -60,26 +61,33 @@ const OID = {
   someExtension: '2a0305',
 };
 
+// "digest" is the fingerprint method the signer names for the statement:
+// SHA-256, except that with Ed25519 it is SHA-512 (RFC 8419, section 3.1).
 const METHODS = {
   ECDSA: {
     generate: { name: 'ECDSA', namedCurve: 'P-256' },
     sign: { name: 'ECDSA', hash: 'SHA-256' },
     algorithm: sequence(oid(OID.ecdsaWithSha256)),
     finish: ecdsaRawToDer,
+    digest: 'SHA-256',
   },
   RSA: {
     generate: { name: 'RSASSA-PKCS1-v1_5', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' },
     sign: { name: 'RSASSA-PKCS1-v1_5' },
     algorithm: sequence(oid(OID.sha256WithRsa), NULL),
     finish: (s) => s,
+    digest: 'SHA-256',
   },
   Ed25519: {
     generate: { name: 'Ed25519' },
     sign: { name: 'Ed25519' },
     algorithm: sequence(oid(OID.ed25519)),
     finish: (s) => s,
+    digest: 'SHA-512',
   },
 };
+const DIGEST_OID = { 'SHA-256': OID.sha256, 'SHA-512': OID.sha512 };
+const digestOf = async (name, bytes) => new Uint8Array(await subtle.digest(name, bytes));
 
 /**
  * Make a time-stamp service.
@@ -123,9 +131,11 @@ export async function makeStampService(method = 'ECDSA', o = {}) {
      * @param {Uint8Array} fingerprintBytes the 32 bytes to stamp
      * @param {number} when the time to state, in milliseconds
      * @param {object} [change] overrides, to build the time-stamps a checker must refuse
+     *   ("digestName": the fingerprint method the signer names, 'SHA-256' or 'SHA-512')
      * @returns {Promise<Uint8Array>} the time-stamp
      */
     async stamp(fingerprintBytes, when, change = {}) {
+      const digestName = change.digestName ?? m.digest;
       const statement =
         change.statement ??
         sequence(
@@ -144,7 +154,7 @@ export async function makeStampService(method = 'ECDSA', o = {}) {
         );
       const attributes = [
         sequence(oid(OID.contentType), set(oid(change.kind ?? OID.tstInfo))),
-        sequence(oid(OID.messageDigest), set(octets(change.digest ?? (await sha256(statement))))),
+        sequence(oid(OID.messageDigest), set(octets(change.digest ?? (await digestOf(digestName, statement))))),
       ];
       // Which certificate signed: its SHA-256 fingerprint, as RFC 3161 asks.
       if (!change.noSigningCertificate) {
@@ -157,7 +167,7 @@ export async function makeStampService(method = 'ECDSA', o = {}) {
       const signer = sequence(
         change.signerVersion ?? integer(1),
         change.signerName ?? sequence(name, serial),
-        sequence(oid(OID.sha256), NULL),
+        sequence(oid(DIGEST_OID[digestName]), NULL),
         // The same bytes, with the tag that marks them as the signer's attributes.
         concatBytes(new Uint8Array([0xa0]), signedAttributes.subarray(1)),
         change.signatureAlgorithm ?? m.algorithm,
@@ -167,7 +177,7 @@ export async function makeStampService(method = 'ECDSA', o = {}) {
       const certificates = change.certificates ?? [change.certificate ?? certificate];
       const signedData = sequence(
         change.signedDataVersion ?? integer(3),
-        set(change.digestAlgorithms ?? sequence(oid(OID.sha256), NULL)),
+        set(change.digestAlgorithms ?? sequence(oid(DIGEST_OID[digestName]), NULL)),
         sequence(oid(OID.tstInfo), der(0xa0, octets(change.enclosed ?? statement))),
         ...(change.noCertificate ? [] : [der(0xa0, ...certificates)]),
         set(signer),

@@ -14,7 +14,7 @@
 // not built in, which is never a pass.
 
 import { Refusal } from './encoding.js';
-import { checkKey, importPublicKey, thumbprint, weakEd25519 } from './keys.js';
+import { badEd25519Signature, checkKey, importPublicKey, thumbprint } from './keys.js';
 
 const SLH = 'SLH-DSA-SHA2-256s';
 
@@ -99,10 +99,11 @@ export async function verifySignature(jwk, signature, data, without = []) {
   if (!Object.hasOwn(VERIFY_PARAMS, jwk.alg)) return 'invalid';
   const params = VERIFY_PARAMS[jwk.alg];
   if (without.includes(jwk.alg) || !(await methodAvailable(jwk.alg))) return 'unavailable';
-  // An Ed25519 signature whose first half is a point of small order is
-  // refused here, whatever the device's own library would say: libraries
-  // differ on it (format description, section 3.8).
-  if (jwk.alg === 'Ed25519' && (signature.length !== 64 || weakEd25519(signature.subarray(0, 32)))) return 'invalid';
+  // An Ed25519 signature whose first half is a point of small order, or
+  // whose second half, the number S, is not below the order L, is refused
+  // here, whatever the device's own library would say: libraries differ on
+  // both (format description, section 3.8).
+  if (jwk.alg === 'Ed25519' && badEd25519Signature(signature)) return 'invalid';
   try {
     const key = await importPublicKey(jwk);
     return (await globalThis.crypto.subtle.verify(params, key, signature, data)) ? 'valid' : 'invalid';

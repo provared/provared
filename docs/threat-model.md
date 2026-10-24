@@ -91,6 +91,20 @@ follows the checking steps of the Web Authentication standard.
   section 6b. Slips should still be short-lived.
 - Who the issuer is. The slip proves which key signed, not whose key it
   is.
+- Against a page that has the passkey sign a record dressed as a sign-in.
+  A passkey signs only a challenge, and the challenge for a slip, an
+  approval or a cancellation is the fingerprint of the record, which the
+  person cannot read on the device's prompt. Any page at an origin under
+  the slip's `rpId` (the website's own operator, a script running on one
+  of its pages, or the operator of any subdomain) can hand the device the
+  fingerprint of a record it wrote as an ordinary sign-in challenge: the
+  client data of a sign-in and of a record have the same shape, and the
+  person sees a sign-in prompt. No device and no page need be broken into.
+  The checker compares the origin and the rpId only with what the slip
+  itself says. So a passkey that signs records should be registered to a
+  relying party (an `rpId`) used for nothing else, and the page that asks
+  for the signature should show the record first. The checker has no
+  option yet by which a reader names the origin they expect.
 
 ## 4. The Stub and the countersignature
 
@@ -690,7 +704,15 @@ person checking gives.
   such a key, so the checker refuses the key itself. For the same reason
   it refuses an Ed25519 signature whose point R is of small order, under
   any key: the key's own holder could make one for any message, which one
-  library accepts and another refuses. The key in a
+  library accepts and another refuses. It also refuses, itself, an
+  Ed25519 signature whose number S is not below the order L, which RFC
+  8032 requires and some libraries do not check, and an ES256 passkey key
+  that is not a point on its curve (`bad-key`), which can check nothing
+  and which libraries report in different ways. A time-stamp signed with
+  Ed25519 must name SHA-512 as its fingerprint method, as RFC 8419
+  requires, and may name the certificate that signed it only once in each
+  form (RFC 5652, section 5.3): two checkers could otherwise pick
+  different certificates. The key in a
   certificate must be written exactly as its standard sets out, so that
   two checkers cannot disagree about whether it can be read.
 
@@ -1122,7 +1144,11 @@ it show a pass for a record that does not check.
   the checker itself put there.
 - "Within its slip" is said only if every stub and every pass was
   compared on this device.
-- Records over a fixed size, or nested too deeply, are refused.
+- Records over a fixed size, or nested too deeply, are refused. A book
+  may hold 100,000 lines of 131,072 bytes, about 13 gigabytes in all;
+  this library takes a book as one text, so it can check no book larger
+  than one text the device can hold, and a checker should bound the size
+  it accepts (format description, section 9).
 - The content of a record must be written in one canonical form (RFC
   8785). A record with a repeated field name, stray spaces or an unusual
   number form is refused, so two checkers cannot read the same record in
@@ -1203,8 +1229,8 @@ fails if the two differ.
 | `payload-not-canonical` | Content that is not in the canonical form, including a repeated field name |
 | `payload-type-mismatch` | Content of one kind under the label of another, for example a stub presented as a countersignature |
 | `bad-field` | A missing, extra or wrongly typed field |
-| `bad-key` | A public key that is not exactly of an accepted kind |
-| `signature-invalid` | A signature that does not fit the key |
+| `bad-key` | A public key that is not exactly of an accepted kind, an Ed25519 key of small order or written in more than one way, or an ES256 key that is not a point on its curve |
+| `signature-invalid` | A signature that does not fit the key, or an Ed25519 signature whose R is a point of small order or whose S is not below the order L |
 | `passkey-wrong-type` | A passkey answer that was made for creating a passkey, not for signing |
 | `passkey-challenge-mismatch` | A passkey signature made for other content |
 | `passkey-origin-mismatch` | A passkey used on a website other than the one the slip names |
@@ -1249,7 +1275,7 @@ fails if the two differ.
 | `dated-after-stamp` | An entry dated later than the outside time-stamp that covers it, or a seal dated later than its own time-stamp |
 | `stamp-bad-data` | A time-stamp that is not laid out as its standard sets out |
 | `stamp-wrong-data` | A time-stamp made for something other than this seal |
-| `stamp-invalid` | A time-stamp whose signature does not check, or that is dated outside the time its service's certificate was in force |
+| `stamp-invalid` | A time-stamp whose signature does not check, that names the certificate that signed it twice in one form, that is signed with Ed25519 and names a fingerprint method other than SHA-512, or that is dated outside the time its service's certificate was in force |
 | `headers-invalid` | A chain of block headers in which a header breaks a rule that every Bitcoin node applies, that does not hold the known blocks at their places, or that ends before the last of them (tested in `test/headers.test.mjs`) |
 | `record-not-sound` | The check before acting: the record so far has a problem, or could not be checked on this device, so no action is allowed |
 | `proof-invalid` | A one-page proof that does not lead to the top fingerprint |

@@ -148,9 +148,10 @@ export function ecdsaToRaw(der, size) {
  * Walk a whole element and everything inside it, and refuse anything that
  * is not strict DER: a constructed part whose items do not fill it exactly,
  * a whole number or an object identifier that is not in its shortest form,
- * a truth value that is not written in the one way DER allows. Parts this
- * checker does not otherwise read are still read here, so that two checkers
- * cannot disagree about whether a time-stamp is well formed.
+ * a truth value that is not written in the one way DER allows, a string of
+ * bits whose unused bits are not zero. Parts this checker does not otherwise
+ * read are still read here, so that two checkers cannot disagree about
+ * whether a time-stamp is well formed.
  * @param {Uint8Array} bytes
  * @param {{tag: number, start: number, end: number}} element
  */
@@ -185,7 +186,12 @@ export function validateDer(bytes, element) {
     } else if (e.tag === TAG.NULL) {
       if (length !== 0) throw badStamp('an empty value is not empty.');
     } else if (e.tag === TAG.BIT_STRING) {
-      if (length === 0 || first > 7) throw badStamp('a string of bits is not written as DER allows.');
+      // The first byte counts the unused bits of the last byte, 0 to 7; a
+      // string of no bits has none; and the unused bits are zero (X.690,
+      // sections 8.6.2 and 11.2.1).
+      if (length === 0 || first > 7 || (length === 1 && first !== 0) || (length > 1 && (bytes[e.end - 1] & ((1 << first) - 1)) !== 0)) {
+        throw badStamp('a string of bits is not written as DER allows.');
+      }
     }
   };
   walk(element, 0);

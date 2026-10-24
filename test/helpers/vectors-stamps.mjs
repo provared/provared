@@ -483,6 +483,12 @@ function validateDerCases() {
     ['a bit string with 8 bits unused', '030208ff'],
     ['an empty bit string', '0300'],
     ['a bit string of no bits', '030100'],
+    ['a bit string of no bits, with unused bits', '030101'],
+    ['a bit string with 1 bit unused, that bit zero', '030201fe'],
+    ['a bit string with 1 bit unused, that bit set', '030201ff'],
+    ['a bit string with 7 bits unused, all zero', '03020780'],
+    ['a bit string with 3 bits unused, one of them set', '0303030004'],
+    ['a bit string with 3 bits unused, all zero', '0303030008'],
     ['an octet string', '0403000102'],
     ['a context tag, primitive', '8003000102'],
     ['a constructed context tag', 'a003020101'],
@@ -727,7 +733,8 @@ function certificate(key, o = {}) {
  * "hash" is the signer's fingerprint method.
  */
 function makeToken(key, o = {}) {
-  const hash = o.hash ?? 'SHA-256';
+  // An Ed25519 signer names SHA-512 (RFC 8419, section 3.1), unless a case says otherwise.
+  const hash = o.hash ?? (key.type === 'ed25519' ? 'SHA-512' : 'SHA-256');
   const cert = o.cert ?? certificate(key, o.certOptions);
   const statement =
     o.statement ??
@@ -783,6 +790,26 @@ function pkcs1Block(data, length) {
   return concatBytes(H('0001'), new Uint8Array(length - info.length - 3).fill(0xff), H('00'), info);
 }
 
+// The order L of the Ed25519 base point: the number S of a signature must be below it.
+const ED25519_L = (1n << 252n) + 27742317777372353535851937790883648493n;
+
+/** The number S of an Ed25519 signature: its second half, little-endian. */
+function sOf(signature) {
+  let s = 0n;
+  for (let i = 63; i >= 32; i--) s = (s << 8n) | BigInt(signature[i]);
+  return s;
+}
+
+/** An Ed25519 signature with its number S replaced, the point R kept. */
+function withS(signature, s) {
+  const out = Uint8Array.from(signature);
+  for (let i = 32; i < 64; i++) {
+    out[i] = Number(s & 0xffn);
+    s >>= 8n;
+  }
+  return out;
+}
+
 /** An ECDSA signature with its second number s replaced by n - s, the other of the two valid forms. */
 function highS(signature) {
   const outer = readElement(signature, 0);
@@ -829,8 +856,9 @@ async function stampCases() {
   add('ECDSA P-256 with SHA-512', token('p256', { hash: 'SHA-512' }), { options: trustFor('p256') });
   add('ECDSA P-384 with SHA-384', token('p384', { hash: 'SHA-384' }), { options: trustFor('p384') });
   add('ECDSA P-384 with SHA-256', token('p384'), { options: trustFor('p384') });
-  add('Ed25519', token('ed'), { options: trustFor('ed') });
-  add('Ed25519 with SHA-512 named by the signer', token('ed', { hash: 'SHA-512' }), { options: trustFor('ed') });
+  add('Ed25519 with SHA-512, as RFC 8419 requires', token('ed'), { options: trustFor('ed') });
+  add('Ed25519 with SHA-256 named by the signer', token('ed', { hash: 'SHA-256' }), { options: trustFor('ed') });
+  add('Ed25519 with SHA-384 named by the signer', token('ed', { hash: 'SHA-384' }), { options: trustFor('ed') });
   add('RSA 2048 with SHA-256', token('rsa'), { options: trustFor('rsa') });
   add('RSA 2048 with SHA-384', token('rsa', { hash: 'SHA-384' }), { options: trustFor('rsa') });
   add('RSA 2048 with SHA-512', token('rsa', { hash: 'SHA-512' }), { options: trustFor('rsa') });
@@ -1121,6 +1149,9 @@ async function stampCases() {
     ['an Ed25519 signature changed', 'ed', (s) => changed(s, { flip: [10, 1] })],
     ['an Ed25519 signature cut short', 'ed', (s) => s.subarray(0, 63)],
     ['an Ed25519 signature with a byte after it', 'ed', (s) => concatBytes(s, H('00'))],
+    ['an Ed25519 signature with S raised by L', 'ed', (s) => withS(s, sOf(s) + ED25519_L)],
+    ['an Ed25519 signature with S equal to L', 'ed', (s) => withS(s, ED25519_L)],
+    ['an Ed25519 signature with every bit of S set', 'ed', (s) => withS(s, (1n << 256n) - 1n)],
     ['an RSA signature changed', 'rsa', (s) => changed(s, { flip: [100, 1] })],
     ['an RSA signature cut short', 'rsa', (s) => s.subarray(1)],
     ['an RSA signature with a byte before it', 'rsa', (s) => concatBytes(H('00'), s)],
@@ -1172,6 +1203,9 @@ async function stampCases() {
     ['the older form twice, the second right', (a, x) => [a[0], a[1], cv1(otherCert), cv1(x.cert)]],
     ['the newer form twice, the second wrong', (a) => [a[0], a[1], a[2], cv2(otherCert)]],
     ['the newer form twice, the second right', (a) => [a[0], a[1], cv2(otherCert), a[2]]],
+    ['the newer form twice, both right', (a) => [a[0], a[1], a[2], a[2]]],
+    ['the older form twice, both right', (a, x) => [a[0], a[1], cv1(x.cert), cv1(x.cert)]],
+    ['both forms once each, both right', (a, x) => [a[0], a[1], a[2], cv1(x.cert)]],
     ['the newer form with two values', (a) => [a[0], a[1], seq(oid(OID.signingCertificateV2), set(...setValues(a[2]), ...setValues(a[2])))]],
     ['the newer form with no value', (a) => [a[0], a[1], seq(oid(OID.signingCertificateV2), set())]],
     ['the newer form that is an octet string', (a, x) => [a[0], a[1], seq(oid(OID.signingCertificateV2), set(octets(digest('SHA-256', x.cert))))]],
@@ -2024,7 +2058,7 @@ export const CASES = {
     const key = makeKey('Ed25519');
     const cert = certificate(key, { noVersion: true });
     const token = makeToken(key, { cert, signerVersion: int(3), signerName: der(0x80, H('0102030405060708')) });
-    return vectorSet('A time-stamp signed with Ed25519, with every byte changed in turn.', 'checkStamp', flipCases(token, STAMPED, { trusted: [authorityOf(cert)] }, 1, 0, [0x01, 0x80]));
+    return vectorSet('A time-stamp signed with Ed25519 (its signer naming SHA-512), with every byte changed in turn.', 'checkStamp', flipCases(token, STAMPED, { trusted: [authorityOf(cert)] }, 1, 0, [0x01, 0x80]));
   },
   'stamps-flips-rsa': async () => {
     const key = makeKey('RSA-2048');

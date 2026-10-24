@@ -208,7 +208,25 @@ written in only one way. RFC 8032 does not say to refuse such keys, and
 libraries differ in whether they do; a checker refuses them itself
 (`bad-key`), so that two checkers cannot disagree. For the same reason,
 an Ed25519 signature whose first 32 bytes (the point R) are such a point,
-or hold a y not less than p, is invalid, whatever the key.
+or hold a y not less than p, is invalid, whatever the key; and so is one
+whose last 32 bytes, read as a little-endian number S, are not less than
+L = 2^252 + 27742317777372353535851937790883648493, the order of the
+base point. RFC 8032, section 5.1.7, requires the check of S; libraries
+differ in whether they make it, so a checker makes it itself. A key of
+mixed order (a point of large order with a small-order part) is not
+refused, and a signature under it is checked with the equation
+S·B = R + k·A, without the cofactor, k being the SHA-512 hash of R, A and
+the message, read as a little-endian number and reduced modulo L before
+the multiplication. The cases of the paper "Taming the many EdDSAs"
+(Chalkias, Garillot, Kondi and Nikolaenko, 2020) are in the shared test
+files (`test-vectors/ed25519-signatures.json`), each with the answer
+these rules give.
+
+An ES256 key MUST be a point on the curve P-256: each half a number less
+than the prime of the curve, and the two satisfying the curve's equation.
+A checker refuses any other (`bad-key`) before it tries any signature
+under it: such a key can check no signature, and libraries report it in
+different ways.
 
 A key is named for people by its **thumbprint**: the JSON Web Key
 Thumbprint with SHA-256 (RFC 7638; for ML-DSA keys, RFC 9964 section 6).
@@ -552,7 +570,11 @@ in place of the narrowed content), and is one of:
 A slip MUST come before the entries that rely on it, and a set of terms
 before the stubs that rely on it. A book MUST NOT hold
 the same slip twice, nor more than 100,000 entries. A line MUST NOT be
-longer than 131,072 bytes.
+longer than 131,072 bytes. Those two limits together allow a book of
+about 13 gigabytes, so a checker SHOULD bound the total size of a book it
+accepts (`too-large`), and MAY stop at the first problem it finds. This
+library takes a book as one text, so it can check no book larger than one
+text the device can hold.
 
 ## 10. The tree and the top fingerprint
 
@@ -703,7 +725,7 @@ the seal's own date (section 21.1, rule 4).
 | RFC 3339 | Times |
 | RFC 6962, section 2.1; RFC 9162, sections 2.1.3.2 and 2.1.4 | The tree, the proof that one entry is in it, and the proof that one tree extends another (section 29.1) |
 | FIPS 205 | SLH-DSA-SHA2-256s, the third signature on a seal |
-| RFC 3161; RFC 5652; RFC 5280; ITU-T X.690 | Time-stamps: the statement, its signed wrapper, the certificate, and the byte layout (DER) |
+| RFC 3161; RFC 5652; RFC 5035; RFC 5280; RFC 8419, section 3.1; ITU-T X.690 | Time-stamps: the statement, its signed wrapper, how it names the certificate that signed, the certificate, Ed25519 with SHA-512 in a time-stamp, and the byte layout (DER) |
 | The OpenTimestamps proof file, version 1 (an open format; not the work of a standards body) | Block time-stamps: the steps from a fingerprint to the Merkle root of a block |
 | RFC 9901 (Selective Disclosure for JSON Web Tokens) | Covered fields |
 | RFC 9421 (HTTP Message Signatures), section 2.5, only its way of writing a message as text; RFC 9530 (Digest Fields); RFC 9110, section 5.6.2 | The texts that the reserved document names `provared.http-request` and `provared.http-response` stand for (section 27). Nothing is signed with RFC 9421 |
@@ -775,6 +797,13 @@ is frozen.
     counted only for a recorder the person named, and on a device
     without SLH-DSA on its first two signatures; its time-stamps not used
     for the entries of the book.
+21. The rules of section 3.8 that go beyond their standards: an Ed25519
+    key of small order, or written in more than one way, is refused as a
+    key, and a signature whose R is such a point is invalid under any key
+    (RFC 8032 leaves both to the implementation); an ES256 key that is
+    not a point on its curve is refused as a key. The check of S against
+    L restates RFC 8032, section 5.1.7, and is made by the checker
+    itself, whatever the library beneath it does.
 
 ## 16. The shared list: actions, kinds of action, rules of conduct
 
@@ -1087,7 +1116,9 @@ otherwise report a problem:
 1. It is laid out as RFC 3161 and RFC 5652 set out, in strict DER
    (`stamp-bad-data`). Every part is read, including parts the checker
    does not otherwise use: a whole number or an object identifier that is
-   not in its shortest form, a part that does not fill what holds it, or a
+   not in its shortest form, a string of bits that counts more than seven
+   unused bits or whose unused bits are not zero (X.690, section 11.2.1),
+   a part that does not fill what holds it, or a
    part the standards do not allow in that place, is refused. The signed
    data is of version 3, with exactly one signer. The public key in the
    certificate that signed is written exactly as its own standard sets
@@ -1100,7 +1131,11 @@ otherwise report a problem:
 3. Its signed attributes name a time-stamp statement, hold the
    fingerprint of the statement, and name the certificate that signed, by
    the "signing certificate" attribute that RFC 3161, section 2.4.2,
-   requires (in the form of RFC 5035, or the older form of RFC 2634). The
+   requires (in the form of RFC 5035, or the older form of RFC 2634). Each
+   of the two forms appears at most once, as RFC 5652, section 5.3, and
+   RFC 5035 require: a time-stamp in which either form appears twice is
+   refused (`stamp-invalid`). Where both forms appear once each, the
+   newer form names the certificate. The
    time-stamp carries that certificate, and the signature over the
    attributes fits its public key (`stamp-invalid`). A certificate with
    the same key and other contents is another certificate.
@@ -1110,8 +1145,11 @@ otherwise report a problem:
    The signing methods are RSA (PKCS #1 version 1.5; keys of 2,048 to
    8,192 bits, with an odd public number from 3 to 2^32 - 1: never 1,
    under which anyone can make a signature that checks), ECDSA on the
-   curves P-256 and P-384, and Ed25519 (not a key of small order, as
-   section 3.8 sets out). A key of any other kind, or on another curve,
+   curves P-256 and P-384, and Ed25519 (not a key of small order, and
+   not a signature whose S is not below L, as section 3.8 sets out; the
+   signer MUST name SHA-512 as the fingerprint method, as RFC 8419,
+   section 3.1, requires, so a time-stamp signed with Ed25519 that names
+   SHA-256 or SHA-384 is refused, `stamp-invalid`). A key of any other kind, or on another curve,
    is refused (`stamp-invalid`). The checker does not try to find out
    whether an RSA modulus can be factored: a service's key is the
    service's business, and a checker trusts a service only by the
@@ -1125,7 +1163,13 @@ otherwise report a problem:
    seconds after the time it states (`dated-after-stamp`). A block
    time-stamp that section 21.3 sets aside is the one exception.
 
-The time a time-stamp states is taken to the second, rounded down.
+The time a time-stamp states is read to the millisecond: a fraction of a
+second, where it states one, is kept to three decimal places, rounded
+down, and the rest dropped. A checker shows the time to the second,
+rounded down, and compares it in milliseconds: with a record's `when`,
+which is whole seconds, and with the time of another time-stamp under
+section 21.3. So two time-stamps 300.5 seconds apart are more than 300
+seconds apart.
 
 **Whom to trust is the checker's choice.** The person checking gives the
 fingerprint (SHA-256, in base64url) of the certificate of each time-stamp
@@ -1181,7 +1225,8 @@ Show that comes with a seal (section 11).
 
 The earliest time that a counted time-stamp from a service gives a seal
 MUST NOT be more than 300 seconds earlier than the latest such time that
-a service gave any seal before it (`time-went-backwards`). So the times
+a service gave any seal before it (`time-went-backwards`; both times in
+milliseconds, as section 21.2 sets out). So the times
 cannot step backwards a little at a time. A block time-stamp is never
 reported under this rule: it is made hours after its seal, and one that
 states an earlier time is set aside (the second case above).

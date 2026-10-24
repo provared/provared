@@ -22,7 +22,7 @@ import threading
 from typing import Protocol, runtime_checkable
 
 from .encoding import Refusal, from_base64url, to_base64url
-from .keys import check_key, thumbprint, weak_ed25519
+from .keys import bad_ed25519_signature, check_key, thumbprint
 
 try:
     from cryptography.hazmat.primitives.asymmetric import mldsa as _mldsa
@@ -87,10 +87,11 @@ def verify_signature(jwk, signature, data, without=()):
         return 'unavailable'
     signature = bytes(signature)
     data = bytes(data)
-    # An Ed25519 signature whose first half is a point of small order is
-    # refused here, whatever the library beneath would say: libraries
-    # differ on it (format description, section 3.8).
-    if alg == 'Ed25519' and (len(signature) != 64 or weak_ed25519(signature[:32])):
+    # An Ed25519 signature whose first half is a point of small order, or
+    # whose second half, the number S, is not below the order L, is refused
+    # here, whatever the library beneath would say: libraries differ on
+    # both (format description, section 3.8).
+    if alg == 'Ed25519' and bad_ed25519_signature(signature):
         return 'invalid'
     try:
         key = _load(jwk)

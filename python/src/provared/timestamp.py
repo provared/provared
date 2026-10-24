@@ -20,7 +20,7 @@ from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
 
 from .der import TAG, bad_stamp, children, content_of, ecdsa_to_raw, expect, hex_of, item, read_element, time_of, validate_der, whole_of
 from .encoding import Refusal, format_time, sha256, to_base64url
-from .keys import weak_ed25519
+from .keys import bad_ed25519_signature, weak_ed25519
 
 MAX_STAMP_BYTES = 12288
 """The largest time-stamp, in bytes."""
@@ -277,7 +277,8 @@ def _verify_with(certificate, data, signature_oid, digest_name, signature, signe
         except Exception:
             return 'invalid'
     elif certificate['keyOid'] == OID['ed25519']:
-        if signature_oid != OID['ed25519']:
+        # With Ed25519 the signer's fingerprint method is SHA-512 (RFC 8419, section 3.1).
+        if signature_oid != OID['ed25519'] or digest_name != 'SHA-512':
             return 'invalid'
         _check_key_encoding(data, certificate, 'Ed25519')
         method = 'Ed25519'
@@ -285,8 +286,8 @@ def _verify_with(certificate, data, signature_oid, digest_name, signature, signe
         raise _invalid(_KIND_NOT_ACCEPTED)
     if any(isinstance(w, str) and w == method for w in without):
         return 'unavailable'
-    # An Ed25519 signature whose first half is a point of small order is refused, as everywhere (format description, section 3.8).
-    if method == 'Ed25519' and (len(raw) != 64 or weak_ed25519(raw[:32])):
+    # An Ed25519 signature whose first half is a point of small order, or whose number S is not below L, is refused, as everywhere (format description, section 3.8).
+    if method == 'Ed25519' and bad_ed25519_signature(raw):
         return 'invalid'
     try:
         key = _public_key(certificate)
@@ -327,7 +328,8 @@ def check_stamp(token, fingerprint_bytes, options=None):
     the checker did not name. "unavailable": this device cannot check the
     service's signing method; no time is given. "authority" is the
     fingerprint of the certificate that signed. "when" is the stated time,
-    to the second, rounded down.
+    to the second, rounded down; "time" is it in milliseconds, a fraction
+    of a second kept to the millisecond.
 
     Raises a Refusal: "stamp-bad-data", "stamp-wrong-data" or "stamp-invalid".
 
@@ -406,6 +408,8 @@ def check_stamp(token, fingerprint_bytes, options=None):
     kind_named = False
     digest_named = False
     named = None
+    newer_named = False
+    older_named = False
     for attribute in children(token, attributes, 16):
         pair = children(token, expect(attribute, TAG.SEQUENCE, 'an attribute'), 2)
         name = hex_of(token, expect(item(pair, 0), TAG.OID, 'the name of an attribute'))
@@ -421,9 +425,17 @@ def check_stamp(token, fingerprint_bytes, options=None):
         elif name == OID['signingCertificateV2'] or name == OID['signingCertificate']:
             if len(values) != 1:
                 raise _invalid('A time-stamp does not say, in one way, which certificate signed it.')
-            # Where both forms are present, the newer one is used.
-            if named is None or name == OID['signingCertificateV2']:
-                named = _signing_certificate_of(token, values[0], name == OID['signingCertificateV2'])
+            # Each form at most once (RFC 5652 section 5.3; RFC 5035 sections 3
+            # and 4). Where both forms are present, the newer one is used.
+            newer = name == OID['signingCertificateV2']
+            if newer_named if newer else older_named:
+                raise _invalid('A time-stamp names the certificate that signed it more than once in the same form, which its standard does not allow.')
+            if newer:
+                newer_named = True
+            else:
+                older_named = True
+            if named is None or newer:
+                named = _signing_certificate_of(token, values[0], newer)
     if not kind_named or not digest_named:
         raise _invalid("A time-stamp's signature does not cover its statement.")
     if named is None:

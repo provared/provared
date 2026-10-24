@@ -46,6 +46,50 @@ export function weakEd25519(bytes) {
   return y >= P || SMALL_ORDER_Y.has(y);
 }
 
+// The order L of the Ed25519 base point (RFC 8032, section 5.1). The number
+// S of a signature must be below it (RFC 8032, section 5.1.7); libraries
+// differ in whether they check, so a checker checks itself.
+const L = 2n ** 252n + 27742317777372353535851937790883648493n;
+
+/**
+ * Whether bytes are an Ed25519 signature that can never be valid, whatever
+ * the key: not 64 bytes; or its first half (the point R) is one under which
+ * anyone can sign or is written in more than one way; or its second half
+ * (the number S, little-endian) is not below L.
+ * @param {Uint8Array} signature
+ * @returns {boolean}
+ */
+export function badEd25519Signature(signature) {
+  if (signature.length !== 64) return true;
+  if (weakEd25519(signature.subarray(0, 32))) return true;
+  let s = 0n;
+  for (let i = 63; i >= 32; i--) s = (s << 8n) | BigInt(signature[i]);
+  return s >= L;
+}
+
+// The curve P-256 (FIPS 186-5, section D.1.2.3): y^2 = x^3 - 3x + b over
+// the whole numbers modulo p. A key whose two halves are not a point on it
+// can check no signature, and libraries report it in different ways, so a
+// checker refuses it itself.
+const P256_P = 2n ** 256n - 2n ** 224n + 2n ** 192n + 2n ** 96n - 1n;
+const P256_B = 0x5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604bn;
+
+/**
+ * Whether two halves of 32 bytes each (x and y, big-endian) are a point on
+ * the curve P-256, each below p.
+ * @param {Uint8Array} x
+ * @param {Uint8Array} y
+ * @returns {boolean}
+ */
+export function onP256(x, y) {
+  let X = 0n;
+  let Y = 0n;
+  for (const b of x) X = (X << 8n) | BigInt(b);
+  for (const b of y) Y = (Y << 8n) | BigInt(b);
+  if (X >= P256_P || Y >= P256_P) return false;
+  return (Y * Y) % P256_P === (((X * X * X - 3n * X + P256_B) % P256_P) + P256_P) % P256_P;
+}
+
 function bad(where, why) {
   return new Refusal('bad-key', `${where}: ${why}`);
 }
@@ -94,9 +138,12 @@ export function checkKey(jwk, allowed, where) {
     if (bytesOf(jwk, 'pub', where).length !== 64) throw bad(where, 'an SLH-DSA-SHA2-256s public key is 64 bytes.');
   } else if (alg === 'ES256') {
     if (jwk.kty !== 'EC' || jwk.crv !== 'P-256') throw bad(where, 'an ES256 key has kty EC and crv P-256.');
-    if (bytesOf(jwk, 'x', where).length !== 32 || bytesOf(jwk, 'y', where).length !== 32) {
+    const x = bytesOf(jwk, 'x', where);
+    const y = bytesOf(jwk, 'y', where);
+    if (x.length !== 32 || y.length !== 32) {
       throw bad(where, 'the two halves of a P-256 public key are 32 bytes each.');
     }
+    if (!onP256(x, y)) throw bad(where, 'a P-256 public key must be a point on the curve, each half below the prime of the curve.');
   } else {
     if (jwk.kty !== 'RSA' || jwk.e !== 'AQAB') throw bad(where, 'an RS256 key has kty RSA and e AQAB.');
     const n = bytesOf(jwk, 'n', where);
