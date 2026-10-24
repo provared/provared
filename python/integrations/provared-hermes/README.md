@@ -171,9 +171,9 @@ recorded tool call, and the model is told why, until you set
 `untested_hermes: run` (below). On 0.21.7 and later 0.21 versions it
 works as described here.
 
-The plugin needs `provared` 0.4.0 or later, before 0.6 (it is tested
-with 0.4.0 and 0.5.0), from the Python Package Index. The plugin itself
-is **not on the Python Package Index yet**: install it from this
+The plugin needs `provared` 0.4.0 or later, before 0.7 (it is tested
+with 0.4.0, 0.5.0 and 0.6.0), from the Python Package Index. The plugin
+itself is **not on the Python Package Index yet**: install it from this
 repository, into the Python environment Hermes runs in (you need git):
 
 ```

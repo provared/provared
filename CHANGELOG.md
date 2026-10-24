@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+- **The fingerprint of a tool call's arguments is named
+  `provared.arguments` by default**, in both languages (24 October 2026).
+  `recordTools`, `record_tools` and `record_function` name the one
+  document they write by default with the reserved name of section 27 of
+  the format description, where 0.5.0 and earlier named it `arguments`
+  (the default was kept in 0.5.0 so that the published framework packages
+  would not change what they write without a version of their own). The
+  fingerprint is the same; only the name changes, and every checker reads
+  both: one of 0.5.0 or later knows the reserved name, an earlier one
+  reads it as a label. A tool that names its own documents through
+  `details` is unchanged, and so are the recorder beside Claude Code, the
+  gateway and the Hermes plugin, which name their documents themselves.
+  No rule of the format changes. Shared test files: `tool-scenarios.json`
+  and `denial-scenarios.json` are made again; their stored answers differ
+  only in that name, and every record in them is signed afresh. The two
+  published framework packages follow, each requiring `provared` 0.6.0 or
+  later: `provared-langchain` 0.2.0 and `pydantic-ai-provared` 0.2.0,
+  whose READMEs say what changes; `provared-agno` (not published)
+  requires 0.6.0 too. The Hermes plugin's bound is raised to below 0.7;
+  it does not use the default. The version in `package.json` and
+  `python/pyproject.toml` is now 0.6.0, so that the packages' bounds hold
+  against the library in this repository. Tests:
+  `test/documents.test.mjs` and `python/tests/test_record_function.py`.
 - **Eight fixes from the audit of the Internet-Draft (24 October 2026)**,
   in both languages, for version 0.6.0. None changes the bytes of any
   record. Five narrow what a checker accepts, so that two checkers built

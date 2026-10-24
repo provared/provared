@@ -87,7 +87,7 @@ class Capability(Runs, unittest.TestCase):
                     'The tool "order_supplies" was not run. With this action the total would be 280 GBP.'))
                 [stub] = stubs(world)
                 self.assertEqual((stub['action'], stub['with'], stub['amount']), (ORDER, SUPPLIER, {'unit': 'GBP', 'value': 30}))
-                self.assertEqual(stub['details'], [{'name': 'arguments', 'sha256': arguments_fingerprint(PAPER)}])
+                self.assertEqual(stub['details'], [{'name': 'provared.arguments', 'sha256': arguments_fingerprint(PAPER)}])
                 summary = check_book(world.writer.book(), issuer_keys=world.issuer_keys)['summary']
                 self.assertTrue(summary['intact'] and summary['withinSlips'])
 

@@ -206,7 +206,7 @@ test('"deny" is refused from inside an action, as every call from there is', asy
 test('recorded tools: the arguments are never written in clear, and one call leaves a stub or a denial, never both', async () => {
   const { recorder, issuerKeys, w } = await writer({ denials: true }, { requires: [{ need: 'approval', action: ORDER, above: 50, unit: 'GBP' }] });
   const args = { item: 'a secret item name', total: 70 };
-  const request = { action: ORDER, with: 'supplier', amount: { unit: 'GBP', value: 70 }, details: [{ name: 'arguments', sha256: await argumentsFingerprint(args) }] };
+  const request = { action: ORDER, with: 'supplier', amount: { unit: 'GBP', value: 70 }, details: [{ name: 'provared.arguments', sha256: await argumentsFingerprint(args) }] };
   const approval = await w.approve({ slip: w.slipFingerprint, ...request, when: START });
   let answer = null;
   const tools = recordTools(recorder, {

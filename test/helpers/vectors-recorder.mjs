@@ -1019,8 +1019,8 @@ async function toolsCopied() {
   });
   const t = s.start;
   const meddlingArgs = { item: 'toner' };
-  const meddlingRequest = { action: ORDER, with: 'supplier', amount: { unit: 'GBP', value: 45 }, details: [{ name: 'arguments', sha256: await argumentsFingerprint(meddlingArgs) }] };
-  const fixedRequest = { action: ORDER, with: 'supplier', amount: { unit: 'GBP', value: 150 }, details: [{ name: 'arguments', sha256: await argumentsFingerprint({ item: 'desk' }) }] };
+  const meddlingRequest = { action: ORDER, with: 'supplier', amount: { unit: 'GBP', value: 45 }, details: [{ name: 'provared.arguments', sha256: await argumentsFingerprint(meddlingArgs) }] };
+  const fixedRequest = { action: ORDER, with: 'supplier', amount: { unit: 'GBP', value: 150 }, details: [{ name: 'provared.arguments', sha256: await argumentsFingerprint({ item: 'desk' }) }] };
   const approve = async (request) => s.ref(null, await s.w.approve({ slip: s.w.slipFingerprint, ...request, when: t }));
   s.open('a');
   s.step({
@@ -1082,7 +1082,7 @@ async function toolsApproval() {
     fields: { requires: [{ above: 40, action: ORDER, need: 'approval', unit: 'GBP' }] },
   });
   const t = s.start;
-  const requestFor = async (args, amount = args.total) => ({ action: ORDER, with: 'supplier', amount: { unit: 'GBP', value: amount }, details: [{ name: 'arguments', sha256: await argumentsFingerprint(args) }] });
+  const requestFor = async (args, amount = args.total) => ({ action: ORDER, with: 'supplier', amount: { unit: 'GBP', value: amount }, details: [{ name: 'provared.arguments', sha256: await argumentsFingerprint(args) }] });
   const approve = async (request) => s.ref(null, await s.w.approve({ slip: s.w.slipFingerprint, ...request, when: t }));
   const yes = await approve(await requestFor({ item: 'toner', total: 60 }));
   const forOther = await approve(await requestFor({ item: 'chairs', total: 70 }, 1));
@@ -1411,7 +1411,7 @@ async function toolsDenials() {
     fields: { requires: [{ above: 40, action: ORDER, need: 'approval', unit: 'GBP' }] },
   });
   const t = s.start;
-  const requestFor = async (args, amount = args.total) => ({ action: ORDER, with: 'supplier', amount: { unit: 'GBP', value: amount }, details: [{ name: 'arguments', sha256: await argumentsFingerprint(args) }] });
+  const requestFor = async (args, amount = args.total) => ({ action: ORDER, with: 'supplier', amount: { unit: 'GBP', value: amount }, details: [{ name: 'provared.arguments', sha256: await argumentsFingerprint(args) }] });
   const yes = s.ref(null, await s.w.approve({ slip: s.w.slipFingerprint, ...(await requestFor({ item: 'toner', total: 60 })), when: t }));
   const base = { action: ORDER, with: 'supplier', amount: { fn: { unit: 'GBP', field: 'total' } }, run: { fn: { field: 'item', prefix: 'ordered ' } } };
   s.open('a', { denials: true });

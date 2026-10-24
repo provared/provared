@@ -25,8 +25,9 @@ writer:
 
 - **Allowed:** the tool runs, and a stub is written. The stub names the
   action, the amount and the other party where they apply, and the
-  SHA-256 fingerprint of the call's arguments, so the record fixes
-  exactly what was asked for without holding it.
+  SHA-256 fingerprint of the call's arguments, as the document
+  `provared.arguments`, so the record fixes exactly what was asked for
+  without holding it.
 - **Not allowed** (over a limit, an action the slip does not name, after
   the slip ends or was cancelled): the tool is not run, nothing is
   written, and Agno hands the model a failed tool answer that says why,

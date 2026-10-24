@@ -39,7 +39,7 @@ class RecordFunction(unittest.TestCase):
         result = check_book(writer.book(), issuer_keys=w.issuer_keys)
         stubs = [e for e in result['entries'] if e['kind'] == 'stub']
         self.assertEqual(len(stubs), 2)
-        self.assertEqual(stubs[0]['content']['details'][0]['name'], 'arguments')
+        self.assertEqual(stubs[0]['content']['details'][0]['name'], 'provared.arguments')
         self.assertEqual(result['summary']['problemFound'], False)
 
     def test_a_call_outside_the_slip_is_not_run(self):

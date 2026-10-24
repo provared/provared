@@ -54,7 +54,7 @@ test('a recorded tool runs only if the slip allows the action, and leaves a stub
   assert.deepEqual(first.amount, { unit: 'GBP', value: 45 });
   assert.equal(first.with, 'supplier');
   // The stub names the arguments by their fingerprint, which anyone who holds them can work out again.
-  assert.deepEqual(first.details, [{ name: 'arguments', sha256: await argumentsFingerprint({ total: 45, boxes: 5, item: 'paper' }) }]);
+  assert.deepEqual(first.details, [{ name: 'provared.arguments', sha256: await argumentsFingerprint({ total: 45, boxes: 5, item: 'paper' }) }]);
   assert.equal(r.entries[1].countersignature.state, 'valid');
   assert.equal(second.action, LOOK);
   assert.equal(second.amount, undefined);

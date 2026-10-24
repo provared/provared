@@ -5,10 +5,12 @@
 // every call asks first, is run only if the slip allows it, and leaves a
 // stub. The agent's software then calls the tools as before.
 //
-// By default the stub of a call names one document, "arguments": the
-// fingerprint of the call's arguments. So the record fixes exactly what was
-// asked for, without holding it: whoever kept the arguments can show them
-// later, and anyone can work out the fingerprint again.
+// By default the stub of a call names one document, "provared.arguments"
+// (a reserved name, format description section 27): the fingerprint of the
+// call's arguments. So the record fixes exactly what was asked for, without
+// holding it: whoever kept the arguments can show them later, and anyone
+// can work out the fingerprint again. Before version 0.6.0 the document was
+// named "arguments"; a checker reads both.
 //
 // It names no agent software and depends on none: a tool is any function.
 
@@ -79,7 +81,7 @@ function oneForm(value, depth = 0) {
 /**
  * The fingerprint of the arguments of a call: SHA-256, in base64url, of the
  * arguments written in the one form of RFC 8785. It is what a recorded
- * tool puts into its stub, as the document "arguments".
+ * tool puts into its stub, as the document "provared.arguments".
  * @param {unknown} args JSON: objects, lists, text, numbers, true, false and null
  * @returns {Promise<string>}
  * @throws {Refusal} "bad-field" if the arguments are not JSON
@@ -123,8 +125,8 @@ const needsOnlyApproval = (answer) => answer.problems.length === 0 && answer.bre
  *   - "with" (optional): the id of the service the tool deals with, as the slip names it, or a function of the arguments that gives it;
  *   - "amount" (optional): {unit, value}, or a function of the arguments that gives it;
  *   - "details" (optional): a function of the arguments that gives the documents to name in the stub
- *     ({name, sha256} each), or false for none. By default: one document, "arguments", the fingerprint
- *     of the arguments (argumentsFingerprint);
+ *     ({name, sha256} each), or false for none. By default: one document, "provared.arguments", the
+ *     fingerprint of the arguments (argumentsFingerprint);
  *   - "countersign" (optional): asks the other side to countersign the stub; a function of the stub and the arguments;
  *   - "approve" (optional): asks the person for their approval where the slip asks for one; a function of the
  *     request ({action, amount?, with?, details?}) and the arguments, that gives {record} or nothing.
@@ -184,7 +186,7 @@ async function call(act, deny, onStub, name, spec, args) {
   let details;
   if (spec.details === false) details = [];
   else if (typeof spec.details === 'function') details = (await (0, spec.details)(structuredClone(given))) ?? [];
-  else details = given === undefined ? [] : [{ name: 'arguments', sha256: await argumentsFingerprint(given) }];
+  else details = given === undefined ? [] : [{ name: 'provared.arguments', sha256: await argumentsFingerprint(given) }];
   if (!Array.isArray(details)) throw f.fail(`tools.${name}.details`, 'must give a list of documents.');
   details = copied(details, `tools.${name}.details`);
   if (details.length > 0) request.details = details;

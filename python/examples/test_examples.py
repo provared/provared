@@ -82,7 +82,7 @@ class Example:
         self.assertEqual(stub['action'], ORDER)
         self.assertEqual(stub['amount'], {'unit': 'GBP', 'value': 30})
         self.assertEqual(stub['with'], SUPPLIER)
-        self.assertEqual(stub['details'], [{'name': 'arguments', 'sha256': arguments_fingerprint(PAPER)}])
+        self.assertEqual(stub['details'], [{'name': 'provared.arguments', 'sha256': arguments_fingerprint(PAPER)}])
         self.assertIn('The book checks as intact: yes. The agent stayed within its slip: yes. Stubs in the book: 1.', self.shown)
 
     def test_each_recorded_tool_is_described_as_the_plain_function_is(self):

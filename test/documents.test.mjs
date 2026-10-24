@@ -321,17 +321,17 @@ test('the largest stub detailsAfter can make still fits a line, with its counter
   assert.ok(lineBound(c, undefined) <= MAX_LINE_BYTES);
 });
 
-test('recordTools still names the arguments "arguments" by default, and a tool may name them "provared.arguments"', async () => {
+test('recordTools names the arguments "provared.arguments" by default, and a tool may still name them "arguments" as a label', async () => {
   const w = await makeWorld();
   const recorder = await opened(w);
   const { argumentsFingerprint } = await import('../src/index.js');
   const tools = recordTools(recorder, {
-    old: { action: ORDER, run: () => 1, with: 'supplier', amount: { unit: 'GBP', value: 1 } },
-    reserved: { action: ORDER, run: () => 2, with: 'supplier', amount: { unit: 'GBP', value: 1 }, details: async (args) => [{ name: 'provared.arguments', sha256: await argumentsFingerprint(args) }] },
+    byDefault: { action: ORDER, run: () => 1, with: 'supplier', amount: { unit: 'GBP', value: 1 } },
+    label: { action: ORDER, run: () => 2, with: 'supplier', amount: { unit: 'GBP', value: 1 }, details: async (args) => [{ name: 'arguments', sha256: await argumentsFingerprint(args) }] },
   });
-  await tools.old({ item: 'paper' });
+  await tools.byDefault({ item: 'paper' });
   const lines = recorder.book().trim().split('\n');
-  assert.deepEqual(content(JSON.parse(lines.at(-1)).stub).details, [{ name: 'arguments', sha256: await argumentsFingerprint({ item: 'paper' }) }]);
-  await tools.reserved({ item: 'paper' });
-  assert.deepEqual(content(JSON.parse(recorder.book().trim().split('\n').at(-1)).stub).details, [{ name: 'provared.arguments', sha256: await argumentsFingerprint({ item: 'paper' }) }]);
+  assert.deepEqual(content(JSON.parse(lines.at(-1)).stub).details, [{ name: 'provared.arguments', sha256: await argumentsFingerprint({ item: 'paper' }) }]);
+  await tools.label({ item: 'paper' });
+  assert.deepEqual(content(JSON.parse(recorder.book().trim().split('\n').at(-1)).stub).details, [{ name: 'arguments', sha256: await argumentsFingerprint({ item: 'paper' }) }]);
 });

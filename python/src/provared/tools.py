@@ -5,10 +5,12 @@
 # every call asks first, is run only if the slip allows it, and leaves a
 # stub. The agent's software then calls the tools as before.
 #
-# By default the stub of a call names one document, "arguments": the
-# fingerprint of the call's arguments. So the record fixes exactly what was
-# asked for, without holding it: whoever kept the arguments can show them
-# later, and anyone can work out the fingerprint again.
+# By default the stub of a call names one document, "provared.arguments"
+# (a reserved name, format description section 27): the fingerprint of the
+# call's arguments. So the record fixes exactly what was asked for, without
+# holding it: whoever kept the arguments can show them later, and anyone
+# can work out the fingerprint again. Before version 0.6.0 the document was
+# named "arguments"; a checker reads both.
 #
 # It names no agent software and depends on none: a tool is any function.
 #
@@ -113,7 +115,7 @@ def _one_form(value, depth=0):
 def arguments_fingerprint(args):
     """The fingerprint of the arguments of a call: SHA-256, in base64url, of
     the arguments written in the one form of RFC 8785. It is what a recorded
-    tool puts into its stub, as the document "arguments".
+    tool puts into its stub, as the document "provared.arguments".
 
     args: JSON: dicts, lists, text, numbers, True, False and None. A whole
     number must be one that JavaScript holds exactly: beyond 2^53 - 1, only
@@ -194,8 +196,8 @@ def record_tools(recorder, tools, options=None, on_stub=None):
         arguments that gives it;
       - "details" (optional): a function of the arguments that gives the
         documents to name in the stub ({"name", "sha256"} each), or False
-        for none. By default: one document, "arguments", the fingerprint of
-        the arguments (arguments_fingerprint);
+        for none. By default: one document, "provared.arguments", the
+        fingerprint of the arguments (arguments_fingerprint);
       - "countersign" (optional): asks the other side to countersign the
         stub; a function of the stub and the arguments;
       - "approve" (optional): asks the person for their approval where the
@@ -283,7 +285,7 @@ def _call(act, deny, on_stub, name, spec, args):
         if details is None:
             details = []
     else:
-        details = [] if given is _ABSENT else [{'name': 'arguments', 'sha256': arguments_fingerprint(given)}]
+        details = [] if given is _ABSENT else [{'name': 'provared.arguments', 'sha256': arguments_fingerprint(given)}]
     if not isinstance(details, list):
         raise f.fail(f'tools.{name}.details', 'must give a list of documents.')
     details = _copied(details, f'tools.{name}.details')

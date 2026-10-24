@@ -79,7 +79,7 @@ class Middleware(Runs, unittest.TestCase):
                     'The tool "order_supplies" was not run. With this action the total would be 280 GBP.'))
                 [stub] = stubs(world)
                 self.assertEqual((stub['action'], stub['with'], stub['amount']), (ORDER, SUPPLIER, {'unit': 'GBP', 'value': 30}))
-                self.assertEqual(stub['details'], [{'name': 'arguments', 'sha256': arguments_fingerprint(PAPER)}])
+                self.assertEqual(stub['details'], [{'name': 'provared.arguments', 'sha256': arguments_fingerprint(PAPER)}])
                 summary = check_book(world.writer.book(), issuer_keys=world.issuer_keys)['summary']
                 self.assertTrue(summary['intact'] and summary['withinSlips'])
 
@@ -283,7 +283,7 @@ class AfterTheReview(Runs, unittest.TestCase):
         # Numbers written as text are read as LangChain reads them, and recorded so.
         [stub] = stubs(world)
         self.assertEqual((world.orders, stub['amount']['value']), ([PAPER], 30))
-        self.assertEqual(stub['details'], [{'name': 'arguments', 'sha256': arguments_fingerprint(PAPER)}])
+        self.assertEqual(stub['details'], [{'name': 'provared.arguments', 'sha256': arguments_fingerprint(PAPER)}])
 
     def test_a_tool_that_answers_with_a_command_has_a_stub_only_if_it_did_not_fail(self):
         for status in ('success', 'error'):

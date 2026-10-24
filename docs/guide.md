@@ -742,7 +742,8 @@ A call that the slip does not allow throws `NotTaken`, with the answer
 of the check before acting, and the tool is not run. Where the slip asks
 for the person's own approval, a tool's `approve` function is asked for
 it once. By default the stub of a call names one document,
-`arguments`: the fingerprint of the call's arguments, written in one
+`provared.arguments` (the reserved name of section 27 of the format
+description): the fingerprint of the call's arguments, written in one
 form (RFC 8785). So the record fixes exactly what was asked for without
 holding it; `argumentsFingerprint` works the same fingerprint out again.
 The arguments must be JSON: a list with a gap in it, or with a named
@@ -882,8 +883,9 @@ the decoded body of a compressed message will not match the body's
 fingerprint. An identifier that is short or easy to guess can be guessed
 from its fingerprint.
 
-`recordTools` still names the arguments `arguments` by default; a tool
-can name them `provared.arguments` through its own `details` function.
+`recordTools` names the arguments `provared.arguments` by default (before
+version 0.6.0, `arguments`; every checker reads both); a tool can name
+them otherwise through its own `details` function.
 
 ## How signing works
 

@@ -210,7 +210,7 @@ class ToolHook(Runs, unittest.TestCase):
                 self.assertTrue(told[1][0].startswith('The tool "order_supplies" was not run. With this action the total would be 280 GBP.'))
                 [stub] = stubs(world)
                 self.assertEqual((stub['action'], stub['with'], stub['amount']), (ORDER, SUPPLIER, {'unit': 'GBP', 'value': 30}))
-                self.assertEqual(stub['details'], [{'name': 'arguments', 'sha256': arguments_fingerprint(PAPER)}])
+                self.assertEqual(stub['details'], [{'name': 'provared.arguments', 'sha256': arguments_fingerprint(PAPER)}])
                 summary = check_book(world.writer.book(), issuer_keys=world.issuer_keys)['summary']
                 self.assertTrue(summary['intact'] and summary['withinSlips'])
 
@@ -229,7 +229,7 @@ class ToolHook(Runs, unittest.TestCase):
         self.assertEqual(world.orders, [PAPER])
         self.assertEqual([failed for _, failed in answers(result)], [False, True])
         [stub] = stubs(world)
-        self.assertEqual(stub['details'], [{'name': 'arguments', 'sha256': arguments_fingerprint(PAPER)}])
+        self.assertEqual(stub['details'], [{'name': 'provared.arguments', 'sha256': arguments_fingerprint(PAPER)}])
 
     def test_a_tool_that_is_not_described_is_refused_or_run_unrecorded(self):
         for asynchronous in (False, True):
@@ -340,7 +340,7 @@ class TheArguments(Runs, unittest.TestCase):
                 [stub] = stubs(world)
                 self.assertEqual((seen, received), ([read], [read]))
                 self.assertEqual(stub['amount'], {'unit': 'GBP', 'value': 95})
-                self.assertEqual(stub['details'], [{'name': 'arguments', 'sha256': arguments_fingerprint(read)}])
+                self.assertEqual(stub['details'], [{'name': 'provared.arguments', 'sha256': arguments_fingerprint(read)}])
 
     def test_where_agno_converts_nothing_the_tool_is_handed_the_arguments_as_given(self):
         # Agno does not convert the arguments of a tool that takes the agent,
@@ -360,7 +360,7 @@ class TheArguments(Runs, unittest.TestCase):
                                ProvaredToolHook(world.writer, TOOLS), tools=[order_supplies], asynchronous=asynchronous)
                 [stub] = stubs(world)
                 self.assertEqual(received, [given])
-                self.assertEqual(stub['details'], [{'name': 'arguments', 'sha256': arguments_fingerprint(given)}])
+                self.assertEqual(stub['details'], [{'name': 'provared.arguments', 'sha256': arguments_fingerprint(given)}])
 
     def test_the_tool_is_handed_exactly_what_it_would_be_handed_without_the_hook(self):
         # A secret is handed as itself, and fingerprinted by its value; a
@@ -383,7 +383,7 @@ class TheArguments(Runs, unittest.TestCase):
                     [stub] = stubs(world)
                     # Every field of the model, by the name it is read by, its default filled in.
                     read = {**given, 'delivery': {'postCode': 'BS1 4DJ', 'left_at': 'the front door'}}
-                    self.assertEqual(stub['details'], [{'name': 'arguments', 'sha256': arguments_fingerprint(read)}])
+                    self.assertEqual(stub['details'], [{'name': 'provared.arguments', 'sha256': arguments_fingerprint(read)}])
 
     def test_a_field_that_pydantic_leaves_out_of_json_is_recorded_all_the_same(self):
         # pydantic leaves out a field marked "exclude" when it writes JSON; the record does not.
@@ -399,7 +399,7 @@ class TheArguments(Runs, unittest.TestCase):
         self.run_agent(world, [call('send_message', given), DONE], ProvaredToolHook(world.writer, TOOLS), tools=[send_message])
         [stub] = stubs(world)
         self.assertEqual(received, ['the back door'])
-        self.assertEqual(stub['details'], [{'name': 'arguments', 'sha256': arguments_fingerprint(given)}])
+        self.assertEqual(stub['details'], [{'name': 'provared.arguments', 'sha256': arguments_fingerprint(given)}])
 
     def test_a_dict_whose_names_are_numbers_is_recorded_with_its_names_as_text(self):
         world = World()
@@ -414,7 +414,7 @@ class TheArguments(Runs, unittest.TestCase):
         self.run_agent(world, [call('send_message', given), DONE], ProvaredToolHook(world.writer, TOOLS), tools=[send_message])
         [stub] = stubs(world)
         self.assertEqual(received, [{101: 2, 102: 1}])
-        self.assertEqual(stub['details'], [{'name': 'arguments', 'sha256': arguments_fingerprint(given)}])
+        self.assertEqual(stub['details'], [{'name': 'provared.arguments', 'sha256': arguments_fingerprint(given)}])
 
     def test_a_default_of_the_tool_s_own_with_no_json_form_is_left_out_of_the_record(self):
         # The tool's own object, not the model's: read back, the call takes it again.
@@ -429,7 +429,7 @@ class TheArguments(Runs, unittest.TestCase):
         self.run_agent(world, [call('send_message', NOTE), DONE], ProvaredToolHook(world.writer, TOOLS), tools=[send_message])
         [stub] = stubs(world)
         self.assertEqual(received, [DEFAULT_CLIENT])
-        self.assertEqual(stub['details'], [{'name': 'arguments', 'sha256': arguments_fingerprint(NOTE)}])
+        self.assertEqual(stub['details'], [{'name': 'provared.arguments', 'sha256': arguments_fingerprint(NOTE)}])
 
     def test_a_value_with_no_json_form_that_the_record_cannot_fix_is_refused_not_changed(self):
         # A new object for each call: the record could not say what the tool was handed.
@@ -463,7 +463,7 @@ class TheArguments(Runs, unittest.TestCase):
                 self.run_agent(world, [call('order_supplies', PAPER), DONE], ProvaredToolHook(world.writer, TOOLS),
                                tools=[order_supplies], asynchronous=asynchronous)
                 [stub] = stubs(world)
-                self.assertEqual(stub['details'], [{'name': 'arguments', 'sha256': arguments_fingerprint({**PAPER, 'reference': received[0]})}])
+                self.assertEqual(stub['details'], [{'name': 'provared.arguments', 'sha256': arguments_fingerprint({**PAPER, 'reference': received[0]})}])
 
     def test_a_field_the_person_leaves_out_is_recorded_with_its_default(self):
         # Agno 3.1 hands such a field as None; a later Agno might leave it out,
@@ -503,7 +503,7 @@ class TheArguments(Runs, unittest.TestCase):
                        ProvaredToolHook(world.writer, TOOLS), tools=[order_supplies])
         [stub] = stubs(world)
         self.assertEqual(received, [datetime.date(2026, 10, 9)])
-        self.assertEqual(stub['details'], [{'name': 'arguments', 'sha256': arguments_fingerprint({**PAPER, 'deliver_on': '2026-10-09'})}])
+        self.assertEqual(stub['details'], [{'name': 'provared.arguments', 'sha256': arguments_fingerprint({**PAPER, 'deliver_on': '2026-10-09'})}])
 
     def test_arguments_that_do_not_fit_the_tool_are_not_run_and_the_model_is_told(self):
         for asynchronous in (False, True):
@@ -547,7 +547,7 @@ class TheArguments(Runs, unittest.TestCase):
                     continue
                 [stub] = stubs(world)
                 self.assertEqual((world.orders, stub['amount']['value']), ([total], total))
-                self.assertEqual(stub['details'], [{'name': 'arguments', 'sha256': arguments_fingerprint(read)}])
+                self.assertEqual(stub['details'], [{'name': 'provared.arguments', 'sha256': arguments_fingerprint(read)}])
 
     def test_input_the_tool_refuses_through_its_type_hints_leaves_no_stub(self):
         # The way the README gives to refuse the model's input with no stub.
@@ -638,7 +638,7 @@ class TheArguments(Runs, unittest.TestCase):
         self.run_agent(world, [call('send_message', NOTE), DONE], ProvaredToolHook(world.writer, TOOLS), tools=[function])
         [stub] = stubs(world)
         self.assertEqual(received, [NOTE])
-        self.assertEqual(stub['details'], [{'name': 'arguments', 'sha256': arguments_fingerprint(NOTE)}])
+        self.assertEqual(stub['details'], [{'name': 'provared.arguments', 'sha256': arguments_fingerprint(NOTE)}])
 
 
 class TeamsAndAgnosOwnTools(Runs, unittest.TestCase):
@@ -721,7 +721,7 @@ class TeamsAndAgnosOwnTools(Runs, unittest.TestCase):
                 result = self.run_team(team, asynchronous)
                 self.assertFalse(any(failed for _, failed in answers(result)))
                 [stub] = stubs(world)
-                self.assertEqual((stub['action'], stub['details']), (MESSAGE, [{'name': 'arguments', 'sha256': arguments_fingerprint(asked)}]))
+                self.assertEqual((stub['action'], stub['details']), (MESSAGE, [{'name': 'provared.arguments', 'sha256': arguments_fingerprint(asked)}]))
                 # The member, which carries no hooks, acted unrecorded: the developer described the hand-over instead.
                 self.assertEqual(world.messages, [NOTE])
 
@@ -878,7 +878,7 @@ class TeamsAndAgnosOwnTools(Runs, unittest.TestCase):
                            hook, tools=[checkout], session_state={}, enable_agentic_state=True)
         self.run_agent(world, None, None, agent=agent)
         [stub] = stubs(world)
-        self.assertEqual((world.orders, stub['details']), (['desk', 'chair'], [{'name': 'arguments', 'sha256': arguments_fingerprint({})}]))
+        self.assertEqual((world.orders, stub['details']), (['desk', 'chair'], [{'name': 'provared.arguments', 'sha256': arguments_fingerprint({})}]))
 
     def test_a_team_s_own_tools_are_recorded_by_the_team_s_hooks(self):
         for asynchronous in (False, True):

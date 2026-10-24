@@ -399,7 +399,7 @@ class PythonValues(unittest.TestCase):
         self.assertEqual(description.asked, 1)
         self.assertEqual(told, [])
         # With the approval the person signs, it is taken, and whoever asked is told.
-        request = {'action': ORDER, 'with': 'supplier', 'amount': {'unit': 'GBP', 'value': 45}, 'details': [{'name': 'arguments', 'sha256': arguments_fingerprint({'item': 'toner'})}]}
+        request = {'action': ORDER, 'with': 'supplier', 'amount': {'unit': 'GBP', 'value': 45}, 'details': [{'name': 'provared.arguments', 'sha256': arguments_fingerprint({'item': 'toner'})}]}
         approval = w.approve(request, w.clock)
         description.approve = lambda request, args: approval
         tools = record_tools(writer, {'order': description}, {'onStub': lambda stub, tool: told.append((tool, stub['seq']))})

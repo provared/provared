@@ -638,7 +638,7 @@ export interface RecordedTool<A = any, R = any> {
   /** The id of the service the tool deals with, as the slip names it. */
   with?: string | ((args: A) => string | undefined);
   amount?: Amount | ((args: A) => Amount | undefined);
-  /** The documents to name in the stub, or false for none. By default: "arguments", the fingerprint of the arguments. */
+  /** The documents to name in the stub, or false for none. By default: "provared.arguments", the fingerprint of the arguments. */
   details?: false | ((args: A) => DocumentRef[] | Promise<DocumentRef[]>);
   /** Asks the other side to countersign the stub. */
   countersign?: (stub: SignedRecord, args: A) => Promise<SignedRecord | null>;

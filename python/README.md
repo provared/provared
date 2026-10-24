@@ -239,8 +239,9 @@ cannot be used with an approval. A matching identifier shows that the
 two records speak of one call, not that the call did what either says;
 a fingerprint of a request, an answer, the arguments or an error shows
 only that the content matches, not that it was the same call.
-`record_tools` and `record_function` still name the arguments
-`arguments` by default.
+`record_tools` and `record_function` name the arguments
+`provared.arguments` by default (before version 0.6.0, `arguments`; every
+checker reads both).
 
 Opened with `denials=True`, the writer also writes a **denial**
 whenever `act` does not take an action: the agent's side's own signed

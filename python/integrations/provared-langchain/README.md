@@ -7,7 +7,7 @@ allows it, and records the call with
 
 *Evidence, not a verdict.*
 
-**Version 0.1.1, a draft**, as Provared itself is. Published as it is, by
+**Version 0.2.0, a draft**, as Provared itself is. Published as it is, by
 one author in their own time; fixes as time allows.
 
 ## What it does
@@ -24,8 +24,9 @@ check later.
 
 - **Allowed:** the tool runs, and a stub is written. The stub names the
   action, the amount and the other party where they apply, and the
-  SHA-256 fingerprint of the call's arguments, so the record fixes
-  exactly what was asked for without holding it.
+  SHA-256 fingerprint of the call's arguments, as the document
+  `provared.arguments`, so the record fixes exactly what was asked for
+  without holding it.
 - **Not allowed** (over a limit, an action the slip does not name, after
   the slip ends or was cancelled): the tool is not run, nothing is
   written, and the model is handed a failed tool answer that says why,
@@ -127,6 +128,20 @@ How to make a slip, a book and the agent's keys is in Provared's
   [list of threats](https://github.com/provared/provared/blob/main/docs/threat-model.md).
   In short: it shows what was recorded under a slip the person signed,
   not what was left out, and not whether an action was wise or lawful.
+
+## Versions
+
+- **0.2.0.** A stub names the fingerprint of the call's arguments
+  `provared.arguments`, the reserved name of section 27 of the format
+  description, where 0.1.x named it `arguments`. The fingerprint is the
+  same; only the name changes, and every checker reads both (one of
+  Provared 0.5.0 or later knows the reserved name; an earlier one reads
+  it as a label). Nothing else in what the middleware records changes.
+  It needs `provared` 0.6.0 or later, whose `record_tools` makes the
+  same change.
+- **0.1.1.** Needs `provared` 0.4.0 or later, so that an agent goes on
+  after its book is sealed; keywords, homepage and the mark.
+- **0.1.0.** The first version.
 
 ## Tests
 
