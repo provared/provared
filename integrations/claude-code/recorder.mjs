@@ -20,6 +20,10 @@
 //   provared-claude-code new-book      seal the book, keep it, and start a new one that begins with the
 //                                      permission in force (done by itself at 90,000 entries or 100 MB)
 //   provared-claude-code check [file]  the checker's answer for the book, or for a book kept before it
+//   provared-claude-code add-witness <address> <fingerprint> <token file>
+//                                      ask a witness (provared-witness) to sign for every seal from now on
+//   provared-claude-code remove-witness <fingerprint>
+//                                      ask that witness no more
 //   provared-claude-code stop          stop the service
 //   provared-claude-code keys          make the keys, and print the agent's public keys
 //
@@ -37,6 +41,17 @@
 //   book-<n>.jsonl           each book kept before it, sealed, numbered from 1 in the order kept
 //   feed-token               the token a reader gives to read the books through the feed (feed.mjs):
 //                            written at the first start (never share)
+//   witnesses.json           the witnesses it asks to sign for its seals, each with its address, the
+//                            fingerprint of its key set and its token: written by "add-witness" (never share)
+//   witnessed/               the statements that witnesses handed back after the seal's line was written, one
+//                            file for each seal, in the form a checker takes beside the book (--seal)
+//   pending-seal.json        a seal whose line is not yet written while "seal" waits for the witnesses; written
+//                            at its place at the next start if a stop came first
+//
+// Seals are numbered by book (format description, section 21.6): a new
+// book's first seal gives the book's number and names the last seal of the
+// book before it from the same passkey and agent, so that a witness
+// (witness.mjs, witnessed.mjs) can follow every book of one person and agent.
 //
 // The feed (GET /books and /lines, feed.mjs) gives the books' lines to a
 // reader on this computer that holds the token, such as the application's
@@ -50,13 +65,15 @@
 
 import { spawn, spawnSync } from 'node:child_process';
 import nodeCrypto from 'node:crypto';
-import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, realpathSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { appendFileSync, closeSync, existsSync, fsyncSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, realpathSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { homedir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { checkBook, checkSlip, entryLine, fingerprint, fromBase64url, keySetFingerprint, openRecorder, thumbprint, toBase64url, utf8, writeSeal } from 'provared';
-import { createFeed, feedToken } from './feed.mjs';
+import { checkBook, checkSlip, entryLine, fingerprint, fromBase64url, inclusionPath, keySetFingerprint, openRecorder, thumbprint, toBase64url, utf8, verifyInclusion, writeSeal } from 'provared';
+import { createFeed, feedToken, isRandom } from './feed.mjs';
+import { firstLineOfFile, replaceDurably, witnessClient } from './witness.mjs';
+import { MAX_RECORDER_WITNESSES, WITNESS_RETRY_MS, WITNESS_WAIT_MS, createWitnessing, heldSealFiles, keepStatement, readWitnessSettings, validAddress, writeWitnessSettings } from './witnessed.mjs';
 
 const subtle = globalThis.crypto.subtle;
 const SLH = 'SLH-DSA-SHA2-256s';
@@ -154,6 +171,159 @@ export function keptBooks(folder) {
     const m = KEPT_BOOK.exec(file);
     return m ? [{ number: Number(m[1]), file, path: join(folder, file) }] : [];
   }).sort((a, b) => a.number - b.number);
+}
+
+/**
+ * Which version of a kept book's file is on the disk: its size, its
+ * modification and change times and its identity. What is worked out from
+ * the file (its seals, its tree of line fingerprints) is kept only while
+ * this stays the same. The change time is set by the file system at each
+ * change and no program can set it back, as one can the modification time,
+ * so a file changed in its middle, kept to the same size and given its old
+ * modification time again, still reads as another version. One limit: on
+ * this computer's file system (NTFS) the change time was seen not to move
+ * for a second change made within a moment of the one before, so a change
+ * made at once after the file was last written may not be seen; a kept
+ * book is not written again once kept. What is at stake is only that wrong
+ * proofs are sent: a witness checks every proof, and refuses a wrong one.
+ * "gone" where the file cannot be read.
+ */
+export function fileVersion(path) {
+  try {
+    const st = statSync(path, { bigint: true });
+    return `${st.size}:${st.mtimeNs}:${st.ctimeNs}:${st.dev}:${st.ino}`;
+  } catch {
+    return 'gone';
+  }
+}
+
+// --- a seal's book number, the seal it names, and the disk ---
+
+const SEAL_LINE = '\n{"seal":';
+/** A book's first line, without its line break. */
+const firstLineOf = (text) => {
+  const end = text.indexOf('\n');
+  return (end < 0 ? text : text.slice(0, end)).replace(/\r$/, '');
+};
+
+/**
+ * The last seal on a line of a book's text that can be read: its
+ * fingerprint, the number of the book it gives (1 where it gives none), and
+ * the fingerprint of the key set that signed it. null where there is none.
+ */
+export async function lastSealOf(text) {
+  let at = text.lastIndexOf(SEAL_LINE, Math.max(0, text.length - 2));
+  while (at >= 0) {
+    const end = text.indexOf('\n', at + 1);
+    try {
+      const record = JSON.parse(text.slice(at + 1, end < 0 ? undefined : end)).seal;
+      const content = JSON.parse(new TextDecoder().decode(fromBase64url(record.payload)));
+      if (content.type === 'provared.seal.v0') {
+        return { fingerprint: await fingerprint(fromBase64url(record.payload)), number: Number.isInteger(content.book) ? content.book : 1, sealer: await keySetFingerprint(content.by.keys) };
+      }
+    } catch {
+      // Not a seal that can be read: the one before it is looked at.
+    }
+    if (at === 0) break;
+    at = text.lastIndexOf(SEAL_LINE, at - 1);
+  }
+  return null;
+}
+
+/**
+ * Whom the permission on a book's first line names, as a witness knows a
+ * sequence (with the recorder's keys): the thumbprint of its passkey and the
+ * fingerprint of its agent's key set, as one text; null where the line is
+ * not a permission.
+ */
+async function whoOfLine(line) {
+  try {
+    const about = await aboutSlip(JSON.parse(line).slip);
+    return `${about.issuerKey} ${await keySetFingerprint(about.content.agent.keys)}`;
+  } catch {
+    return null;
+  }
+}
+
+/** The line at a place in a text (counting from 0), without its line break, found without splitting the text; null where there is none. */
+function lineAt(text, place) {
+  let at = 0;
+  for (let i = 0; i < place; i++) {
+    at = text.indexOf('\n', at) + 1;
+    if (at === 0) return null;
+  }
+  if (at >= text.length) return null;
+  const end = text.indexOf('\n', at);
+  return end < 0 ? null : text.slice(at, end);
+}
+
+/** Make sure what a file holds is on the disk (fsync). */
+function syncFile(path) {
+  const fd = untilFree(() => openSync(path, 'r+'));
+  try {
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+}
+
+// A seal whose line is not yet written, kept apart from the book, on the
+// disk, while "seal" waits for the witnesses (sealIn): a witness may sign
+// for it before its line is written, and a witness that holds a seal that
+// is in no book signs for none after it.
+export const PENDING_SEAL = 'pending-seal.json';
+
+/**
+ * At the start, before anything else is added to the book in force: the
+ * seal a stop left kept apart is written at its place, where the book still
+ * ends just before it and the seal covers exactly the entries before it.
+ * Where its line is in the book already, the file is no longer needed.
+ * Where neither, it cannot be written, and the file is kept under another
+ * name for the person to look at.
+ * @returns {Promise<{text: string, placed: string|null, problem: string|null}>} placed: the seal's payload, where it is
+ *   in the text handed back and not yet known to be on the disk
+ */
+async function placePending(folder, text) {
+  const path = join(folder, PENDING_SEAL);
+  const aside = (why) => {
+    const moved = join(folder, `pending-seal-not-placed-${Date.now()}.json`);
+    try { untilFree(() => renameSync(path, moved)); } catch { /* left where it is */ }
+    return { text, placed: null, problem: `A seal kept apart from the book while witnesses were asked (${PENDING_SEAL}) could not be written into it: ${why} It is kept as ${moved}. A witness that signed for it may refuse every later seal of this book; "status" says so for each witness.` };
+  };
+  let record;
+  let content;
+  try {
+    const p = JSON.parse(readFileSync(path, 'utf8'));
+    if (p.book !== 'book.jsonl') return aside('it names another book than book.jsonl.');
+    record = p.seal;
+    content = JSON.parse(new TextDecoder().decode(fromBase64url(record.payload)));
+  } catch {
+    return aside('it cannot be read.');
+  }
+  const lines = text.split('\n');
+  if (lines.at(-1) === '') lines.pop();
+  const size = content.size;
+  const itsLine = (line) => typeof line === 'string' && line.startsWith(`{"seal":{"payload":"${record.payload}"`);
+  if (Number.isInteger(size) && lines.length > size && itsLine(lines[size])) {
+    // Its line is in the book: it was written before the stop.
+    try { unlinkSync(path); } catch { /* removed after the next seal */ }
+    return { text, placed: null, problem: null };
+  }
+  // Its line is in a book kept since: a new book began before the file could be let go.
+  if (Number.isInteger(size)) {
+    for (const k of keptBooks(folder).reverse()) {
+      let kept;
+      try { kept = readFileSync(k.path, 'utf8'); } catch { continue; }
+      if (itsLine(lineAt(kept, size))) {
+        try { unlinkSync(path); } catch { /* removed after the next seal */ }
+        return { text, placed: null, problem: null };
+      }
+    }
+  }
+  if (!Number.isInteger(size) || lines.length !== size || size < 1) return aside(`it covers ${size} entries, and the book holds ${lines.length}.`);
+  const leaves = lines.map(utf8);
+  if (!(await verifyInclusion(0, size, leaves[0], await inclusionPath(leaves, 0), fromBase64url(content.root)))) return aside('it does not cover the entries the book holds.');
+  return { text: `${text}${entryLine({ seal: record })}\n`, placed: record.payload, problem: null };
 }
 
 // --- keys kept between runs, as JSON Web Keys in a file the person keeps ---
@@ -525,13 +695,16 @@ async function slipsIn(text) {
  * checked and taken into the book first. Where the folder has no book.jsonl,
  * a new book begins with that slip: the first book, or the rest of a new
  * book that a switch had begun when the recorder stopped.
- * @param {{folder?: string, port?: number, name?: string, newBookAt?: {entries?: number, bytes?: number}, inFlightMs?: number, faults?: (step: string) => void, clock?: () => number}} o
+ * @param {{folder?: string, port?: number, name?: string, newBookAt?: {entries?: number, bytes?: number}, inFlightMs?: number, faults?: (step: string) => void, clock?: () => number, witnessWaitMs?: number, witnessRetryMs?: number}} o
  *   port 0 takes any free port; newBookAt and inFlightMs are for tests (90,000 entries, 100,000,000 bytes and
- *   15 minutes by default); faults is called at each step of a new book ("sealed", "kept", "written"), for tests;
- *   clock gives the time the waiting calls and the retry of a new book are measured by (Date.now), for tests
- * @returns {Promise<{port: number, close: () => Promise<void>, recorder: object, seal: () => Promise<object>, renew: (slip: object, o?: {newPasskey?: boolean}) => Promise<object>, newBook: () => Promise<object>}>}
+ *   15 minutes by default); faults is called at each step of a new book ("sealed", "kept", "written"), and of a
+ *   seal kept apart while witnesses are asked ("pending", "statements"), for tests; clock gives the time the
+ *   waiting calls and the retry of a new book are measured by (Date.now), for tests; witnessWaitMs is how long
+ *   "seal" waits for the witnesses (5 seconds), witnessRetryMs how often a witness that is behind is asked again
+ *   (a minute)
+ * @returns {Promise<{port: number, close: () => Promise<void>, recorder: object, seal: () => Promise<object>, renew: (slip: object, o?: {newPasskey?: boolean}) => Promise<object>, newBook: () => Promise<object>, witnesses: () => Promise<object>}>}
  */
-export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_PORT, name = 'The recorder beside the coding agent', newBookAt = {}, inFlightMs = IN_FLIGHT_MS, faults = () => {}, clock = Date.now } = {}) {
+export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_PORT, name = 'The recorder beside the coding agent', newBookAt = {}, inFlightMs = IN_FLIGHT_MS, faults = () => {}, clock = Date.now, witnessWaitMs = WITNESS_WAIT_MS, witnessRetryMs = WITNESS_RETRY_MS } = {}) {
   const f = files(folder);
   if (!existsSync(f.slip)) throw new Error(`There is no signed slip at ${f.slip}. Sign one on the signing page and put it in place: ${RUN} use <the saved file>`);
   const placed = await loadSlip(folder);
@@ -581,8 +754,10 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
       feed.changed();
     }
   };
+  // "synced": how much of the book's text (in characters) is made sure to be on the disk; a witness is asked only
+  // about seals within it. "keptNumber": the number of book-<n>.jsonl, once the book is kept; null for the book in force.
   const bookAt = (path, writer, about, saved) => {
-    const b = { id: ++bookIds, path, writer, written: typeof saved === 'string' ? saved.length : 0, slip: about.slip, fingerprint: about.fingerprint, issuerKey: about.issuerKey, content: about.content, before: new Map(), seen: 0, entries: 0, bytes: 0, times: new Map() };
+    const b = { id: ++bookIds, path, writer, written: typeof saved === 'string' ? saved.length : 0, synced: 0, keptNumber: null, slip: about.slip, fingerprint: about.fingerprint, issuerKey: about.issuerKey, content: about.content, before: new Map(), seen: 0, entries: 0, bytes: 0, times: new Map() };
     b.save = watched(b, bookSaver(folder, { path, saved }));
     follow(b);
     return b;
@@ -600,6 +775,19 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
 
   let text = existsSync(f.book) ? readFileSync(f.book, 'utf8') : '';
   if (text !== '' && !text.endsWith('\n')) text += '\n';
+  // A seal that a stop left kept apart from the book while witnesses were
+  // asked for it: written at its place first, before anything else is added
+  // to the book, so that a witness that signed for it finds it there.
+  let pendingProblem = null;
+  let pendingLine = null;
+  // Whether the line of the seal kept apart is known to be on the disk, while the file is not yet let go.
+  let pendingOnDisk = false;
+  if (existsSync(join(folder, PENDING_SEAL))) {
+    const done = await placePending(folder, text);
+    text = done.text;
+    pendingProblem = done.problem;
+    if (done.placed) pendingLine = `${SEAL_LINE}{"payload":"${done.placed}"`;
+  }
   // The passkeys trusted: the folder's list (trusted-passkeys.json). The
   // recorder does not start if the book or slip.json holds a slip from a
   // passkey not on it.
@@ -621,18 +809,73 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
   /** The book in force, at book.jsonl. */
   let current = bookAt(f.book, await open(text, placed.fingerprint, trusted), placed);
   current.save(current.writer.book());
+  syncBook(current);
   const started = new Date().toISOString();
   let count = 0;
 
+  // Make sure a book's file is on the disk (fsync), as far as it was
+  // written: a witness is asked only about seals within it. Once the line of
+  // the seal kept apart is on the disk, that seal is no longer kept apart.
+  function syncBook(b) {
+    try {
+      faults('sync');
+      syncFile(b.path);
+    } catch {
+      return false;
+    }
+    b.synced = b.written ?? 0;
+    if (pendingLine !== null && !pendingOnDisk) {
+      const at = b.writer.book().indexOf(pendingLine);
+      if (at >= 0 && at + pendingLine.length <= b.synced) pendingOnDisk = true;
+    }
+    // Once its line is on the disk (in this book, or in one kept since), the file is let go; where that fails, it
+    // is tried again at the next save, whichever book that is of.
+    if (pendingOnDisk) {
+      try {
+        unlinkSync(join(folder, PENDING_SEAL));
+        pendingLine = null;
+        pendingOnDisk = false;
+      } catch (e) {
+        if (e.code === 'ENOENT') {
+          pendingLine = null;
+          pendingOnDisk = false;
+        }
+      }
+    }
+    return true;
+  }
+
   // One request at a time, so that a renewal or a new book never falls
   // between a call and its stub, and the writer is switched between two
-  // requests.
+  // requests. "queued" counts the requests waiting their turn: "seal" waits
+  // for the witnesses only while none does.
   let turn = Promise.resolve();
+  let queued = 0;
+  const queueWatchers = new Set();
   const inTurn = (work) => {
-    const run = turn.then(work);
+    queued++;
+    for (const wake of [...queueWatchers]) wake();
+    const run = turn.then(() => {
+      queued--;
+      return work();
+    });
     turn = run.catch(() => {});
     return run;
   };
+  // Wait for "settled", for at most "ms", and no longer than until another request waits its turn.
+  async function briefly(settled, ms) {
+    let timer;
+    let wake;
+    const another = new Promise((r) => { wake = r; });
+    queueWatchers.add(wake);
+    if (queued > 0) wake();
+    try {
+      await Promise.race([settled, another, new Promise((r) => { timer = setTimeout(r, ms); })]);
+    } finally {
+      clearTimeout(timer);
+      queueWatchers.delete(wake);
+    }
+  }
   const entries = () => {
     follow(current);
     return current.entries;
@@ -664,6 +907,32 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
   // The books kept at a switch while a call allowed under them may still come back.
   const keptOpen = new Map();
   let bookProblem = null;
+
+  // The witnesses named in witnesses.json (witnessed.mjs): they are shown the
+  // books, oldest first, the one in force last; a book the recorder holds is
+  // read from its own copy, as far as it is on the disk, and a kept book it
+  // no longer writes from its file.
+  const memoryBook = (b) => ({ key: `memory:${b.id}`, kind: 'memory', text: () => b.writer.book(), firstLine: () => firstLineOf(b.writer.book()), durable: () => b.synced ?? 0, version: () => b.writer.book().length });
+  const fileBook = (k) => ({
+    key: `file:${k.path}`,
+    kind: 'file',
+    text: () => readFileSync(k.path, 'utf8'),
+    firstLine: () => { try { return firstLineOfFile(k.path); } catch { return null; } },
+    durable: () => Infinity,
+    version: () => fileVersion(k.path),
+  });
+  const witnessing = createWitnessing({
+    folder,
+    recorder: { keys: sealer.keys, fingerprint: sealKeys[0] },
+    retryMs: witnessRetryMs,
+    books: () => [
+      ...keptBooks(folder).map((k) => {
+        const open = [...keptOpen.values()].find((o) => o.path === k.path);
+        return open ? memoryBook(open) : fileBook(k);
+      }),
+      memoryBook(current),
+    ],
+  });
   // A kept book that no counting call can come back to any more is sealed,
   // if anything came after its seal.
   async function tidy() {
@@ -806,25 +1075,139 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
   function savedOrHeld(b) {
     try {
       b.save(b.writer.book());
+      // A seal whose line could not be saved when it was made is on the disk once this save has written it.
+      if (pendingLine !== null && b.path === f.book) syncBook(b);
     } catch (e) {
       throw Object.assign(new Error(`the stub is signed and held by the recorder, but could not be written to its book file yet (${e.message}); the recorder writes it with the next save, and it is lost if the recorder stops before then`), { code: 'held-not-saved' });
     }
   }
 
-  async function sealIn(b) {
-    const book = b.writer.book();
+  // What a new book's first seal needs of each kept book (section 21.6):
+  // the passkey of the permission on its first line, and its last seal. Read
+  // from the file once, and again when the file has changed; read from the
+  // recorder's own copy for a kept book a call may still come back to.
+  const keptFacts = new Map();
+  async function factsOf(k) {
+    const open = [...keptOpen.values()].find((o) => o.path === k.path);
+    if (open) {
+      const kept = open.writer.book();
+      return { who: await whoOfLine(firstLineOf(kept)), last: await lastSealOf(kept) };
+    }
+    let size;
+    try {
+      size = statSync(k.path).size;
+    } catch {
+      return null;
+    }
+    const known = keptFacts.get(k.path);
+    if (known && known.size === size) return known;
+    let kept;
+    try {
+      kept = untilFree(() => readFileSync(k.path, 'utf8'));
+    } catch {
+      return null;
+    }
+    const facts = { size, who: await whoOfLine(firstLineOf(kept)), last: await lastSealOf(kept) };
+    keptFacts.set(k.path, facts);
+    return facts;
+  }
+
+  // The number of the book a seal is of, and the seal it names before it
+  // (format description, section 21.6). A book that holds a seal goes on as
+  // its first seal says, naming its last seal. One that holds none follows
+  // the latest book kept before it whose first line is a permission from the
+  // same passkey for the same agent, sealed with this recorder's keys: it is
+  // that book's number and one, and names that book's last seal. Where there
+  // is none, it is the first book of that passkey and agent: it gives no
+  // number, and names no seal. So the books of one person and agent are one
+  // sequence, as a witness knows them (the recorder's keys, the passkey and
+  // the agent's keys), and a book from another passkey, or for another agent,
+  // begins a sequence of its own. The book a
+  // recorder kept as book-<n>.jsonl keeps that name: the file's number is the
+  // order kept, and the seal's number is the book's place in its sequence.
+  async function linkFor(b, seals) {
+    if (seals.length > 0) return { previous: seals.at(-1).fingerprint, book: Number.isInteger(seals[0].content.book) ? seals[0].content.book : undefined };
+    const who = await whoOfLine(firstLineOf(b.writer.book()));
+    if (who === null) return {};
+    for (const k of keptBooks(folder).reverse()) {
+      if (b.keptNumber !== null && b.keptNumber !== undefined && k.number >= b.keptNumber) continue;
+      const facts = await factsOf(k);
+      // A kept book that cannot be read (held by another program for longer than the recorder waits): the seal
+      // is not made, rather than given a number that may be wrong; it is tried again at the next seal.
+      if (facts === null) throw new Error(`The kept book ${k.path} could not be read, so the number of the book in force, and the seal it follows, are not known: no seal was made. Try again in a moment.`);
+      if (facts.who === who && facts.last && facts.last.sealer === sealKeys[0]) return { previous: facts.last.fingerprint, book: facts.last.number + 1 };
+    }
+    return {};
+  }
+
+  // Seal a book. With "inTime" (the seal asked for by "seal"), and where a
+  // witness is named and the book passes its check as it stands, the
+  // witnesses are asked before the seal's line is written, and the
+  // statements that come in time stand beside the seal on its line. The
+  // seal's entry is first kept on the disk apart from the book, so that a
+  // witness never signs for a seal that a stop could leave out of the book.
+  // The wait is at most witnessWaitMs, and ends as soon as another request
+  // waits its turn: a tool call never waits for a witness. Every seal's line
+  // is made sure to be on the disk, and then each witness is asked about the
+  // seals it has not signed for (in the background).
+  async function sealIn(b, { inTime = false } = {}) {
     // The seal before, from the writer's own answer for its book: nothing is read again.
     const result = await b.writer.check();
     const seals = result.entries.filter((e) => e.kind === 'seal' && e.problems.length === 0);
-    const previous = seals.length ? seals[seals.length - 1].fingerprint : undefined;
-    const sealed = await writeSeal(book, { by: { keys: sealer.keys, name }, previous, when: Date.now() }, sealer.privateKeys);
+    // Before the first seal of the book in force, every book kept before it
+    // that a call allowed under it could still come back to is closed, and
+    // sealed if anything came after its seal: the seal this one names is
+    // then the last of its book, and no seal is added to that book after it.
+    // A call that comes back for such a book later is recorded in the book in
+    // force, as after 15 minutes.
+    if (b === current && seals.length === 0 && keptOpen.size > 0) {
+      for (const [id, k] of [...keptOpen]) {
+        keptOpen.delete(id);
+        if (!endsWithSeal(k)) await sealIn(k);
+      }
+    }
+    const link = await linkFor(b, seals);
+    const book = b.writer.book();
+    const sealed = await writeSeal(book, { by: { keys: sealer.keys, name }, previous: link.previous, book: link.book, when: Date.now() }, sealer.privateKeys);
     // No outside time-stamp is put beside the seal here (a seal without one has no "stamps" member).
-    await b.writer.add({ seal: sealed.record });
-    b.save(b.writer.book());
+    let entry = { seal: sealed.record };
+    let arrived = [];
+    let asked = null;
+    const sound = result.problems.length === 0 && result.entries.every((e) => e.problems.length === 0);
+    try {
+      if (inTime && b === current && sound && pendingLine === null && witnessing.configured()) {
+        replaceDurably(join(folder, PENDING_SEAL), `${JSON.stringify({ about: 'A seal whose line was not yet written while witnesses were asked for it. The recorder writes it into book.jsonl, at its place, when it next starts.', book: 'book.jsonl', seal: sealed.record })}\n`);
+        pendingLine = `${SEAL_LINE}{"payload":"${sealed.record.payload}"`;
+        faults('pending');
+        asked = await witnessing.inTime({ key: memoryBook(b).key, record: sealed.record, fingerprint: sealed.fingerprint, content: JSON.parse(new TextDecoder().decode(fromBase64url(sealed.record.payload))), text: book, first: firstLineOf(book) });
+        await briefly(asked.settled, witnessWaitMs);
+        arrived = asked.take();
+        faults('statements');
+        if (arrived.length > 0) entry = { seal: sealed.record, witnesses: arrived.map((a) => a.statement) };
+      }
+      try {
+        await b.writer.add(entry);
+      } catch (e) {
+        if (!entry.witnesses) throw e;
+        // Each statement passed the library's check for this seal, so this
+        // is not expected: the seal goes in by itself, and the statements
+        // are kept beside the book.
+        for (const a of arrived) await keepStatement(folder, sealed.fingerprint, sealed.record, a.statement);
+        arrived = [];
+        entry = { seal: sealed.record };
+        await b.writer.add(entry);
+      }
+      b.save(b.writer.book());
+      syncBook(b);
+    } finally {
+      asked?.done();
+    }
     follow(b);
-    return { fingerprint: sealed.fingerprint, entries: b.entries };
+    if (b !== current) keptFacts.delete(b.path);
+    witnessing.trigger();
+    return { fingerprint: sealed.fingerprint, entries: b.entries, ...(link.book ? { book: link.book } : {}), witnessed: arrived.map((a) => a.key) };
   }
-  const seal = () => sealIn(current);
+  const seal = () => sealIn(current, { inTime: true });
 
   // A new book: seal the book in force (unless it ends with a seal), keep
   // it as book-<n>.jsonl, and start book.jsonl again with the permission in
@@ -846,8 +1229,10 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
     if (!endsWithSeal(old)) await sealIn(old);
     faults('sealed');
     const writer = await open(entryLine({ slip: old.slip }) + '\n', old.fingerprint, trusted);
-    // The file must hold the old book exactly before it is kept.
+    // The file must hold the old book exactly before it is kept, and be on
+    // the disk: the new book's first seal will name its last seal.
     old.save(old.writer.book());
+    if (!syncBook(old)) throw new Error(`The book ${f.book} could not be made sure to be on the disk, so it is not kept yet: the next book's first seal will name its last seal, and a witness may be asked about it.`);
     const number = (keptBooks(folder).at(-1)?.number ?? 0) + 1;
     if (number > KEPT_BOOK_HIGHEST) throw new Error(`A kept book would be numbered ${number}, past the highest a kept book may have (${KEPT_BOOK_HIGHEST}), so no new book is started.`);
     const keptPath = join(folder, `book-${number}.jsonl`);
@@ -860,7 +1245,8 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
     }
     old.times = keptFigures;
     current = bookAt(f.book, writer, old);
-    Object.assign(old, { path: keptPath, save: watched(old, bookSaver(folder, { path: keptPath, saved: old.writer.book() })) });
+    Object.assign(old, { path: keptPath, keptNumber: number, save: watched(old, bookSaver(folder, { path: keptPath, saved: old.writer.book() })) });
+    keptFacts.delete(keptPath);
     if (holding(old.id)) keptOpen.set(old.id, old);
     bookProblem = null;
     try {
@@ -943,7 +1329,7 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
     if (keptText.startsWith('{"seal":', keptText.lastIndexOf('\n', keptText.length - 2) + 1)) continue;
     try {
       const under = [...(await slipsIn(keptText))].at(-1);
-      const b = { path: k.path, writer: await open(keptText, under, trusted), seen: 0, entries: 0, bytes: 0, times: new Map() };
+      const b = { path: k.path, keptNumber: k.number, writer: await open(keptText, under, trusted), seen: 0, entries: 0, bytes: 0, times: new Map(), synced: 0 };
       b.save = watched(b, bookSaver(folder, { path: k.path, saved: keptText }));
       await sealIn(b);
     } catch (e) {
@@ -977,6 +1363,7 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
       // The feed's own requests (GET /books and /lines), with its token.
       if (await feed.handle(req, res)) return undefined;
       if (req.method === 'GET' && req.url === '/status') {
+        const witnessed = await witnessing.status();
         return send(200, {
           slip: current.fingerprint,
           issuer: current.issuerKey,
@@ -992,6 +1379,9 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
           keptBooks: keptBooks(folder).map((k) => k.file),
           feed: feed.status(),
           ...(bookProblem ? { newBookProblem: bookProblem } : {}),
+          witnesses: witnessed.witnesses,
+          ...(witnessed.problem ? { witnessesProblem: witnessed.problem } : {}),
+          ...(pendingProblem ? { pendingSealProblem: pendingProblem } : {}),
           started,
           folder,
         });
@@ -1065,6 +1455,7 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
       if (req.url === '/stop') {
         send(200, { stopped: true });
         feed.close();
+        witnessing.close();
         setTimeout(() => server.close(), 50);
         return undefined;
       }
@@ -1078,10 +1469,13 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
     server.once('error', reject);
     server.listen(port, '127.0.0.1', resolve);
   });
+  // The witnesses are asked about every seal they have not signed for, from now on.
+  witnessing.start();
   return {
     port: server.address().port,
     get recorder() { return current.writer; },
     get readings() { return readings; },
+    witnesses: () => witnessing.status(),
     seal: () => inTurn(async () => {
       const sealed = await seal();
       await whenFull();
@@ -1095,6 +1489,7 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
     newBook: () => inTurn(newBook),
     close: () => {
       feed.close();
+      witnessing.close();
       return new Promise((resolve) => server.close(resolve));
     },
   };
@@ -1371,6 +1766,14 @@ async function renewFrom(file, folder, port, newPasskey = false) {
   }
 }
 
+// What "seal" says of the witnesses.
+function witnessedWords(sealed, folder) {
+  const named = readWitnessSettings(folder).list.length;
+  if (named === 0) return '';
+  const on = Array.isArray(sealed.witnessed) ? sealed.witnessed.length : 0;
+  return ` ${on} of the ${named} witnesses named signed for it in time, beside the seal on its line; ${on === named ? 'nothing is left to ask' : 'the others are asked again while the recorder runs, and what they hand back is kept beside the book ("status" says what each holds)'}.`;
+}
+
 /** The slips a book holds, read from its lines: what "check" shows where the person names no passkey. */
 async function slipsListed(text) {
   const out = [];
@@ -1403,6 +1806,11 @@ const USAGE = `Usage: ${RUN} <command>
   check [file]  the checker's answer for the book, or for a book kept before it (book-1.jsonl);
                 name your own passkey with --issuer <its thumbprint> (once for each), or see the
                 passkeys the book names
+  add-witness <address> <fingerprint> <token file>
+                ask a witness (provared-witness, at http://127.0.0.1:<port>) to sign for each
+                seal from now on: the fingerprint of its key set, and its token file
+  remove-witness <fingerprint>
+                ask that witness no more
   stop          stop the recorder
   keys          make the keys, and print the agent's public keys`;
 
@@ -1508,8 +1916,100 @@ async function main(argv) {
       }
       console.error(`Compare each with your own passkey's thumbprint, which the signing page shows when you sign, and run again with --issuer <thumbprint> for each that is yours: ${RUN} check --issuer <thumbprint>\n`);
     }
+    // The witnesses this recorder asks, and the statements they handed back
+    // after a seal's line was written (kept beside the book, in "witnessed").
+    const { list: named } = readWitnessSettings(folder);
+    // What is said of the recorder's own copies of seals, handed over for their statements, before and after the checker's answer.
+    let mine = null;
+    if (named.length > 0 && !rest.includes('--witness')) {
+      for (const w of named) extra.push('--witness', w.key);
+      console.error(`The witnesses you trust (--witness) are named from this recorder's own list (${join(folder, 'witnesses.json')}): ${named.map((w) => w.key).join(', ')}. To name them yourself, give --witness.`);
+    }
+    if (!rest.includes('--seal')) {
+      const held = heldSealFiles(folder, readFileSync(bookFile, 'utf8'));
+      for (const p of held) extra.push('--seal', p);
+      if (held.length > 0) {
+        mine = `${held.length === 1 ? 'One seal' : `${held.length} seals`} of this book ${held.length === 1 ? 'is' : 'are'} handed over beside it (--seal) only to bring the statements that witnesses handed back after the seal's line was written: ${held.length === 1 ? 'it is a copy' : 'they are copies'} of this book's own ${held.length === 1 ? 'seal' : 'seals'}, from the recorder's own folder (${join(folder, 'witnessed')}), which the agent can write. The checker calls ${held.length === 1 ? 'it a seal' : 'them seals'} "held elsewhere": ${held.length === 1 ? 'it is' : 'they are'} not, and cannot show the book cut short; only the statements beside ${held.length === 1 ? 'it' : 'them'} count. Hand over a seal you hold yourself, apart from this computer, for that (--seal).`;
+        console.error(mine);
+      }
+    }
     const ran = spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', checker, bookFile, ...rest, ...extra], { stdio: 'inherit' });
+    if (mine) console.error(`\nNote: ${mine}`);
     return ran.status ?? 2;
+  }
+  if (command === 'add-witness') {
+    const [address, key, tokenFile] = rest;
+    if (!address || !key || !tokenFile || rest.length !== 3) {
+      console.log(USAGE);
+      return 2;
+    }
+    if (!validAddress(address)) {
+      console.error('The address must be http://127.0.0.1:<port>: the recorder asks a witness on this computer (one on another computer is reached through a tunnel to a port here).');
+      return 2;
+    }
+    if (!THUMBPRINT.test(key)) {
+      console.error('The second word must be the fingerprint of the witness\'s key set, as "provared-witness init" prints it: 43 letters, digits, "-" and "_".');
+      return 2;
+    }
+    let token;
+    try {
+      token = readFileSync(resolve(tokenFile), 'utf8').trim();
+    } catch (e) {
+      console.error(`The token file ${tokenFile} could not be read (${e.code ?? e.message}).`);
+      return 2;
+    }
+    if (!isRandom(token)) {
+      console.error(`${tokenFile} does not hold a witness's token: 43 letters, digits, "-" and "_" (the file witness-token in the witness's folder).`);
+      return 2;
+    }
+    const settings = readWitnessSettings(folder);
+    if (settings.problem) {
+      console.error(settings.problem);
+      return 1;
+    }
+    const others = settings.list.filter((w) => w.key !== key);
+    if (others.length >= MAX_RECORDER_WITNESSES) {
+      console.error(`The recorder asks at most ${MAX_RECORDER_WITNESSES} witnesses (a seal's line holds at most four statements): remove one first.`);
+      return 1;
+    }
+    // Who answers there: the witness must prove that it holds the token, and sign with the key set named.
+    try {
+      const r = await witnessClient({ address, token }).ask('GET', '/about');
+      if (r.code !== 200) throw Object.assign(new Error(r.body.error ?? `the witness answered ${r.code}`), { code: 'refused' });
+      if (r.body.witness?.fingerprint !== key) {
+        console.error(`The witness at ${address} signs with the key set ${r.body.witness?.fingerprint}, not ${key}, so it was not added. Compare with the fingerprint "provared-witness init" printed.`);
+        return 1;
+      }
+      console.log(`The witness "${String(r.body.witness.by?.name ?? '').replace(/[\u0000-\u001f\u007f-\u009f]/g, '�')}" at ${address} answers, proves that it holds the token, and signs with the key set ${key}.${r.body.ready ? '' : ' It does not sign yet: at every start its operator must say that its folder was not put back to an older copy (provared-witness ready).'}`);
+    } catch (e) {
+      if (e.code !== 'unreachable') {
+        console.error(`${e.message}, so it was not added.`);
+        return 1;
+      }
+      console.log(`Warning: nothing answers at ${address} now. The witness is added all the same, and asked after each seal; "status" says what it holds.`);
+    }
+    writeWitnessSettings(folder, [...others, { address, key, token }]);
+    console.log(`The recorder asks it to sign for each seal from now on (a running recorder reads ${settings.path} each time). Whoever checks the book names it: --witness ${key}`);
+    return 0;
+  }
+  if (command === 'remove-witness') {
+    const [key] = rest;
+    if (!key || rest.length !== 1) {
+      console.log(USAGE);
+      return 2;
+    }
+    const settings = readWitnessSettings(folder);
+    if (settings.problem) {
+      console.error(settings.problem);
+      return 1;
+    }
+    if (!settings.list.some((w) => w.key === key)) {
+      console.error(`The recorder does not ask a witness with the key set ${key}.`);
+      return 1;
+    }
+    writeWitnessSettings(folder, settings.list.filter((w) => w.key !== key));
+    console.log(`The recorder asks that witness no more. The statements it gave stay where they are: on the seals' lines, and in ${join(folder, 'witnessed')}.`);
+    return 0;
   }
   const status = await running(port);
   if (command === 'status') {
@@ -1527,13 +2027,13 @@ async function main(argv) {
         console.error(`The book was not sealed: ${sealed.error ?? 'the recorder gave no seal.'}`);
         return 1;
       }
-      console.log(`Sealed: entry ${sealed.entries} is the seal ${sealed.fingerprint}.`);
+      console.log(`Sealed: entry ${sealed.entries} is the seal ${sealed.fingerprint}${sealed.book ? `, of book ${sealed.book}` : ''}.${witnessedWords(sealed, folder)}`);
       return 0;
     }
     const service = await startService({ folder, port: 0 });
     const sealed = await service.seal();
     await service.close();
-    console.log(`Sealed (the service was not running, so the book was opened here): entry ${sealed.entries} is the seal ${sealed.fingerprint}.`);
+    console.log(`Sealed (the service was not running, so the book was opened here): entry ${sealed.entries} is the seal ${sealed.fingerprint}${sealed.book ? `, of book ${sealed.book}` : ''}.${witnessedWords(sealed, folder)}`);
     return 0;
   }
   if (command === 'new-book') {

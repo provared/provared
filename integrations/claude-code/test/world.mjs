@@ -6,6 +6,7 @@
 //
 // Imported with import(), after local-library.mjs (see that file).
 
+import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
@@ -41,6 +42,38 @@ export function tempFolder(prefix = 'provared-cc-') {
   const dir = mkdtempSync(join(tmpdir(), prefix));
   made.push(dir);
   return dir;
+}
+
+/**
+ * A start that must be refused, with words that match "pattern": refused,
+ * it passes; started all the same, the witness is closed at once and the
+ * test fails; neither within "ms", it fails then, and a start that comes
+ * later is closed. So a start check that is weakened fails the test quickly,
+ * and leaves no witness listening to hold the run open.
+ * @param {(o: object) => Promise<{close: () => Promise<void>}>} start startWitness
+ */
+export async function refusedStart(start, options, pattern, ms = 20000) {
+  const attempt = start(options);
+  let timer;
+  const late = new Promise((done) => {
+    timer = setTimeout(done, ms, 'late');
+  });
+  let outcome;
+  try {
+    outcome = await Promise.race([attempt.then((w) => ({ w }), (e) => ({ e })), late]);
+  } finally {
+    clearTimeout(timer);
+  }
+  if (outcome === 'late') {
+    attempt.then((w) => w.close(), () => {});
+    assert.fail(`the start was neither refused nor ended within ${ms} ms (a refusal matching ${pattern} was due)`);
+  }
+  if (outcome.w) {
+    await outcome.w.close();
+    assert.fail(`the start was not refused (a refusal matching ${pattern} was due)`);
+  }
+  assert.match(outcome.e.message, pattern);
+  return outcome.e;
 }
 
 export const ACTIONS = ['provared.code.read', 'provared.code.change', 'provared.code.run', 'provared.code.release', 'provared.web.read', 'provared.agent.instruct'];

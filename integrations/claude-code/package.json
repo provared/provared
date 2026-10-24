@@ -26,13 +26,17 @@
   ],
   "type": "module",
   "bin": {
-    "provared-claude-code": "recorder.mjs"
+    "provared-claude-code": "recorder.mjs",
+    "provared-witness": "witness.mjs"
   },
   "files": [
     "recorder.mjs",
     "hook.mjs",
     "actions.mjs",
     "feed.mjs",
+    "witness.mjs",
+    "witnessed.mjs",
+    "proofs.mjs",
     "LICENSE-CC-BY-4.0.txt"
   ],
   "engines": {
@@ -42,6 +46,6 @@
     "test": "node --disable-warning=ExperimentalWarning --test test/*.test.mjs"
   },
   "dependencies": {
-    "provared": "^0.4.0"
+    "provared": "^0.6.0"
   }
 }

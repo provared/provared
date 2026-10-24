@@ -354,6 +354,74 @@
   checker's answer, and points out a gap in their numbers; the site's
   publishing run fetches them from the release "record". Checked by an
   independent reviewer over four rounds; 93 tests.
+- **The recorder beside Claude Code numbers its books, chains each new book
+  to the last seal of the book before, and asks witnesses; and a local
+  witness service, `provared-witness`** (`integrations/claude-code`:
+  `recorder.mjs`, `witness.mjs`, `witnessed.mjs`, `proofs.mjs`; live for the
+  published record since 24 October 2026, 15:38 UTC). A book's number
+  follows the passkey of its first line: a book that holds a seal goes on as
+  its first seal says; one that holds none takes the latest kept book's
+  number and one, where that book began with a permission from the same
+  passkey and its last seal is by this recorder's keys, and its first seal
+  names that book's last seal; where there is no such book it gives no
+  number, so the record so far reads exactly as it did and its next book is
+  book 2. The numbers are read from the kept files, never kept in a file of
+  their own. Before the book in force is first sealed, every kept book that
+  a late call could still come back to is closed and, where something came
+  after its seal, sealed again, so that the first seal of book n names the
+  last seal of book n - 1; a kept book that cannot be read when that seal
+  needs it stops the seal, and the error says why. Every seal's line is
+  made sure to be on the disk, and a witness is shown only such seals. A
+  renewal with a new passkey starts no new book; the next book then begins a
+  sequence of its own.
+  - *Witnesses*: `witnesses.json` names at most four, each
+    `{address, key, token}` at `http://127.0.0.1:<port>`, written by
+    `add-witness` (which reads the token from the witness's token file and
+    checks that the witness answers, holds the token and signs with that key
+    set) and `remove-witness`. After the seal that `seal` makes (the
+    command, `POST /seal` or the service's own) the recorder keeps the seal
+    apart on the disk (`pending-seal.json`) before any witness is asked,
+    shows each witness every seal after the one it holds (at first contact,
+    the latest only), and waits at most five seconds, and no longer than
+    until any tool call arrives; statements that come in time stand on the
+    seal's own line, and every other statement is kept beside the book in
+    `witnessed/<seal fingerprint>.json`. Each statement is checked with the
+    library's own checker before it is kept. It asks again after each seal
+    and every minute while a witness is behind; a witness that holds a seal
+    of this sequence that is in none of the recorder's books is reported
+    (`witness-holds-another`) and asked no more. A seal kept apart that the
+    book changed under while the recorder was stopped is moved aside
+    (`pending-seal-not-placed-<time>.json`) and `status` says so. `check`
+    hands over the kept statements of the seals in the book checked (the
+    latest 64) and names the witnesses of `witnesses.json`, unless `--seal`
+    or `--witness` is given. `status` gains `witnesses`, `witnessesProblem`
+    and `pendingSealProblem`; `seal` answers with `book` and `witnessed`.
+  - *The witness service* (`provared-witness`: `init`, `start`, `status`,
+    `ready`, `update`, `forget`, `stop`) listens on 127.0.0.1:8796 with a
+    folder of its own (`witness-keys.jwk`, two tokens, `witness.json`,
+    `journal.jsonl`, `state.json`, `checkpoint.json`, `journal-mark.json`,
+    `witness.lock`). One token is for the recorders it serves and one for
+    its operator; questions and answers are proved as the feed's are
+    (HMAC-SHA-256 under a key worked out from the token and two random
+    numbers; one question to a conversation). It signs only for the
+    recorders its operator named, by the fingerprint of their key sets, and
+    only after the journal line, then the state, then the mark, are on the
+    disk; after a save that fails it answers 503 until it is started again;
+    at every start it signs nothing until its operator says it is up to date
+    (`ready`), after taking its own journal again, and it refuses to start
+    where the journal has gone while the keys are there, where a line is not
+    one it writes, or where its state reflects more lines than the journal
+    holds. Limits: 120 new statements in any hour, 64 sequences, 8 signing
+    or updating questions at once, bodies of 1 MiB. There is no background
+    start: whoever runs a witness decides how it is kept running. Stated in
+    the README: a witness is only as sound as its folder, and whoever can
+    change it, or put back an older copy whole, can make it forget a
+    sequence.
+  - The package depends on `provared` 0.6.0 or later. Three independent
+    reviews: the first found one serious fault (a statement given out that
+    was never saved, so after a restart the witness could sign a fork) and
+    three medium; the second and third found nothing serious or medium.
+    189 tests, and the three test fixes of 21 October brought across.
 - **`provared-gateway` 0.1.0, a reverse proxy that writes the receipts**
   (`gateway/`, not published). It sits in front of the web interfaces an
   agent acts through, holds the agent's keys (in memory or through

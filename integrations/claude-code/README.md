@@ -126,7 +126,9 @@ stop: a call asked during the switch waits its turn, and a call allowed
 under the old book and finished after the switch is recorded in the old
 book, which is then sealed again after it (if the recorder stops before
 that, the kept book is sealed when it next starts). A call whose receipt
-never comes keeps the old book open for 15 minutes at most; a receipt
+never comes keeps the old book open for 15 minutes at most, and only
+until the new book is first sealed (see "Each book follows on from the
+one before", below); a receipt
 that comes later goes into the book in force, under the permission it
 was allowed under where that book holds it, or else under the
 permission in force. Each book checks on its own, with the same passkeys
@@ -193,6 +195,50 @@ first of the next.
 Any program that can reach the recorder's port on this computer can
 start a new book, as it can ask for a seal; since a new book starts no
 limit again, this gains it nothing but another file.
+
+### Each book follows on from the one before
+
+A seal may say which book it is of (the format description, section
+21.6). The recorder numbers its books in one sequence for each person and
+agent, as a witness knows them (below):
+
+- The first seal of a new book gives the book's number (`book`: 2, 3 and
+  so on) and names, as the seal before it, the last seal of the book
+  before. Its later seals give the same number, and each names the seal
+  before it, as always. The first book gives no number, so every seal
+  written before (the record so far included) reads exactly as it did,
+  and a book whose seals give no number goes on giving none.
+- "The book before" is the latest kept book whose first line is a
+  permission from the same passkey, for the same agent, sealed with this
+  recorder's keys, as a witness knows a sequence: the recorder reads it
+  from the kept files, so the numbers hold across a restart. A book that
+  begins with a permission from another passkey (one taken with
+  `--new-passkey`) begins a sequence of its own, with no number and no
+  seal before it; a later book that begins with the first passkey's
+  permission again follows the last book of that passkey.
+  Where a kept book cannot be read when the book in force is first
+  sealed (another program holds it for longer than ten seconds), no seal
+  is made, rather than one with a number that may be wrong; `seal` says
+  why, and works again once the file can be read.
+- So the number in a kept book's file name (`book-3.jsonl`) is the order
+  in which the books were kept, and the number in its seals is its place
+  in its sequence. The two can differ.
+- Before the book in force is first sealed, every kept book that a call
+  allowed under it could still come back to is closed, and sealed again
+  where something came after its seal: the seal the new book names is
+  then the last seal of its book, and no seal is added to that book
+  after it. A call that comes back for such a book later is recorded in
+  the book in force, as after 15 minutes.
+- A book is kept as `book-<n>.jsonl` only once it is made sure to be on
+  the disk: the next book's first seal will name its last seal, and a
+  witness may be shown it. Where that cannot be done, no new book is
+  started yet, and the recorder tries again a minute later.
+
+A checker of one book cannot see the seal that the book's first seal
+names, and says so. To compare the two, check the book before with that
+seal handed over beside it (`--seal`), as the format description,
+section 21.6, sets out. A checker of the library's version 0.5.0 or
+earlier refuses a seal that gives a number: see "The library this needs".
 
 ## A feed of the books, for an uploader on this computer
 
@@ -328,6 +374,296 @@ still listens on 127.0.0.1 only; give its address as `127.0.0.1`, not
 `localhost`, which may lead to another program on the computer's other
 address.
 
+## Witnesses for the seals
+
+A seal fixes everything before it, but whoever keeps a book can show a
+second, different history to someone else, sealed with the same keys,
+and a reader who holds one copy cannot see the other. A **witness** is a
+program with keys of its own (Ed25519 and ML-DSA-87) that keeps, for each
+recorder, person and agent, the latest seal it has signed for, and signs
+a short statement for a new seal only where the new seal extends that
+one: in the same book, by a consistency proof (RFC 9162, section
+2.1.4), or as the first seal of the next book (the format description,
+section 29). The package has one, `provared-witness`, which runs as a
+small service on this computer.
+
+### Setting one up
+
+```
+provared-claude-code status
+provared-witness init --recorder <the "sealer" that status printed>
+provared-witness start --ready
+provared-claude-code add-witness http://127.0.0.1:8796 <the fingerprint init printed> ~/.provared/witness/witness-token
+```
+
+- `init` makes, in the witness's folder (`~/.provared/witness`, or the
+  folder `PROVARED_WITNESS_DIR` names), its keys, two tokens (one for the
+  recorders it serves, one for its operator's commands) and an empty
+  journal, and names the recorders it serves, by the fingerprint of each
+  one's key set; it prints the fingerprint of its own key set. Run it
+  again to name more recorders; start the witness again for a change to
+  take effect. To start a new witness in a folder that held one, move
+  all of these out of it together first: `witness-keys.jwk`,
+  `journal.jsonl`, `state.json`, `checkpoint.json` and
+  `journal-mark.json` (each that is there). Left behind, any one of them
+  would give the new witness what the old one kept; `init` refuses to
+  make new keys while any of the last four is there. The tokens and
+  `witness.json` may stay; give the recorders the new witness with
+  `add-witness`.
+- `start` runs it in that terminal, on 127.0.0.1, port 8796 (`--port`, or
+  `PROVARED_WITNESS_PORT`, for another). At every start, the first
+  included, it signs nothing until you say that its folder was not put
+  back to an older copy: `--ready` says so as it starts, and
+  `provared-witness ready` says so later (see "Keeping a witness sound").
+- `add-witness` checks that the witness answers there, proves that it
+  holds the token, and signs with the key set named, and then writes it
+  into the recorder's `witnesses.json` with its token (at most four
+  witnesses: a seal's line holds at most four statements). One that does
+  not answer at that moment is named all the same, with a warning; one
+  that signs with another key set, or cannot prove that it holds the
+  token, is not. `remove-witness <fingerprint>` takes one out. A running
+  recorder reads the list each time; nothing needs restarting.
+- Whoever checks the book names the witness they trust by its
+  fingerprint: `--witness <fingerprint>`.
+
+### What the recorder does with them
+
+- **After each seal**, it asks each witness what it holds and whether it
+  signs now, and shows a witness that does the seals it has not signed
+  for, in order, each with its proof (as RFC 9162 sets out, made from the
+  book's line fingerprints, which the recorder keeps as the book grows,
+  so that no proof reads the book again) and the book's first line. A
+  witness that holds no seal of this recorder, person and agent is shown
+  the latest seal only: a witness signs whatever it is first shown. A
+  witness that does not sign now is shown nothing, and no proof is made
+  for it. The line fingerprints of a book are kept while the recorder
+  holds that book, and of two kept books at most, which are worked out
+  again from their files when needed. A kept book's are worked out again
+  whenever its file's size, modification or change time, or identity
+  changes; a book the recorder holds is its own copy, which only grows.
+  On this computer's file system (NTFS) the change time was seen not to
+  move for a change made within a moment of the one before, so a kept
+  book changed at once after it was last written may not be seen. That
+  can only hold witnessing up: a witness checks every proof, and refuses
+  a wrong one.
+- **Only seals whose line is made sure to be on the disk** (fsync) are
+  shown, so that a witness never signs for a seal that a stop could
+  leave out of the book: such a witness would refuse every later seal.
+  The seal that `seal` makes is the one exception, so that its
+  statements can stand on its own line: the recorder first keeps the
+  seal's entry apart, on the disk (`pending-seal.json`), then asks the
+  witnesses, waits up to five seconds, writes the seal's line with the
+  statements that came, and makes sure it is on the disk. If it stops
+  before the line is written, it writes the seal at its place at the
+  next start, before anything else is added to the book, or lets the
+  file go where its line is in the book already, or in a book kept since.
+  Where the book no longer ends where the seal begins, or the seal does
+  not cover the entries it holds (it was changed while the recorder was
+  stopped), nothing is written: the file is kept as
+  `pending-seal-not-placed-<time>.json`, and `status` says so. One seal
+  is kept apart at a time: while the line of one is not yet known to be
+  on the disk, the next seal is not held for the witnesses.
+- **No tool call waits for a witness.** `seal` waits only while no other
+  request waits: a tool call that arrives ends the wait at once, and the
+  seal's line is written without the statements still to come. A seal
+  made at a new book, after a late call, or when the recorder starts, is
+  not waited for at all. A tool call does wait for the seal's own work,
+  which is not a wait for a witness: a call that arrives while a seal is
+  being made waits until the seal is written, about 3.2 seconds on a
+  book near 90 MB, the same with no witness named. Once the seal is
+  written, the check before a tool call took at most 51 thousandths of a
+  second on a book of 92 MB.
+- **A statement is taken only where the library's own checker passes
+  it** for that seal, as signed by the witness named; one that does not
+  is never written, on a line or beside the book. One that comes after
+  the seal's line was written is kept beside the book, in the folder
+  `witnessed`, one file for each seal (`<the seal's fingerprint>.json`),
+  in the form the checker takes beside a book with `--seal`.
+- **`check` hands them over**: for the book checked, the files of the
+  seals that stand in that book (the latest 64, the most a checker
+  takes), and the witnesses in `witnesses.json`, named as trusted
+  (`--witness`); it says so. The checker can take a late statement only
+  with a copy of its seal, which it calls a seal "held elsewhere": these
+  are not, they are copies of the book's own seals from the recorder's
+  folder, which the agent can write, and they cannot show the book cut
+  short. `check` says so plainly, before and after the checker's answer.
+  For that, hand over a seal you hold yourself, apart from this computer.
+  Give `--seal` or `--witness` yourself to name your own instead. With the checker alone:
+  `npx provared-check book.jsonl --issuer <thumbprint> --sealer <fingerprint> --witness <fingerprint> --seal ~/.provared/claude-code/witnessed/<seal>.json`.
+- **A witness that is down, refuses, or hands back what does not pass
+  never stops recording.** `status` shows, for each witness, the seal it
+  holds, whether that is the latest on the disk (`upToDate`), and, where
+  it is behind, why (`problem`: a code and plain words, such as
+  `unreachable`, `witness-not-ready`, `recorder-not-served` or
+  `witness-invalid`). The recorder asks again after each seal, and every
+  minute while a witness is behind (a witness that is not ready, or
+  stopped, is asked only what it holds). One code is worth looking at at
+  once: `witness-holds-another`, a witness that holds a seal of this
+  recorder, person and agent that is in none of the recorder's books. No
+  seal is sent to it; it is asked what it holds each minute. A book was
+  moved, cut short or replaced, or the witness was shown another history.
+  `witness-stopped` is a witness that could not save what it holds: it
+  gives out nothing until it is started again.
+- **The record page** (`tools/make-record-page.mjs`) checks each book
+  with the checker as before: the statements on seals' lines are read,
+  and shown as not counted, since the page names no witness; the
+  statements kept beside the book are not handed over.
+
+### The witness's commands
+
+| Command | What it does |
+|---|---|
+| `init [--name <label>] [--recorder <fingerprint>]... [--port <n>]` | Make the witness's keys, tokens and journal where they are missing, and name the recorders it serves |
+| `start [--ready] [--port <n>]` | Run the witness in this terminal. `--ready` is your word, at this start, that its folder was not put back to an older copy |
+| `status` | What the running witness holds: whether it is ready, each sequence it holds (the recorder, the passkey, the agent, the book, the number of entries and the seal), its journal, its limits |
+| `ready` | Tell the running witness that its folder was not put back to an older copy: at every start, the first included, it signs nothing until you do |
+| `update <book> [--seal <file>]...` | Hand the running witness, from a copy, the statements it signed for the seals of a book (on their lines, and in files handed over beside it): it takes, in order, those later than what it holds |
+| `forget <sequence>` | Stop holding a sequence (`status` names each by its fingerprint). The witness then signs, for that recorder, person and agent, whatever seal it is next shown, a second history too: forget only a sequence that no recorder you serve still uses, such as one a recorder filled the witness with |
+| `stop` | Stop the running witness |
+
+`status`, `ready`, `update`, `forget` and `stop` prove that they hold the
+operator's token, `operator-token` in the witness's folder. Never give
+that file, nor `witness-keys.jwk`, to anyone; give `witness-token` to the
+recorders it serves, and to nothing else.
+
+### Keeping a witness sound
+
+- **It saves before it gives anything out.** For each new statement it
+  adds a line to its journal (`journal.jsonl`) and replaces its state
+  (`state.json`) and its journal mark (`journal-mark.json`: how many
+  journal lines it has saved, kept apart from the state), each made
+  sure to be on the disk, and only then gives
+  the statement out. What it says it holds (to a recorder, and in
+  `status`) is what it last saved, never what it holds in memory. If
+  anything cannot be saved (a full disk, or the journal held by another
+  program for longer than ten seconds), it gives out nothing more, by any
+  route, and cannot be told `ready`, until it is started again; started
+  again, it holds what is on the disk. The same seal asked for again gets
+  the same statement, and adds nothing.
+- **Its journal stays small.** Every 256 lines (`journalLines`) it writes
+  a checkpoint (`checkpoint.json`: the latest seal of each sequence, with
+  its statement, which is all it needs to refuse a fork) and begins the
+  journal again; the earlier lines are dropped. A start reads the journal
+  a line at a time, and reads in full only the lines its state does not
+  yet reflect.
+- **At every start, the first included, it signs nothing until you say
+  so.** It first takes again every journal line its saved state does not
+  yet reflect, then answers every request to sign with
+  `witness-not-ready` until you run `provared-witness ready` (or started
+  it with `--ready`). It cannot tell by itself whether its folder was put
+  back to an older copy, journal and all, even a copy taken before its
+  first statement: **that is your word.** A witness put back, and
+  told it is up to date, can be made to sign a fork. Before you say so,
+  you can hand it what a recorder holds:
+  `provared-witness update <the recorder's book> --seal <each file in its witnessed folder>`.
+  A witness on a computer that restarts without you there stays
+  unready until you come; `start --ready` in a start-up script is your
+  word given in advance.
+- **It refuses to start where something is missing or changed**: a
+  journal that has gone while the keys are there (it would have
+  forgotten every seal it signed for; to start a new witness instead,
+  move out the files named under "Setting one up", all together), a
+  journal line that is not one it
+  writes, lines numbered out of order, a state that reflects more lines
+  than the journal holds, a journal that follows a checkpoint it does not
+  have, a journal that holds lines of two segments, a line longer than
+  any it writes, and a journal mark that says more lines were saved than
+  the journal holds (so a journal emptied or cut short is seen even where
+  `state.json` is lost). A last journal line cut off in the middle, by a
+  stop while it was written, was never answered and nothing of it was
+  given out: it is taken off, and `status` says so. A lost `state.json`
+  is rebuilt from the checkpoint and the journal; a stop between the
+  steps of a checkpoint is mended at the next start. **What this needs:**
+  with both `state.json` and `journal-mark.json` lost (or a witness made
+  before the mark was kept), a journal emptied or cut short is not seen:
+  the witness starts from its checkpoint, or from nothing, holding an
+  older seal, and once told it is ready it can be made to sign a fork,
+  as a folder put back to an older copy can. Keep the two files as
+  safely as the journal, and never move them out together.
+- **One witness at a time on a folder**: two would each hold, in memory,
+  what they signed, and could sign a fork between them. The lock is
+  `witness.lock`; one left by a process that has ended is taken over,
+  under a second file (`witness.lock.takeover`) that only one start can
+  make, so two starts that find the same stale lock cannot both take it.
+  (On Windows a process number can be given to another program later:
+  where the witness then says another runs and none does, move the lock
+  out of the folder.)
+- **Its limits**, each in `witness.json`: at most 120 new statements in
+  any hour, shared by every recorder it serves (`statementsPerHour`), at
+  most 64 sequences held (`maxSequences`), a checkpoint every 256 journal
+  lines (`journalLines`), at most 8 questions that sign taken on at once,
+  a body of at most 1 MiB, a conversation of one question. Past a limit
+  it answers 429 or 503 and signs nothing. A journal line is about 70 KB
+  (the seal, the statement and the book's first line), so the journal
+  stays under about 18 MB, and the state and checkpoint under about 5 MB.
+- **A new sequence starts only from a permission that passes the
+  library's check**, its passkey's signature included.
+
+### What a witness protects, and what it does not
+
+It protects, where the person checking names the witness, the passkey
+and the recorder (the format description, section 29.4):
+
+- A second history of the entries before a witnessed seal, sealed by the
+  same recorder and starting from any permission that passkey gave the
+  same agent, needs that witness to sign for it too, and it does not.
+  That holds across the books of that person and agent: a new book
+  cannot start from an earlier seal than the latest the witness holds.
+  Two witnesses need two to fail.
+- With the latest seal a witness holds (its `status` names it), handed
+  over beside the book it is of, the end of that book cannot be cut off
+  back to before that seal unnoticed.
+
+It does not protect:
+
+- **Against anything the agent can reach.** The agent runs as you. Under
+  your own user account it can read the recorder's keys and sign seals
+  of its own, read the witness's folder and use its keys or its tokens,
+  stop it, put its folder back, or tell it that it is up to date. A
+  witness under the same account as the agent shows only that the
+  recorder's own side kept to the rules. For it to mean more, run it
+  under another user account (the recorder then holds only its token,
+  which lets it ask for statements that follow the rules), on another
+  computer reached through a tunnel to a port here, or have someone else
+  run it. A witness on another computer, reached directly over a
+  network, is not built yet.
+- **Against a holder of the token reading what it holds, or filling
+  it.** One token serves every recorder the witness serves: each can ask
+  it to sign for its own seals, and can read what it holds for any
+  sequence. A recorder it serves (and the agent, which can act as one on
+  the same computer) can fill its 64 sequences with permissions signed by
+  passkeys of its own, and use up the 120 statements an hour that all
+  recorders share; `forget` frees a sequence, at the cost said above. The
+  operator's token is apart.
+- **What travels is not encrypted.** No token ever travels, and every
+  question and answer is proved with HMAC-SHA-256 (RFC 2104), but the
+  seal, the proof and the book's first line (your permission: your
+  passkey's public key, the name you typed, the agent's keys, its
+  actions, limits and purpose) can be read by a program that watches the
+  connection on this computer.
+- **What is never shown to it**: a book, or the end of a book after the
+  latest seal it signed for. A history sealed with other recorder keys,
+  or that starts from a permission for another agent or from another
+  passkey, is another sequence to it.
+- **Time, or the truth of the entries**: a statement's time is the
+  witness's own word, and it sees fingerprints, not entries.
+- **Limits across books**, and a book that repeats or leaves out what an
+  earlier book holds: each book is checked on its own.
+- **A book that holds a permission from another passkey, or for another
+  agent, than its first line**: a checker counts no statement for it (a
+  renewal by the same passkey is fine). After a renewal with
+  `--new-passkey`, the book in force holds both, so its seals are not
+  counted as witnessed; the next book begins a sequence of its own.
+
+### The library this needs
+
+Numbered seals and witness statements need version 0.6.0 or later of
+the library: a checker of version 0.5.0 or earlier refuses a seal that
+gives a book number and a seal's line that holds statements. So the
+package depends on `provared` 0.6.0 or later. Anyone who checks a book
+that this recorder has numbered, or that holds statements, needs that
+version too (`npx provared-check` takes the latest).
+
 ## The commands
 
 | Command | What it does |
@@ -337,10 +673,12 @@ address.
 | `renew <file>` | Take a new signed permission into the book, while the recorder runs or not; `--new-passkey` where you signed it with a passkey of yours that signed none before |
 | `start` | Run the recorder in this terminal, and see what it says |
 | `ensure` | Start the recorder in the background if it is not running (the hooks run this when a session starts) |
-| `status` | What the recorder holds: the permission, until when, the number of entries, the calls allowed and not yet recorded (`callsNotYetRecorded`), the books kept (`keptBooks`), when a new one is started (`newBookAt`), and the feed's token file and how many questions wait (`feed`) |
-| `seal` | Seal the book now, with the recorder's three keys |
+| `status` | What the recorder holds: the permission, until when, the number of entries, the calls allowed and not yet recorded (`callsNotYetRecorded`), the books kept (`keptBooks`), when a new one is started (`newBookAt`), the feed's token file and how many questions wait (`feed`), and for each witness what it holds and why it is behind (`witnesses`) |
+| `seal` | Seal the book now, with the recorder's three keys, and ask the witnesses named, waiting up to five seconds while no other request waits |
 | `new-book` | Seal the book, keep it as `book-<n>.jsonl`, and start a new one that begins with the permission in force (done by itself at 90,000 entries, or at 100 MB of text) |
-| `check [file]` | The checker's answer for the book, or, given a name such as `book-1.jsonl`, for a book kept before it. Name your passkey with `--issuer <its thumbprint>`, once for each passkey of yours; without it, `check` lists the passkeys the book's permissions name, as read from the book, and the checker takes none of them as one you trust |
+| `check [file]` | The checker's answer for the book, or, given a name such as `book-1.jsonl`, for a book kept before it. Name your passkey with `--issuer <its thumbprint>`, once for each passkey of yours; without it, `check` lists the passkeys the book's permissions name, as read from the book, and the checker takes none of them as one you trust. It names the witnesses in `witnesses.json` (`--witness`) and hands over the statements kept beside the book (`--seal`), unless you give your own |
+| `add-witness <address> <fingerprint> <token file>` | Ask a witness (at `http://127.0.0.1:<port>`) to sign for each seal from now on, after checking that it answers there and signs with that key set |
+| `remove-witness <fingerprint>` | Ask that witness no more |
 | `stop` | Stop the recorder |
 | `keys` | Make the keys, and print the agent's public keys |
 
@@ -406,8 +744,10 @@ the stub writer open on one book:
   start, or that runs past its time limit, lets the call go ahead
   unrecorded.
 - **Seals:** whoever runs the agent seals the book when they choose
-  (`seal`), with the recorder's three keys. This recorder names no
-  outside time-stamp service.
+  (`seal`), with the recorder's three keys, and the recorder asks the
+  witnesses named in `witnesses.json`, if any, to sign for each seal
+  ("Witnesses for the seals", above). This recorder names no outside
+  time-stamp service.
 
 How tool calls are named, by the hook and not by the agent:
 
@@ -548,8 +888,12 @@ The recorder keeps everything in one folder, `~/.provared/claude-code`
 the permission it acts under (`slip.json`) and those before it, the list
 of passkeys whose permissions it takes (`trusted-passkeys.json`), the
 book (`book.jsonl`), the books kept before it (`book-1.jsonl` and
-so on), and the token of its feed (`feed-token`, below). Never share the
-files that end in `.jwk`, nor `feed-token`.
+so on), the token of its feed (`feed-token`, above), the witnesses it
+asks, with their tokens (`witnesses.json`), the statements they handed
+back after a seal's line was written (`witnessed/`), and, while `seal`
+waits for the witnesses, the seal kept apart (`pending-seal.json`).
+Never share the files that end in `.jwk`, nor `feed-token`, nor
+`witnesses.json`.
 After each receipt the new lines are added to the end of the book: the
 cost does not grow with the book, where the file is as the recorder left
 it; where someone else changed it, the recorder compares the whole file
@@ -573,8 +917,10 @@ along with everything else. To keep the record on another disk:
 - A seal shows only that the book was whole when it was sealed, by the
   recorder's own word, with keys kept in the same folder. It helps
   against a book cut short or rewritten only once its fingerprint is
-  held somewhere else: written down, sent to someone, or time-stamped by
-  an outside service. This recorder does not send seals anywhere.
+  held somewhere else: written down, sent to someone, time-stamped by
+  an outside service, or signed for by a witness (above). This recorder
+  sends seals to no one but the witnesses named in `witnesses.json`, on
+  this computer, and to none where it names none.
 
 ## What the record shows, and what it does not
 
@@ -639,6 +985,11 @@ along with everything else. To keep the record on another disk:
   as with `book.jsonl` itself.
 - Every stub is one-sided: there is no other party to countersign a tool
   call. The checker says so.
+- A witness's statement shows only that the witness saw the seal and
+  will sign for no other history that does not extend it; under the same
+  user account as the agent, it shows that only as far as the agent left
+  the witness alone ("What a witness protects, and what it does not",
+  above).
 - The naming of a command (a deletion, a release, a run) is this hook's
   reading of its text. A command written to look harmless reads as a
   run.
@@ -677,7 +1028,8 @@ node integrations/claude-code/recorder.mjs init
 The first command writes `integrations/claude-code/node_modules/provared`
 as a few small files that only point at the repository's `src/` and
 `bin/`: nothing is linked or copied. The commands are then
-`node integrations/claude-code/recorder.mjs <command>`.
+`node integrations/claude-code/recorder.mjs <command>`, and the
+witness's `node integrations/claude-code/witness.mjs <command>`.
 
 The tests always run against the repository's own library, whatever
 `node_modules` holds (`test/local-library.mjs`):
