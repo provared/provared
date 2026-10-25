@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+- **A workflow that publishes a release from the founder's signed tag**
+  (25 October 2026). `.github/workflows/publish.yml` runs only when a tag
+  such as `v0.7.0` is pushed. Before anything is published it checks that
+  the tag is signed by the release key in `.github/release-signers` and
+  by nothing else, that the tag, `package.json`, `python/pyproject.toml`
+  and the newest heading of this change log name the same version, and
+  that the JavaScript and Python libraries pass their tests on the tagged
+  commit, with the tests of each framework package it will publish. It
+  then publishes the npm package and the Python packages through each
+  registry's trusted publishing, with no stored password or token, and
+  makes the GitHub release with the checking page as one file and its
+  SHA-256. A version already on a registry is not published again, so a
+  framework package is published only when its own version is raised;
+  where its version is already published and its code differs, the run
+  stops before anything is published. The scripts it runs are in
+  `tools/release/`. Nothing in the npm package or the Python packages
+  changes. Version 0.6.0 and earlier were published by hand.
+
 ## 0.6.0 (25 October 2026)
 
 Version 0.6.0 adds three kinds of record and the services that use them: the denial (the agent's own side states that an action it was asked for was not taken), seals held elsewhere and handed over beside a book, and witness statements beside a seal, with consistency proofs; and, beside the library, a central sealer, a gateway that writes the receipts for agents that cannot be wrapped, and a recorder beside Claude Code that numbers its books and has them witnessed (none of these three programs is published). What a reader of a book made by 0.5.0 or earlier must know: every such book reads as it did, apart from the cases below; but a checker of 0.5.0 or earlier refuses a book that holds a denial, a seal that gives `book`, or a seal that holds `witnesses`, so a book made with these needs a checker of 0.6.0. The fingerprint of a tool call's arguments is now named `provared.arguments` by default, where it was `arguments`; the fingerprint itself is the same. And a checker of 0.6.0 refuses some time-stamps and keys that 0.5.0 accepted, each listed below: a time-stamp that is not strict DER, that names its signing certificate twice in the same form, or that is signed with Ed25519 under a method other than SHA-512 or with parameters; an ES256 key that is not a point on its curve; and an Ed25519 signature whose number S is not below the order L. A passkey and a time-stamp service that follow their standards produce none of these; the sample record gets the same findings and the same exit code from the command-line checker of both versions, and 0.6.0 adds only a line on witnesses and, with `--json`, the empty members for denials and witnesses.
