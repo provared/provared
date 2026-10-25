@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- **A "try it" page** at prova.red/try/ (`site/try/`, not yet published).
+  One button. Where the browser has Ed25519 and ML-DSA-87 built in (Chrome,
+  Edge and Brave 155, tried on 13 October 2026), the page makes a new
+  record with the development stand-in for a passkey, under a limit on
+  orders in GBP that the visitor may change, writes a receipt for each of
+  four orders (on purpose, even where the check before acting says no) and
+  checks the record. Elsewhere it reads the sample record and checks it one
+  entry at a time, and says why. The words about the record, what the page
+  does not do and what the check trusts are those of the path shown.
+  Nothing is sent, nothing is stored, and the record made has no seal; the
+  card of its top fingerprint is then headed "The top fingerprint". Linked
+  from the home page and the site map; its logic (`site/try/story.js`) is
+  tested in `test/try-page.test.mjs`. The site's style sheet gains the
+  checking page's rules for the checker's answer, scoped to the new page.
+
 - **Signing moved to https://sign.prova.red** (25 October 2026). A browser
   lets a passkey sign only for the website name it was made for and the
   addresses under it, so a passkey made at prova.red/sign/ could be asked
@@ -20,6 +35,7 @@
 - The test workflow is no longer started by a push that changes only the
   record page and the sitemap.
 
+- On the "try it" page the checker's answer entry by entry is folded away behind "Show every entry", which opens in place; the story, the summary and what the check does not show stay open.
 ## 0.6.0 (25 October 2026)
 
 Version 0.6.0 adds three kinds of record and the services that use them: the denial (the agent's own side states that an action it was asked for was not taken), seals held elsewhere and handed over beside a book, and witness statements beside a seal, with consistency proofs; and, beside the library, a central sealer, a gateway that writes the receipts for agents that cannot be wrapped, and a recorder beside Claude Code that numbers its books and has them witnessed (none of these three programs is published). What a reader of a book made by 0.5.0 or earlier must know: every such book reads as it did, apart from the cases below; but a checker of 0.5.0 or earlier refuses a book that holds a denial, a seal that gives `book`, or a seal that holds `witnesses`, so a book made with these needs a checker of 0.6.0. The fingerprint of a tool call's arguments is now named `provared.arguments` by default, where it was `arguments`; the fingerprint itself is the same. And a checker of 0.6.0 refuses some time-stamps and keys that 0.5.0 accepted, each listed below: a time-stamp that is not strict DER, that names its signing certificate twice in the same form, or that is signed with Ed25519 under a method other than SHA-512 or with parameters; an ES256 key that is not a point on its curve; and an Ed25519 signature whose number S is not below the order L. A passkey and a time-stamp service that follow their standards produce none of these; the sample record gets the same findings and the same exit code from the command-line checker of both versions, and 0.6.0 adds only a line on witnesses and, with `--json`, the empty members for denials and witnesses.
