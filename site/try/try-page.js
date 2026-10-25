@@ -217,6 +217,7 @@ async function start() {
   $('run').textContent = path === 'live' ? 'Make and check a record' : 'Check the sample record';
   $('run').dataset.ready = 'yes';
   $('run').disabled = false;
+  $('status').textContent = '';
   document.documentElement.dataset.path = path;
 }
 

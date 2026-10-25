@@ -1,5 +1,6 @@
 // The "try it" page's own logic (site/try/story.js), which runs the same in Node.js as in a browser.
 
+import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { checkBook } from '../src/check.js';
@@ -66,4 +67,18 @@ test('the words that differ by path are true only of the record that path shows'
 test('the sample path names only the browsers that were tried, and the refusal of a limit writes 10,000 with a comma', () => {
   for (const has of [{ ed25519: true, mldsa: false }, { ed25519: false, mldsa: false }]) assert.match(choosePath(has).why, /Chrome, Edge and Brave 155, tried on 13 October 2026, can make a new record here\.$/);
   assert.match(limitRefusal(), /from 1 to 10,000\./);
+});
+
+test('the renderer still heads the top fingerprint as the try page expects, so the page can relabel it where there is no seal', () => {
+  const render = readFileSync(new URL('../page/render.js', import.meta.url), 'utf8');
+  const page = readFileSync(new URL('../site/try/try-page.js', import.meta.url), 'utf8');
+  assert.ok(render.includes("'The top fingerprint (the Seal)'"), 'page/render.js no longer holds the heading the try page relabels: change both together');
+  assert.ok(page.includes("'The top fingerprint (the Seal)'"));
+});
+
+test('the start-up guard acts only on a script that fails, and the page clears its message once ready', () => {
+  const wait = readFileSync(new URL('../site/try/wait.js', import.meta.url), 'utf8');
+  const page = readFileSync(new URL('../site/try/try-page.js', import.meta.url), 'utf8');
+  assert.ok(wait.includes("event.target.tagName === 'SCRIPT'"));
+  assert.ok(page.includes("$('status').textContent = '';"));
 });
