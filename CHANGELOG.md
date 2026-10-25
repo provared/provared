@@ -3,16 +3,19 @@
 ## Unreleased
 
 - **A "try it" page** at prova.red/try/ (`site/try/`, not yet published).
-  One button: where the browser has Ed25519 and ML-DSA-87 built in (Edge
-  and Brave from version 155), the page makes a new record with the
-  development stand-in for a passkey, under a limit on orders in GBP that
-  the visitor may change, writes a receipt for each of four orders and
-  checks the record; elsewhere it reads the sample record and checks it
-  one entry at a time, and says why. Nothing is sent, nothing is kept, and
-  no seal is made. Linked from the home page and the site map; its logic
-  (`site/try/story.js`) is tested in `test/try-page.test.mjs`. The site's
-  style sheet gains the checking page's rules for the checker's answer,
-  scoped to the new page.
+  One button. Where the browser has Ed25519 and ML-DSA-87 built in (Chrome,
+  Edge and Brave 155, tried on 13 October 2026), the page makes a new
+  record with the development stand-in for a passkey, under a limit on
+  orders in GBP that the visitor may change, writes a receipt for each of
+  four orders (on purpose, even where the check before acting says no) and
+  checks the record. Elsewhere it reads the sample record and checks it one
+  entry at a time, and says why. The words about the record, what the page
+  does not do and what the check trusts are those of the path shown.
+  Nothing is sent, nothing is stored, and the record made has no seal; the
+  card of its top fingerprint is then headed "The top fingerprint". Linked
+  from the home page and the site map; its logic (`site/try/story.js`) is
+  tested in `test/try-page.test.mjs`. The site's style sheet gains the
+  checking page's rules for the checker's answer, scoped to the new page.
 
 - **Signing moved to https://sign.prova.red** (25 October 2026). A browser
   lets a passkey sign only for the website name it was made for and the

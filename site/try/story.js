@@ -38,7 +38,7 @@ export function choosePath(has) {
   const missing = [has && has.ed25519 === true ? null : 'Ed25519', has && has.mldsa === true ? null : 'ML-DSA-87'].filter(Boolean).join(' or ');
   return {
     path: 'sample',
-    why: `Your browser has no built-in ${missing}, which an agent's receipt is signed with, so it cannot make a new record. Instead it reads the sample record that comes with the library, and checks it here one entry at a time. ${has && has.ed25519 === true ? 'It cannot check every signature, so its answer says that the check is not complete.' : "It can check only the passkey's signature on the permission, so it cannot compare the receipts with the permission, and its answer says that the check is not complete."} Edge and Brave from version 155 can make a new record here.`,
+    why: `Your browser has no built-in ${missing}, which an agent's receipt is signed with, so it cannot make a new record. Instead it reads the sample record that comes with the library, and checks it here one entry at a time. ${has && has.ed25519 === true ? 'It cannot check every signature, so its answer says that the check is not complete.' : "It can check only the passkey's signature on the permission, so it cannot compare the receipts with the permission, and its answer says that the check is not complete."} Chrome, Edge and Brave 155, tried on 13 October 2026, can make a new record here.`,
   };
 }
 
@@ -119,4 +119,39 @@ export function expectedFirstBreach(limit) {
     if (total > limit) return i + 1;
   }
   return null;
+}
+
+/** The words of the refusal of a limit that cannot be read. */
+export function limitRefusal() {
+  return `Give the limit as a whole number of GBP, from ${MIN_LIMIT.toLocaleString('en-GB')} to ${MAX_LIMIT.toLocaleString('en-GB')}. Nothing was made.`;
+}
+
+/**
+ * The page's own words that differ by path: they are true only of the record
+ * that path shows.
+ * @param {'live'|'sample'} path
+ * @returns {{signedWith: string, permissionNote: string, notDone: string[], checkedBy: string}}
+ */
+export function pathText(path) {
+  if (path === 'live') {
+    return {
+      signedWith: `with a stand-in for a passkey`,
+      permissionNote: `It is signed with the library's development stand-in for a passkey: a key made in this page's memory a moment ago, which no person confirmed. Every permission it signs says "(development)" in the name of whoever signed it, and names the address http://localhost, which is meant for development; a real permission names the page where the person signed, such as https://sign.prova.red. A real permission is signed by a person, with a real passkey on their own device. A name in a record is a label; only keys are checked.`,
+      notDone: [
+        `It makes no seal. A seal, which gathers the receipts under one fingerprint, is signed with a third method (SLH-DSA) that no browser tried so far has, so a seal's third signature cannot be checked in a browser. The command-line checker checks it.`,
+        `No other party countersigns the receipts made here, so each shows only what the agent's side said.`,
+        `Nothing here is time-stamped by an outside service.`,
+      ],
+      checkedBy: `Checked in this browser, trusting the stand-in passkey that this page made a moment ago.`,
+    };
+  }
+  return {
+    signedWith: `with a software stand-in for a passkey, in advance`,
+    permissionNote: `The sample record was made in advance, on 5 October 2026, and comes with the library. Its permission is signed with a software stand-in for a passkey, which no person confirmed, for the invented person "Sam Example". A real permission is signed by a person, with a real passkey on their own device. A name in a record is a label; only keys are checked.`,
+    notDone: [
+      `The sample has a seal, receipts countersigned by the invented supplier, and a time-stamp from a made-up time-stamp service. This browser cannot check all their signatures: a seal's third method (SLH-DSA) is in no browser tried so far, and this browser lacks a method the receipts are signed with. The command-line checker checks them all.`,
+      `In a browser that can make a new record, this page makes one of its own instead, under a limit you choose.`,
+    ],
+    checkedBy: `Checked in this browser, trusting the keys that come with the sample.`,
+  };
 }

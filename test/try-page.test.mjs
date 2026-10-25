@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import { checkBook } from '../src/check.js';
 import { developmentRecorder, DEVELOPMENT_MARK } from '../src/dev.js';
 import { sha256, toBase64url, utf8 } from '../src/encoding.js';
-import { DEFAULT_LIMIT, ORDERS, choosePath, expectedFirstBreach, makeRecord, readLimit } from '../site/try/story.js';
+import { DEFAULT_LIMIT, ORDERS, choosePath, expectedFirstBreach, limitRefusal, makeRecord, pathText, readLimit } from '../site/try/story.js';
 
 const lib = { developmentRecorder, checkBook, sha256, utf8, toBase64url };
 
@@ -43,4 +43,27 @@ test('the record made under each limit is intact, and the checker finds the firs
   }
   assert.equal(expectedFirstBreach(200), 4);
   assert.equal(expectedFirstBreach(230), null);
+});
+
+test('the words that differ by path are true only of the record that path shows', () => {
+  const live = pathText('live');
+  const sample = pathText('sample');
+  assert.match(live.permissionNote, /a moment ago/);
+  assert.match(live.permissionNote, /http:\/\/localhost, which is meant for development; a real permission names the page where the person signed, such as https:\/\/sign\.prova\.red/);
+  assert.match(live.notDone.join(' '), /makes no seal/);
+  assert.match(live.notDone.join(' '), /No other party countersigns/);
+  assert.match(live.checkedBy, /stand-in passkey that this page made a moment ago/);
+  assert.match(live.signedWith, /stand-in for a passkey/);
+  assert.doesNotMatch(sample.permissionNote, /moment ago|\(development\)|http:\/\/localhost/);
+  assert.match(sample.permissionNote, /in advance, on 5 October 2026/);
+  assert.match(sample.notDone.join(' '), /has a seal, receipts countersigned by the invented supplier, and a time-stamp from a made-up time-stamp service/);
+  assert.doesNotMatch(sample.notDone.join(' '), /no seal|No other party countersigns|Nothing here is time-stamped/);
+  assert.match(sample.checkedBy, /keys that come with the sample/);
+  assert.match(sample.signedWith, /software stand-in for a passkey, in advance/);
+  for (const words of [live, sample]) assert.doesNotMatch([words.permissionNote, ...words.notDone].join(' '), /no browser has yet|No browser has the third/);
+});
+
+test('the sample path names only the browsers that were tried, and the refusal of a limit writes 10,000 with a comma', () => {
+  for (const has of [{ ed25519: true, mldsa: false }, { ed25519: false, mldsa: false }]) assert.match(choosePath(has).why, /Chrome, Edge and Brave 155, tried on 13 October 2026, can make a new record here\.$/);
+  assert.match(limitRefusal(), /from 1 to 10,000\./);
 });

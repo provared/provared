@@ -8,7 +8,18 @@
 <title>Try Provared</title>
 <link rel="canonical" href="https://prova.red/try/">
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Provared">
+<meta property="og:title" content="Try Provared in your browser">
+<meta property="og:description" content="Two minutes, nothing to install: an agent orders under a limit, signs a receipt for each order, and the free checker finds where it went over. Nothing is sent anywhere.">
+<meta property="og:url" content="https://prova.red/try/">
+<meta property="og:image" content="https://prova.red/preview.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://prova.red/preview.png">
 <link rel="stylesheet" href="../style.css?v=5">
+<script src="wait.js" defer></script>
 <script type="module" src="try-page.js"></script>
 </head>
 <body>
@@ -35,7 +46,7 @@
   <h2>1. The permission</h2>
   <p>In the checker's own words, read from the signed permission:</p>
   <div class="card slip"><dl id="permission-words"></dl></div>
-  <p class="small quiet">It is signed with the library's development stand-in for a passkey: a key made in this page's memory a moment ago, which no person confirmed. Every permission it signs says "(development)" in the name of whoever signed it, and names the address http://localhost, which the format allows only for development. A real permission is signed by a person, with a real passkey on their own device. A name in a record is a label; only keys are checked.</p>
+  <p class="small quiet" id="permission-note"></p>
 </section>
 
 <section id="acted" hidden>
@@ -50,12 +61,10 @@
   <div id="result" class="result"></div>
 </section>
 
-<h2>What this page does not do</h2>
-<ul>
-  <li>It uses no seal. A seal, which gathers the receipts under one fingerprint, is signed with a third method (SLH-DSA) that no browser has yet, so a seal's third signature is not checked in any browser. The command-line checker checks it. The checker's answer still shows the record's top fingerprint, which a seal would sign.</li>
-  <li>No other party countersigns the receipts made here, so each shows only what the agent's side said.</li>
-  <li>Nothing here is time-stamped by an outside service.</li>
-</ul>
+<section id="not-done" hidden>
+  <h2>What this page does not do</h2>
+  <ul id="not-done-list"></ul>
+</section>
 
 <h2>Next</h2>
 <p>To make a record of your own on your computer, with Node.js 24.7 or later, or Python 3.11 or later:</p>
