@@ -88,6 +88,8 @@ agent = create_agent(model, tools=[order_supplies, send_message],
 
 The package is listed among the middleware in
 [LangChain's own documentation](https://docs.langchain.com/oss/python/integrations/middleware).
+For JavaScript agents, [examples/frameworks/](examples/frameworks/) shows the
+same with the Vercel AI SDK, through `recordTools`.
 
 ## The four parts
 

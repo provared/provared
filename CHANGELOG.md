@@ -29,6 +29,25 @@
   approval made beforehand, or whose `details` is not a list. Its tests run
   in a job of their own in the test workflow, at the locked versions and
   again at the newest releases of OpenTelemetry.
+- **An example for a JavaScript agent framework** in
+  `examples/frameworks/` (not in the npm package): an agent built with the
+  Vercel AI SDK (`ai` 7.0.153), with its tools put behind the stub writer
+  with `recordTools`. One order within the slip is run and receipted; one
+  over its limit is not run, leaves no stub, and the agent is told why; the
+  checker finds the book intact and within its slip, and the output says
+  that the slip was signed by a development stand-in, not a person. It
+  uses the SDK's own mock model and passes `telemetry: { isEnabled: false }`.
+  It runs with a guard (`_offline.mjs`) open from before any module is
+  loaded until the program ends, which replaces with refusing functions
+  Node.js's socket connections, `dgram` sends, `dns` look-ups (both
+  `Resolver` classes included), the functions that start a program (`child_process`, `ChildProcess.prototype.spawn` and, where it exists, `process.execve`),
+  `worker_threads.Worker`, `fetch`, `WebSocket`, and `process.binding`
+  for the bindings beneath them; the tests check that nothing was refused.
+  Its own `package.json` and lock file pin every version, so the library
+  keeps no dependencies. A new job in the test workflow runs it. In
+  `docs/guide.md`, the links to the examples and to the Python version's
+  examples now give their full addresses on GitHub, since `examples/` and
+  `python/` are not in the npm package.
 
 - **A "try it" page** at prova.red/try/ (`site/try/`, not yet published).
   One button. Where the browser has Ed25519 and ML-DSA-87 built in (Chrome,

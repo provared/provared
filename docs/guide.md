@@ -39,7 +39,7 @@ An Internet-Draft is a working document, not a standard.
 | `tools/` | Three small tools: one wrote the sample record, one writes the checking page as a single file, one writes the shared test files |
 | `test/` | The tests |
 | `test-vectors/` | Shared test files: records and values, each with the answer this library gives. Another implementation of the format can be tested against them |
-| `python/` | The Python version, `pip install provared`, which gives the same answers. See its own [README](../python/README.md), and its examples with three agent frameworks in `python/examples/`, and small packages for two of them in `python/integrations/` |
+| `python/` | The Python version, `pip install provared`, which gives the same answers. See its own [README](https://github.com/provared/provared/blob/main/python/README.md), and its examples with three agent frameworks in `python/examples/`, and small packages for two of them in `python/integrations/` |
 | `site/` | The pages at [prova.red](https://prova.red/): what a record proves, with the checker's answer for the sample record, and a worked example. Published with GitHub Pages by `.github/workflows/pages.yml`, which also serves the checking page at `prova.red/check/` and as one file. The pages load nothing from anywhere and keep nothing about a reader |
 
 The npm package holds `src/`, `bin/`, `net/`, `spec/`, `docs/`,
@@ -105,7 +105,7 @@ const passkey = await developmentPasskey();
 fills in the issuer (its key, page address and marked name) and the
 agent's keys; by default the slip runs from a minute ago for one day,
 holds no limits and names no other party, and its purpose says that it
-is for development. [examples/first-record.mjs](../examples/first-record.mjs)
+is for development. [examples/first-record.mjs](https://github.com/provared/provared/blob/main/examples/first-record.mjs)
 is a whole first record in one file. In Python the same is
 `provared.dev` (`development_passkey`, `development_slip`,
 `development_recorder`), with the writer as `.writer`.
@@ -760,6 +760,16 @@ not a promise. The numbers `0` and `-0` share a fingerprint, as RFC
 8785 writes both as `0`. If `onStub` fails, its error is passed on,
 though the tool has run and its stub is in the book. `recordTools`
 names no agent software, and works with any function.
+
+[examples/frameworks/](https://github.com/provared/provared/tree/main/examples/frameworks) in the repository shows
+`recordTools` beside a JavaScript agent framework, the Vercel AI SDK
+(`ai`, version 7). The SDK's own tool calls the recorded tool from its
+`execute` function, and the SDK hands the words of `NotTaken` back to the
+model as a failed tool call, so the agent is told why a call was not run.
+It runs with a scripted stand-in model and sends nothing anywhere; it has
+its own `package.json`, with exact versions, and is not part of the npm
+package. The Python examples are in
+[python/examples/](https://github.com/provared/provared/tree/main/python/examples) in the repository.
 
 ### Denials: the calls the agent's side refused
 

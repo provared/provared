@@ -1,0 +1,19 @@
+{
+  "name": "provared-framework-examples",
+  "private": true,
+  "description": "An example: Provared beside the Vercel AI SDK. Not part of the provared package.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=24.7"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning --import ./_offline-whole-run.mjs vercel-ai-sdk.mjs",
+    "test": "node --disable-warning=ExperimentalWarning --test test/guard.test.mjs && node --disable-warning=ExperimentalWarning --import ./_offline-whole-run.mjs --test --test-isolation=none test/examples.test.mjs"
+  },
+  "dependencies": {
+    "ai": "7.0.153",
+    "provared": "file:../..",
+    "zod": "4.6.7"
+  }
+}

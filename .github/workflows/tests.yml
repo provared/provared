@@ -7,6 +7,8 @@
 # before the people who use them find it. Nothing is cached: every run
 # installs the newest release of each framework that the package allows
 # (the OpenTelemetry bridge is also tested at its locked versions first).
+# The examples' jobs are the exception: they install the exact versions
+# their files name, every run.
 #
 # Nothing here is published, pushed or sent anywhere: the workflow can only
 # read the repository, and it uses no secret. The tests call no AI service;
@@ -259,3 +261,25 @@ jobs:
       - name: Run the tests
         working-directory: python/examples
         run: python -m unittest test_examples -v
+
+  # The JavaScript example (examples/frameworks/), with the Vercel AI SDK
+  # and every package beneath it at the exact versions that its
+  # package-lock.json fixes. It takes the library from this commit. Install
+  # scripts are not run: the example needs none.
+  javascript-examples:
+    name: JavaScript example (Vercel AI SDK)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: Install the examples' exact versions
+        working-directory: examples/frameworks
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Run the tests
+        working-directory: examples/frameworks
+        run: npm test
