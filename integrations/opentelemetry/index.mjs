@@ -5,9 +5,12 @@
 //   receipt's fingerprint, the fingerprint of the permission (the slip) it
 //   relies on, the action, and what the check before acting said
 //   (attributes.mjs lists the names);
-// - the receipt names the span's trace: the stub names, among its
-//   documents, "provared.trace-id", the fingerprint of the span's trace id
-//   (format description, section 27).
+// - the receipt names the span's trace, for a tool that the caller says
+//   sends the trace out with the call (in a W3C Trace Context "traceparent"
+//   header): the stub names, among its documents, "provared.trace-id", the
+//   fingerprint of the trace id that header carries (format description,
+//   section 27). The bridge cannot see whether a tool really sends it: the
+//   caller's word is the agent's side's word.
 //
 // A span is the agent's side's own word, as the receipt is. The receipt
 // and the checker are the evidence; the span is a pointer to it.
@@ -39,7 +42,6 @@ const GEN_AI = Object.freeze({
 });
 const ERROR_TYPE = 'error.type';
 const TRACE_ID = 'provared.trace-id';
-const EVENT_ID = 'provared.event-id';
 
 // A class name, written as code writes it: low in variety, as error.type
 // asks, and never a message. It is put on the span as the code named it.
@@ -57,8 +59,8 @@ function errorType(e) {
 // Text of one character or more, well-formed: the form section 27 asks of an identifier.
 const identifier = (value) => (typeof value === 'string' && value.length > 0 && value.length <= 256 && value.isWellFormed() ? value : null);
 
-const OPTIONS = ['span', 'tracer', 'agentName', 'bindTrace', 'bindCallId', 'event', 'onStub'];
-const ACT_OPTIONS = [...OPTIONS, 'toolName', 'callId'];
+const OPTIONS = ['span', 'tracer', 'agentName', 'event', 'onStub'];
+const ACT_OPTIONS = [...OPTIONS, 'toolName', 'callId', 'sendsTrace'];
 
 function settingsOf(options, known) {
   if (options !== undefined && (options === null || typeof options !== 'object' || Array.isArray(options))) throw new TypeError('options: must be an object.');
@@ -66,7 +68,7 @@ function settingsOf(options, known) {
   for (const name of Object.keys(o)) if (!known.includes(name)) throw new TypeError(`${name}: is not an option. The options are: ${known.join(', ')}.`);
   const span = o.span === undefined ? 'new' : o.span;
   if (span !== 'new' && span !== 'active') throw new TypeError('span: must be "new" (the bridge starts an "execute_tool" span for each call) or "active" (the bridge adds to the span that is active when the tool is called).');
-  for (const name of ['bindTrace', 'bindCallId', 'event']) {
+  for (const name of ['event', 'sendsTrace']) {
     if (o[name] !== undefined && typeof o[name] !== 'boolean') throw new TypeError(`${name}: must be true or false.`);
   }
   if (o.agentName !== undefined && identifier(o.agentName) === null) throw new TypeError('agentName: must be text of 1 to 256 characters.');
@@ -78,8 +80,7 @@ function settingsOf(options, known) {
     span,
     tracer: o.tracer ?? trace.getTracer(TRACER_NAME, TRACER_VERSION),
     agentName: o.agentName,
-    bindTrace: o.bindTrace !== false,
-    bindCallId: o.bindCallId !== false,
+    sendsTrace: o.sendsTrace === true,
     event: o.event === true,
     onStub: o.onStub,
     toolName: o.toolName,
@@ -106,23 +107,20 @@ function withSpan(settings, toolName, callId, work) {
   });
 }
 
-// The documents that bind the receipt to the span: the trace id, and the
-// identifier the model gave the call. Each is the fingerprint of the
-// identifier, never the identifier.
-async function bindings(settings, span, callId) {
-  const documents = [];
+// The document that binds the receipt to the span's trace, for a tool
+// that sends the trace out with the call: the fingerprint of the trace id,
+// never the trace id. Section 27 of the format description defines
+// "provared.trace-id" as the trace-id of the "traceparent" header the
+// agent's side sent, so nothing is written for a tool that sends none.
+// The trace id a propagator puts into that header is that of the span
+// active while the tool runs: this span. The model's identifier for the
+// call is not the platform's identifier ("provared.event-id"), so it goes
+// on the span only, never into the receipt.
+async function bindings(sends, span) {
   const context = span && typeof span.spanContext === 'function' ? span.spanContext() : null;
-  if (settings.bindTrace && context && isSpanContextValid(context)) {
-    documents.push({ name: TRACE_ID, sha256: await identifierFingerprint(context.traceId) });
-  }
-  if (settings.bindCallId && callId) documents.push({ name: EVENT_ID, sha256: await identifierFingerprint(callId) });
-  return documents;
+  if (!sends || !context || !isSpanContextValid(context)) return [];
+  return [{ name: TRACE_ID, sha256: await identifierFingerprint(context.traceId) }];
 }
-
-// The bindings to add after documents already named: no second
-// "provared.event-id" where the caller named one already, so that one
-// receipt does not hold identifiers of the call from two sources.
-const after = (named, binding) => (Array.isArray(named) && named.some((d) => d && d.name === EVENT_ID) ? binding.filter((d) => d.name !== EVENT_ID) : binding);
 
 function markNotTaken(span, own, action, answer, denial, settings) {
   annotate(span, { outcome: 'not_taken', action, answer, denial }, { event: settings.event });
@@ -143,18 +141,22 @@ function markError(span, own, action, e) {
 
 /**
  * Put an agent's tools behind the stub writer, as recordTools does, and
- * trace each call: each call's span names its receipt, and its receipt
- * names the span's trace.
+ * trace each call: each call's span names its receipt, and the receipt of
+ * a tool that sends the trace out names the span's trace.
  *
  * Each tool is described as for recordTools ("action", "run", and where they
- * apply "with", "amount", "details", "countersign", "approve"), with one
- * member more:
+ * apply "with", "amount", "details", "countersign", "approve"), with two
+ * members more:
+ *   - "sendsTrace" (optional): true where the tool sends the trace out with
+ *     its call, in a W3C Trace Context "traceparent" header (a web call
+ *     made with OpenTelemetry's instrumentation, say). Only then does the
+ *     receipt name the trace, as "provared.trace-id". False by default. The
+ *     bridge cannot see whether the tool really sends it;
  *   - "callId" (optional): a function of the second argument the tool is
  *     called with (the options an agent framework hands a tool, say) that
  *     gives the identifier the model gave the call, or nothing. It goes on
- *     the span as gen_ai.tool.call.id and into the receipt as the
- *     fingerprint "provared.event-id". Anything that is not text of 1 to
- *     256 characters is set aside.
+ *     the span as gen_ai.tool.call.id, and never into the receipt. Anything
+ *     that is not text of 1 to 256 characters is set aside.
  *
  * @param {object} recorder the stub writer (openRecorder)
  * @param {Record<string, object>} tools by name; the name, as given, is the span's gen_ai.tool.name
@@ -163,8 +165,6 @@ function markError(span, own, action, e) {
  *   "active" adds to the span that is active when the tool is called, where an agent framework already makes one
  * @param {object} [options.tracer] the tracer for "new"; by default trace.getTracer("provared-opentelemetry")
  * @param {string} [options.agentName] gen_ai.agent.name on each span the bridge starts
- * @param {boolean} [options.bindTrace] false to leave the trace out of the receipt; true by default
- * @param {boolean} [options.bindCallId] false to leave the model's call identifier out of the receipt; true by default
  * @param {boolean} [options.event] true to add a span event "provared.not_taken" where a call is not taken; false by default
  * @param {(stub: object, tool: string) => any} [options.onStub] as for recordTools
  * @returns {Record<string, (args?: any, extra?: any) => Promise<any>>} the tools; a call gives what the tool gives,
@@ -178,14 +178,15 @@ export function traceTools(recorder, tools, options = {}) {
   for (const name of Object.keys(tools)) {
     const spec = tools[name];
     if (spec === null || typeof spec !== 'object') throw new TypeError(`tools.${name}: must be an object.`);
-    const { callId, ...rest } = spec;
+    const { callId, sendsTrace, ...rest } = spec;
     if (callId !== undefined && typeof callId !== 'function') throw new TypeError(`tools.${name}.callId: must be a function.`);
-    fixed[name] = Object.freeze({ callId, rest: Object.freeze({ ...rest }) });
+    if (sendsTrace !== undefined && typeof sendsTrace !== 'boolean') throw new TypeError(`tools.${name}.sendsTrace: must be true or false.`);
+    fixed[name] = Object.freeze({ callId, sends: sendsTrace === true, rest: Object.freeze({ ...rest }) });
   }
   recordTools(recorder, Object.fromEntries(Object.entries(fixed).map(([name, t]) => [name, t.rest])));
 
   const traced = {};
-  for (const [name, { callId: callIdOf, rest }] of Object.entries(fixed)) {
+  for (const [name, { callId: callIdOf, sends, rest }] of Object.entries(fixed)) {
     Object.defineProperty(traced, name, {
       enumerable: true,
       value: async (args, extra) => {
@@ -198,7 +199,7 @@ export function traceTools(recorder, tools, options = {}) {
           }
         }
         return withSpan(settings, name, callId, async (span, own) => {
-          const binding = await bindings(settings, span, callId);
+          const binding = await bindings(sends, span);
           const traceBound = binding.some((d) => d.name === TRACE_ID);
           // What the caller's own functions throw is the caller's: an error
           // that one of them threw (a NotTaken from another stub writer,
@@ -222,7 +223,7 @@ export function traceTools(recorder, tools, options = {}) {
             }
           } : fn);
           const run = later(rest.run);
-          // The documents the tool names, as recordTools would name them, and the bindings after them.
+          // The documents the tool names, as recordTools would name them, and the trace after them.
           const details =
             binding.length === 0
               ? later(rest.details)
@@ -230,7 +231,7 @@ export function traceTools(recorder, tools, options = {}) {
                   let named = [];
                   if (typeof rest.details === 'function') named = (await later(rest.details)(a)) ?? [];
                   else if (rest.details !== false && a !== undefined) named = [{ name: 'provared.arguments', sha256: await argumentsFingerprint(a) }];
-                  return Array.isArray(named) ? [...named, ...after(named, binding)] : named;
+                  return Array.isArray(named) ? [...named, ...binding] : named;
                 };
           let stub = null;
           const onStub = async (written, tool) => {
@@ -280,11 +281,12 @@ export function traceTools(recorder, tools, options = {}) {
  * traceTools does for a tool. The request, "perform" and "more" are those
  * of "act"; "more.detailsAfter" is passed on.
  *
- * Where "more.approval" is given, no binding is added to the request: the
- * person approved the request as it stands, and an approval covers exactly
- * the documents the person saw. The span still names the receipt. Where
- * "request.details" is given and is not a list, the request is passed on
- * as it is, for "act" to refuse.
+ * The receipt names the span's trace only where "options.sendsTrace" is
+ * true, as for a tool in traceTools. Even then nothing is added where
+ * "more.approval" is given (the person approved the request as it stands,
+ * and an approval covers exactly the documents the person saw), or where
+ * "request.details" is given and is not a list (the request is passed on
+ * as it is, for "act" to refuse). The span names the receipt in every case.
  *
  * @param {object} recorder the stub writer (openRecorder)
  * @param {{action: string, amount?: object, with?: string, details?: object[]}} request
@@ -293,7 +295,8 @@ export function traceTools(recorder, tools, options = {}) {
  * @param {object} [options] as for traceTools, and:
  * @param {string} [options.toolName] gen_ai.tool.name and the span's name, 1 to 64 visible ASCII characters;
  *   by default the action name where it has that form, or else "action"
- * @param {string} [options.callId] the identifier the model gave the call
+ * @param {string} [options.callId] the identifier the model gave the call; on the span only
+ * @param {boolean} [options.sendsTrace] true where "perform" sends the trace out with the call; false by default
  * @returns {Promise<object>} what "act" gives; a call not taken is not thrown, as with "act"
  */
 export async function traceAct(recorder, request, perform, more = {}, options = {}) {
@@ -303,15 +306,12 @@ export async function traceAct(recorder, request, perform, more = {}, options = 
   const toolName = settings.toolName ?? actionOrNull(request.action) ?? 'action';
   const callId = settings.callId ?? null;
   const approved = more !== null && typeof more === 'object' && more.approval !== undefined && more.approval !== null;
-  const later = more !== null && typeof more === 'object' && more.detailsAfter !== undefined && more.detailsAfter !== null;
   const listed = request.details === undefined || Array.isArray(request.details);
   return withSpan(settings, toolName, callId, async (span, own) => {
-    let binding = approved || !listed ? [] : await bindings(settings, span, callId);
-    // "detailsAfter" may name the platform's own identifier for the call: then the model's is not added beside it.
-    if (later) binding = binding.filter((d) => d.name !== EVENT_ID);
+    const binding = approved || !listed ? [] : await bindings(settings.sendsTrace, span);
     const traceBound = binding.some((d) => d.name === TRACE_ID);
     const given = Array.isArray(request.details) ? request.details : [];
-    const asked = binding.length === 0 ? request : { ...request, details: [...given, ...after(given, binding)] };
+    const asked = binding.length === 0 ? request : { ...request, details: [...given, ...binding] };
     let outcome;
     try {
       outcome = await recorder.act(asked, perform, more);

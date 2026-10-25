@@ -20,12 +20,22 @@ It links them both ways, in one call:
   receipt's fingerprint, the fingerprint of the permission, the action, and
   what the check before acting said (taken, or not taken and why, as
   finding codes);
-- **the receipt names the span's trace.** The receipt names, among its
-  documents, `provared.trace-id`: the fingerprint of the span's trace id
-  (format description, section 27).
+- **the receipt names the span's trace, for a tool that sends it out.**
+  Where you say that a tool sends the trace out with its call, in a W3C
+  Trace Context `traceparent` header (a web call made with OpenTelemetry's
+  own instrumentation, say), its receipt names, among its documents,
+  `provared.trace-id`: the fingerprint of the trace id that header
+  carries, which is the span's. That is what the format description,
+  section 27, says the name stands for. For any other tool the receipt
+  names no trace, and `provared.stub.trace_bound` on the span says so.
 
-So from a span in a tracing tool you can find its receipt in the book, and
-from a receipt you can find its trace.
+So from a span in a tracing tool you can always find its receipt in the
+book, and from the receipt of a tool that sends the trace out you can find
+its trace.
+
+**The bridge cannot see whether a tool really sends the trace.** Your
+`sendsTrace: true` is the agent's side's word, as the receipt is: a
+matching trace id in the other system's log is what shows it was sent.
 
 Status: version 0.1.0, a draft, not yet published. Evidence, not a verdict.
 
@@ -68,30 +78,36 @@ const tools = traceTools(recorder, described, { span: 'active' });
 A tool may also give `callId`: a function of the second argument it is
 called with (the options a framework hands a tool) that gives the
 identifier the model gave the call. It goes on the span as
-`gen_ai.tool.call.id`, and into the receipt as the fingerprint
-`provared.event-id`. What it gives is used only where it is text of 1 to
-256 characters; anything else is set aside. Where the tool's own documents
-already name a `provared.event-id`, the model's is not added beside it, so
-that one receipt never holds identifiers of the call from two sources.
+`gen_ai.tool.call.id`, and never into the receipt: it is the model's
+identifier, not the platform's, and `provared.event-id` stands for the
+platform's (section 27). What it gives is used only where it is text of 1
+to 256 characters; anything else is set aside.
+
+A tool says that it sends the trace out with `sendsTrace: true`:
 
 ```js
-order: { action: 'shop.order', run: placeOrder, callId: (options) => options?.toolCallId }
+order: {
+  action: 'shop.order',
+  run: placeOrder,            // calls the shop's interface, with a traceparent header
+  sendsTrace: true,
+  callId: (options) => options?.toolCallId,
+}
 ```
 
 `traceAct(recorder, request, perform, more, options)` does the same for one
 call of the stub writer's `act`. As with `act`, a call that is not taken
-is given back, not thrown, and `more.detailsAfter` is passed on (where it
-is given, the model's identifier is not added, for the same reason). Its
-span is named after `options.toolName`, or else the action where it is 1
-to 64 visible characters with no spaces, or else `action`. Two cases add
+is given back, not thrown, and `more.detailsAfter` is passed on. Its span
+is named after `options.toolName`, or else the action where it is 1 to 64
+visible characters with no spaces, or else `action`. The receipt names the
+trace only where `options.sendsTrace` is true, and even then two cases add
 nothing to the request:
 
 - where `more.approval` is given: the person approved the request as it
   stands, and an approval covers exactly the documents the person saw, so
-  a binding added afterwards would no longer match it. The span still
+  a document added afterwards would no longer match it. The span still
   names the receipt; the receipt does not name the trace. (`traceTools`
-  asks for the approval after the bindings are added, so the person
-  approves the request with them.)
+  asks for the approval after the trace is added, so the person approves
+  the request with it.)
 - where `request.details` is given and is not a list: the request is
   passed on as it is, and `act` refuses it.
 
@@ -102,22 +118,25 @@ The options:
 | `span` | `'new'`: a span for each call; `'active'`: add to the active span | `'new'` |
 | `tracer` | the tracer for new spans | `trace.getTracer('provared-opentelemetry')` |
 | `agentName` | `gen_ai.agent.name` on each new span, 1 to 256 characters | none |
-| `bindTrace` | put the trace's fingerprint into the receipt | `true` |
-| `bindCallId` | put the fingerprint of the model's call identifier into the receipt | `true` |
 | `event` | add a span event `provared.not_taken` where a call is not taken | `false` |
 | `onStub` | as for `recordTools` | none |
 | `toolName` | `traceAct` only: the span's tool name | the action |
-| `callId` | `traceAct` only: the model's identifier for the call, 1 to 256 characters | none |
+| `callId` | `traceAct` only: the model's identifier for the call, 1 to 256 characters, for the span | none |
+| `sendsTrace` | `traceAct` only: `perform` sends the trace out with the call; the receipt then names it | `false` |
+
+For `traceTools`, `sendsTrace` and `callId` are members of each tool's
+description, not options.
 
 An option that is not in this list, or that is not of the form given, is
 refused with an error that names it.
 
 With no OpenTelemetry software set up to record traces, OpenTelemetry's
 interface records no span, and the tools still run and are receipted. The
-receipt then names a trace only where the call was made inside one passed
-on from elsewhere (from a `traceparent` header that came in, say). A trace
-that is not sampled, so that no span is kept, is still named in the
-receipt: its trace id is still passed on to what the tool calls.
+receipt of a tool that sends the trace out then names a trace only where
+the call was made inside one passed on from elsewhere (from a
+`traceparent` header that came in, say). A trace that is not sampled, so
+that no span is kept, is still named in such a receipt: its trace id is
+still passed on to what the tool calls.
 
 ## What goes on the span
 
@@ -197,18 +216,20 @@ on any object with `setAttribute`, and does not import OpenTelemetry:
 - A span exists only for calls that go through `traceTools` or
   `traceAct`. A call the agent made another way has neither a span from
   this package nor a receipt.
-- A trace id is the agent's side's choice. A matching trace id shows that
-  two records speak of the same trace, not that the call did what either
-  says, and a trace may hold many calls.
+- A trace id is the agent's side's choice, and so is `sendsTrace`. A
+  matching trace id shows that two records speak of the same trace, not
+  that the call did what either says, and a trace may hold many calls.
 - A trace id is not secret: anyone who sees the trace can work out its
   fingerprint and find the receipt that names it.
 - For a call not taken with no denial written, the span does not name the
   permission: the check before acting does not give it.
 - A stub may name at most 32 documents (28 where `detailsAfter` is given),
-  and the bindings take up to two of them. A tool that names more than 30
-  of its own leaves no room for both: the check before acting then refuses
-  the call (`not_taken`). Turn a binding off (`bindTrace: false`,
-  `bindCallId: false`) to make room.
+  and the trace takes one of them. A tool that sends the trace and names
+  32 documents of its own leaves no room: the check before acting then
+  refuses the call (`not_taken`).
+- The meaning of `provared.trace-id` and `provared.event-id` is a draft
+  of the format, to be settled. This package writes only the first, and
+  only in the case section 27 describes.
 - OpenTelemetry's conventions for generative AI are marked "development":
   their names may change. Span events are being replaced by log records in
   OpenTelemetry, which is why the event is off by default.

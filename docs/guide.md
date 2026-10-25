@@ -888,9 +888,11 @@ version 0.6.0, `arguments`; every checker reads both); a tool can name
 them otherwise through its own `details` function.
 
 To show each receipt on the trace span of its call in an observability
-tool, and name the span's trace in the receipt, use the OpenTelemetry
-bridge in `integrations/opentelemetry/` (not yet published); a span is a
-pointer to the receipt, not evidence.
+tool, use the OpenTelemetry bridge in `integrations/opentelemetry/` (not
+yet published); a span is a pointer to the receipt, not evidence. It puts
+`provared.trace-id` into a receipt only for a tool that you say sends the
+trace out with its call, in a `traceparent` header, as this section
+defines the name; it cannot see whether the tool really does.
 
 ## How signing works
 

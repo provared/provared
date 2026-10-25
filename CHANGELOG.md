@@ -4,17 +4,21 @@
 
 - **An OpenTelemetry bridge**, `provared-opentelemetry` 0.1.0, in
   `integrations/opentelemetry/` (not published). It puts each tool call's
-  receipt on the trace span that observability tools already show, and the
-  span's trace into the receipt, in one call: `traceTools` (as
-  `recordTools`) or `traceAct` (as the stub writer's `act`). The span
+  receipt on the trace span that observability tools already show, in one
+  call: `traceTools` (as `recordTools`) or `traceAct` (as the stub
+  writer's `act`). The span
   gets `provared.outcome`, `provared.action`, `provared.stub.fingerprint`,
   `provared.stub.seq`, `provared.stub.countersigned`,
   `provared.stub.trace_bound`, `provared.slip.fingerprint` and, for a call
   not taken, `provared.check.codes` and `provared.denial.fingerprint`; a span
   the bridge starts is an `execute_tool` span as OpenTelemetry's
   conventions for generative AI describe it. The receipt names the
-  fingerprint of the span's trace id as `provared.trace-id`, and of the
-  model's call identifier, where given, as `provared.event-id`. Only
+  fingerprint of the span's trace id as `provared.trace-id` only for a tool
+  that the caller says sends the trace out with its call, in a
+  `traceparent` header (`sendsTrace: true`; off by default), as section
+  27 of the format description defines the name; the bridge cannot see
+  whether the tool really does. The model's identifier for the call goes
+  on the span as `gen_ai.tool.call.id`, never into the receipt. Only
   fingerprints, names and codes reach a span: never arguments, amounts,
   documents, keys, the words of a finding or an error's message. A span is
   the agent's side's own word; the receipt and the checker are the

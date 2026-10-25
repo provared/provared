@@ -29,16 +29,19 @@ test('with no SDK, the tools run and are receipted, and the receipt names no tra
   await assert.rejects(tools.order({ n: 3 }), NotTaken);
 });
 
-test('with no SDK, but inside a trace passed on from elsewhere, the receipt names that trace', async () => {
+test('with no SDK, but inside a trace passed on from elsewhere, the receipt of a tool that sends it names that trace', async () => {
   const manager = new AsyncLocalStorageContextManager().enable();
   context.setGlobalContextManager(manager);
   try {
     const { recorder } = await shop();
     const written = [];
-    const tools = traceTools(recorder, { order: { action: ORDER, run: async () => 1 } }, { onStub: (s) => written.push(s) });
+    const tools = traceTools(recorder, { order: { action: ORDER, run: async () => 1, sendsTrace: true }, quiet: { action: ORDER, run: async () => 2 } }, { onStub: (s) => written.push(s) });
     // As a propagator gives it, from a "traceparent" header that came in.
     const parent = { traceId: '0af7651916cd43dd8448eb211c80319c', spanId: 'b7ad6b7169203331', traceFlags: TraceFlags.SAMPLED, isRemote: true };
     await context.with(trace.setSpanContext(context.active(), parent), () => tools.order({}));
+    // A tool not said to send the trace: no trace in its receipt.
+    await context.with(trace.setSpanContext(context.active(), parent), () => tools.quiet({}));
+    assert.deepEqual(namesOf(written[1]), ['provared.arguments']);
     assert.deepEqual(namesOf(written[0]), ['provared.arguments', 'provared.trace-id']);
     const sha256 = JSON.parse(new TextDecoder().decode(fromBase64url(written[0].record.payload))).details[1].sha256;
     assert.equal(sha256, await identifierFingerprint(parent.traceId));
