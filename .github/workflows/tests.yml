@@ -21,8 +21,9 @@ name: Tests
 on:
   push:
     branches: [main]
-    # The record page is remade each day and holds no code.
-    paths-ignore: ['site/records/**']
+    # The record page is remade each day and holds no code; remaking it also
+    # changes the sitemap's date.
+    paths-ignore: ['site/records/**', 'site/sitemap.xml']
   pull_request:
   schedule:
     # Every Monday at 06:00 UTC.
