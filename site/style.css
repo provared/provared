@@ -187,3 +187,22 @@ th { color: var(--quiet); font-weight: normal; white-space: nowrap; overflow-wra
 
 /* The mark: a permission slip with a signature, beside a heading or the site's name. */
 .mark { vertical-align: -0.2em; margin-right: 0.4em; }
+
+/* The "try it" page: its button, its one box, and the checker's answer as
+   the checking page's renderer draws it (page/render.js), scoped to it. */
+[hidden] { display: none !important; }
+button.button { font: inherit; cursor: pointer; }
+button.button:disabled { opacity: 0.5; cursor: default; }
+input[type="text"] { font: inherit; color: var(--text); background: var(--page); border: 1px solid var(--line); border-radius: 0.3rem; padding: 0.3rem 0.5rem; max-width: 100%; }
+.result .answers li.partly { border-left-color: var(--seal); }
+.result .card { overflow-wrap: anywhere; }
+.result .card.stub, .result .card.refusal, .result .card.terms { border-left-color: var(--stub); }
+.result .card.show { border-left-color: var(--show); }
+.result .card.unreadable, .result .card.broken { border-left-color: var(--bad); }
+.result .kind { font-weight: 700; }
+.result h3 { margin: 0 0 0.25rem; }
+.result dd { overflow: hidden; }
+.result .mono { font-family: ui-monospace, monospace; font-size: 0.85rem; }
+.result .flag { margin: 0.5rem 0 0; padding: 0.4rem 0.6rem; border-radius: 0.4rem; border: 1px solid var(--line); }
+.result .flag.problem, .result .flag.breach { border-color: var(--bad); color: var(--bad); font-weight: 600; }
+.result .flag.onesided, .result .flag.note { border-color: var(--seal); }
