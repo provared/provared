@@ -714,8 +714,9 @@ test('one recorder may have at most 16 questions waiting (T1)', async () => {
     const everyOne = new Promise((ok) => {
       allDecided = ok;
     });
-    http.Server.prototype.emit = function (event, req, ...rest) {
-      const handled = emit.call(this, event, req, ...rest);
+    http.Server.prototype.emit = function (...args) {
+      const handled = emit.apply(this, args);
+      const [event, req] = args;
       if (event === 'request' && req.url === '/held') {
         req.once('end', () => {
           if (++decided === 16) allDecided();
@@ -731,7 +732,7 @@ test('one recorder may have at most 16 questions waiting (T1)', async () => {
         (reason) => ({ reason }),
       ),
     );
-    await everyOne;
+    assert.notEqual(await within(everyOne, 60000), 'no answer', 'Waited a minute and the sealer had not decided on all 16 questions.');
     // Let go: the 15 that waited are answered in their turn, and no other was turned away.
     letGo();
     assert.ok((await sealing).entry, 'the seal');
@@ -786,12 +787,32 @@ test('a body that ends after it was turned away while being read is not answered
   const noted = (e) => failures.push(e);
   process.on('unhandledRejection', noted);
   process.on('uncaughtException', noted);
+  // The bytes of /extend bodies the sealer has read, counted by a handler added after its own, so that it has
+  // counted them already: the small questions are sent only once all of both part-bodies have arrived.
+  const emit = http.Server.prototype.emit;
+  let read = 0;
+  let allRead;
+  const bothRead = new Promise((ok) => {
+    allRead = ok;
+  });
+  http.Server.prototype.emit = function (...args) {
+    const handled = emit.apply(this, args);
+    const [event, req] = args;
+    if (event === 'request' && req.url === '/extend') {
+      req.on('data', (chunk) => {
+        read += chunk.length;
+        if (read >= 2 * (8 * MiB - 1)) allRead();
+      });
+    }
+    return handled;
+  };
   try {
     const headed = (length) => signed({ recorder: 'agent-one', key: tokens['agent-one'], path: '/extend', length }).headers;
     // Two bodies of 8 MiB being read hold the recorder's 16 MiB.
     sendPart(running.address, '/extend', headed(8 * MiB), 8 * MiB - 1, 8 * MiB, opened);
     sendPart(running.address, '/extend', headed(8 * MiB), 8 * MiB - 1, 8 * MiB, opened);
-    await pause(1500);
+    assert.notEqual(await within(bothRead, 60000), 'no answer', 'Waited a minute and the sealer had not read both part-bodies.');
+    http.Server.prototype.emit = emit;
     // A small question sent whole, in one piece: turned away while its body is read, and its body then ends at once.
     for (let i = 0; i < 5; i++) {
       const q = signed({ recorder: 'agent-one', key: tokens['agent-one'], path: '/held', body: { book: 'x'.repeat(1000) } });
@@ -811,6 +832,7 @@ test('a body that ends after it was turned away while being read is not answered
     await pause(500);
     assert.deepEqual(failures.map((e) => e?.code ?? String(e)), [], 'nothing was answered a second time');
   } finally {
+    http.Server.prototype.emit = emit;
     process.off('unhandledRejection', noted);
     process.off('uncaughtException', noted);
     for (const req of opened) req.destroy();

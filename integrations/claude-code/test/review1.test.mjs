@@ -406,6 +406,15 @@ test('calls caught by a renewal are each recorded under the permission they were
 // test lets it go; the renewal is given up only once the service has read it
 // whole and it waits its turn; and the seal is let go only once the service
 // has seen the caller go.
+// An event the test waits for that has not come within a minute fails the test, in words, rather than leaving it waiting.
+const NOT_CAME = Symbol('not came');
+async function inTime(promise, what) {
+  let timer;
+  const value = await Promise.race([promise, new Promise((done) => { timer = setTimeout(() => done(NOT_CAME), 60000); })]);
+  clearTimeout(timer);
+  if (value === NOT_CAME) assert.fail(`Waited a minute and ${what} did not happen.`);
+  return value;
+}
 test('a renewal whose caller gave up waiting is not made', async () => {
   const { folder, passkey, agent, slip: first } = await world([]);
   const second = await signSlip({ agentKeys: agent.keys, passkey, purpose: 'renewed' });
@@ -434,26 +443,27 @@ test('a renewal whose caller gave up waiting is not made', async () => {
     };
     const sealing = service.seal();
     const settled = sealing.then(() => 'sealed', () => 'sealed');
-    await holding;
+    await inTime(holding, "the seal's first signature check");
     // The renewal, once the service has read its body: its turn is asked for in the same round, before setImmediate runs.
     let arrived;
     const waiting = new Promise((ok) => {
       arrived = ok;
     });
-    http.Server.prototype.emit = function (event, req, res, ...rest) {
+    http.Server.prototype.emit = function (...args) {
+      const [event, req, res] = args;
       if (event === 'request' && req.url === '/renew') req.once('end', () => setImmediate(() => arrived(res)));
-      return emit.call(this, event, req, res, ...rest);
+      return emit.apply(this, args);
     };
     const giveUp = new AbortController();
     const asked = fetch(`http://127.0.0.1:${service.port}/renew`, { method: 'POST', body: JSON.stringify({ slip: second }), signal: giveUp.signal });
     const answered = asked.then(() => 'answered', () => 'given up');
-    const res = await Promise.race([waiting, answered]);
+    const res = await inTime(Promise.race([waiting, answered]), 'the service reading the renewal');
     assert.notEqual(res, 'answered', 'the renewal was answered while the seal held the service');
     assert.equal(await Promise.race([settled, Promise.resolve('holding')]), 'holding', 'the seal holds the service while the renewal waits');
     const gone = once(res, 'close');
     giveUp.abort();
     await assert.rejects(asked);
-    await gone;
+    await inTime(gone, 'the service seeing the caller go');
     letGo();
     await sealing;
     // A question asked after the renewal waits its turn behind it, so once it is answered the renewal's turn is over.
