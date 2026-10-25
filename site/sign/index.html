@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; img-src 'self'; form-action 'none'; base-uri 'none'">
+<meta name="description" content="Provared permissions are now signed at https://sign.prova.red, an address that serves nothing else.">
+<meta name="robots" content="noindex">
+<link rel="canonical" href="https://sign.prova.red/">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<title>Signing has moved</title>
+<link rel="stylesheet" href="../style.css?v=4">
+</head>
+<body>
+<header>
+  <p class="small"><a href="../"><svg class="mark" viewBox="0 0 64 64" width="20" height="20" aria-hidden="true"><circle cx="32" cy="32" r="32" fill="#8f000f"/><path d="M20 15 H37 L45 23 V49 H20 Z" fill="#ffffff"/><path d="M37 15 V23 H45" fill="none" stroke="#8f000f" stroke-width="2.5" stroke-linejoin="round"/><path d="M25 29 H40 M25 35 H36" stroke="#8f000f" stroke-width="2.5" stroke-linecap="round"/><path d="M24.5 43 C27 39, 29 46, 31.5 42.5 C34 39, 36 46, 40.5 41.5" fill="none" stroke="#8f000f" stroke-width="3" stroke-linecap="round"/></svg>Provared</a></p>
+  <h1>Signing has moved</h1>
+  <p class="motto">Permissions are now signed at <a href="https://sign.prova.red/">sign.prova.red</a>.</p>
+</header>
+<main>
+<p>Open <a href="https://sign.prova.red/">https://sign.prova.red</a> to sign a permission or a cancellation with a passkey. This page no longer offers signing.</p>
+
+<p><b>Why it moved.</b> A browser lets a passkey sign only for the website name it was made for and the addresses under it. A passkey made for prova.red could also be used by any other page under prova.red. Such a page could present a record's fingerprint as an ordinary sign-in question, and have the passkey sign a record the person never saw. Nothing else is served at sign.prova.red, so a passkey made there can be used by no other page.</p>
+
+<p><b>If you came here with a link</b> that holds a permission (an address ending in <code>#permission=</code> and a long text), open the same link with <code>https://prova.red/sign/</code> replaced by <code>https://sign.prova.red/</code>. The text after <code>#</code> stays in your browser and is never sent to any server.</p>
+
+<p><b>A passkey you made here before</b> still signs as it did, and records it signed still check. For new permissions, make a passkey at sign.prova.red, and give its thumbprint to whoever checks your records.</p>
+
+<p>Questions and faults are welcome by email to <a href="mailto:hello@prova.red?subject=Provared">hello@prova.red</a> or as <a href="https://github.com/provared/provared/issues">issues on GitHub</a>.</p>
+</main>
+<footer>
+  <p><b>About the author.</b> Pavel Izmaylov builds Provared alone, in their own time and under their own name; on GitHub, <a href="https://github.com/sealwright">sealwright</a>. Every email to <a href="mailto:hello@prova.red?subject=Provared">hello@prova.red</a> is read and answered within a few days.</p>
+  <p>This page loads nothing from anywhere but its own style sheet and icon, and keeps nothing about you.</p>
+</footer>
+</body>
+</html>
