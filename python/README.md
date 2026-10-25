@@ -13,7 +13,7 @@ particular to Python.
 
 ## Status
 
-**Version 0.5.0, a draft**, the same version as the JavaScript library.
+**Version 0.6.0, a draft**, the same version as the JavaScript library.
 Published as it is, by one author in their own time; fixes as time
 allows. It gives the same answer, case for case, as the shared test
 files in [`test-vectors/`](https://github.com/provared/provared/tree/main/test-vectors) show: the same result, the

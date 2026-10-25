@@ -43,9 +43,10 @@ env:
   PYTHONUNBUFFERED: '1'
 
 jobs:
-  # The library's own tests. "npm test" at the top of the repository would
-  # also run the tests of the two packages below; here they are run apart,
-  # so that a failure says which part broke, and each set runs once.
+  # The library's own tests, the same files as "npm test" at the top of the
+  # repository: only test/**/*.test.mjs, so that the packages below, and
+  # the helper files beside their tests, are not run here. Each package is
+  # run in its own job, so that a failure says which part broke.
   javascript:
     name: JavaScript library
     runs-on: ubuntu-latest
@@ -61,10 +62,10 @@ jobs:
       - name: Run the tests
         run: node --disable-warning=ExperimentalWarning --test 'test/**/*.test.mjs'
 
-  # The recorder beside Claude Code, and the gateway. Their tests point the
-  # name "provared" at this repository's own library (test/local-library.mjs
-  # in each folder), so nothing is installed: they test the library as it
-  # is in this commit, not a published version.
+  # The recorder beside Claude Code, the gateway and the central sealer.
+  # Their tests point the name "provared" at this repository's own library
+  # (test/local-library.mjs in each folder), so nothing is installed: they
+  # test the library as it is in this commit, not a published version.
   javascript-packages:
     name: ${{ matrix.package }}
     runs-on: ubuntu-latest
@@ -72,7 +73,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [integrations/claude-code, gateway]
+        package: [integrations/claude-code, gateway, sealer]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
