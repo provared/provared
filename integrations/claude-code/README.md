@@ -21,8 +21,11 @@ provared-claude-code init
 `init` makes the agent's keys, writes the hooks into the project's
 `.claude/settings.local.json` (next to anything already there), and
 prints a link and **the fingerprint of the agent's key set** (`keys`
-prints it too). **Open the link in a browser:** the signing page at
-prova.red opens with a starting permission for this agent filled in.
+prints it too). **Open the link in a browser:** the signing page
+opens with a starting permission for this agent filled in. (Signing moved
+to https://sign.prova.red on 25 October 2026; until this package's next
+version the link begins `https://prova.red/sign/`, which now says so:
+open the same link with that part replaced by `https://sign.prova.red/`.)
 Write your name and read the permission: the page shows the same
 fingerprint of the agent's key set, and if it differs from the one
 `init` printed, the page holds someone else's keys, so do not sign. Change

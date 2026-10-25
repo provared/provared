@@ -6,7 +6,6 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; img-src 'self'; form-action 'none'; base-uri 'none'">
 <meta name="description" content="Provared permissions are now signed at https://sign.prova.red, an address that serves nothing else.">
 <meta name="robots" content="noindex">
-<link rel="canonical" href="https://sign.prova.red/">
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
 <title>Signing has moved</title>
 <link rel="stylesheet" href="../style.css?v=4">
@@ -20,11 +19,11 @@
 <main>
 <p>Open <a href="https://sign.prova.red/">https://sign.prova.red</a> to sign a permission or a cancellation with a passkey. This page no longer offers signing.</p>
 
-<p><b>Why it moved.</b> A browser lets a passkey sign only for the website name it was made for and the addresses under it. A passkey made for prova.red could also be used by any other page under prova.red. Such a page could present a record's fingerprint as an ordinary sign-in question, and have the passkey sign a record the person never saw. Nothing else is served at sign.prova.red, so a passkey made there can be used by no other page.</p>
+<p><b>Why it moved.</b> A browser lets a passkey sign only for the website name it was made for and the addresses under it. A passkey made for prova.red could also be used by any other page under prova.red. Such a page could present a record's fingerprint as an ordinary sign-in question, and have the passkey sign a record the person never saw. Nothing else is served at sign.prova.red, so a passkey made there can be used by no other page, as long as nothing is ever served at an address under it.</p>
 
 <p><b>If you came here with a link</b> that holds a permission (an address ending in <code>#permission=</code> and a long text), open the same link with <code>https://prova.red/sign/</code> replaced by <code>https://sign.prova.red/</code>. The text after <code>#</code> stays in your browser and is never sent to any server.</p>
 
-<p><b>A passkey you made here before</b> still signs as it did, and records it signed still check. For new permissions, make a passkey at sign.prova.red, and give its thumbprint to whoever checks your records.</p>
+<p><b>A passkey you made here before:</b> records signed with it still check. Do not use it for Provared again, because any page under prova.red can still ask it to sign. Make a new passkey at sign.prova.red, and give its thumbprint to whoever checks your records. A recorder that already trusts your old passkey takes a permission from the new one only when told it is new (<code>--new-passkey</code>).</p>
 
 <p>Questions and faults are welcome by email to <a href="mailto:hello@prova.red?subject=Provared">hello@prova.red</a> or as <a href="https://github.com/provared/provared/issues">issues on GitHub</a>.</p>
 </main>

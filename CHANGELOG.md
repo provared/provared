@@ -8,13 +8,15 @@
   to sign by any other page under prova.red (the list of threats, section
   3). The signing page is now served at sign.prova.red from its own
   repository, https://github.com/provared/sign, which holds only that page
-  and the library files it loads, each a byte-for-byte copy of the files at
-  tag v0.6.0, and serves nothing else. prova.red/sign/ now says that
+  and the library's files, each a byte-for-byte copy of the files at tag
+  v0.6.0, and serves nothing else. prova.red/sign/ now says that
   signing has moved and offers no signing (`site/sign/index.html`; the
   publishing workflow no longer copies the signing page there). The
   gateway's README points to the new address. The recorder beside Claude
-  Code still prints links to prova.red/sign/; that changes with its next
-  reviewed version.
+  Code and the Hermes plugin still print links to prova.red/sign/, and the
+  signing page itself, shown inside another page, still names that
+  address; each changes with its next reviewed version, and their READMEs
+  now say how to open such a link at the new address.
 - The test workflow is no longer started by a push that changes only the
   record page and the sitemap.
 
