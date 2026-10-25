@@ -159,7 +159,7 @@ each part protects against, is in
 
 ## Status
 
-**Version 0.5.0, a draft.** Published as it is, by one author in their
+**Version 0.6.0, a draft.** Published as it is, by one author in their
 own time, built with AI tools since 3 October 2026; fixes as time
 allows. The code has been through 50 rounds of review by AI reviewers,
 each reviewer a fresh session given the code, the documents and a brief
