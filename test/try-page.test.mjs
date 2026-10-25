@@ -76,6 +76,13 @@ test('the renderer still heads the top fingerprint as the try page expects, so t
   assert.ok(page.includes("'The top fingerprint (the Seal)'"));
 });
 
+test('the renderer still names its list of entries as the try page folds it', () => {
+  const render = readFileSync(new URL('../page/render.js', import.meta.url), 'utf8');
+  const page = readFileSync(new URL('../site/try/try-page.js', import.meta.url), 'utf8');
+  assert.ok(render.includes("'The entries'"), 'page/render.js no longer names its list of entries "The entries": change the try page with it');
+  assert.ok(page.includes("h.textContent === 'The entries'"));
+});
+
 test('the start-up guard acts only on a script that fails, and the page clears its message once ready', () => {
   const wait = readFileSync(new URL('../site/try/wait.js', import.meta.url), 'utf8');
   const page = readFileSync(new URL('../site/try/try-page.js', import.meta.url), 'utf8');

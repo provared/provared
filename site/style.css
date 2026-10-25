@@ -206,3 +206,7 @@ input[type="text"] { font: inherit; color: var(--text); background: var(--page);
 .result .flag { margin: 0.5rem 0 0; padding: 0.4rem 0.6rem; border-radius: 0.4rem; border: 1px solid var(--line); }
 .result .flag.problem, .result .flag.breach { border-color: var(--bad); color: var(--bad); font-weight: 600; }
 .result .flag.onesided, .result .flag.note { border-color: var(--seal); }
+
+/* The try page: the checker's answer entry by entry, folded away. */
+.entries-fold > summary { cursor: pointer; font-weight: 600; padding: 0.6em 0; }
+.entries-fold[open] > summary { margin-bottom: 0.4em; }

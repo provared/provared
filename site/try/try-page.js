@@ -67,6 +67,26 @@ function reset() {
 // The renderer heads the card of the record's top fingerprint "(the Seal)".
 // A record with no seal has a top fingerprint and no seal, so there the card
 // is headed by what it holds.
+/**
+ * The checker's answer entry by entry is long (about eight phone screens).
+ * The story above already shows each action and the summary, so the
+ * renderer's "The entries" heading and its cards are moved into a fold that
+ * opens in place (a details element, which needs no script to open).
+ * "What this check does not show" stays open.
+ */
+function foldEntries(result) {
+  const target = $('result');
+  const heading = [...target.querySelectorAll('h2')].find((h) => h.textContent === 'The entries');
+  if (!heading) return;
+  const moved = [];
+  for (let n = heading.nextElementSibling; n && n.tagName !== 'H2'; n = n.nextElementSibling) moved.push(n);
+  const count = result.entries.length;
+  const fold = el('details', 'entries-fold');
+  fold.append(el('summary', '', `Show every entry, as the checker read it (${count} ${count === 1 ? 'entry' : 'entries'})`));
+  heading.replaceWith(fold);
+  fold.append(heading, ...moved);
+}
+
 function noSealHeading(result) {
   if (result.summary.counts.seals !== 0) return;
   for (const h of $('result').querySelectorAll('h3')) {
@@ -98,6 +118,7 @@ async function runLive(limit) {
   $('checked').hidden = false;
   renderResult($('result'), made.result, { options: { issuerKeys: made.issuerKeys }, checkedBy: words.checkedBy });
   noSealHeading(made.result);
+  foldEntries(made.result);
   const first = made.result.summary.firstBreach;
   $('status').textContent = first === null
     ? `Done. With a limit of ${limit} GBP, the record shows the agent within its permission. Try a lower limit.`
@@ -175,6 +196,7 @@ async function runSample() {
   const result = await checker.result();
   renderResult($('result'), result, { options: trust, checkedBy: words.checkedBy });
   noSealHeading(result);
+  foldEntries(result);
   $('status').textContent = 'Done. The checker\'s answer is below.';
 }
 
