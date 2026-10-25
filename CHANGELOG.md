@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- **An OpenTelemetry bridge**, `provared-opentelemetry` 0.1.0, in
+  `integrations/opentelemetry/` (not published). It puts each tool call's
+  receipt on the trace span that observability tools already show, and the
+  span's trace into the receipt, in one call: `traceTools` (as
+  `recordTools`) or `traceAct` (as the stub writer's `act`). The span
+  gets `provared.outcome`, `provared.action`, `provared.stub.fingerprint`,
+  `provared.stub.seq`, `provared.stub.countersigned`,
+  `provared.stub.trace_bound`, `provared.slip.fingerprint` and, for a call
+  not taken, `provared.check.codes` and `provared.denial.fingerprint`; a span
+  the bridge starts is an `execute_tool` span as OpenTelemetry's
+  conventions for generative AI describe it. The receipt names the
+  fingerprint of the span's trace id as `provared.trace-id`, and of the
+  model's call identifier, where given, as `provared.event-id`. Only
+  fingerprints, names and codes reach a span: never arguments, amounts,
+  documents, keys, the words of a finding or an error's message. A span is
+  the agent's side's own word; the receipt and the checker are the
+  evidence. `@opentelemetry/api` is a peer dependency; the library itself
+  still has none. Its tests run in a job of their own in the test workflow.
+
 - **A "try it" page** at prova.red/try/ (`site/try/`, not yet published).
   One button. Where the browser has Ed25519 and ML-DSA-87 built in (Chrome,
   Edge and Brave 155, tried on 13 October 2026), the page makes a new

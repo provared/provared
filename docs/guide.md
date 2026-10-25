@@ -887,6 +887,11 @@ from its fingerprint.
 version 0.6.0, `arguments`; every checker reads both); a tool can name
 them otherwise through its own `details` function.
 
+To show each receipt on the trace span of its call in an observability
+tool, and name the span's trace in the receipt, use the OpenTelemetry
+bridge in `integrations/opentelemetry/` (not yet published); a span is a
+pointer to the receipt, not evidence.
+
 ## How signing works
 
 - **The person** signs a slip with a passkey. A passkey signs a short

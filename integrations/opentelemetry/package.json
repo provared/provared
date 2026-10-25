@@ -1,0 +1,54 @@
+{
+  "name": "provared-opentelemetry",
+  "version": "0.1.0",
+  "description": "Puts each Provared receipt's fingerprint, its permission's fingerprint, the action and the outcome of the check before acting on the OpenTelemetry span of the tool call, and the span's trace into the receipt. A pointer to the evidence, not evidence. Evidence, not a verdict.",
+  "author": "Pavel Izmaylov",
+  "license": "Apache-2.0 AND CC-BY-4.0",
+  "homepage": "https://prova.red",
+  "bugs": "https://github.com/provared/provared/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/provared/provared.git",
+    "directory": "integrations/opentelemetry"
+  },
+  "keywords": [
+    "ai-agent",
+    "agent",
+    "opentelemetry",
+    "tracing",
+    "gen-ai",
+    "audit-trail",
+    "permission",
+    "receipt",
+    "evidence"
+  ],
+  "type": "module",
+  "main": "./index.mjs",
+  "exports": {
+    ".": "./index.mjs",
+    "./attributes": "./attributes.mjs",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.mjs",
+    "attributes.mjs",
+    "LICENSE-CC-BY-4.0.txt"
+  ],
+  "engines": {
+    "node": ">=24.7"
+  },
+  "scripts": {
+    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "provared": "^0.6.0"
+  },
+  "peerDependencies": {
+    "@opentelemetry/api": "^1.9.1"
+  },
+  "devDependencies": {
+    "@opentelemetry/api": "1.9.1",
+    "@opentelemetry/context-async-hooks": "2.12.0",
+    "@opentelemetry/sdk-trace": "2.12.0"
+  }
+}
