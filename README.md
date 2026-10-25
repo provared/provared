@@ -161,7 +161,7 @@ each part protects against, is in
 
 **Version 0.6.0, a draft.** Published as it is, by one author in their
 own time, built with AI tools since 3 October 2026; fixes as time
-allows. The code has been through 50 rounds of review by AI reviewers,
+allows. The code has been through more than 80 rounds of review by AI reviewers,
 each reviewer a fresh session given the code, the documents and a brief
 of what to look at; every fault was fixed, or stated as a limit, and
 kept as a test. No person other than the author has reviewed it yet.
