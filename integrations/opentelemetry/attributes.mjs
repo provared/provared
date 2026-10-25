@@ -46,7 +46,8 @@ const FINGERPRINT = /^[A-Za-z0-9_-]{43}$/;
 const ACTION = /^[\x21-\x7e]{1,64}$/;
 
 const fingerprintOrNull = (value) => (typeof value === 'string' && FINGERPRINT.test(value) ? value : null);
-const actionOrNull = (value) => (typeof value === 'string' && ACTION.test(value) ? value : null);
+/** The value where it is an action name (1 to 64 visible ASCII characters), or null. */
+export const actionOrNull = (value) => (typeof value === 'string' && ACTION.test(value) ? value : null);
 
 // The content of a signed record, read from its payload. Nothing is checked
 // here: the stub writer wrote and checked it a moment before.

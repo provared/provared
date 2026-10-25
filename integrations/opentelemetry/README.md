@@ -49,12 +49,17 @@ Each tool is described as for the library's `recordTools` (see the guide,
 "The agent's tools"). By default the bridge starts one span for each call,
 named `execute_tool <tool name>`, as OpenTelemetry's conventions for
 generative AI ask, and makes it the active span while the tool runs, so
-that what the tool does (a web call, say) is traced beneath it.
+that what the tool does (a web call, say) is traced beneath it. The tool
+name is the name the tool has in the object you give, as you gave it: keep
+it to a plain name, because it goes on the span.
 
 Where an agent framework already makes a span for each tool call, use
 `span: 'active'`: the bridge then adds its attributes to that span and
 starts none, since the conventions ask for one span for one call. It then
-leaves that span's name, kind and status to the framework.
+leaves that span's name, kind and status to the framework. Several calls
+made at once under one active span (an agent's turn, say) share that span,
+and each call's attributes replace the one before: the span then names
+only the call that ended last. Give each call its own span.
 
 ```js
 const tools = traceTools(recorder, described, { span: 'active' });
@@ -64,7 +69,10 @@ A tool may also give `callId`: a function of the second argument it is
 called with (the options a framework hands a tool) that gives the
 identifier the model gave the call. It goes on the span as
 `gen_ai.tool.call.id`, and into the receipt as the fingerprint
-`provared.event-id`.
+`provared.event-id`. What it gives is used only where it is text of 1 to
+256 characters; anything else is set aside. Where the tool's own documents
+already name a `provared.event-id`, the model's is not added beside it, so
+that one receipt never holds identifiers of the call from two sources.
 
 ```js
 order: { action: 'shop.order', run: placeOrder, callId: (options) => options?.toolCallId }
@@ -72,7 +80,20 @@ order: { action: 'shop.order', run: placeOrder, callId: (options) => options?.to
 
 `traceAct(recorder, request, perform, more, options)` does the same for one
 call of the stub writer's `act`. As with `act`, a call that is not taken
-is given back, not thrown; `more.detailsAfter` is passed on.
+is given back, not thrown, and `more.detailsAfter` is passed on (where it
+is given, the model's identifier is not added, for the same reason). Its
+span is named after `options.toolName`, or else the action where it is 1
+to 64 visible characters with no spaces, or else `action`. Two cases add
+nothing to the request:
+
+- where `more.approval` is given: the person approved the request as it
+  stands, and an approval covers exactly the documents the person saw, so
+  a binding added afterwards would no longer match it. The span still
+  names the receipt; the receipt does not name the trace. (`traceTools`
+  asks for the approval after the bindings are added, so the person
+  approves the request with them.)
+- where `request.details` is given and is not a list: the request is
+  passed on as it is, and `act` refuses it.
 
 The options:
 
@@ -80,15 +101,23 @@ The options:
 |---|---|---|
 | `span` | `'new'`: a span for each call; `'active'`: add to the active span | `'new'` |
 | `tracer` | the tracer for new spans | `trace.getTracer('provared-opentelemetry')` |
-| `agentName` | `gen_ai.agent.name` on each new span | none |
+| `agentName` | `gen_ai.agent.name` on each new span, 1 to 256 characters | none |
 | `bindTrace` | put the trace's fingerprint into the receipt | `true` |
 | `bindCallId` | put the fingerprint of the model's call identifier into the receipt | `true` |
 | `event` | add a span event `provared.not_taken` where a call is not taken | `false` |
 | `onStub` | as for `recordTools` | none |
+| `toolName` | `traceAct` only: the span's tool name | the action |
+| `callId` | `traceAct` only: the model's identifier for the call, 1 to 256 characters | none |
+
+An option that is not in this list, or that is not of the form given, is
+refused with an error that names it.
 
 With no OpenTelemetry software set up to record traces, OpenTelemetry's
-interface makes no real span: the tools still run and are receipted, and
-the receipt names no trace.
+interface records no span, and the tools still run and are receipted. The
+receipt then names a trace only where the call was made inside one passed
+on from elsewhere (from a `traceparent` header that came in, say). A trace
+that is not sampled, so that no span is kept, is still named in the
+receipt: its trace id is still passed on to what the tool calls.
 
 ## What goes on the span
 
@@ -98,10 +127,15 @@ starts:
 | Attribute | Value |
 |---|---|
 | `gen_ai.operation.name` | `execute_tool` |
-| `gen_ai.tool.name` | the tool's name, as given to `traceTools` |
-| `gen_ai.tool.call.id` | the model's identifier for the call, where `callId` gives one |
+| `gen_ai.tool.name` | the tool's name, as given to `traceTools`; for `traceAct`, as above |
+| `gen_ai.tool.call.id` | the model's identifier for the call, where one is given |
 | `gen_ai.agent.name` | the `agentName` option, where given |
 | `error.type` | where the call ended in an error: `NotTaken`, or the class name of the tool's error (such as `TypeError`), or `_OTHER` |
+
+The class name is put on the span as the code named it, where it is a
+plain name of at most 64 characters, and `_OTHER` where it is not or cannot
+be read. A tool that makes up names of error classes from what it was
+given would put that on the span.
 
 Provared's own, under its own name, on every span the bridge works on:
 
@@ -117,16 +151,29 @@ Provared's own, under its own name, on every span the bridge works on:
 | `provared.slip.fingerprint` | the fingerprint of the permission the receipt, or the denial, relies on |
 | `provared.denial.fingerprint` | where not taken and the stub writer wrote a denial: its fingerprint |
 
-The span's status is "error" where the call was not taken or failed. For
-a call not taken its description gives the finding codes.
+`not_taken` means this call's own check said no. An error that the tool,
+or one of its own functions (`amount`, `with`, `details`, `approve`,
+`countersign`), throws is the tool's error, `error`, even where it is a
+`NotTaken` from another stub writer.
+
+On a span the bridge starts, the status is "error" where the call was not
+taken or failed. For a call not taken its description gives the finding
+codes. For a tool's error there is no description, and no record of the
+exception: OpenTelemetry's rules ask for the error's message as the
+description and for the exception to be recorded, and both are left out
+here because the message may quote what the tool was given.
 
 **What never goes on the span:** a call's arguments, its amount, a
 document's content, a key, a passkey value, the words of a finding, and an
 error's message. Each of these may hold what the tool was given. The
 conventions' own `gen_ai.tool.call.arguments` and
-`gen_ai.tool.call.result` are not set. A tracing setup of your own may
-still record them, or the error, through other software: this package
-cannot stop that.
+`gen_ai.tool.call.result` are not set.
+
+A tracing setup of your own may still record these through other
+software: this package cannot stop that. An agent framework that records
+the exceptions its tools throw will record a `NotTaken`'s message, which is
+the checker's own words and may give amounts ("With this action the total
+would be 280 GBP").
 
 `attributes.mjs` (`provared-opentelemetry/attributes`) does the same work
 on any object with `setAttribute`, and does not import OpenTelemetry:
@@ -152,23 +199,37 @@ on any object with `setAttribute`, and does not import OpenTelemetry:
   this package nor a receipt.
 - A trace id is the agent's side's choice. A matching trace id shows that
   two records speak of the same trace, not that the call did what either
-  says.
+  says, and a trace may hold many calls.
 - A trace id is not secret: anyone who sees the trace can work out its
   fingerprint and find the receipt that names it.
 - For a call not taken with no denial written, the span does not name the
   permission: the check before acting does not give it.
+- A stub may name at most 32 documents (28 where `detailsAfter` is given),
+  and the bindings take up to two of them. A tool that names more than 30
+  of its own leaves no room for both: the check before acting then refuses
+  the call (`not_taken`). Turn a binding off (`bindTrace: false`,
+  `bindCallId: false`) to make room.
 - OpenTelemetry's conventions for generative AI are marked "development":
   their names may change. Span events are being replaced by log records in
   OpenTelemetry, which is why the event is off by default.
 
 ## Versions
 
-Tested with Node.js 24, `@opentelemetry/api` 1.9.1, and, for the tests
-only, `@opentelemetry/sdk-trace` 2.12.0 and
-`@opentelemetry/context-async-hooks` 2.12.0 (all under the Apache License
-2.0). `@opentelemetry/api` is a peer dependency, as OpenTelemetry asks of
-libraries: the application chooses the one copy. The bridge uses no part of
-the SDK.
+`@opentelemetry/api` (`^1.9.0`) and `provared` (`>=0.6.0 <0.8`) are peer
+dependencies: the application chooses the one copy of each. OpenTelemetry
+asks this of libraries, so that every part of an application uses the one
+tracer provider; and the bridge must use the same copy of `provared` as
+the stub writer handed to it, or it would not know a `NotTaken` from it.
+The bridge uses no part of OpenTelemetry's SDK.
+
+Tested with Node.js 24 and, for the tests, at the versions locked in
+`package-lock.json`: `@opentelemetry/api` 1.9.1, `@opentelemetry/sdk-trace`
+2.12.0 and `@opentelemetry/context-async-hooks` 2.12.0. Also tried on
+25 October 2026 with `@opentelemetry/api` 1.9.0 (with the same SDK), and
+with `@opentelemetry/api` 1.10.0, `@opentelemetry/sdk-trace` 3.0.0 and
+`@opentelemetry/context-async-hooks` 3.0.0. All are under the Apache
+License 2.0. The repository's test workflow runs the tests at the locked
+versions and again at the newest releases.
 
 ## Tests
 
@@ -180,8 +241,8 @@ npm test
 
 The tests use this repository's own library, OpenTelemetry's SDK with its
 in-memory exporter, and permissions signed with the library's development
-stand-in for a passkey. They run inside a guard that refuses any
-connection, and check that none was tried.
+stand-in for a passkey. One file runs with no SDK at all. They run inside a
+guard that refuses any connection, and check that none was tried.
 
 ## Licences
 

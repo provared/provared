@@ -18,8 +18,13 @@
   fingerprints, names and codes reach a span: never arguments, amounts,
   documents, keys, the words of a finding or an error's message. A span is
   the agent's side's own word; the receipt and the checker are the
-  evidence. `@opentelemetry/api` is a peer dependency; the library itself
-  still has none. Its tests run in a job of their own in the test workflow.
+  evidence. `@opentelemetry/api` and `provared` are peer dependencies; the
+  library itself still has none. An error that the tool, or one of its own
+  functions, throws is the tool's error, even a `NotTaken` from another
+  stub writer. `traceAct` adds nothing to a request that comes with an
+  approval made beforehand, or whose `details` is not a list. Its tests run
+  in a job of their own in the test workflow, at the locked versions and
+  again at the newest releases of OpenTelemetry.
 
 - **A "try it" page** at prova.red/try/ (`site/try/`, not yet published).
   One button. Where the browser has Ed25519 and ML-DSA-87 built in (Chrome,

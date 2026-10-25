@@ -2,10 +2,11 @@
 #
 # When: on every pull request, so that a change is tested before it reaches
 # main; on every push to main, except the daily record page; and every
-# Monday, so that a new release of LangChain, Pydantic AI or Agno that
-# breaks one of the framework packages is found before the people who use
-# them find it. Nothing is cached: every run installs the newest release of
-# each framework that the package allows.
+# Monday, so that a new release of LangChain, Pydantic AI, Agno or
+# OpenTelemetry that breaks one of the packages built on them is found
+# before the people who use them find it. Nothing is cached: every run
+# installs the newest release of each framework that the package allows
+# (the OpenTelemetry bridge is also tested at its locked versions first).
 #
 # Nothing here is published, pushed or sent anywhere: the workflow can only
 # read the repository, and it uses no secret. The tests call no AI service;
@@ -88,10 +89,12 @@ jobs:
 
   # The OpenTelemetry bridge. Unlike the packages above, its tests need
   # packages of their own: OpenTelemetry's API, its SDK and its context
-  # manager (all under the Apache License 2.0), at the exact versions in
-  # its package-lock.json, installed with no install scripts run. Its tests
-  # point "provared" at this commit's library, as above, and run inside a
-  # guard that refuses any connection.
+  # manager (all under the Apache License 2.0), installed with no install
+  # scripts run. They run twice: first at the exact versions in its
+  # package-lock.json, then at the newest release of each that npm offers,
+  # with no lock file, so that a new release of OpenTelemetry that breaks
+  # the bridge is found. Its tests point "provared" at this commit's
+  # library, as above, and run inside a guard that refuses any connection.
   javascript-opentelemetry:
     name: integrations/opentelemetry
     runs-on: ubuntu-latest
@@ -106,7 +109,17 @@ jobs:
       - name: Install the packages the tests need
         working-directory: integrations/opentelemetry
         run: npm ci --ignore-scripts --no-audit --no-fund
-      - name: Run the tests
+      - name: Run the tests, at the locked versions
+        working-directory: integrations/opentelemetry
+        run: npm test
+      - name: Install the newest releases, with no lock file
+        working-directory: integrations/opentelemetry
+        run: npm install --no-save --no-package-lock --ignore-scripts --no-audit --no-fund "@opentelemetry/api@^1.9.0" @opentelemetry/sdk-trace@latest @opentelemetry/context-async-hooks@latest
+      - name: Show the versions being tested
+        working-directory: integrations/opentelemetry
+        run: |
+          for p in api sdk-trace context-async-hooks; do node -p "'@opentelemetry/$p ' + require('./node_modules/@opentelemetry/$p/package.json').version"; done
+      - name: Run the tests, at the newest releases
         working-directory: integrations/opentelemetry
         run: npm test
 

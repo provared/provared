@@ -13,13 +13,14 @@
 // and the checker are the evidence; the span is a pointer to it.
 //
 // It depends on OpenTelemetry's API only (a peer dependency, as
-// OpenTelemetry asks of libraries), never on its SDK: with no SDK
-// registered, the API makes no span, and the tools run and are receipted
-// as without the bridge.
+// OpenTelemetry asks of libraries), never on its SDK. With no SDK
+// registered, the API records no span; the tools run and are receipted as
+// without the bridge, and the receipt names a trace only where the call
+// was made inside one passed on from elsewhere.
 
 import { SpanKind, SpanStatusCode, isSpanContextValid, trace } from '@opentelemetry/api';
 import { NotTaken, argumentsFingerprint, identifierFingerprint, recordTools } from 'provared';
-import { annotate, codesOf } from './attributes.mjs';
+import { actionOrNull, annotate, codesOf } from './attributes.mjs';
 
 export { ATTRIBUTES, NOT_TAKEN_EVENT, OUTCOMES, annotate, attributesFor, codesOf } from './attributes.mjs';
 
@@ -37,22 +38,32 @@ const GEN_AI = Object.freeze({
   agentName: 'gen_ai.agent.name',
 });
 const ERROR_TYPE = 'error.type';
+const TRACE_ID = 'provared.trace-id';
+const EVENT_ID = 'provared.event-id';
 
-// A class name, written as code writes it: low in variety, as error.type asks, and never a message.
+// A class name, written as code writes it: low in variety, as error.type
+// asks, and never a message. It is put on the span as the code named it.
 const ERROR_NAME = /^[A-Za-z_$][A-Za-z0-9_$.]{0,63}$/;
 
-const isNotTaken = (e) => e instanceof NotTaken || (e !== null && typeof e === 'object' && e.name === 'NotTaken' && e.answer && typeof e.answer === 'object');
-
 function errorType(e) {
-  const name = e && typeof e === 'object' && typeof e.constructor === 'function' ? e.constructor.name : null;
-  return typeof name === 'string' && ERROR_NAME.test(name) ? name : '_OTHER';
+  try {
+    const name = e !== null && typeof e === 'object' && typeof e.constructor === 'function' ? e.constructor.name : null;
+    return typeof name === 'string' && ERROR_NAME.test(name) ? name : '_OTHER';
+  } catch {
+    return '_OTHER';
+  }
 }
 
 // Text of one character or more, well-formed: the form section 27 asks of an identifier.
 const identifier = (value) => (typeof value === 'string' && value.length > 0 && value.length <= 256 && value.isWellFormed() ? value : null);
 
-function settingsOf(options) {
-  const o = options !== null && typeof options === 'object' ? options : {};
+const OPTIONS = ['span', 'tracer', 'agentName', 'bindTrace', 'bindCallId', 'event', 'onStub'];
+const ACT_OPTIONS = [...OPTIONS, 'toolName', 'callId'];
+
+function settingsOf(options, known) {
+  if (options !== undefined && (options === null || typeof options !== 'object' || Array.isArray(options))) throw new TypeError('options: must be an object.');
+  const o = options ?? {};
+  for (const name of Object.keys(o)) if (!known.includes(name)) throw new TypeError(`${name}: is not an option. The options are: ${known.join(', ')}.`);
   const span = o.span === undefined ? 'new' : o.span;
   if (span !== 'new' && span !== 'active') throw new TypeError('span: must be "new" (the bridge starts an "execute_tool" span for each call) or "active" (the bridge adds to the span that is active when the tool is called).');
   for (const name of ['bindTrace', 'bindCallId', 'event']) {
@@ -60,7 +71,9 @@ function settingsOf(options) {
   }
   if (o.agentName !== undefined && identifier(o.agentName) === null) throw new TypeError('agentName: must be text of 1 to 256 characters.');
   if (o.onStub !== undefined && typeof o.onStub !== 'function') throw new TypeError('onStub: must be a function.');
-  if (o.tracer !== undefined && (o.tracer === null || typeof o.tracer.startActiveSpan !== 'function')) throw new TypeError('tracer: must be an OpenTelemetry tracer.');
+  if (o.tracer !== undefined && (o.tracer === null || typeof o.tracer !== 'object' || typeof o.tracer.startActiveSpan !== 'function')) throw new TypeError('tracer: must be an OpenTelemetry tracer.');
+  if (o.toolName !== undefined && actionOrNull(o.toolName) === null) throw new TypeError('toolName: must be 1 to 64 visible ASCII characters, with no spaces.');
+  if (o.callId !== undefined && identifier(o.callId) === null) throw new TypeError('callId: must be text of 1 to 256 characters.');
   return {
     span,
     tracer: o.tracer ?? trace.getTracer(TRACER_NAME, TRACER_VERSION),
@@ -69,6 +82,8 @@ function settingsOf(options) {
     bindCallId: o.bindCallId !== false,
     event: o.event === true,
     onStub: o.onStub,
+    toolName: o.toolName,
+    callId: o.callId,
   };
 }
 
@@ -98,11 +113,16 @@ async function bindings(settings, span, callId) {
   const documents = [];
   const context = span && typeof span.spanContext === 'function' ? span.spanContext() : null;
   if (settings.bindTrace && context && isSpanContextValid(context)) {
-    documents.push({ name: 'provared.trace-id', sha256: await identifierFingerprint(context.traceId) });
+    documents.push({ name: TRACE_ID, sha256: await identifierFingerprint(context.traceId) });
   }
-  if (settings.bindCallId && callId) documents.push({ name: 'provared.event-id', sha256: await identifierFingerprint(callId) });
+  if (settings.bindCallId && callId) documents.push({ name: EVENT_ID, sha256: await identifierFingerprint(callId) });
   return documents;
 }
+
+// The bindings to add after documents already named: no second
+// "provared.event-id" where the caller named one already, so that one
+// receipt does not hold identifiers of the call from two sources.
+const after = (named, binding) => (Array.isArray(named) && named.some((d) => d && d.name === EVENT_ID) ? binding.filter((d) => d.name !== EVENT_ID) : binding);
 
 function markNotTaken(span, own, action, answer, denial, settings) {
   annotate(span, { outcome: 'not_taken', action, answer, denial }, { event: settings.event });
@@ -133,10 +153,11 @@ function markError(span, own, action, e) {
  *     called with (the options an agent framework hands a tool, say) that
  *     gives the identifier the model gave the call, or nothing. It goes on
  *     the span as gen_ai.tool.call.id and into the receipt as the
- *     fingerprint "provared.event-id".
+ *     fingerprint "provared.event-id". Anything that is not text of 1 to
+ *     256 characters is set aside.
  *
  * @param {object} recorder the stub writer (openRecorder)
- * @param {Record<string, object>} tools by name; the name is the span's gen_ai.tool.name
+ * @param {Record<string, object>} tools by name; the name, as given, is the span's gen_ai.tool.name
  * @param {object} [options]
  * @param {'new'|'active'} [options.span] "new" (the default) starts an "execute_tool" span for each call;
  *   "active" adds to the span that is active when the tool is called, where an agent framework already makes one
@@ -150,7 +171,7 @@ function markError(span, own, action, e) {
  *   and throws what recordTools throws (NotTaken where the call is not allowed)
  */
 export function traceTools(recorder, tools, options = {}) {
-  const settings = settingsOf(options);
+  const settings = settingsOf(options, OPTIONS);
   if (tools === null || typeof tools !== 'object' || Array.isArray(tools)) throw new TypeError('tools: must be an object that holds the tools by name.');
   // Every description is checked by recordTools now, so that a mistake is found when the tools are put together, not at the first call.
   const fixed = {};
@@ -178,29 +199,65 @@ export function traceTools(recorder, tools, options = {}) {
         }
         return withSpan(settings, name, callId, async (span, own) => {
           const binding = await bindings(settings, span, callId);
-          const traceBound = binding.some((d) => d.name === 'provared.trace-id');
+          const traceBound = binding.some((d) => d.name === TRACE_ID);
+          // What the caller's own functions throw is the caller's: an error
+          // that one of them threw (a NotTaken from another stub writer,
+          // say) is never read as this call's check saying no.
+          const thrown = new Set();
+          let started = false;
+          const sync = (fn) => (typeof fn === 'function' ? (...a) => {
+            try {
+              return (0, fn)(...a);
+            } catch (e) {
+              thrown.add(e);
+              throw e;
+            }
+          } : fn);
+          const later = (fn) => (typeof fn === 'function' ? async (...a) => {
+            try {
+              return await (0, fn)(...a);
+            } catch (e) {
+              thrown.add(e);
+              throw e;
+            }
+          } : fn);
+          const run = later(rest.run);
           // The documents the tool names, as recordTools would name them, and the bindings after them.
           const details =
             binding.length === 0
-              ? rest.details
+              ? later(rest.details)
               : async (a) => {
                   let named = [];
-                  if (typeof rest.details === 'function') named = (await (0, rest.details)(a)) ?? [];
+                  if (typeof rest.details === 'function') named = (await later(rest.details)(a)) ?? [];
                   else if (rest.details !== false && a !== undefined) named = [{ name: 'provared.arguments', sha256: await argumentsFingerprint(a) }];
-                  return Array.isArray(named) ? [...named, ...binding] : named;
+                  return Array.isArray(named) ? [...named, ...after(named, binding)] : named;
                 };
           let stub = null;
           const onStub = async (written, tool) => {
             stub = written;
             if (settings.onStub) await settings.onStub(written, tool);
           };
-          const tool = recordTools(recorder, { [name]: { ...rest, details } }, { onStub })[name];
+          const spec = {
+            ...rest,
+            run: (a) => {
+              started = true;
+              return run(a);
+            },
+            details,
+            amount: sync(rest.amount),
+            with: sync(rest.with),
+            countersign: later(rest.countersign),
+            approve: later(rest.approve),
+          };
+          for (const member of ['details', 'amount', 'with', 'countersign', 'approve']) if (spec[member] === undefined) delete spec[member];
+          const tool = recordTools(recorder, { [name]: spec }, { onStub })[name];
           try {
             const result = await tool(args);
             annotate(span, { outcome: 'taken', action: rest.action, stub, traceBound });
             return result;
           } catch (e) {
-            if (isNotTaken(e)) markNotTaken(span, own, rest.action, e.answer, e.denial, settings);
+            const fromCheck = e instanceof NotTaken && e.tool === name && !started && !thrown.has(e);
+            if (fromCheck) markNotTaken(span, own, rest.action, e.answer, e.denial, settings);
             // "onStub" failed after the receipt was written: the receipt stands, and the error is the caller's.
             else if (stub) {
               annotate(span, { outcome: 'taken', action: rest.action, stub, traceBound });
@@ -223,26 +280,38 @@ export function traceTools(recorder, tools, options = {}) {
  * traceTools does for a tool. The request, "perform" and "more" are those
  * of "act"; "more.detailsAfter" is passed on.
  *
+ * Where "more.approval" is given, no binding is added to the request: the
+ * person approved the request as it stands, and an approval covers exactly
+ * the documents the person saw. The span still names the receipt. Where
+ * "request.details" is given and is not a list, the request is passed on
+ * as it is, for "act" to refuse.
+ *
  * @param {object} recorder the stub writer (openRecorder)
  * @param {{action: string, amount?: object, with?: string, details?: object[]}} request
  * @param {() => Promise<any>} perform takes the action
  * @param {object} [more] as for "act"
  * @param {object} [options] as for traceTools, and:
- * @param {string} [options.toolName] gen_ai.tool.name and the span's name; by default the action name
+ * @param {string} [options.toolName] gen_ai.tool.name and the span's name, 1 to 64 visible ASCII characters;
+ *   by default the action name where it has that form, or else "action"
  * @param {string} [options.callId] the identifier the model gave the call
  * @returns {Promise<object>} what "act" gives; a call not taken is not thrown, as with "act"
  */
 export async function traceAct(recorder, request, perform, more = {}, options = {}) {
-  const settings = settingsOf(options);
+  const settings = settingsOf(options, ACT_OPTIONS);
   if (recorder === null || typeof recorder !== 'object' || typeof recorder.act !== 'function') throw new TypeError('recorder: must be a stub writer.');
   if (request === null || typeof request !== 'object') throw new TypeError('request: must be an object.');
-  const toolName = identifier(options?.toolName) ?? (typeof request.action === 'string' ? request.action : 'action');
-  const callId = identifier(options?.callId);
+  const toolName = settings.toolName ?? actionOrNull(request.action) ?? 'action';
+  const callId = settings.callId ?? null;
+  const approved = more !== null && typeof more === 'object' && more.approval !== undefined && more.approval !== null;
+  const later = more !== null && typeof more === 'object' && more.detailsAfter !== undefined && more.detailsAfter !== null;
+  const listed = request.details === undefined || Array.isArray(request.details);
   return withSpan(settings, toolName, callId, async (span, own) => {
-    const binding = await bindings(settings, span, callId);
-    const traceBound = binding.some((d) => d.name === 'provared.trace-id');
+    let binding = approved || !listed ? [] : await bindings(settings, span, callId);
+    // "detailsAfter" may name the platform's own identifier for the call: then the model's is not added beside it.
+    if (later) binding = binding.filter((d) => d.name !== EVENT_ID);
+    const traceBound = binding.some((d) => d.name === TRACE_ID);
     const given = Array.isArray(request.details) ? request.details : [];
-    const asked = binding.length === 0 ? request : { ...request, details: [...given, ...binding] };
+    const asked = binding.length === 0 ? request : { ...request, details: [...given, ...after(given, binding)] };
     let outcome;
     try {
       outcome = await recorder.act(asked, perform, more);
@@ -255,4 +324,3 @@ export async function traceAct(recorder, request, perform, more = {}, options = 
     return outcome;
   });
 }
-
