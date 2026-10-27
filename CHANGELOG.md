@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **A conformance kit**, in `conformance/` (not published): another
+  implementation of the format, in any language, is tested against the
+  shared test files through a small program of its own (an adapter),
+  which the kit hands one case at a time as a line of JSON and whose
+  answer it compares. By default it compares the codes and the shape of
+  each answer, not the words meant for people, as `test-vectors/README.md`
+  sets out; `--words` compares every value. It ends with code 0 only where
+  every case compared matched. An adapter for Provared's own JavaScript
+  library passes all 14,742 cases word for word. Passing it shows
+  agreement on these cases only; it is not a certificate. Its tests run in
+  the test workflow beside the sealer's.
+
 - **An OpenTelemetry bridge**, `provared-opentelemetry` 0.1.0, in
   `integrations/opentelemetry/` (not published). It puts each tool call's
   receipt on the trace span that observability tools already show, in one

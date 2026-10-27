@@ -1,0 +1,18 @@
+{
+  "name": "provared-conformance",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tests another implementation of the Provared format against the shared test files: it hands each case to an adapter, one line of JSON at a time, and compares the codes and the shape of each answer. Agreement on these cases only, not a certificate.",
+  "author": "Pavel Izmaylov",
+  "license": "Apache-2.0 AND CC-BY-4.0",
+  "type": "module",
+  "bin": {
+    "provared-conformance": "run.mjs"
+  },
+  "engines": {
+    "node": ">=24.7"
+  },
+  "scripts": {
+    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.mjs"
+  }
+}
