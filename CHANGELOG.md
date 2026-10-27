@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **OpenSSF Scorecard.** A workflow, `.github/workflows/scorecard.yml`,
+  runs the Open Source Security Foundation's Scorecard on each push to
+  main, every Sunday and when a branch protection rule changes, and
+  publishes the result to api.scorecard.dev and to this repository's code
+  scanning page. Laid out as the Scorecard project's own example; no
+  permission at the top, and only `security-events: write` and
+  `id-token: write` in its one job. It is the first workflow here to use
+  an action that is not GitHub's own (`ossf/scorecard-action` v2.5.0,
+  pinned to its commit). The README shows the Scorecard badge.
+
 - **An OpenTelemetry bridge**, `provared-opentelemetry` 0.1.0, in
   `integrations/opentelemetry/` (not published). It puts each tool call's
   receipt on the trace span that observability tools already show, in one

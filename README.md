@@ -1,5 +1,7 @@
 # <img src="https://prova.red/favicon.svg" alt="" width="36"> Provared
 
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/provared/provared/badge)](https://scorecard.dev/viewer/?uri=github.com/provared/provared)
+
 Proof of what an AI agent was allowed to do, and what it then did.
 
 A person signs the permission with a passkey. The agent signs a receipt
