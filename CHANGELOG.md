@@ -14,6 +14,19 @@
   agreement on these cases only; it is not a certificate. Its tests run in
   the test workflow beside the sealer's.
 
+- **The conformance kit, two changes.** By default it no longer counts the
+  sentences in the lists named `notes` and `limits`: another implementation
+  may say the same thing in more or fewer sentences, so only the codes,
+  the items that are not texts and the shape of each answer are compared;
+  `--words` still compares every word and every sentence. And a second,
+  example adapter, `conformance/adapters/provared-public.mjs`, is written
+  only on the functions the npm package offers (`provared` and
+  `provared/check`), and can be pointed at an installed copy of the
+  package with `--package`: it answers 3,099 of the 14,742 cases, all of
+  them matching word for word, and skips the other 11,643, which test
+  parts of the library that are not offered to other programs, saying why
+  for each.
+
 - **An OpenTelemetry bridge**, `provared-opentelemetry` 0.1.0, in
   `integrations/opentelemetry/` (not published). It puts each tool call's
   receipt on the trace span that observability tools already show, in one

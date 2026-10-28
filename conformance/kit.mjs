@@ -23,8 +23,10 @@ const step = (path, key) => (typeof key === 'number' ? `${path}[${key}]` : path 
 
 /**
  * The first place where an answer differs from the stored one, or null where
- * they match. With words false, the text of each member named "message",
- * and each text in a list named "notes" or "limits", need only be a text.
+ * they match. With words false, the text of each member named "message"
+ * need only be a text, and in a list named "notes" or "limits" the texts are
+ * neither compared nor counted: only the items that are not texts (a slip's
+ * limits, for example) are compared, in order (choice K-6).
  */
 export function difference(expected, got, words = false, path = 'answer', key = null) {
   if (!words && key === 'message' && typeof expected === 'string') {
@@ -32,13 +34,23 @@ export function difference(expected, got, words = false, path = 'answer', key = 
   }
   if (Array.isArray(expected)) {
     if (!Array.isArray(got)) return `${path}: expected a list, got ${show(got)}`;
-    if (got.length !== expected.length) return `${path}: expected a list of ${expected.length}, got a list of ${got.length}`;
-    const sentences = !words && SENTENCE_LISTS.has(key);
-    for (let i = 0; i < expected.length; i++) {
-      if (sentences && typeof expected[i] === 'string') {
-        if (typeof got[i] !== 'string') return `${step(path, i)}: expected a text, got ${show(got[i])}`;
-        continue;
+    if (!words && SENTENCE_LISTS.has(key)) {
+      // Sentences for people: any number of them, in any words. The items
+      // that are not texts are compared as in any other list.
+      const kept = (list) => list.map((item, at) => ({ item, at })).filter((x) => typeof x.item !== 'string');
+      const want = kept(expected);
+      const have = kept(got);
+      if (have.length !== want.length) {
+        return `${path}: expected ${want.length} item(s) that are not texts, got ${have.length}`;
       }
+      for (let i = 0; i < want.length; i++) {
+        const d = difference(want[i].item, have[i].item, words, step(path, have[i].at), null);
+        if (d) return d;
+      }
+      return null;
+    }
+    if (got.length !== expected.length) return `${path}: expected a list of ${expected.length}, got a list of ${got.length}`;
+    for (let i = 0; i < expected.length; i++) {
       const d = difference(expected[i], got[i], words, step(path, i), null);
       if (d) return d;
     }

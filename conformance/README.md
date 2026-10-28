@@ -19,14 +19,16 @@ as that README sets out for another implementation:
 - every member must be there, with no member added, and every value must
   be the same: codes, numbers, fingerprints, true or false, the length of
   every list;
-- except the words meant for people: the text of each member named
-  `message`, and each text in a list named `notes` or `limits`, need only
-  be a text. You may say the same thing in your own words, or in another
-  language. Items of those lists that are not texts (a slip's limits, for
-  example) are compared in full.
+- except the words meant for people. The text of each member named
+  `message` need only be a text. In a list named `notes` or `limits`, the
+  sentences are neither compared nor counted: you may give more or fewer
+  of them, or none, in your own words or in another language. The items
+  of those lists that are not texts (a slip's limits, for example) are
+  compared in full, with their number and their order.
 
-With `--words`, every value is compared, words included. Provared's own
-libraries must pass this way; another implementation need not.
+With `--words`, every value is compared, words included, and so is the
+number of sentences in each list. Provared's own libraries must pass this
+way; another implementation need not.
 
 The order of members in an object does not matter; the order of items in
 a list does.
@@ -131,6 +133,53 @@ JavaScript library, in about 40 lines. It answers through
 `test/helpers/vectors.mjs`, the same table the library's own tests use,
 which shows what each `function` takes and gives.
 
+### An example adapter on public functions only
+
+`adapters/provared-public.mjs` is a second adapter for the same library,
+written as an outside developer would write one: it uses only the
+functions the npm package offers (`import ... from 'provared'` and
+`'provared/check'`), never a file inside the library. It is the better
+model for your own adapter: it shows how each case is decoded (bytes
+written in hexadecimal, changed bytes, keys made from a seed), which
+function answers it, and how the answer is put in the stored shape.
+
+```
+node conformance/run.mjs -- node --disable-warning=ExperimentalWarning conformance/adapters/provared-public.mjs
+```
+
+It loads the library through the `exports` list of the package's
+`package.json`, from this repository by default. Add `--package <folder>`
+after the adapter's name to test an installed copy of the npm package
+instead, such as `node_modules/provared`.
+
+On 28 October 2026 it answered **3,099 of the 14,742 cases**, every one
+matching word for word, and skipped the other 11,643. Those test parts
+of the library that are not offered to other programs, and that the
+public functions therefore cannot answer:
+
+- the checks of each kind of record's content (`validate...Content`) and
+  of a page address (`checkOrigin`);
+- reading DER, time-stamps from a service and block time-stamps on their
+  own (`readElement`, `children`, `validateDer`, `timeOf`, `ecdsaToRaw`,
+  `ecdsaDerToRaw`, `checkStamp`, `checkBlockStamp`, `decodeStamps`);
+- the inner steps of the tree and of the chain of block headers
+  (`leafHash`, `treeRoot`, `treeBuilder`, `consistencyProof`,
+  `sealerTree`, `nextBits`, `readHeaderChain`, `headerChainSteps`,
+  `answerFor`);
+- reading keys, signatures, records, times and the canonical form on
+  their own (`checkKey`, `checkEd25519Signature`, `parseRecord`,
+  `parseTime`, `countCharacters`, `parseCanonical`, `requestOf`);
+- two lists of fixed values that hold a number the package does not
+  offer (`recordConstants`, `denialConstants`);
+- the stub writer's scenarios, which are played by the repository's own
+  test code (`recorderScenario`);
+- of `documentFingerprint`, the cases for a web request or answer, which
+  also ask for the text its fingerprint is made from.
+
+Each skip gives its reason to the kit. Many of these parts are still
+reached through the public functions, inside whole books, Shows and
+slips; what the skips lose is the cases that test each part on its own.
+
 ## What it does not prove
 
 Passing the kit is **not a certificate**, and the kit gives no seal or
@@ -149,9 +198,11 @@ be held to them (`test-vectors/README.md`).
 ## Tests
 
 `npm test` in this folder runs the kit's own tests (`test/`): the kit
-passes Provared's own library on every file, word for word, and it
-reports rightly an adapter that answers wrongly, stops, hangs or prints
-what is not JSON (`test/adapters/faulty.mjs`).
+passes Provared's own library on every file, word for word, through
+both adapters; the example adapter imports nothing but Node.js's own
+modules and the package's public entry points; and the kit reports
+rightly an adapter that answers wrongly, gives other sentences, stops,
+hangs or prints what is not JSON (`test/adapters/faulty.mjs`).
 
 Under the Apache License 2.0, as the rest of the code; this guide under
 Creative Commons Attribution 4.0.

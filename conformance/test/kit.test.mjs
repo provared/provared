@@ -4,6 +4,7 @@
 
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -16,6 +17,7 @@ const vectors = join(kit, '..', 'test-vectors');
 const node = process.execPath;
 const quiet = '--disable-warning=ExperimentalWarning';
 const provared = [quiet, join(kit, 'adapters', 'provared.mjs')];
+const publicOnly = [quiet, join(kit, 'adapters', 'provared-public.mjs')];
 const faulty = (...a) => [quiet, join(here, 'adapters', 'faulty.mjs'), ...a];
 const small = () => readSets(vectors, ['base64url.json', 'canonical-json.json']);
 const run = (args, more = {}) => runKit({ command: node, args, sets: small(), ...more });
@@ -31,12 +33,22 @@ test('the comparison: codes and shape by default, every word with words', () => 
   assert.match(difference(expected, { refused: { code: 'bad-field', message: 7 } }), /expected a text, got 7/);
   assert.match(difference(expected, { refused: { code: 'bad-field' } }), /answer\.refused\.message: missing/);
   assert.match(difference(expected, { refused: { code: 'bad-field', message: 'x', more: 1 } }), /answer\.refused\.more: not expected/);
-  // The texts of "notes" and "limits" are words; their number, and anything
-  // in them that is not a text (such as a slip's limits), are compared.
+  // The texts of "notes" and "limits" are words: neither their words nor
+  // their number are compared (choice K-6). Anything in those lists that is
+  // not a text (such as a slip's limits) is compared in full.
   const book = { ok: { notes: ['One.', 'Two.'], limits: ['Three.'], slip: { limits: [{ action: 'a', max: 2 }] } } };
   assert.equal(difference(book, { ok: { notes: ['Un.', 'Deux.'], limits: ['Trois.'], slip: { limits: [{ action: 'a', max: 2 }] } } }), null);
-  assert.match(difference(book, { ok: { notes: ['Un.'], limits: ['Trois.'], slip: { limits: [{ action: 'a', max: 2 }] } } }), /answer\.ok\.notes: expected a list of 2, got a list of 1/);
+  assert.equal(difference(book, { ok: { notes: ['Un.'], limits: ['Trois.', 'Quatre.', 'Cinq.'], slip: { limits: [{ action: 'a', max: 2 }] } } }), null);
+  assert.equal(difference(book, { ok: { notes: [], limits: [], slip: { limits: [{ action: 'a', max: 2 }] } } }), null);
+  assert.match(difference(book, { ok: { notes: ['Un.'], limits: ['Trois.'], slip: { limits: [{ action: 'a', max: 2 }] } } }, true), /answer\.ok\.notes: expected a list of 2, got a list of 1/);
   assert.match(difference(book, { ok: { notes: ['Un.', 'Deux.'], limits: ['Trois.'], slip: { limits: [{ action: 'a', max: 3 }] } } }), /answer\.ok\.slip\.limits\[0\]\.max: expected 2, got 3/);
+  assert.match(difference(book, { ok: { notes: 'One. Two.', limits: ['Three.'], slip: { limits: [{ action: 'a', max: 2 }] } } }), /answer\.ok\.notes: expected a list/);
+  // In a list of that name, the items that are not texts keep their number and order.
+  const mixed = { ok: { limits: ['Words.', { action: 'a', max: 2 }, 'More words.'] } };
+  assert.equal(difference(mixed, { ok: { limits: [{ action: 'a', max: 2 }] } }), null);
+  assert.match(difference(mixed, { ok: { limits: ['Words.'] } }), /answer\.ok\.limits: expected 1 item\(s\) that are not texts, got 0/);
+  assert.match(difference(mixed, { ok: { limits: [{ action: 'a', max: 2 }, 7] } }), /answer\.ok\.limits: expected 1 item\(s\) that are not texts, got 2/);
+  assert.match(difference(mixed, { ok: { limits: ['x', { action: 'b', max: 2 }] } }), /answer\.ok\.limits\[1\]\.action: expected "a", got "b"/);
   // Anything else is compared exactly.
   assert.match(difference({ ok: { name: 'x' } }, { ok: { name: 'y' } }), /answer\.ok\.name/);
   assert.match(difference({ ok: [1] }, { ok: { 0: 1 } }), /expected a list/);
@@ -57,6 +69,33 @@ test("the kit passes Provared's own library on every shared test file, words inc
   assert.equal(r.ok, true);
 });
 
+test('the example adapter uses only the public entry points of the package', () => {
+  const source = readFileSync(join(kit, 'adapters', 'provared-public.mjs'), 'utf8');
+  const specifiers = [...source.matchAll(/^\s*import\b[^'"]*['"]([^'"]+)['"]/gm)].map((m) => m[1]);
+  assert.ok(specifiers.length > 0);
+  for (const s of specifiers) assert.match(s, /^node:/, `only Node.js's own modules are imported by name, not ${s}`);
+  // The one dynamic import is of a file the package's "exports" list names.
+  assert.equal([...source.matchAll(/\bimport\(/g)].length, 1);
+  assert.match(source, /import\(pathToFileURL\(join\(folder, file\)\)\.href\)/);
+  assert.match(source, /pkg\.exports/);
+  assert.match(source, /entry\('\.'\)/);
+  assert.match(source, /entry\('\.\/check'\)/);
+});
+
+test('the example adapter on public functions matches every case it answers, words included, and says why it skips the rest', { timeout: 600000 }, async () => {
+  const r = await runKit({ command: node, args: publicOnly, sets: readSets(vectors), words: true });
+  assert.deepEqual(r.failures, []);
+  assert.equal(r.ok, true);
+  assert.ok(r.totals.passed > 3000, `${r.totals.passed} cases answered`);
+  assert.ok(r.totals.skipped > 0);
+  const answered = new Set(r.files.filter((f) => f.passed > 0).map((f) => f.function));
+  for (const fn of ['checkSlip', 'checkBook', 'checkShow', 'checkBefore', 'makeShow', 'writeDenial', 'prepareApproval', 'verifyInclusion', 'checkHeaderChain']) {
+    assert.ok(answered.has(fn), `${fn} is answered through public functions`);
+  }
+  // Nothing that only the inner parts can answer is answered.
+  for (const fn of ['validateDer', 'checkStamp', 'treeRoot', 'recorderScenario']) assert.ok(!answered.has(fn), fn);
+});
+
 test('a wrong code fails, with the case and the place named', async () => {
   const r = await run(faulty('wrong-code'));
   assert.equal(r.ok, false);
@@ -73,6 +112,20 @@ test('other words pass by codes and shape, and fail word for word', async () => 
   const r = await run(faulty('wrong-words'), { words: true });
   assert.equal(r.ok, false);
   assert.match(r.failures[0].why, /^answer\.refused\.message: expected ".*", got "Other words that say the same\."$/);
+});
+
+test('other sentences, more or fewer, in real answers pass by codes and shape, and fail word for word', async () => {
+  const sets = readSets(vectors, ['renewal-books.json', 'slips.json']);
+  const r = await runKit({ command: node, args: faulty('other-sentences'), sets });
+  assert.deepEqual(r.failures, []);
+  assert.equal(r.ok, true);
+  const w = await runKit({ command: node, args: faulty('other-sentences'), sets, words: true });
+  assert.equal(w.ok, false);
+  assert.ok(w.failures.some((f) => /(notes|limits): expected a list of \d+, got a list of \d+/.test(f.why)));
+  // A code changed inside the same answers is still caught.
+  const c = await runKit({ command: node, args: faulty('other-sentences-and-code'), sets });
+  assert.equal(c.ok, false);
+  assert.ok(c.failures.some((f) => /got "not-the-right-code"/.test(f.why)));
 });
 
 test('cases the adapter sets aside are skipped, and with nothing compared the kit does not pass', async () => {
