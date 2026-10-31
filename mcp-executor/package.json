@@ -52,7 +52,7 @@
     "node": ">=24.7"
   },
   "scripts": {
-    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.mjs"
+    "test": "node --disable-warning=ExperimentalWarning --test --test-timeout=60000 test/*.test.mjs"
   },
   "dependencies": {
     "provared": "^0.6.0"

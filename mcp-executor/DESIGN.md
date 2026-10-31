@@ -654,4 +654,7 @@ the JavaScript packages matrix), and ESLint covers the folder.**
 **X36. The tests use a made-up MCP server written for them
 (`test/fake-server.mjs`), started as a real process, with tools that
 answer, fail, err, stall, ask the client something, or end the process.**
-Nothing is sent over the network; nothing of anyone else's is run.
+Nothing is sent over the network; nothing of anyone else's is run. A test
+that starts the executor as a process ends it, and so the server, on
+every path (success, failure, time limit), and the test script gives each
+test 60 seconds: a child left alive would keep the test process alive.
