@@ -2,6 +2,36 @@
 
 ## Unreleased
 
+- **An executor for MCP tool servers**, `mcp-executor/`
+  (`provared-mcp-executor` 0.1.0, not published), stage 1: the stdio
+  transport. An executor, in the words of the Internet-Draft
+  `draft-izmaylov-agent-permission-receipts-02`, is software other than
+  the agent that holds what its actions need and refuses an action the
+  permission does not allow. The agent's MCP client starts the executor as
+  if it were the tool server; the executor starts the real server with its
+  credential (from a file or the executor's own environment, never the
+  agent's), and passes every message of either revision of the protocol
+  through unchanged except two. `tools/call` is matched to an action by
+  the tool's name in a rules file, checked by the check before acting
+  through the agent's stub writer, which the executor holds; a call the
+  permission allows is sent on and gets a receipt that names the executor
+  in `with`, binds the arguments and the server's result by fingerprint,
+  and is countersigned with the executor's own key set once the outcome is
+  known; a call it does not allow is answered as a tool error that says
+  why, and written as a denial. `tools/list` comes back without the tools
+  that have no rule. Beside the book the executor keeps its own copy, one
+  tagged line before each call is sent (made sure to be on the disk
+  first) and one once its receipt is in the book, and `compare` holds that
+  copy against a book to find a receipt that was left out, which the draft
+  leaves unspecified. A call the executor cannot record is not sent. A
+  call cut off by a stop gets its receipt at the next start, from the copy,
+  naming `provared.error`. Lines from the agent are read strictly (no
+  batch, no member name given twice, an id that is text or a whole number),
+  and refused otherwise. The design, the HTTP transport and the content
+  rules of the plan's F-157 (design only), and 36 numbered choices for
+  review are in `mcp-executor/DESIGN.md`. Nothing in the library changes.
+  The test workflow runs the package's tests, and ESLint covers the folder.
+
 - **OpenSSF Scorecard.** A workflow, `.github/workflows/scorecard.yml`,
   runs the Open Source Security Foundation's Scorecard on each push to
   main, every Sunday and when a branch protection rule changes, and
