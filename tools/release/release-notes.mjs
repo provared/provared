@@ -5,7 +5,10 @@
 //
 // Read from the environment, as the publishing workflow sets them (each
 // may be empty):
-//   NPM_PUBLISHED     "true" where this run published the npm package
+//   NPM_STAGED        "true" where this run staged the npm package; it is
+//                     public only once the founder approves it on npmjs.com
+//   NPM_PRESENT       "true" where npm already held this version when the
+//                     run began, so that nothing was staged
 //   PYTHON_PUBLISHED  the Python projects this run published, as
 //                     "name version" separated by commas
 //   PYTHON_KEPT       the Python projects already on the index at their
@@ -62,23 +65,31 @@ if (paragraphs.length) {
   if (leads.length) opening.push(`The main changes:\n\n${leads.join('\n')}`);
 }
 
-const npmPublished = process.env.NPM_PUBLISHED === 'true';
+const npmStaged = process.env.NPM_STAGED === 'true';
+const npmPresent = process.env.NPM_PRESENT === 'true';
 const pythonPublished = list(process.env.PYTHON_PUBLISHED);
+const pythonKeptItems = (process.env.PYTHON_KEPT ?? '').split(',').map((item) => item.trim()).filter(Boolean);
 const pythonKept = list(process.env.PYTHON_KEPT);
-const places = [];
-if (npmPublished) places.push(`\`provared\` ${version} on npm`);
-if (pythonPublished.length) places.push(`${and(pythonPublished)} on the Python Package Index`);
+// The library itself already on the index at this very version: the tag is
+// new, so an earlier attempt of this run, or a publication by hand, put it there.
+const libraryKept = pythonKeptItems.includes(`provared ${version}`);
 
 const repository = process.env.GITHUB_REPOSITORY || 'provared/provared';
 const text = [
   `Version ${version}${version.startsWith('0.') ? ', a draft' : ''}. Published as it is, by one author in their own time.`,
   ...opening,
 ];
-if (places.length) {
-  text.push(`**Published from the signed tag ${tag}** by the workflow \`.github/workflows/publish.yml\`, through each registry's trusted publishing, with no stored password or token: ${places.join('; ')}. npm records the provenance of the package, and the Python Package Index an attestation for each file, each naming this repository and this workflow.`);
+if (npmStaged || pythonPublished.length) {
+  const done = [];
+  if (pythonPublished.length) done.push(`it published ${and(pythonPublished)} on the Python Package Index, where each file has an attestation naming this repository and this workflow`);
+  if (npmStaged) done.push(`it staged \`provared\` ${version} on npm, where it becomes public, and installable, only once the author approves it on npmjs.com with their passkey; until then \`npm install provared@${version}\` does not find it`);
+  text.push(`**From the signed tag ${tag}**, the workflow \`.github/workflows/publish.yml\` used each registry's trusted publishing, with no stored password or token: ${done.join('; and ')}.`);
+}
+if (npmPresent) {
+  text.push(`Not staged on npm again, because npm already held \`provared\` ${version} when this run began: an earlier attempt of this run staged it and it was approved, or it was published by hand.`);
 }
 if (pythonKept.length) {
-  text.push(`Not published again, because the Python Package Index already holds that version: ${and(pythonKept)}.`);
+  text.push(`Not published again, because the Python Package Index already holds that version: ${and(pythonKept)}.${libraryKept ? ` The library itself, \`provared\` ${version}, was put there by an earlier attempt of this run or by hand.` : ''}`);
 }
 text.push(
   'Every published version stays on npm and the Python Package Index.',

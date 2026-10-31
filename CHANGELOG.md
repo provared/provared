@@ -9,16 +9,23 @@
   by nothing else, that the tag, `package.json`, `python/pyproject.toml`
   and the newest heading of this change log name the same version, and
   that the JavaScript and Python libraries pass their tests on the tagged
-  commit, with the tests of each framework package it will publish. It
-  then publishes the npm package and the Python packages through each
-  registry's trusted publishing, with no stored password or token, and
-  makes the GitHub release with the checking page as one file and its
-  SHA-256. A version already on a registry is not published again, so a
+  commit, with the tests of every framework package against the library
+  from that commit. It then publishes the Python packages and stages the
+  npm package, through each registry's trusted publishing, with no stored
+  password or token, and makes the GitHub release with the checking page
+  as one file and its SHA-256. The npm version is staged
+  (`npm stage publish`) and becomes public only when the author approves
+  it on npmjs.com; the release notes say so. The Python files are checked
+  against the SHA-256 recorded when they were built before they are
+  uploaded. A version already on a registry is not published again, so a
   framework package is published only when its own version is raised;
   where its version is already published and its code differs, the run
   stops before anything is published. The scripts it runs are in
   `tools/release/`. Nothing in the npm package or the Python packages
   changes. Version 0.6.0 and earlier were published by hand.
+- `tools/make-single-page.mjs` refuses an option, or more than one
+  argument, and writes nothing: `--out x` used to write a file named
+  `--out`. It still takes one optional argument, the file to write.
 
 - **An OpenTelemetry bridge**, `provared-opentelemetry` 0.1.0, in
   `integrations/opentelemetry/` (not published). It puts each tool call's
