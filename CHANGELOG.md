@@ -119,6 +119,77 @@
   `passkeys` does. `status` names the retired passkeys (`retired`). Test:
   `integrations/claude-code/test/retire.test.mjs`.
 
+- **A workflow that publishes a release from the founder's signed tag**
+  (25 October 2026). `.github/workflows/publish.yml` runs only when a tag
+  such as `v0.7.0` is pushed. Before anything is published it checks that
+  the tag is signed by the release key in `.github/release-signers` and
+  by nothing else, that the tag, `package.json`, `python/pyproject.toml`
+  and the newest heading of this change log name the same version, and
+  that the JavaScript and Python libraries pass their tests on the tagged
+  commit, with the tests of every framework package against the library
+  from that commit. It then publishes the Python packages and stages the
+  npm package, through each registry's trusted publishing, with no stored
+  password or token, and makes the GitHub release with the checking page
+  as one file and its SHA-256. The npm version is staged
+  (`npm stage publish`) and becomes public only when the author approves
+  it on npmjs.com; the run shows the stage ID and the package's
+  integrity value, so that the author approves that one stage, and the
+  release notes say, for each registry, what the run sent there. The
+  Python files are checked
+  against the SHA-256 recorded when they were built before they are
+  uploaded. A version already on a registry is not published again, so a
+  framework package is published only when its own version is raised;
+  where its version is already published and its code differs, the run
+  stops before anything is published. The scripts it runs are in
+  `tools/release/`. Nothing in the npm package or the Python packages
+  changes. Version 0.6.0 and earlier were published by hand.
+- `tools/make-single-page.mjs` refuses an option, or more than one
+  argument, and writes nothing: `--out x` used to write a file named
+  `--out`. It still takes one optional argument, the file to write.
+
+- **A conformance kit**, in `conformance/` (not published): another
+  implementation of the format, in any language, is tested against the
+  shared test files through a small program of its own (an adapter),
+  which the kit hands one case at a time as a line of JSON and whose
+  answer it compares. By default it compares the codes and the shape of
+  each answer, not the words meant for people, as `test-vectors/README.md`
+  sets out; `--words` compares every value. It ends with code 0 only where
+  every case compared matched. An adapter for Provared's own JavaScript
+  library passes all 14,742 cases word for word. Passing it shows
+  agreement on these cases only; it is not a certificate. Its tests run in
+  the test workflow beside the sealer's.
+
+- **The conformance kit, two changes.** By default it no longer counts the
+  sentences in the lists named `notes` and `limits`: another implementation
+  may say the same thing in more or fewer sentences, so only the codes,
+  the items that are not texts and the shape of each answer are compared;
+  `--words` still compares every word and every sentence. And a second,
+  example adapter, `conformance/adapters/provared-public.mjs`, is written
+  only on the functions the npm package offers (`provared` and
+  `provared/check`), and can be pointed at an installed copy of the
+  package with `--package`: it answers 3,099 of the 14,742 cases, all of
+  them matching word for word, and skips the other 11,643, which test
+  parts of the library that are not offered to other programs, saying why
+  for each.
+
+- **The conformance kit, after an independent review.** By default, the
+  findings of an entry (`problems`, `breaches`, `disclosureProblems`) are
+  compared in any order, as the format description says their order is
+  not part of the format; and an entry's own `problems` may hold only
+  some of those stored, at least one, since a checker may stop at the
+  first way an entry fails its own check (where it stopped before the
+  countersignature, "unchecked" is taken in its place). Breaches are
+  still compared in full. `--words` keeps the stored order. The verdict
+  now says how many cases were skipped and not tested, the functions
+  skipped entirely are listed, and `--no-skip` counts any skip as a
+  failure. A reply holding both an answer and a skip is a fault of the
+  adapter. The example adapter reports an error it does not expect as a
+  crash, where it gave the code `check-failed`. The guide gains a table
+  of every function the shared test files name: its section of the
+  format description, whether another implementation may skip it, where
+  its answer is declared, and how its cases are written; and it lists
+  the stored values that are particular to Provared's own library.
+
 - **An OpenTelemetry bridge**, `provared-opentelemetry` 0.1.0, in
   `integrations/opentelemetry/` (not published). It puts each tool call's
   receipt on the trace span that observability tools already show, in one
