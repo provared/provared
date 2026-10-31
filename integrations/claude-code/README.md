@@ -119,19 +119,24 @@ holds both lists (`passkeys`, and among them `retired`); a file written
 by an earlier version has no `retired`, and retires none. If a command
 changes the list while a renewal adds a passkey, both changes are kept:
 the file is read again just before it is written, and no passkey is
-ever taken off it.
+ever taken off it. A narrow window remains between that reading and the
+renaming of the new file into place, since no lock is held. A list that
+would hold no passkey is never written.
 
 Retirement stops new permissions; it does not stop a program that can
-change the recorder's files. The one permission it cannot keep out is the
-one that was last in force in the last kept book: when the recorder
-starts with no `book.jsonl` and that permission in `slip.json`, it takes
-it as the completion of a switch to a new book, without the checks, so
-that a permission that has ended since does not stop the recorder from
-starting. So a program on this computer that removes `book.jsonl` and
-puts that permission back can resume it, even if its passkey was retired
-afterwards; and so can one that adds a permission's line at the end of
-the kept book. Any other permission is checked, a retired passkey's
-among them. This raises the bar; it does not close the gap: see "What
+change the recorder's files. At start-up, only the permission last in
+force escapes the checks: the last permission line of `book.jsonl`, or,
+where the recorder starts with no `book.jsonl` (a switch to a new book
+that a stop interrupted), the last permission line of the last kept
+book. That one is taken without the checks, so that a permission that
+has ended since does not stop the recorder from starting. Any other
+permission put in `slip.json`, even one that `book.jsonl` or a kept book
+holds further up, is checked, a retired passkey's among them, and is
+refused if its passkey was retired. So what remains: a program on this
+computer that puts back the permission last in force (in `slip.json`,
+after removing `book.jsonl` where it was last in force in the kept book)
+can resume it, even if its passkey was retired afterwards; and so can
+one that adds a permission's line at the end of either book. This raises the bar; it does not close the gap: see "What
 the record shows, and what it does not".
 
 ## A new book at 90,000 entries

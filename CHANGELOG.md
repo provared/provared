@@ -100,16 +100,19 @@
   own and renamed into place; so `retire-passkey` run at the same moment
   as a renewal that adds a new passkey keeps both changes (a narrow
   window remains between that reading and the renaming, since no lock is
-  held). At start-up, a new book that a switch had begun is completed
-  without the checks only with the permission that was last in force in
-  the last kept book (its last permission line); any other permission
-  that book holds goes through the checks, a retired passkey's among
-  them. What is left: a program on this computer that removes `book.jsonl`
-  and puts back the permission that was last in force in the kept book
-  can resume it, even if its passkey was retired afterwards, and so can
-  one that adds a permission's line at the end of the kept book.
-  Retirement stops new permissions; it does not stop a program that can
-  change the recorder's files. A file written by an earlier version holds
+  held); a list that would hold no passkey is never written. At start-up,
+  only the permission last in force is taken without the checks: the
+  last permission line of `book.jsonl`, or, where a switch to a new book
+  was interrupted and there is no `book.jsonl`, the last permission line
+  of the last kept book. Any other permission put in `slip.json`, even one
+  that either book holds further up, goes through the checks, a retired
+  passkey's among them, and no line is added for it. What is left: a
+  program on this computer that puts back the permission last in force
+  (removing `book.jsonl` where it was last in force in the kept book) can
+  resume it, even if its passkey was retired afterwards, and so can one
+  that adds a permission's line at the end of either book. Retirement
+  stops new permissions; it does not stop a program that can change the
+  recorder's files. A file written by an earlier version holds
   `passkeys` alone and is read as retiring none, so a recorder updated in
   place starts on its folder as it is; a `retired` that is not a list of
   thumbprints from `passkeys` stops the recorder, as a malformed

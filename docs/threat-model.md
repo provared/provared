@@ -112,10 +112,12 @@ follows the checking steps of the Web Authentication standard.
     that name, so no other page can have it sign anything. Provared's own
     signing page is served at sign.prova.red, a name that serves nothing
     else.
-  - A reader who names the address is protected by naming alone, whatever
-    name the passkey was made for: the client data the passkey signs must
-    say that address, so a record signed at any other page under the
-    `rpId` is refused.
+  - A reader who names the address is protected by naming alone against
+    every other address under the `rpId`, whatever name the passkey was
+    made for: the client data the passkey signs must say that address, so
+    a record signed at any other address under the `rpId` is refused. It
+    does not protect against another page served at the named address
+    itself.
   - A page that shows the record before it asks for the signature helps
     only against a page that asks openly for a record to be signed. It
     does nothing against a prompt dressed as a sign-in, which shows no

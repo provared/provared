@@ -48,7 +48,12 @@ function fixture() {
   mkdirSync(join(repo, 'src', 'deeper'), { recursive: true });
   writeFileSync(join(repo, 'src', 'deeper', 'inner.js'), 'export const inner = 1;\n');
   git(repo, 'init', '-q');
-  commitAll(repo, 'fixture');
+  git(repo, 'add', '-A');
+  // A link and a submodule entry under src/, each with a name ending in .js, held only in what is committed: neither is an ordinary file, and neither is copied.
+  const target = execFileSync('git', ['-C', repo, 'hash-object', '-w', '--stdin'], { input: 'check.js', stdio: ['pipe', 'pipe', 'pipe'] }).toString('utf8').trim();
+  git(repo, 'update-index', '--add', '--cacheinfo', `120000,${target},src/link.js`);
+  git(repo, 'update-index', '--add', '--cacheinfo', `160000,${'1'.repeat(40)},src/sub.js`);
+  git(repo, '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', 'fixture');
   git(repo, 'tag', 'v0.6.0');
   return repo;
 }
@@ -66,6 +71,12 @@ test('every file under site/ is a copy of a file as git holds it at the tag: the
   assert.ok(modules.length > 20);
   for (const name of modules) assert.equal(copies[`src/${name}`], `src/${name}`);
   assert.equal(Object.keys(copies).length, 4 + modules.length, 'nothing else: not src/notes.txt, not src/deeper/inner.js');
+  // The link and the submodule entry are committed, and neither is copied.
+  const held = git(repo, 'ls-tree', 'v0.6.0', '--', 'src/link.js', 'src/sub.js');
+  assert.match(held, /^120000 blob [0-9a-f]+\tsrc\/link\.js$/m);
+  assert.match(held, /^160000 commit 1{40}\tsrc\/sub\.js$/m);
+  assert.ok(!Object.hasOwn(copies, 'src/link.js'), 'a link is not copied');
+  assert.ok(!Object.hasOwn(copies, 'src/sub.js'), 'a submodule entry is not copied');
   // Every module the page's script imports is served, at the path its import reaches from the site's root.
   for (const [path] of pageModules('page/sign-page.js')) assert.equal(copies[servedAt(path)], path, path);
   assert.throws(() => servedAt('net/nodes.js'), /no place on the site/);

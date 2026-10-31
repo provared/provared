@@ -3,12 +3,14 @@
 // are still counted across the books it signed; "admit-passkey" takes it
 // back; a list written before "retired" existed is read as it was; a
 // permission superseded before a book was kept cannot be brought back at
-// start-up through the completion of a new book; and two changes to the
-// list at the same moment lose neither.
+// start-up through the completion of a new book, nor by putting it back
+// as slip.json while the book in force holds it; two changes to the list
+// at the same moment lose neither; and a list with no passkey is never
+// written.
 
 import './local-library.mjs'; // first: "provared" is this repository's own library
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
@@ -234,5 +236,55 @@ test('two changes to the list of passkeys at the same moment: a passkey added wh
   // A list given with fewer passkeys never shortens the file.
   assert.deepEqual(writeTrusted(folder, [A]).passkeys, [A, B, C]);
   // Each write used a temporary file of its own, and none is left behind.
+  assert.deepEqual(readdirSync(folder).filter((n) => n.endsWith('.tmp')), []);
+});
+
+test('a permission the book in force holds, but not as its last, from a passkey retired since, is not resumed by putting it back as slip.json; the one last in force is', async () => {
+  const { folder, passkey: old, agent, slip: s1 } = await world(LIMITS);
+  const A = await thumbprint(old.key);
+  let service = await startService({ folder, port: 0 });
+  const fresh = await developmentPasskey();
+  const s2 = await signSlip({ agentKeys: agent.keys, passkey: fresh, limits: LIMITS, purpose: 'The second permission, from a new passkey.' });
+  let s2Fingerprint;
+  try {
+    // Renewed with a new passkey, then the old one retired: book.jsonl holds S1, then S2.
+    const renewed = await runCommand(['renew', saveSlip(s2), '--new-passkey'], { folder, port: service.port });
+    assert.equal(renewed.code, 0, renewed.err);
+    s2Fingerprint = (await status(service.port)).slip;
+    assert.equal((await runCommand(['retire-passkey', A], { folder, port: service.port })).code, 0);
+  } finally {
+    await service.close();
+  }
+  assert.equal(read(folder, 'book.jsonl').split('\n').filter((l) => l.startsWith('{"slip":')).length, 2, 'book.jsonl holds S1 and S2');
+  const inForce = read(folder, 'slip.json');
+  const bookBefore = read(folder, 'book.jsonl');
+  // Any program on the computer: S1 put back as slip.json, the book left as it is.
+  writeFileSync(join(folder, 'slip.json'), JSON.stringify(s1));
+  await refusedStart(startService, { folder, port: 0 }, /was retired with .*retire-passkey/);
+  assert.equal(read(folder, 'book.jsonl'), bookBefore, 'nothing was added to the book');
+  // The permission last in force (S2, the book's last permission line) starts as before.
+  writeFileSync(join(folder, 'slip.json'), inForce);
+  service = await startService({ folder, port: 0 });
+  try {
+    assert.equal((await status(service.port)).slip, s2Fingerprint);
+  } finally {
+    await service.close();
+  }
+});
+
+test('a list of passkeys that would hold none is never written', async () => {
+  const { folder, passkey } = await world([]);
+  const A = await thumbprint(passkey.key);
+  const empty = tempFolder('provared-empty-list-');
+  // No file and nothing to add: refused, and no file is made.
+  assert.throws(() => writeTrusted(empty, []), /would hold no passkey, so it was not written/);
+  assert.equal(existsSync(join(empty, 'trusted-passkeys.json')), false);
+  // The file taken away between retire-passkey's first reading and its writing: refused, and nothing is written.
+  const service = await startService({ folder, port: 0 });
+  await service.close();
+  assert.deepEqual(readTrusted(folder), [A]);
+  const path = join(folder, 'trusted-passkeys.json');
+  assert.throws(() => retirePasskey(folder, A, true, { beforeRead: () => unlinkSync(path) }), /would hold no passkey, so it was not written/);
+  assert.equal(existsSync(path), false, 'no list with no passkey was written');
   assert.deepEqual(readdirSync(folder).filter((n) => n.endsWith('.tmp')), []);
 });

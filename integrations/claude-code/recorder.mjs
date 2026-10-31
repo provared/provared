@@ -606,6 +606,10 @@ export function writeTrusted(folder, add = [], change = null, { beforeRead } = {
   beforeRead?.();
   const held = readTrustedFile(folder);
   const passkeys = [...new Set([...(held?.passkeys ?? []), ...add])];
+  // A list with no passkey is one the recorder refuses to start with: write nothing.
+  if (passkeys.length === 0) {
+    throw new Error(`The list of passkeys (${files(folder).trusted}) would hold no passkey, so it was not written: the file was missing when it was read again, and no passkey was being added. Nothing was changed.`);
+  }
   let retired = held?.retired ?? [];
   if (change?.retire) retired = [...new Set([...retired, change.retire])];
   if (change?.admit) retired = retired.filter((k) => k !== change.admit);
@@ -902,6 +906,15 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
   let trusted = await trustFor(folder, text, placed);
   const taken = text === '' || !(await slipsIn(text)).has(placed.fingerprint);
   const kept = keptBooks(folder);
+  if (!taken && (await lastSlipIn(text)) !== placed.fingerprint) {
+    // A slip the book holds, but not as its last permission line: one that
+    // was in force once and was replaced since (slip.json put back by hand,
+    // perhaps from its kept copy slip-<fingerprint>.json). Only the last
+    // permission line of the book is the one in force, and only that one is
+    // taken without the checks; any other goes through the same checks as a
+    // renewal, a retired passkey's among them, and no line is added.
+    await checkNewSlip(placed.slip, { agentKeys: agent.keys, trusted, retired: readRetired(folder) });
+  }
   if (taken) {
     // A new book, or a slip put in place while the service was not running:
     // taken in after the same checks as a renewal. Where the folder has no
