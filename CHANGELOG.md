@@ -2,6 +2,75 @@
 
 ## Unreleased
 
+- **The recorder beside Claude Code as a Claude Code plugin.** It can now
+  be installed, with its hooks, in two commands in Claude Code:
+  `/plugin marketplace add provared/provared`, then
+  `/plugin install provared-recorder@provared`. A marketplace file at the
+  top of the repository (`.claude-plugin/marketplace.json`, the place
+  `/plugin marketplace add` looks) lists one plugin, the folder
+  `integrations/claude-code`, which gains `.claude-plugin/plugin.json`
+  (the name `provared-recorder`, the package's version) and
+  `hooks/hooks.json`: the hooks `init` writes, each run through the
+  plugin's entry, `plugin.mjs`, by the plugin's own paths
+  (`${CLAUDE_PLUGIN_ROOT}`), and at the start of a session a new command,
+  `session-start`. It starts the recorder as `ensure` does and, where
+  something stands in the way (no library, no permission yet, a recorder
+  that does not start or is still starting, the recorder's hooks in force
+  twice), tells the person and Claude in Claude Code's own fields for
+  that, within 27 seconds; where all is well it says nothing. Nothing
+  signs for the person: they run `init` (which, run through the plugin,
+  writes no hooks), sign at https://sign.prova.red/ with their own
+  passkey, and run `use`, as the first session tells them. Before each
+  call the hook, where no permission was ever put in place, now says that,
+  with the same steps, rather than only that the recorder is not running,
+  and it waits for the recorder for at most 25 seconds from its own start.
+
+- **The plugin's library, by an exact path.** Claude Code 2.1.167 copied a
+  plugin fetched from a git repository into its cache without the library
+  `provared`, so every call was refused and the start of a session failed;
+  and Node.js would have looked for the name in the folders above the
+  plugin, such as the person's home folder. The plugin's entry
+  (`plugin.mjs`, with `plugin-library.mjs`) now takes the library from
+  the plugin's own `node_modules` where Claude Code put it there, or else
+  installs it itself, at a session's start or at a command the person runs,
+  with `npm ci --ignore-scripts` from the folder's new `package-lock.json`
+  (exactly 0.6.0, the package checked by npm against the fingerprint
+  the lockfile holds, no install script run, npm's own program run by Node.js
+  with no shell and stopped for certain at its time limit), into the
+  plugin's data folder, and loads it from there alone, in this program and
+  in every program it starts. After that, the copy is trusted by where it
+  sits, and is not checked again before each use. Whatever goes wrong in
+  the entry itself (a damaged copy, a missing lockfile, a Node.js without
+  `module.registerHooks`), a call is refused before it is taken and Claude
+  Code is told after it, as the hook itself does. A settings file with
+  comments is looked through for the recorder's hooks as JSON with
+  comments. Where it cannot, the session says so,
+  every call is refused, and each refusal gives the one command that mends
+  it (`plugin.mjs install-library`). Checked with Claude Code 2.1.167's own
+  `claude plugin validate`, with and without `--strict`, and by installing
+  the plugin, from a marketplace whose entry names a git copy of this
+  branch, into a Claude Code settings folder of its own, then running its
+  hooks and `session-start` from the copy in the plugin cache.
+
+- **Not recorded twice.** Claude Code runs a plugin's hook and the same
+  hook in a settings file side by side. Before each call, the plugin's
+  hook (and only it: Claude Code names the plugin's folder to it) looks in
+  the person's and the project's settings files for a hook that runs a
+  recorder's `hook.mjs`, in the forms the README lists (a word joined from
+  quoted and unquoted parts as a shell joins it; the project's and the
+  home folder written as variables or `~`; a copy since deleted, on a path
+  that names Provared); where it finds one, it refuses the call and says
+  how to take one of the two out. It reads no settings file larger than
+  1 MB, looks at no more than 20,000 words, for no more than 2 seconds,
+  and refuses the call past any of these. After a call it records it
+  whatever it finds. A new command, `remove-hooks`, takes the hooks `init`
+  wrote, from any copy of the recorder, out of a project's
+  `.claude/settings.local.json`, and nothing else, by writing a new file
+  that then takes the old one's place, and only where the file did not
+  change while it was read. `init` gains `--no-hooks`, refuses any other
+  word after it, and warns where it writes hooks while the plugin is
+  installed. The new file `settings-hooks.mjs` is in the npm package.
+
 - **The heading of the top fingerprint.** The checking page heads the card
   of a record's top fingerprint "The top fingerprint (the Seal)" only where
   the record holds a seal, and "The top fingerprint" where it holds none

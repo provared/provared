@@ -1,0 +1,16 @@
+{
+  "name": "provared",
+  "description": "Provared's plugins for Claude Code: proof of what an AI agent was allowed to do, and what it then did. Evidence, not a verdict.",
+  "owner": {
+    "name": "Pavel Izmaylov",
+    "url": "https://prova.red"
+  },
+  "plugins": [
+    {
+      "name": "provared-recorder",
+      "source": "./integrations/claude-code",
+      "description": "Records Claude Code with Provared: each tool call is checked against a permission you sign with your own passkey, refused if it is outside it, and receipted if it is taken.",
+      "category": "security"
+    }
+  ]
+}
