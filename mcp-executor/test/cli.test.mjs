@@ -105,6 +105,35 @@ test('keys makes the key files once and prints what goes into the permission; ch
   assert.match(help.stdout, /provared-mcp-executor stdio/);
 });
 
+test("stdio: when the tool server ends, the executor process ends too, with the server's code, although the client still holds its input open", async () => {
+  const w = await world({ open: false });
+  const child = start(['stdio', '--config', w.configPath]);
+  const out = [];
+  child.stdout.on('data', (c) => out.push(c));
+  const lines = () => Buffer.concat(out).toString('utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+  let code;
+  try {
+    child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'echo', arguments: {} } })}\n`);
+    await until(() => lines().some((m) => m.id === 1));
+    child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'crash', arguments: {} } })}\n`);
+    // The input is left open: the executor must end on its own once the server has.
+    code = await new Promise((done, failed) => {
+      const t = setTimeout(() => failed(new Error('The executor did not end within 10 s of its server ending.')), 10000);
+      child.on('exit', (c) => {
+        clearTimeout(t);
+        done(c);
+      });
+    });
+  } finally {
+    await end(child);
+  }
+  assert.equal(code, 3, "the server's exit code");
+  const answer = lines().find((m) => m.id === 2);
+  assert.equal(answer.error.code, 1002);
+  const checked = await checkBook(readFileSync(join(w.folder, 'book.jsonl'), 'utf8'), { issuerKeys: w.settings.agent.issuerKeys });
+  assert.equal(checked.summary.counts.stubs, 2, 'both calls have their receipts');
+});
+
 test('stdio: started as the tool server, the executor speaks MCP on its own streams, writes nothing else to standard output, and ends when its input ends', async () => {
   const w = await world({ open: false });
   const child = start(['stdio', '--config', w.configPath]);

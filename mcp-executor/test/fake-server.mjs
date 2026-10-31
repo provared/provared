@@ -74,11 +74,13 @@ function onMessage(m) {
     if (name === 'slow') {
       if (args.never) return;
       setTimeout(() => {
-        if (!cancelled.has(String(id))) text('Done, slowly.');
+        // With FAKE_IGNORE_CANCEL the server answers all the same, as a server that does not honour cancellation would.
+        if (!cancelled.has(String(id)) || process.env.FAKE_IGNORE_CANCEL) text(`Done, slowly.${args.tag ? ` ${args.tag}` : ''}`);
         else log({ notAnswered: id });
       }, args.ms ?? 200);
       return;
     }
+    if (name === 'weird') return send({ jsonrpc: '2.0', id, result: { resultType: 'complete', content: [{ type: 'text', text: 'a lone surrogate follows: \ud800' }] } });
     if (name === 'ask') {
       const askId = serverRequestId++;
       pendingAsks.set(askId, (answer) => text(`The client said: ${JSON.stringify(answer.result ?? answer.error)}`));

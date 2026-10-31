@@ -131,6 +131,36 @@ export function repeatedName(text, fold = false) {
   return null;
 }
 
+const SAFE = BigInt(Number.MAX_SAFE_INTEGER);
+
+/**
+ * The first whole-number literal in a JSON text that lies outside what every
+ * reader holds exactly (beyond 2^53 - 1 either way), or null. Two readers
+ * would hold such a number differently (as a float, as a big integer, or
+ * refused), so the executor refuses the line. The text must already be
+ * known to be JSON.
+ */
+export function unsafeInteger(text) {
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '"') {
+      let j = i + 1;
+      while (text[j] !== '"') j += text[j] === '\\' ? 2 : 1;
+      i = j;
+    } else if (c === '-' || (c >= '0' && c <= '9')) {
+      let j = i + 1;
+      while (j < text.length && /[0-9.eE+-]/.test(text[j])) j++;
+      const token = text.slice(i, j);
+      if (/^-?[0-9]+$/.test(token)) {
+        const magnitude = BigInt(token.startsWith('-') ? token.slice(1) : token);
+        if (magnitude > SAFE) return token;
+      }
+      i = j - 1;
+    }
+  }
+  return null;
+}
+
 /** Whether a value is a JSON-RPC id: text, or a whole number (the specification: "a string or integer ID", never null). */
 export function isId(value) {
   return typeof value === 'string' || (typeof value === 'number' && Number.isInteger(value));
@@ -171,6 +201,7 @@ export function readMessage(line) {
   if (!message || typeof message !== 'object') return { refused: { code: CODES.invalidRequest, message: 'A message is a JSON object.' }, id: null };
   const repeated = repeatedName(text);
   if (repeated !== null) return { refused: { code: CODES.invalidRequest, message: 'A member name is given twice in one object of the message, which two readers may read differently.' }, id: null };
+  if (unsafeInteger(text) !== null) return { refused: { code: CODES.invalidRequest, message: 'The message holds a whole number beyond 9,007,199,254,740,991, which two readers may hold differently.' }, id: null };
   const id = Object.hasOwn(message, 'id') ? message.id : undefined;
   const knownId = isId(id) ? id : null;
   if (message.jsonrpc !== '2.0') return { refused: { code: CODES.invalidRequest, message: 'The message does not say "jsonrpc": "2.0".' }, id: knownId };

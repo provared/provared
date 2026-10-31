@@ -31,6 +31,29 @@
   rules of the plan's F-157 (design only), and 36 numbered choices for
   review are in `mcp-executor/DESIGN.md`. Nothing in the library changes.
   The test workflow runs the package's tests, and ESLint covers the folder.
+  An independent review of the first draft found one serious fault and
+  six of medium weight, each now fixed and a test (`test/review1.test.mjs`):
+  a receipt lost for good where the book file could not be written after a
+  call (the copy now keeps the outcome and the next start writes the
+  receipt from it); a late answer from a server that ignores cancellation
+  taken for a later call's under the same client id (each call now goes to
+  the server under an id of the executor's own); a `tools/call` sent as a
+  notification forwarded unchecked (dropped); the process staying alive
+  after its server ended (it ends with the server's code); no cap on calls
+  or list requests waiting (`maxWaiting`, default 16; 256 lists); a bare
+  program name found through the client's `PATH` (named by path, or
+  `server.path`, with a warning otherwise); a result that cannot be
+  fingerprinted leaving no outcome in the receipt (`provared.error` with a
+  fixed text). Smaller points: each copy line carries its number, so a
+  line taken out, put twice or moved stops the start; `compare` tells a
+  receipt the executor could not write apart from one the book lacks, does
+  not agree where the book has a problem, and makes no key; a whole number
+  beyond 2^53 - 1 anywhere in a line is refused; `check` writes nothing;
+  a permission naming other services beside the executor is warned about.
+  The founder's decision F-158 (content rules in the executor's settings,
+  fingerprinted into receipts and into the permission's `agent.software`;
+  the automatic late receipt kept; reserved names for a tool's name and
+  result to come in the library and draft -03) is recorded in `DESIGN.md`.
 
 - **OpenSSF Scorecard.** A workflow, `.github/workflows/scorecard.yml`,
   runs the Open Source Security Foundation's Scorecard on each push to

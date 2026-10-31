@@ -86,6 +86,8 @@ It needs Node.js 24.7 or later, and depends only on the `provared` library.
    provared-mcp-executor check --config executor.json
    ```
 
+   It writes nothing: no line to the book, no copy key.
+
 5. Point the agent's MCP client at the executor where it named the server.
    For a client whose settings are JSON:
 
@@ -114,6 +116,7 @@ It needs Node.js 24.7 or later, and depends only on the `provared` library.
     "command": "node",
     "args": ["files-server.mjs"],
     "cwd": "servers/files",
+    "path": ["/usr/local/bin"],
     "env": { "FILES_API_TOKEN": { "file": "secrets/files-token" } },
     "passEnv": ["PATH", "HOME"]
   },
@@ -138,17 +141,28 @@ It needs Node.js 24.7 or later, and depends only on the `provared` library.
   "timeout": 300000,
   "denialsPerHour": 600,
   "callIdInMeta": true,
-  "shutdownWait": 5000
+  "shutdownWait": 5000,
+  "maxWaiting": 16
 }
 ```
 
 - `name`: the executor's name; part of the tag on each line of its copy.
 - `service`: the id the permission gives the executor in `with`; written
   into each stub's `with`. Default `executor`.
+- `server.command`: the program to start, best named by its path. A bare
+  name (`node`) is looked for in the folders of `server.path`, or, where
+  that is not given, in the folders of the executor's own `PATH`, with a
+  warning: that environment is set by the agent's client, which could then
+  choose which program is given the credential. On Windows a bare name is
+  tried with `.exe` and `.com` only; the server is started without a
+  shell, which cannot run a `.cmd` or `.bat` shim (name the program the
+  shim starts, such as `node.exe` with the script as an argument). A
+  program that is not found stops the start.
 - `server.env`: each variable the server needs, and where its value is read
   from: a file (`file`; one line ending at its end is dropped), the
-  executor's own environment (`env`), or the settings themselves (`value`,
-  warned against). The server's environment holds these and the variables
+  executor's own environment (`env`, warned against: that environment is
+  only as safe as the agent's client that set it), or the settings
+  themselves (`value`, warned against). The server's environment holds these and the variables
   in `passEnv` (by default `PATH`, `PATHEXT`, `SYSTEMROOT`, `COMSPEC`,
   `WINDIR`, `TEMP`, `TMP`, `HOME`, `USERPROFILE`, `LANG`, `LC_ALL`, `TZ`),
   and nothing else of the executor's environment: the agent's client, which
@@ -167,7 +181,10 @@ It needs Node.js 24.7 or later, and depends only on the `provared` library.
   arguments (`pointer`), or the length of the list there (`count`). A call
   whose amount cannot be read is refused, and so is one whose arguments
   name one member twice in one object, or two that differ only in capitals
-  (`total` and `TOTAL`): a server may read the other one.
+  (`total` and `TOTAL`): a server may read the other one. (A member
+  name given twice exactly is refused in every message; names that differ
+  only in capitals are refused only where a rule reads the amount from the
+  arguments.)
 - `unlisted`: `refuse` (default) refuses a call to a tool no rule names and
   writes a denial named `executor.unlisted`; `forward` sends it on with no
   receipt and no denial, and the record then leaves those calls out.
@@ -183,14 +200,27 @@ It needs Node.js 24.7 or later, and depends only on the `provared` library.
 - `denialsPerHour`: the most denials written in any hour (default 600).
 - `shutdownWait`: how long the server is given to exit after its input is
   closed before it is ended (default 5,000 milliseconds).
+- `maxWaiting`: the most tool calls in progress or waiting their turn at
+  once (default 16; 1 to 1,000). A call past it is answered with error 1001
+  and nothing is written. At most 256 `tools/list` requests may wait for
+  the server's answer.
 
 ## What the executor does with each call
 
 1. **The line.** Read strictly: UTF-8, one JSON object with
    `"jsonrpc": "2.0"`, no batch, no member name given twice anywhere in it,
-   an id that is text or a whole number. Anything else is answered with a
-   JSON-RPC error and goes no further: the method the executor reads must
-   be the one the server acts on. A line over 16 MiB is refused.
+   no whole number beyond 9,007,199,254,740,991 anywhere in it (two readers
+   would hold it differently), an id that is text or a whole number.
+   Anything else is answered with a JSON-RPC error and goes no further: the
+   method the executor reads must be the one the server acts on. A line
+   over 16 MiB is refused. A notification whose method is not one of the
+   protocol's own (`notifications/…`), such as a `tools/call` sent without
+   an id, is dropped and logged: it would reach the server unchecked.
+   Each `tools/call` goes to the server under an id of the executor's own,
+   unique for the session, and the answer comes back to the client under
+   the client's id; so an answer that arrives late, after a timeout or a
+   cancellation, can never be taken for the answer to a later call that
+   reuses an id. A call past `maxWaiting` is answered with error 1001.
 2. **The rule**, by the tool's name (1 to 128 letters, digits, `_`, `-` and
    `.`; any other name is refused with -32602).
 3. **The amount**, as the rule says.
@@ -213,19 +243,32 @@ It needs Node.js 24.7 or later, and depends only on the `provared` library.
    `traceparent`. After the answer it names `mcp.result` (the server's
    whole `result`, in the one form of RFC 8785) or, where there was no
    result, `provared.error` (the text of the error the client is given, or
-   the server's JSON-RPC error as JSON).
+   the server's JSON-RPC error as JSON). A result that cannot be written in
+   that form (text that is not well-formed Unicode, a number JSON cannot
+   write) gets `provared.error` with a fixed text saying so. The
+   `inputResponses` and `requestState` of a retried multi round-trip call
+   are not bound: only `arguments` are.
 7. **A call that was sent always gets its stub**, whatever happened: the
    server's result (an `isError` result included), its error, no answer
    within `timeout`, the agent's cancellation, or the server ending. The
    executor countersigns the stub with its own keys once the outcome is
    known, so the countersignature covers the result's fingerprint. Then a
-   line saying the receipt is in the book goes into the copy.
-8. **The answer to the client** is the server's, exactly as the server
-   wrote it. Where there is none, the client gets a JSON-RPC error of the
-   executor's own: code 1002 (no answer: the time ran out, the agent
-   cancelled, or the server ended) with the stub's fingerprint in `data`.
-   Code 1001 means the call was not taken because the executor could not
-   record it.
+   line saying the receipt is in the book goes into the copy, naming the
+   stub. Where the book file cannot be written after the call (something
+   changed it, or it is not writable), the line names no stub and holds
+   what the executor knew of the outcome instead; the call stays
+   unfinished, the executor takes no more calls, and the next start writes
+   the receipt from the copy with that outcome.
+8. **The answer to the client** is the server's, with the client's id in
+   place of the executor's and nothing else changed. Where there is none,
+   the client gets a JSON-RPC error of the executor's own: code 1002 (no
+   answer: the time ran out, the agent cancelled, or the server ended) with
+   the stub's fingerprint in `data`. Code 1001 means the call was not
+   taken: the executor could not record it, is stopped, or has too many
+   calls waiting. A line from the server that the executor cannot read as
+   a message (not UTF-8, not JSON) is handed to the client as it is, and a
+   server line over 16 MiB is dropped; a call waiting for either ends by
+   the timeout.
 
 One tool call goes through the stub writer at a time; other messages pass
 through at once. A long tool call delays the next tool call.
@@ -243,16 +286,20 @@ executor exits with the server's code, and the client restarts it, as the
 specification says it should.
 
 **A call the executor was sending when it stopped.** Its line in the copy
-has no line saying the receipt was written. At the next start the receipt
-is written from that line, naming `provared.error` with the words "The
-executor stopped while this call was with the tool server, so its outcome
-is not known…", under the permission in force. Where the call was sent
-under another permission, the executor does not start, and says to put
-that permission back for one start.
+has no line naming its receipt. At the next start the receipt is written
+from that line, under the permission in force: with the result's or the
+error's fingerprint where the copy holds it (the receipt was made and the
+book could not be written), or else naming `provared.error` with the
+words "The executor stopped while this call was with the tool server, so
+its outcome is not known…". Where the call was sent under another
+permission, the executor does not start, and says to put that permission
+back for one start.
 
 **The copy cannot be read** (its key is missing while it holds lines; no
-line checks under the key; a last line was cut by a stop): the executor
-does not start, and says why.
+line checks under the key; a last line was cut by a stop; a line was taken
+out, put twice or moved, which the number each line carries shows): the
+executor does not start, and says why. A copy cut at its end is not seen:
+nothing in a line says it is the last.
 
 ## The copy, and comparing it with the book
 
@@ -263,11 +310,16 @@ provared-mcp-executor compare --config executor.json [--book <another copy of th
 For every call the copy shows as sent, the book is searched for the stub
 that names the executor and the same `executor.call`. The answer lists the
 calls that match, those whose receipt in the book is not the one the
-executor wrote, those with no receipt in the book, those the executor sent
-and never gave a receipt, receipts in the book that name the executor and
-that the copy does not know, and denials the book lacks. It ends with code
-0 only where everything agrees and every line of the copy checks under the
-key.
+executor wrote (`differs`), those with no receipt in the book (`missing`:
+whoever keeps the book left it out, or the book is older than the copy),
+those whose receipt the executor itself could not write to the book
+(`notWritten`: its own stop, told apart from an omission), those the
+executor sent and never gave a receipt, receipts in the book that name the
+executor and that the copy does not know, and denials the book lacks. It
+ends with code 0 only where everything agrees, every line of the copy
+checks under the key and runs in sequence, and the book itself has no
+problem. The copy key must exist (`compare` makes none), and a book named
+with `--book` must exist.
 
 It cannot find a call that never went through the executor, whether a tool
 did what its result says, or a copy changed by whoever holds the copy key.

@@ -157,6 +157,11 @@ gives one; `with` the executor's id; `details`:
 | `mcp.result` | the server's `result`, in the one form of RFC 8785 (added after the call) | no, a label |
 | `provared.error` | the error text (added after the call where there was no result) | yes |
 
+`mcp.tool`, `mcp.result` and `executor.call` are labels. The founder has
+decided (F-158) that reserved document names for a tool's name and a
+tool's result will come in the library and in draft -03; until then these
+labels stand, and a checker reads them as labels.
+
 **The countersignature.** Signed with the executor's own key set (Ed25519
 and ML-DSA-87), which the permission names in `with` under the executor's
 id. It is made after the server answered (or did not), over the stub that
@@ -187,12 +192,17 @@ not require it, and countersigns anyway.
 The copy is a file apart from the book, only ever added to, one line for
 each call: `sending` (before the call goes to the server; on the disk
 first), `done` (once the stub is in the book, with the stub's and the
-countersignature's fingerprints), `refused` (with the reason, the codes and
-the denial's fingerprint) and `withdrawn` (cancelled before it was sent).
-Each line carries HMAC-SHA-256 (RFC 2104) of its text and the executor's
-name under the copy key, so that a line added or changed by someone without
-the key does not check. It holds names, times, codes and fingerprints:
-never a credential, an argument or a result.
+countersignature's fingerprints and the documents added after the call;
+or, where the book could not be written, with those documents and no
+stub, so that the call stays unfinished), `refused` (with the reason, the
+codes and the denial's fingerprint) and `withdrawn` (cancelled before it
+was sent). Each line carries its number from 0 and HMAC-SHA-256 (RFC 2104)
+of its text and the executor's name under the copy key, so that a line
+added or changed by someone without the key does not check, and a line
+taken out, put twice or moved is seen by the numbers. A copy cut at its
+end is not seen: nothing in a line says it is the last; shipping each line
+elsewhere (stage 2) is the answer to that. It holds names, times, codes
+and fingerprints: never a credential, an argument or a result.
 
 **Where it should live.** Section 18 of the draft: the executor's records
 show the gap "only if … the executor keeps them where the agent's side
@@ -210,16 +220,18 @@ executor in `with` and the same `executor.call` fingerprint.
 |---|---|
 | matched | the receipt is in the book, and is the one the executor wrote |
 | differs | the book holds a receipt for the call, but not the one the executor wrote |
-| missing | the executor sent the call, and the book has no receipt for it: whoever keeps the book left it out, or the book is older than the copy |
+| missing | the executor sent the call and wrote its receipt, and the book has no receipt for it: whoever keeps the book left it out, or the book is older than the copy |
+| not written | the executor sent the call and could not write its receipt to the book (its own stop): told apart from an omission by the book's keeper; the next start of the executor writes it |
 | unfinished | the executor sent the call and stopped before the receipt; the next start writes it |
 | not in the copy | a receipt in the book names the executor, and the executor's copy does not know it: not written by this executor (its countersignature state says whether it was forged, which cannot succeed without the executor's keys, or left one-sided) |
 | denial missing | the executor wrote a denial that the book lacks |
 
 It cannot find: a call that never went through the executor; whether a tool
-did what its result says; a copy changed by whoever holds the copy key; a
-receipt of this agent that names another service or none. It does not read
-the agent's own claims about anything: only the book's records and the
-copy's lines.
+did what its result says; a copy changed by whoever holds the copy key, or
+cut at its end; a receipt of this agent that names another service or
+none. It does not read the agent's own claims about anything: only the
+book's records and the copy's lines. It does not agree where the book
+itself has a problem.
 
 ## 8. What happens when things go wrong
 
@@ -230,11 +242,14 @@ copy's lines.
   cannot be written after a call was sent, the client still gets the
   server's answer (the call happened), and the executor stops.
 - **The executor stopped with a call in flight.** The copy's `sending` line
-  has no `done`. At the next start the receipt is written from that line,
-  naming `provared.error` with a fixed text saying the outcome is not
-  known, under the permission the call was sent under. Where that
-  permission is no longer the one in force, the executor does not start
-  and says what to do (put the old permission back for one start). An
+  has no `done` naming a stub. At the next start the receipt is written
+  from that line, under the permission the call was sent under: with the
+  result's or the error's fingerprint where a `done` line without a stub
+  holds it (the receipt was made and the book could not be written), or
+  else naming `provared.error` with a fixed text saying the outcome is not
+  known. Where that permission is no longer the one in force, the executor
+  does not start and says what to do (put the old permission back for one
+  start). The founder has kept this automatic late receipt (F-158). An
   acknowledgement command, as the gateway has, is stage 2.
 - **The copy cannot be read** (its key missing with lines present; no line
   checks; a line cut by a stop): the executor does not start.
@@ -265,7 +280,12 @@ copy's lines.
   arguments are fingerprinted, not understood (see section 11).
 - Retries (Open Issue 7): each `tools/call` is one receipt, including each
   retry of a multi round-trip call (`resultType: "input_required"`), and
-  each counts against totals and counts.
+  each counts against totals and counts. A retry's `inputResponses` and
+  `requestState` are not bound in the stub: only `arguments` are.
+- The executor's own environment and `PATH` are set by the agent's client
+  that starts it. A credential read from that environment (`env`), or a
+  program found through that `PATH`, is only as safe as the client; the
+  settings can name the program by its path and the folders to look in.
 - The clocks: times in receipts are the executor's; a countersignature is
   by the same clock. Seals and outside time-stamps are stage 2.
 - One tool call at a time: a long call delays the next.
@@ -314,6 +334,12 @@ forwarded, the body limit, the journal) is the starting point.
 The question: a call changes a label in a settings file, and the same edit
 switches on a `scan` setting. A rule "the `scan` setting in this file stays
 false" should stop it before the call is let through.
+
+**Decided (the founder, F-158).** Content rules live in the executor's own
+settings, fingerprinted into each receipt, and the person places the same
+fingerprint in the permission's `agent.software`. This is design only for
+now: nothing of it is built in stage 1. The three places that were weighed,
+and the reasoning, stand below.
 
 **Where such rules live.** Three places were weighed:
 
@@ -650,6 +676,71 @@ gateway's commands are.
 
 **X35. The test workflow runs the package's tests (`mcp-executor` added to
 the JavaScript packages matrix), and ESLint covers the folder.**
+
+**X37. A `done` line of the copy names the stub only once it is on the
+disk; where the book could not be written, the line holds what the
+executor knew of the outcome and no stub, and the call stays unfinished.**
+At the next start the receipt is written from the `sending` line and those
+documents. Why: before, such a call was marked done and lost its receipt
+for good (the first review's S1). The other way: leave the `sending` line
+open with no `done`; then the outcome the executor knew would be lost
+too.
+
+**X38. Each `tools/call` goes to the server under an id of the executor's
+own, unique for the session, and the answer comes back under the client's
+id.** Cancellations are renamed the same way, and a late answer under a
+settled id is dropped (the last 10,000 settled ids are kept). Why: a
+server that answers after a timeout or a cancellation would otherwise have
+its answer taken for a later call's that reuses the client's id (M1). The
+other way: forward the client's ids and refuse to reuse one; it would
+refuse honest reuse.
+
+**X39. A notification whose method is not one of the protocol's own
+(`notifications/…`) is dropped and logged.** Why: a `tools/call` sent
+without an id would reach the server unchecked (M2). The other way: pass it
+on, as a server should ignore it; some do not.
+
+**X40. The executor process ends, with the server's code, when the server
+has ended and every receipt is written, whether or not the client still
+holds its input open.** Why: the client restarts a server that exits; a
+process that stays alive with no server serves nothing (M3).
+
+**X41. At most `maxWaiting` tool calls in progress or waiting (default 16;
+1 to 1,000), and at most 256 `tools/list` requests waiting; past either,
+error 1001 and nothing written.** Why: calls waiting their turn hold their
+bodies in memory (M4). The other way: no cap.
+
+**X42. The program is named by its path; a bare name is looked for in
+`server.path` or, with a warning, the executor's own `PATH`; on Windows
+`.exe` and `.com` only; one not found stops the start.** Why: the
+executor's `PATH` is set by the agent's client, which could then choose
+which program receives the credential (M5). The other way: let the
+operating system find it, as `spawn` does.
+
+**X43. A result that cannot be written in the one form of RFC 8785 gets
+`provared.error` with a fixed text, and the executor logs it.** Why: a
+countersigned stub naming no outcome at all would say less than it could
+(M6). The other way: name no document.
+
+**X44. Every line of the copy carries its number from 0; a copy whose
+lines that check do not run in sequence stops the start.** Why: the tag
+alone did not show a line taken out, put twice or moved (L1). Stated: a
+copy cut at its end is still not seen.
+
+**X45. `compare` does not agree where the book itself has a problem, tells
+a receipt the executor could not write apart from one the book lacks,
+makes no copy key, and refuses a `--book` that does not exist.** (L2.)
+
+**X46. A line holding a whole number beyond 2^53 - 1, in an id or anywhere
+else, is refused.** Why: two readers hold such a number differently, as the
+gateway's rule says (L3). The other way: accept it where it is not read.
+
+**X47. `check` writes nothing: no slip line to the book, no copy key.**
+(L4.) Why: a check that changes the folder is not a check.
+
+**X48. A permission that names other services beside the executor gets a
+warning.** Why: a receipt that names one of them, written by whoever
+holds the agent's keys, would not be a finding (L6).
 
 **X36. The tests use a made-up MCP server written for them
 (`test/fake-server.mjs`), started as a real process, with tools that

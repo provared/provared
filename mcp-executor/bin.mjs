@@ -13,7 +13,7 @@
 // "stdio" writes nothing to its standard output but MCP messages; what it
 // has to say goes to its standard error, one JSON object to a line.
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, isAbsolute, resolve } from 'node:path';
 import { loadCopyKey } from './copy.mjs';
 import { compareCopyWithBook } from './compare.mjs';
@@ -59,7 +59,10 @@ async function main(args) {
     const { config, root } = readConfig(args);
     const executor = await openExecutor(config, { root });
     const ended = await executor.attach(process.stdin, process.stdout);
-    return typeof ended.code === 'number' ? ended.code : 1;
+    // The server has ended and every receipt is written: the executor ends
+    // too, whether or not the client still holds its input open (the
+    // client restarts it, as the specification says).
+    process.exit(typeof ended.code === 'number' ? ended.code : 1);
   }
   if (command === 'check') {
     const { config, root } = readConfig(args);
@@ -81,8 +84,11 @@ async function main(args) {
     const { settings, problems } = readSettings(config, root);
     if (problems.length) throw new Error(`The settings have problems:\n- ${problems.join('\n- ')}`);
     const bookPath = option(args, '--book');
-    const book = readIfThere(bookPath ? (isAbsolute(bookPath) ? bookPath : resolve(bookPath)) : settings.agent.book);
-    const result = await compareCopyWithBook({ copyPath: settings.executor.copy, copyKey: loadCopyKey(settings.executor.copyKey), name: settings.name, service: settings.service, book, options: { issuerKeys: settings.agent.issuerKeys } });
+    const bookAt = bookPath ? (isAbsolute(bookPath) ? bookPath : resolve(bookPath)) : settings.agent.book;
+    if (!existsSync(bookAt)) throw new Error(`The book ${bookAt} does not exist.`);
+    const copyKey = loadCopyKey(settings.executor.copyKey, { create: false });
+    if (!copyKey) throw new Error(`The copy key ${settings.executor.copyKey} does not exist: the executor has not run yet, or the key was moved. Nothing to compare.`);
+    const result = await compareCopyWithBook({ copyPath: settings.executor.copy, copyKey, name: settings.name, service: settings.service, book: readIfThere(bookAt), options: { issuerKeys: settings.agent.issuerKeys } });
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     return result.summary.agree ? 0 : 1;
   }

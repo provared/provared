@@ -233,7 +233,10 @@ test('the agent cancels a call: while it is with the server the receipt says so;
     const r1 = await first;
     assert.equal(r1.error.code, 1002);
     assert.match(r1.error.message, /cancelled this call while it was with the tool server/);
-    assert.ok(w.fakeSeen().some((s) => s.seen?.method === 'notifications/cancelled' && s.seen.params.requestId === 'c1'));
+    // The server knows the call by the executor's own id, and the cancellation names that id.
+    const sentCall = w.fakeSeen().find((s) => s.seen?.method === 'tools/call');
+    assert.match(sentCall.seen.id, /^provared-[0-9]+$/);
+    assert.ok(w.fakeSeen().some((s) => s.seen?.method === 'notifications/cancelled' && s.seen.params.requestId === sentCall.seen.id));
     let answered = false;
     second.then(
       () => {
@@ -358,7 +361,7 @@ test('a call sent and never given its receipt (the executor stopped) is given on
   await w.client.call('echo', {});
   await w.close();
   const key = loadCopyKey(join(w.folder, 'copy.jsonl.key'));
-  const copy = openCopy(join(w.folder, 'copy.jsonl'), key, w.settings.name);
+  const copy = openCopy(join(w.folder, 'copy.jsonl'), key, w.settings.name, readCopy(join(w.folder, 'copy.jsonl'), key, w.settings.name).next);
   const details = [{ name: 'provared.arguments', sha256: await argumentsFingerprint({}) }, { name: TOOL_DOCUMENT, sha256: await identifierFingerprint('slow') }, { name: CALL_DOCUMENT, sha256: await identifierFingerprint('lost-call') }];
   copy.note({ kind: 'sending', call: 'lost-call', when: new Date().toISOString(), slip: w.executor.slip.fingerprint, tool: 'slow', action: 'slow.work', with: 'executor', details });
   await openWorld(w);
@@ -388,7 +391,8 @@ test('a call sent and never given its receipt (the executor stopped) is given on
     await w.close();
   }
   // Under another permission: the executor does not open.
-  copy.note({ kind: 'sending', call: 'other-slip-call', when: new Date().toISOString(), slip: 'A'.repeat(43), tool: 'slow', action: 'slow.work', with: 'executor', details });
+  const again = openCopy(join(w.folder, 'copy.jsonl'), key, w.settings.name, readCopy(join(w.folder, 'copy.jsonl'), key, w.settings.name).next);
+  again.note({ kind: 'sending', call: 'other-slip-call', when: new Date().toISOString(), slip: 'A'.repeat(43), tool: 'slow', action: 'slow.work', with: 'executor', details });
   await assert.rejects(openExecutor(w.settings, { root: w.folder, log: () => {} }), /not the one in force/);
 });
 
