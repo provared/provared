@@ -62,15 +62,23 @@ function changed(bytes, change) {
 }
 
 // A refusal from the library is an error named "Refusal" with a code (the
-// type declarations call it so). Anything else is the checker's own fault,
-// which the shared test files write as "check-failed".
+// type declarations call it so). A RangeError is the library refusing an
+// argument outside what a function takes (a place among the leaves that is
+// not there, a Show of no pages, a time beyond what a date can hold): the
+// shared test files store those 13 cases as "check-failed", the library's
+// own catch-all code, which is particular to the JavaScript library
+// (conformance/README.md). Anything else is a fault in this adapter or in
+// the library, and is reported as one: the adapter says what it met on its
+// standard error and stops, and the kit counts the case as failed.
 const CHECK_FAILED = { code: 'check-failed', message: 'The checker met something it did not expect here. This is treated as not intact.' };
 async function answer(work) {
   try {
     return { ok: await work() };
   } catch (e) {
     if (e && e.name === 'Refusal' && typeof e.code === 'string') return { refused: { code: e.code, message: String(e.message) } };
-    return { refused: CHECK_FAILED };
+    if (e instanceof RangeError) return { refused: CHECK_FAILED };
+    process.stderr.write(`the adapter met an error it does not expect: ${e && e.stack ? e.stack : String(e)}\n`);
+    process.exit(1);
   }
 }
 

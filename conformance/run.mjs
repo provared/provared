@@ -4,7 +4,8 @@
 //   node conformance/run.mjs [options] -- <command> [arguments...]
 //
 // Ends with code 0 only where every case compared matched, 1 where any did
-// not (or none was compared), and 2 where the command itself was wrong.
+// not (or none was compared, or --no-skip was given and a case was skipped),
+// and 2 where the command itself was wrong.
 
 import { writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -20,8 +21,10 @@ The command after "--" starts your adapter. The kit writes one case to it
 as one line of JSON, and reads one line of JSON back (conformance/README.md).
 
 Options:
-  --words             compare every value, words meant for people included
-                      (Provared's own libraries must pass this way)
+  --words             compare every value, words meant for people included,
+                      and the findings in their stored order (Provared's own
+                      libraries must pass this way)
+  --no-skip           count every case the adapter skips as a failure
   --file <name>       only this file of test-vectors/ (may be given again)
   --vectors <folder>  the folder of shared test files (default: test-vectors/)
   --timeout <seconds> the longest wait for one answer (default: 60)
@@ -41,7 +44,7 @@ const split = argv.indexOf('--');
 const options = split < 0 ? argv : argv.slice(0, split);
 const adapter = split < 0 ? [] : argv.slice(split + 1);
 
-const settings = { words: false, files: [], vectors: null, timeout: 60, showAll: false, report: null, quiet: false };
+const settings = { words: false, noSkip: false, files: [], vectors: null, timeout: 60, showAll: false, report: null, quiet: false };
 for (let i = 0; i < options.length; i++) {
   const o = options[i];
   const value = () => {
@@ -52,6 +55,7 @@ for (let i = 0; i < options.length; i++) {
     process.stdout.write(HELP);
     process.exit(0);
   } else if (o === '--words') settings.words = true;
+  else if (o === '--no-skip') settings.noSkip = true;
   else if (o === '--file') settings.files.push(value());
   else if (o === '--vectors') settings.vectors = value();
   else if (o === '--timeout') {
@@ -78,9 +82,12 @@ const report = await runKit({
   args: adapter.slice(1),
   sets,
   words: settings.words,
+  noSkip: settings.noSkip,
   timeout: settings.timeout * 1000,
 });
 const lines = describe(report, { showFailures: settings.showAll ? Infinity : 20 });
-process.stdout.write(`${(settings.quiet ? lines.slice(-2) : lines).join('\n')}\n`);
+// --quiet keeps the totals, the verdict and, where the kit stopped asking the adapter, why.
+const shown = settings.quiet ? lines.filter((l, i) => i >= lines.length - 2 || l.startsWith('Stopped early:')) : lines;
+process.stdout.write(`${shown.join('\n')}\n`);
 if (settings.report) writeFileSync(settings.report, `${JSON.stringify(report, null, 1)}\n`);
 process.exit(report.ok ? 0 : 1);

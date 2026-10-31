@@ -27,6 +27,24 @@
   parts of the library that are not offered to other programs, saying why
   for each.
 
+- **The conformance kit, after an independent review.** By default, the
+  findings of an entry (`problems`, `breaches`, `disclosureProblems`) are
+  compared in any order, as the format description says their order is
+  not part of the format; and an entry's own `problems` may hold only
+  some of those stored, at least one, since a checker may stop at the
+  first way an entry fails its own check (where it stopped before the
+  countersignature, "unchecked" is taken in its place). Breaches are
+  still compared in full. `--words` keeps the stored order. The verdict
+  now says how many cases were skipped and not tested, the functions
+  skipped entirely are listed, and `--no-skip` counts any skip as a
+  failure. A reply holding both an answer and a skip is a fault of the
+  adapter. The example adapter reports an error it does not expect as a
+  crash, where it gave the code `check-failed`. The guide gains a table
+  of every function the shared test files name: its section of the
+  format description, whether another implementation may skip it, where
+  its answer is declared, and how its cases are written; and it lists
+  the stored values that are particular to Provared's own library.
+
 - **An OpenTelemetry bridge**, `provared-opentelemetry` 0.1.0, in
   `integrations/opentelemetry/` (not published). It puts each tool call's
   receipt on the trace span that observability tools already show, in one

@@ -9,7 +9,7 @@ import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { asciiJson, difference, readSets, runKit } from '../kit.mjs';
+import { asciiJson, describe, difference, readSets, runKit } from '../kit.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const kit = join(here, '..');
@@ -125,7 +125,7 @@ test('other sentences, more or fewer, in real answers pass by codes and shape, a
   // A code changed inside the same answers is still caught.
   const c = await runKit({ command: node, args: faulty('other-sentences-and-code'), sets });
   assert.equal(c.ok, false);
-  assert.ok(c.failures.some((f) => /got "not-the-right-code"/.test(f.why)));
+  assert.ok(c.failures.some((f) => /got "not-the-right-code"|not among the stored findings.*"not-the-right-code"/.test(f.why)));
 });
 
 test('cases the adapter sets aside are skipped, and with nothing compared the kit does not pass', async () => {
@@ -183,9 +183,96 @@ test('the command: its summary and its exit codes', () => {
   const bad = cli('--file', 'base64url.json', '--', node, ...faulty('wrong-code'));
   assert.equal(bad.status, 1);
   assert.match(bad.stdout, /- base64url\.json: an impossible length\n {4}answer\.refused\.code: expected "bad-base64url", got "not-the-right-code"/);
-  assert.match(bad.stdout, /Not every case matched\./);
+  assert.match(bad.stdout, /Not every case matched: 6 of 11 compared failed\./);
   assert.equal(cli('--file', 'no-such.json', '--', node).status, 2);
   assert.equal(cli('--file', 'base64url.json').status, 2);
   assert.equal(cli('--bogus', '--', node).status, 2);
   assert.equal(cli('--help').status, 0);
+});
+
+test('findings: any order by codes and shape, the stored order word for word (choice K-30)', () => {
+  const a = { code: 'chain-broken', message: 'A.' };
+  const b = { code: 'time-went-backwards', message: 'B.' };
+  const c = { code: 'over-limit', message: 'C.', at: 3 };
+  const d = { code: 'over-count-limit', message: 'D.' };
+  const book = (problems, breaches) => ({ ok: { problems: [], entries: [{ index: 2, kind: 'stub', problems, breaches }] } });
+  const stored = book([a, b], [c, d]);
+  assert.equal(difference(stored, book([b, a], [d, c])), null);
+  assert.match(difference(stored, book([b, a], [c, d]), true), /entries\[0\]\.problems\[0\]\.code: expected "chain-broken"/);
+  // A breach left out, or one added, or one given twice, fails.
+  assert.match(difference(stored, book([a, b], [c])), /breaches: 1 finding\(s\) missing/);
+  assert.match(difference(stored, book([a, b], [c, d, { code: 'prohibited', message: 'E.' }])), /breaches\[2\]: not among the stored findings/);
+  assert.match(difference(stored, book([a, b], [c, d, d])), /breaches\[2\]: not among the stored findings/);
+  assert.match(difference(stored, book([a, b], [{ ...c, at: 4 }, d])), /breaches\[0\]: not among the stored findings/);
+  // A list of findings that is not an entry's problems must be whole, in any order.
+  const top = { ok: { problems: [a, b] } };
+  assert.equal(difference(top, { ok: { problems: [b, a] } }), null);
+  assert.match(difference(top, { ok: { problems: [a] } }), /problems: 1 finding\(s\) missing/);
+  // Messages are still only texts.
+  assert.equal(difference(stored, book([{ ...b, message: 'X.' }, a], [d, c])), null);
+  assert.match(difference(stored, book([{ ...b, message: 7 }, a], [d, c])), /expected a text, got 7/);
+});
+
+test("an entry's problems may stop at the first, never at none (choices K-31, K-32)", () => {
+  const a = { code: 'signature-invalid', message: 'A.' };
+  const b = { code: 'countersignature-wrong-stub', message: 'B.' };
+  const entry = (problems, countersignature) => ({ ok: { entries: [{ index: 1, kind: 'stub', problems, countersignature }] } });
+  const stored = entry([a, b], { state: 'invalid', signatures: [] });
+  assert.equal(difference(stored, entry([a], { state: 'invalid', signatures: [] })), null);
+  assert.equal(difference(stored, entry([b], { state: 'invalid', signatures: [] })), null);
+  assert.match(difference(stored, entry([], { state: 'invalid', signatures: [] })), /problems: expected at least one of 2 finding\(s\), got none/);
+  assert.match(difference(stored, entry([a, a], { state: 'invalid', signatures: [] })), /problems\[1\]: not among the stored findings/);
+  assert.match(difference(stored, entry([a], { state: 'invalid', signatures: [] }), true), /problems: expected a list of 2, got a list of 1/);
+  // Stopped before the countersignature: "unchecked" is taken in place of its stored state.
+  assert.equal(difference(stored, entry([a], { state: 'unchecked', signatures: [] })), null);
+  assert.match(difference(stored, entry([a, b], { state: 'unchecked', signatures: [] })), /countersignature\.state: expected "invalid", got "unchecked"/);
+  assert.match(difference(stored, entry([a], { state: 'valid', signatures: [] })), /countersignature\.state: expected "invalid", got "valid"/);
+  // An entry with no stored problem must give none.
+  assert.match(difference(entry([], { state: 'valid', signatures: [] }), entry([a], { state: 'valid', signatures: [] })), /problems\[0\]: not among the stored findings/);
+});
+
+const BOOK_FILES = ['books.json', 'chained-books.json', 'held-seals.json', 'witness-books.json', 'check-before.json'];
+test('in real answers: findings reordered, or problems cut to the first, pass; a finding dropped, added or emptied fails', { timeout: 600000 }, async () => {
+  const sets = readSets(vectors, BOOK_FILES);
+  const go = (mode, words = false) => runKit({ command: node, args: faulty(mode), sets, words });
+  for (const mode of ['reorder', 'first-problem']) {
+    const r = await go(mode);
+    assert.deepEqual(r.failures, [], mode);
+    assert.equal(r.ok, true, mode);
+    const w = await go(mode, true);
+    assert.equal(w.ok, false, `${mode} fails word for word`);
+  }
+  for (const mode of ['drop-finding', 'extra-finding', 'drop-breach', 'no-problems']) {
+    const r = await go(mode);
+    assert.equal(r.ok, false, mode);
+    assert.ok(r.totals.failed > 0, mode);
+  }
+});
+
+test('a line holding both "skip" and "answer" is a fault of the adapter, not a skip', async () => {
+  const r = await run(faulty('skip-and-answer'));
+  assert.equal(r.totals.skipped, 0);
+  assert.equal(r.totals.failed, 48);
+  assert.equal(r.failures[0].why, 'the adapter\'s line holds both "answer" and "skip"');
+});
+
+test('skips: named in the verdict, whole functions listed, and failures with --no-skip', async () => {
+  const r = await run(faulty('skip'));
+  assert.deepEqual(r.skippedFunctions, ['fromBase64url', 'parseCanonical']);
+  const text = describe(r).join('\n');
+  assert.match(text, /Functions skipped entirely \(2\): fromBase64url, parseCanonical\./);
+  assert.match(text, /No case was compared; 48 skipped and not tested\./);
+  const cli = (...a) => spawnSync(node, [join(kit, 'run.mjs'), ...a], { encoding: 'utf8' });
+  const files = ['--file', 'base64url.json', '--file', 'canonical-json.json'];
+  const skipOne = [quiet, join(here, 'adapters', 'skip-one-file.mjs')];
+  const some = cli(...files, '--', node, ...skipOne);
+  assert.equal(some.status, 0, some.stderr);
+  assert.match(some.stdout, /11 case\(s\) compared, all matched; 37 skipped and not tested\./);
+  assert.match(some.stdout, /Functions skipped entirely \(1\): parseCanonical\./);
+  const strict = cli('--no-skip', ...files, '--', node, ...skipOne);
+  assert.equal(strict.status, 1);
+  assert.match(strict.stdout, /--no-skip counts a skip as a failure/);
+  const quietRun = cli('--quiet', '--file', 'base64url.json', '--', node, ...faulty('crash-always'));
+  assert.equal(quietRun.status, 1);
+  assert.match(quietRun.stdout, /^Stopped early: the adapter failed 4 times in a row/m);
 });

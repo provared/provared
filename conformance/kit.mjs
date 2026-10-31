@@ -14,6 +14,14 @@ import { join } from 'node:path';
 /** The lists whose texts are this library's own sentences (test-vectors/README.md). */
 const SENTENCE_LISTS = new Set(['notes', 'limits']);
 
+/**
+ * The lists of findings. The order in which a checker reports several
+ * findings for one entry is not part of the format (spec/provared-format.md,
+ * section 8): without words, these lists are compared as sets that may hold
+ * an item more than once (choice K-30).
+ */
+const FINDING_LISTS = new Set(['problems', 'breaches', 'disclosureProblems']);
+
 const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const show = (v) => {
   const text = JSON.stringify(v);
@@ -21,12 +29,79 @@ const show = (v) => {
 };
 const step = (path, key) => (typeof key === 'number' ? `${path}[${key}]` : path ? `${path}.${key}` : key);
 
+/** A value written with its members in name order, members named "message" left out. */
+function sortKey(value) {
+  if (Array.isArray(value)) return `[${value.map(sortKey).join(',')}]`;
+  if (isObject(value)) {
+    const names = Object.keys(value).filter((n) => n !== 'message').sort();
+    return `{${names.map((n) => `${JSON.stringify(n)}:${sortKey(value[n])}`).join(',')}}`;
+  }
+  return JSON.stringify(value) ?? 'undefined';
+}
+
+/** Is this object an entry of a book or a Show (it has a place and a kind)? */
+const isEntry = (v) => isObject(v) && typeof v.index === 'number' && typeof v.kind === 'string';
+
+/**
+ * Two lists of findings compared without regard to order. With part true,
+ * the answer may hold any items of the stored list, each no more often than
+ * stored, and at least one where any is stored: a checker MAY stop at the
+ * first way an entry fails its own check, but MUST report at least one
+ * (choice K-31).
+ */
+function findingsDifference(expected, got, path, part) {
+  if (!Array.isArray(got)) return `${path}: expected a list, got ${show(got)}`;
+  const pool = new Map();
+  for (const item of expected) {
+    const k = sortKey(item);
+    if (!pool.has(k)) pool.set(k, []);
+    pool.get(k).push(item);
+  }
+  const pairs = [];
+  for (let i = 0; i < got.length; i++) {
+    const left = pool.get(sortKey(got[i]));
+    if (!left || left.length === 0) {
+      return `${step(path, i)}: not among the stored findings, or given more often than stored: ${show(got[i])}`;
+    }
+    pairs.push([left.shift(), got[i], i]);
+  }
+  const missing = [...pool.values()].flat();
+  if (part) {
+    if (expected.length > 0 && got.length === 0) return `${path}: expected at least one of ${expected.length} finding(s), got none`;
+  } else if (missing.length) {
+    return `${path}: ${missing.length} finding(s) missing, such as ${show(missing[0])}`;
+  }
+  for (const [want, have, i] of pairs) {
+    const d = difference(want, have, false, step(path, i), null);
+    if (d) return d;
+  }
+  return null;
+}
+
+/**
+ * A countersignature that a checker which stopped early left unchecked:
+ * where the stored entry reports a fault in its countersignature and the
+ * answer reports none (it stopped before reaching it), "unchecked" with no
+ * signatures is taken in place of the stored state (choice K-32).
+ */
+function leftUnchecked(expectedEntry, gotEntry) {
+  const codes = (list) => (Array.isArray(list) ? list.map((p) => (isObject(p) ? p.code : null)) : []);
+  const isCounter = (c) => typeof c === 'string' && c.startsWith('countersignature-');
+  if (!codes(expectedEntry.problems).some(isCounter)) return false;
+  if (codes(gotEntry.problems).some(isCounter)) return false;
+  const c = gotEntry.countersignature;
+  return isObject(c) && c.state === 'unchecked' && Array.isArray(c.signatures) && c.signatures.length === 0 && Object.keys(c).length === 2;
+}
+
 /**
  * The first place where an answer differs from the stored one, or null where
- * they match. With words false, the text of each member named "message"
- * need only be a text, and in a list named "notes" or "limits" the texts are
- * neither compared nor counted: only the items that are not texts (a slip's
- * limits, for example) are compared, in order (choice K-6).
+ * they match. With words false: the text of each member named "message"
+ * need only be a text; in a list named "notes" or "limits" the texts are
+ * neither compared nor counted, and only the items that are not texts (a
+ * slip's limits, for example) are compared, in order (choice K-6); the
+ * lists of findings are compared in any order (K-30); and an entry's
+ * "problems" may hold only some of the stored ones, at least one (K-31,
+ * K-32). With words true, everything is compared exactly, in order.
  */
 export function difference(expected, got, words = false, path = 'answer', key = null) {
   if (!words && key === 'message' && typeof expected === 'string') {
@@ -49,6 +124,7 @@ export function difference(expected, got, words = false, path = 'answer', key = 
       }
       return null;
     }
+    if (!words && FINDING_LISTS.has(key)) return findingsDifference(expected, got, path, false);
     if (got.length !== expected.length) return `${path}: expected a list of ${expected.length}, got a list of ${got.length}`;
     for (let i = 0; i < expected.length; i++) {
       const d = difference(expected[i], got[i], words, step(path, i), null);
@@ -64,8 +140,14 @@ export function difference(expected, got, words = false, path = 'answer', key = 
     for (const name of Object.keys(got)) {
       if (!Object.hasOwn(expected, name)) return `${step(path, name)}: not expected, got ${show(got[name])}`;
     }
+    const entry = !words && isEntry(expected);
     for (const name of Object.keys(expected)) {
-      const d = difference(expected[name], got[name], words, step(path, name), name);
+      let d;
+      if (entry && name === 'problems' && Array.isArray(expected[name])) {
+        d = findingsDifference(expected[name], got[name], step(path, name), true);
+      } else if (entry && name === 'countersignature' && leftUnchecked(expected, got)) {
+        d = null;
+      } else d = difference(expected[name], got[name], words, step(path, name), name);
       if (d) return d;
     }
     return null;
@@ -94,7 +176,7 @@ export function readSets(folder, only = []) {
  * (U+2028 and U+2029 among them), whatever the case holds.
  */
 export function asciiJson(value) {
-  return JSON.stringify(value).replace(/[\u007f-￿]/g, (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`);
+  return JSON.stringify(value).replace(/[\u007f-\uffff]/g, (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`);
 }
 
 /** One running adapter: ask() sends a request and waits for its line. */
@@ -191,6 +273,7 @@ function readReply(item, id, timeout) {
   }
   if (!isObject(reply)) return { problem: `the adapter's line is not a JSON object: ${show(reply)}`, restart: true };
   if (reply.id !== id) return { problem: `the adapter answered request ${show(reply.id)}, not request ${id}`, restart: true };
+  if (Object.hasOwn(reply, 'skip') && Object.hasOwn(reply, 'answer')) return { problem: 'the adapter\'s line holds both "answer" and "skip"' };
   if (Object.hasOwn(reply, 'skip')) return { skip: typeof reply.skip === 'string' ? reply.skip : 'set aside by the adapter' };
   if (!Object.hasOwn(reply, 'answer')) return { problem: 'the adapter\'s line holds neither "answer" nor "skip"' };
   return { answer: reply.answer };
@@ -199,10 +282,11 @@ function readReply(item, id, timeout) {
 /**
  * Runs every case of the sets through the adapter. Returns a report:
  * {files: [{file, function, passed, failed, skipped, notRun}], failures:
- * [{file, name, why}], totals, ok}. ok is true only where at least one case
- * was compared and every case compared matched.
+ * [{file, name, why}], totals, skippedFunctions, ok}. ok is true only where
+ * at least one case was compared, every case compared matched, and, with
+ * noSkip, no case was skipped.
  */
-export async function runKit({ command, args = [], cwd, sets, words = false, timeout = 60000, maxRestarts = 3, onCase }) {
+export async function runKit({ command, args = [], cwd, sets, words = false, noSkip = false, timeout = 60000, maxRestarts = 3, onCase }) {
   const files = [];
   const failures = [];
   let adapter = null;
@@ -245,14 +329,23 @@ export async function runKit({ command, args = [], cwd, sets, words = false, tim
   if (adapter) adapter.stop();
   const totals = { passed: 0, failed: 0, skipped: 0, notRun: 0 };
   for (const f of files) for (const k of Object.keys(totals)) totals[k] += f[k];
-  const ok = totals.failed === 0 && totals.notRun === 0 && totals.passed > 0;
-  return { words, files, failures, totals, gaveUp, ok };
+  // The functions none of whose cases was compared, because each was skipped.
+  const byFunction = new Map();
+  for (const f of files) {
+    const t = byFunction.get(f.function) ?? { compared: 0, skipped: 0 };
+    t.compared += f.passed + f.failed;
+    t.skipped += f.skipped;
+    byFunction.set(f.function, t);
+  }
+  const skippedFunctions = [...byFunction].filter(([, t]) => t.compared === 0 && t.skipped > 0).map(([name]) => name).sort();
+  const ok = totals.failed === 0 && totals.notRun === 0 && totals.passed > 0 && !(noSkip && totals.skipped > 0);
+  return { words, noSkip, files, failures, totals, skippedFunctions, gaveUp, ok };
 }
 
 /** The report in plain words, as lines of text. */
 export function describe(report, { showFailures = 20 } = {}) {
   const out = [];
-  out.push(`Compared: ${report.words ? 'every value, words included' : 'codes and the shape of each answer (not the words meant for people)'}`);
+  out.push(`Compared: ${report.words ? 'every value, words included, in order' : 'codes and the shape of each answer (not the words meant for people; findings in any order)'}`);
   out.push('');
   const width = Math.max(4, ...report.files.map((f) => f.file.length));
   out.push(`${'File'.padEnd(width)}  passed  failed  skipped  not run`);
@@ -270,11 +363,21 @@ export function describe(report, { showFailures = 20 } = {}) {
     }
     out.push('');
   }
+  if (report.skippedFunctions?.length) {
+    out.push(`Functions skipped entirely (${report.skippedFunctions.length}): ${report.skippedFunctions.join(', ')}.`);
+    out.push('');
+  }
   if (report.gaveUp) out.push(`Stopped early: ${report.gaveUp}.`);
   const t = report.totals;
-  out.push(`Files: ${report.files.length}. Cases: ${t.passed + t.failed + t.skipped + t.notRun}. Passed: ${t.passed}. Failed: ${t.failed}. Skipped: ${t.skipped}. Not run: ${t.notRun}.`);
-  if (report.ok) out.push('Every case compared matched. This shows agreement on these cases only; it is not a certificate.');
-  else if (t.passed + t.failed === 0) out.push('No case was compared.');
-  else out.push('Not every case matched.');
+  const n = (x) => x.toLocaleString('en-GB');
+  const compared = t.passed + t.failed;
+  out.push(`Files: ${report.files.length}. Cases: ${n(compared + t.skipped + t.notRun)}. Passed: ${n(t.passed)}. Failed: ${n(t.failed)}. Skipped: ${n(t.skipped)}. Not run: ${n(t.notRun)}.`);
+  const skipped = t.skipped ? `; ${n(t.skipped)} skipped and not tested` : '';
+  if (report.ok) {
+    out.push(`${n(compared)} case(s) compared, all matched${skipped}. This shows agreement on these cases only; it is not a certificate.`);
+  } else if (compared === 0) out.push(`No case was compared${skipped}.`);
+  else if (t.failed === 0 && t.notRun === 0 && report.noSkip) {
+    out.push(`${n(compared)} case(s) compared, all matched, but ${n(t.skipped)} skipped, and --no-skip counts a skip as a failure.`);
+  } else out.push(`Not every case matched: ${n(t.failed)} of ${n(compared)} compared failed${t.notRun ? `, ${n(t.notRun)} not run` : ''}${skipped}.`);
   return out;
 }

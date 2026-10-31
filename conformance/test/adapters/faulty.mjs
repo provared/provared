@@ -7,6 +7,15 @@
 //                 words, and two sentences more (nothing else changes)
 //   other-sentences-and-code  the same, and the first code in the answer
 //                 changed as well
+//   reorder       every list of findings ("problems", "breaches") of two
+//                 items or more given in reverse order
+//   first-problem every entry's list of problems cut to its first item, as
+//                 a checker that stops at the first fault may give it
+//   drop-finding  the last item of every list of findings left out
+//   extra-finding the first item of every list of findings given twice
+//   drop-breach   the last item of every list of breaches left out
+//   no-problems   every entry's list of problems emptied
+//   skip-and-answer  every line holds both "skip" and "answer"
 //   skip          every case is set aside
 //   crash         stops at the case named by the second argument
 //   hang          never answers the case named by the second argument
@@ -50,7 +59,29 @@ async function handle(request) {
     };
     walk(answer);
   }
+  if (FINDING_MODES.has(mode)) findings(answer, null, null);
+  if (mode === 'skip-and-answer') return write({ id: request.id, skip: 'both', answer });
   write({ id: hit && mode === 'wrong-id' ? request.id + 1000 : request.id, answer });
+}
+
+const FINDING_MODES = new Set(['reorder', 'first-problem', 'drop-finding', 'extra-finding', 'drop-breach', 'no-problems']);
+const isEntry = (v) => v !== null && typeof v === 'object' && typeof v.index === 'number' && typeof v.kind === 'string';
+/** Changes the lists of findings in an answer as the mode says. */
+function findings(v, key, parent) {
+  if (Array.isArray(v)) {
+    for (const x of v) findings(x, null, v);
+    if (key !== 'problems' && key !== 'breaches') return;
+    if (mode === 'reorder' && v.length >= 2) v.reverse();
+    if (mode === 'drop-finding' && v.length >= 1) v.pop();
+    if (mode === 'extra-finding' && v.length >= 1) v.push({ ...v[0] });
+    if (mode === 'drop-breach' && key === 'breaches' && v.length >= 1) v.pop();
+    if (key === 'problems' && isEntry(parent)) {
+      if (mode === 'first-problem') v.splice(1);
+      if (mode === 'no-problems') v.splice(0);
+    }
+    return;
+  }
+  if (v !== null && typeof v === 'object') for (const [k, x] of Object.entries(v)) findings(x, k, v);
 }
 
 let rest = '';
