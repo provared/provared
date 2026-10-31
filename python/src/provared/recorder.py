@@ -43,8 +43,6 @@ import contextvars
 import copy
 import datetime
 import inspect
-import math
-import re
 import threading
 from collections.abc import Mapping
 

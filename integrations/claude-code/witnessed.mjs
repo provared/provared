@@ -486,6 +486,7 @@ export function createWitnessing({ folder, recorder, books, timeoutMs = 10000, r
               w.problem = problemFrom(e);
               if (w.held !== null) w.held = undefined;
             }));
+          // eslint-disable-next-line no-unmodified-loop-condition -- closed is set by close(), which may run while the loop waits.
           } while (w.again && !closed);
         } finally {
           w.running = false;

@@ -155,8 +155,12 @@ const seals = books.flatMap((b) => b.result.entries.filter((e) => e.kind === 'se
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const blockIn = (answer, re) => { const m = answer.match(re); if (!m) throw new Error(`the checker's answer has no block matching ${re}`); return m[0].trimEnd(); };
 const block = (re) => blockIn(text, re);
+// eslint-disable-next-line security/detect-non-literal-regexp -- built from an entry number, which holds only digits.
 const slipBlock = slipsAll.map(({ e, b }) => blockIn(b.text, new RegExp(`^Entry ${e.index}: SLIP[^\\n]*\\n(?:[^\\n]+\\n)*`, 'm'))).join('\n\n');
-const summaryBlock = block(/^Summary\n(?:[^\n]+\n)*/m);
+// The checker's summary: its heading and the lines up to the first empty one.
+// eslint-disable-next-line security/detect-unsafe-regex -- each repeated line ends in a line break the line cannot match, so matching takes time in proportion to the input.
+const SUMMARY = /^Summary\n(?:[^\n]+\n)*/m;
+const summaryBlock = block(SUMMARY);
 
 const byDay = new Map();
 const byAction = new Map();
@@ -232,7 +236,7 @@ const booksSection = !several ? '' : `
 ${books.map((b) => { const own = b.result.entries.filter((e) => e.kind === 'stub'); return `    <tr><td><a href="${b.file}">${b.file}</a></td><td>${b.result.size}</td><td>${own.length}</td><td>${esc(when(own[0]?.content.when))}</td><td>${esc(when(own.at(-1)?.content.when))}</td></tr>`; }).join('\n')}
   </tbody>
 </table>
-${kept.map((k) => `<p>The checker's summary for ${k.file} (${k.result.size} entries, about ${Math.round(k.bytes.length / 1024)} KB), exactly as printed; the whole answer is <a href="${k.answer}">${k.answer}</a>.</p>\n<pre>${esc(blockIn(k.text, /^Summary\n(?:[^\n]+\n)*/m))}</pre>`).join('\n')}
+${kept.map((k) => `<p>The checker's summary for ${k.file} (${k.result.size} entries, about ${Math.round(k.bytes.length / 1024)} KB), exactly as printed; the whole answer is <a href="${k.answer}">${k.answer}</a>.</p>\n<pre>${esc(blockIn(k.text, SUMMARY))}</pre>`).join('\n')}
 <p>Each kept book is checked as the book in force is, naming the same keys:</p>
 <pre>${kept.map((k) => command(k.file)).join('\n')}</pre>`;
 

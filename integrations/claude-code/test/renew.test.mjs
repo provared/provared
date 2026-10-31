@@ -58,6 +58,7 @@ test('a new slip is taken while the service runs: no call finds it gone, and stu
     let renewing = true;
     const asked = [];
     const loop = (async () => {
+      // eslint-disable-next-line no-unmodified-loop-condition -- set to false by the renewal command when it ends, while the loop waits.
       while (renewing) {
         const response = await fetch(`http://127.0.0.1:${port}/before`, { method: 'POST', body: JSON.stringify({ action: 'provared.code.read' }) });
         asked.push({ ok: response.ok, allowed: (await response.json()).allowed, slip: (await status(port)).slip });

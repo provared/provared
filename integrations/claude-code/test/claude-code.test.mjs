@@ -96,6 +96,7 @@ const NAMED = [
   ['echo \\" ; rm -rf build ; echo \\"', 'delete'],
   ["echo \\' ; rm -rf build ; echo \\'", 'delete'],
   ['echo `" ; Remove-Item -Recurse build ; echo `"', 'delete'],
+  // eslint-disable-next-line no-template-curly-in-string -- shell text on purpose: the recorder must read ${...} as the shell does.
   ['echo ${#PATH}; rm -rf build', 'delete'],
   ['Write-Output hi <# note #>; Remove-Item -Recurse build', 'delete'],
   ['2>/dev/null rm -rf build', 'delete'],
@@ -121,6 +122,7 @@ const NAMED = [
   ['2>/dev/null bash -c "rm -rf x"', 'delete'],
   ['sudo -u root bash -c "rm -rf x"', 'delete'],
   ['Write-Output hi <# note #>; powershell -Command "ri x"', 'delete'],
+  // eslint-disable-next-line no-template-curly-in-string -- shell text on purpose: the recorder must read ${...} as the shell does.
   ['echo ${#PATH}; bash -c "rm -rf x"', 'delete'],
   ['ssh host shred -u secrets', 'delete'],
   // A command line run by eval, iex or Invoke-Expression, by find -exec through a shell, or by cmd /c written without a space.
@@ -356,7 +358,9 @@ const NAMED = [
   ["echo \"$( (cd /; rm x) )\"", 'delete'],
   ["echo \"$((1 + 2))\"", 'run'],
   ["echo \"$(( $(rm -rf x) + 1 ))\"", 'delete'],
+  // eslint-disable-next-line no-template-curly-in-string -- shell text on purpose: the recorder must read ${...} as the shell does.
   ["echo \"${HOME}/rm\"", 'run'],
+  // eslint-disable-next-line no-template-curly-in-string -- shell text on purpose: the recorder must read ${...} as the shell does.
   ["echo \"${x:-$(rm -rf x)}\"", 'delete'],
   ["echo \"a `echo b` $(rm c)\"", 'delete'],
   ["Write-Output \"`$(Remove-Item x)\"", 'delete'],
@@ -392,6 +396,7 @@ const NAMED = [
   ["echo \"$(# )\nrm -rf y)\"", 'delete'],
   ["echo \"$(echo a;# )\nrm -rf y)\"", 'delete'],
   ["echo \"$(echo a#b) rm the old files\"", 'run'],
+  // eslint-disable-next-line no-template-curly-in-string -- shell text on purpose: the recorder must read ${...} as the shell does.
   ["echo \"$(echo ${#x}) rm the old files\"", 'run'],
   ["echo \"$(echo $#) rm the old files\"", 'run'],
   ["echo \"$(echo case x) rm the old files\"", 'run'],

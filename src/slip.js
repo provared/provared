@@ -22,11 +22,14 @@ const MAX_PERIOD_SECONDS = 366 * 86400;
 // begins or ends with a hyphen, and the last is not all digits. A browser
 // writes a page's address in exactly this form, with a name in another
 // script written in its "xn--" form, which the rule takes as it is.
+// eslint-disable-next-line security/detect-unsafe-regex -- each part has a bounded length, and a full stop or colon separates the parts.
 const ORIGIN = /^(https|http):\/\/([a-z0-9.-]{1,253})(?::([1-9][0-9]{0,4}))?$/;
+// eslint-disable-next-line security/detect-unsafe-regex -- a label has at most 63 characters.
 const LABEL = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
 
 function checkOrigin(origin, rpId) {
   f.text(origin, 1, 300, 'issuer.origin');
+  // eslint-disable-next-line security/detect-unsafe-regex -- a name has at most 253 characters.
   if (typeof rpId !== 'string' || !/^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$/.test(rpId)) {
     throw f.fail('issuer.rpId', 'must be a website name in lower case, such as example.org.');
   }

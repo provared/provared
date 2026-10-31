@@ -1,0 +1,14 @@
+{
+  "name": "provared-lint",
+  "private": true,
+  "description": "Development tools only: the static analysis run in .github/workflows/tests.yml. Not part of any published package.",
+  "type": "module",
+  "devDependencies": {
+    "eslint": "10.13.0",
+    "eslint-plugin-security": "4.2.0",
+    "globals": "17.13.0"
+  },
+  "scripts": {
+    "lint": "cd ../.. && node tools/lint/node_modules/eslint/bin/eslint.js --config tools/lint/eslint.config.js --max-warnings 0 src bin net page tools integrations gateway sealer"
+  }
+}

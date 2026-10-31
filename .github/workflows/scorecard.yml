@@ -16,20 +16,34 @@
 # What it sends: the result, signed with this run's GitHub identity token,
 # to the Scorecard project's public service (api.scorecard.dev), which
 # serves the badge; and the same result to GitHub's code scanning page of
-# this repository. It uses no secret.
+# this repository. It uses no stored secret, only the run's own automatic
+# token.
 #
 # Laid out as the Scorecard project's own example for a public repository
-# (https://github.com/ossf/scorecard-action, examples/scorecard.yml). The
-# Scorecard service accepts a published result only from a workflow that
-# keeps to its rules: no environment variables or defaults at the top or in
-# the job, no write permission at the top, and in the job only the four
-# actions it names (the three below and its own).
+# (examples/scorecard.yml in https://github.com/ossf/scorecard-action, as
+# on its main branch, read 31 October 2026; the file is not in the commit
+# pinned below). The Scorecard service accepts a published result only
+# from a workflow that keeps to its rules: no environment variables or
+# defaults at the top or in the job, no write permission at the top, and
+# in the job only actions from its short approved list.
 #
 # Unlike the other workflows here, one action is not GitHub's own:
 # ossf/scorecard-action, made by the Open Source Security Foundation. Every
 # action is pinned to the exact commit of a released version (the comment
-# gives the version), so that a later change to a tag cannot change what
-# runs here.
+# gives the version), so that a later change to a tag cannot change the
+# action's own files. For the Scorecard action that does not fix everything
+# that runs: its action.yaml, at the pinned commit, runs the container
+# docker://ghcr.io/ossf/scorecard-action:v2.5.0, chosen by its tag, so the
+# Scorecard project could change that container without changing the
+# commit. The image the tag named on 31 October 2026 was
+# sha256:1e1481c65fc2407d3fd6ab18a23c741eb4d1c0d9359ebafc4b3ab13aa61d8627.
+# It cannot be pinned by that fingerprint here: the Scorecard service
+# accepts a result only from the named action, not from the container run
+# directly. What the container can reach is small: the job's token can
+# only send results to the code scanning page and ask for an identity
+# token; it has no "contents" permission, so it cannot change the
+# repository. At worst a changed container could publish a false result,
+# on this repository's Security tab and at api.scorecard.dev.
 
 name: Scorecard
 
@@ -50,6 +64,8 @@ concurrency:
 permissions: {}
 
 # No job here may read or write GitHub's cache for this repository.
+# GitHub's workflow syntax documents this key; actionlint 1.7.12 does not
+# know it yet and reports it, wrongly.
 cache-mode: none
 
 jobs:

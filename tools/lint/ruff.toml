@@ -1,0 +1,33 @@
+# Ruff settings for the Python in this repository: static analysis that
+# looks for real faults, not style. Run from the top of the repository with
+#   ruff check --config tools/lint/ruff.toml python
+# Development tools only: nothing here is published.
+
+target-version = "py311"
+extend-exclude = [".venv*", "build", "dist"]
+
+[lint]
+select = [
+  "E9",    # the file cannot be read as Python
+  "F",     # names never defined, imports never used, and the like (Pyflakes)
+  "PLE",   # errors that Pylint finds
+  "B",     # likely faults (flake8-bugbear)
+  "S",     # security faults (flake8-bandit): assert used for checks, eval,
+           # weak fingerprints, subprocess with shell=True, pickle, and so on
+  "ASYNC", # blocking calls and busy waits in asynchronous code
+]
+ignore = [
+  # Each of these reports a matter of style or a choice the code makes on
+  # purpose, nearly everywhere it occurs, not a fault:
+  "B007",  # a loop variable not used in the loop's body
+  "B905",  # zip() without strict=: here it pairs lists of known equal length
+  "S110",  # try-except-pass: used on purpose where an error is set aside
+  "S112",  # try-except-continue: the same
+  "S603",  # any subprocess call; the fault, shell=True, is S602 and stays on
+]
+
+[lint.per-file-ignores]
+# Tests are not reached by anyone else's input. They use chance on purpose,
+# and define small functions in a loop that are called, and their threads
+# joined, before the loop moves on.
+"**/tests/**" = ["S311", "B023"]

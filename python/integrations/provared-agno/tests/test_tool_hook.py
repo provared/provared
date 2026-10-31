@@ -436,7 +436,7 @@ class TheArguments(Runs, unittest.TestCase):
         world = World()
         received = []
 
-        def send_message(to: str, text: str, client: Client = Field(default_factory=Client)) -> str:
+        def send_message(to: str, text: str, client: Client = Field(default_factory=Client)) -> str:  # noqa: B008 -- the framework reads Field(default_factory=...) to make a new client for each call; nothing is shared
             """Send a message through a client made for the call."""
             received.append(client)
             return 'sent'
@@ -1429,7 +1429,7 @@ class Asynchronous(Runs, unittest.TestCase):
 
         async def main():
             run = asyncio.ensure_future(first.arun(QUESTION))
-            while 'started' not in times:
+            while 'started' not in times:  # noqa: ASYNC110 -- waits for a value another task writes into a shared dict; the test watches that dict, as the hook leaves it
                 await asyncio.sleep(0.01)
             run.cancel()
             [ended] = await asyncio.gather(run, return_exceptions=True)

@@ -43,7 +43,7 @@ def _clone_any(value):
 def _callee(run):
     """The function whose body a call of run runs: run itself, or, for an
     object that can be called, its class's __call__."""
-    return run if inspect.isroutine(run) or isinstance(run, functools.partial) else getattr(type(run), '__call__', None)
+    return run if inspect.isroutine(run) or isinstance(run, functools.partial) else getattr(type(run), '__call__', None)  # noqa: B004 -- fetches the class's __call__ to read its body; not a test of whether run can be called
 
 
 def _generator(run):

@@ -72,7 +72,7 @@ from tools.env_probe import get_environment_probe_line  # noqa: E402
 
 get_version_info()
 get_environment_probe_line()
-platform.uname().processor
+platform.uname().processor  # noqa: B018 -- read once on purpose, so that the answer is cached before the guard that refuses new programs starts
 
 ORDER = 'provared.order.place'
 MESSAGE = 'provared.message.send'

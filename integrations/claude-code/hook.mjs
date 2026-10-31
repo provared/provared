@@ -58,6 +58,7 @@ async function readInput() {
 function fallbackForm() {
   const mark = `@${crypto.randomUUID()}@`;
   const args = JSON.parse(given, (key, value, context) => (typeof value === 'number' && !Number.isFinite(value) && context?.source ? mark + context.source : value)).tool_input ?? {};
+  // eslint-disable-next-line security/detect-non-literal-regexp -- built from a random UUID made here, which holds only hexadecimal digits and hyphens.
   return (JSON.stringify(args) ?? 'null').replaceAll(new RegExp(`"${mark}([^"]*)"`, 'g'), '$1');
 }
 

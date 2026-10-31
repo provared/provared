@@ -113,6 +113,7 @@ const RANDOM = /^[A-Za-z0-9_-]{43}$/;
 export function isRandom(value) {
   return typeof value === 'string' && RANDOM.test(value) && Buffer.from(value, 'base64url').toString('base64url') === value;
 }
+// eslint-disable-next-line security/detect-unsafe-regex -- the number has at most nine digits, so the text it can match is short and bounded.
 const BOOK_NAME = /^book(?:-[1-9][0-9]{0,8})?\.jsonl$/;
 const KEPT_NAME = /^book-([1-9][0-9]{0,8})\.jsonl$/;
 const PIECE = 4 * 1024 * 1024;

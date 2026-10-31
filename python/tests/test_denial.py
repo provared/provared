@@ -10,7 +10,7 @@ import pathlib
 import re
 import unittest
 
-from provared import FINDING_CODES, NotTaken, check_book, denial_codes, record_tools, write_denial
+from provared import FINDING_CODES, NotTaken, Refusal, check_book, denial_codes, record_tools, write_denial
 from provared.dev import development_recorder
 
 ORDER = 'supplies.order'
@@ -120,9 +120,9 @@ class Denials(unittest.TestCase):
         made = opened()
         fields = {'slip': made.slip_fingerprint, 'action': ORDER, 'source': 'check', 'codes': ['over-limit']}
         self.assertEqual(write_denial(fields, made.agent_private_keys)['record']['signatures'][0]['protected'][:10], 'eyJ0eXAiOi')
-        with self.assertRaises(Exception):
+        with self.assertRaises(Refusal):
             write_denial({**fields, 'codes': ['details-not-added']}, made.agent_private_keys)
-        with self.assertRaises(Exception):
+        with self.assertRaises(Refusal):
             write_denial({**fields, 'source': 'person'}, made.agent_private_keys)
 
     def test_the_list_of_codes_is_the_table_of_the_list_of_threats(self):
