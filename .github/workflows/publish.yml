@@ -31,7 +31,9 @@
 #      - npm: the package is staged ("npm stage publish"), not published.
 #        It becomes public only when the founder approves it on
 #        npmjs.com, which asks for the founder's passkey. Nothing in this
-#        workflow, and no token, can approve it.
+#        workflow, and no token, can approve it. The run shows the stage ID
+#        and the package's integrity value, so that the founder approves
+#        that stage and no other. The provenance is recorded at staging.
 #      - the Python Package Index: the packages not yet on the index are
 #        published at once, each file with an attestation. The index has
 #        no approval step.
@@ -40,11 +42,16 @@
 #      the change log (tools/release/release-notes.mjs).
 #
 # A version already on a registry is not published again, so a run that
-# stopped part of the way can be started again with "Re-run all jobs". A
-# file already on the Python Package Index is skipped, so an upload that
-# stopped part of the way is completed with "Re-run failed jobs". A version
-# staged on npm and not yet approved cannot be staged again: approve it, or
-# reject it, before a run is started again.
+# stopped part of the way can be started again with "Re-run all jobs". An
+# upload to the Python Package Index that stopped part of the way is
+# completed with "Re-run failed jobs": the same files are uploaded again,
+# and the index is expected to accept a file it already holds unchanged and
+# to refuse one that differs. A version staged on npm and not yet approved
+# cannot be staged again: approve it, or reject it, before a run is started
+# again.
+#
+# The files the build makes are kept with the run for 7 days
+# (retention-days), so a job can be started again within that time.
 #
 # Permissions: none for the workflow as a whole; each job asks for the
 # least it needs. Only the two publishing jobs may ask for an identity
@@ -326,13 +333,21 @@ jobs:
       # founder approves it on npmjs.com with their passkey. The package has
       # no dependencies and no scripts; --ignore-scripts makes sure that
       # nothing in it is run while it is staged. --provenance asks npm to
-      # record where it was built.
+      # record where it was built: the record (an entry in Sigstore's public
+      # log) is made here, when the version is staged, before the founder
+      # approves it, and stays even if the founder rejects it.
+      # --json makes npm's answer readable: it gives the stage ID and the
+      # package's integrity value, which the next step shows.
       - name: Stage the package
-        run: npm stage publish --access public --ignore-scripts --provenance
-      - name: Say what is left to do
+        run: |
+          if ! npm stage publish --access public --ignore-scripts --provenance --json > "$RUNNER_TEMP/stage.json"; then cat "$RUNNER_TEMP/stage.json"; exit 1; fi
+          cat "$RUNNER_TEMP/stage.json"
+      # The stage ID and the integrity value, in a notice and in the job's
+      # summary, so that the founder approves this stage and no other.
+      - name: Say what was staged, and what is left to do
         env:
           VERSION: ${{ needs.check.outputs.version }}
-        run: echo "::notice::provared $VERSION is staged on npm and is not public yet. Approve it on https://www.npmjs.com/package/provared, tab Staged Packages, with your passkey."
+        run: node tools/release/stage-summary.mjs "$RUNNER_TEMP/stage.json" "$VERSION"
 
   publish-pypi:
     name: Publish to the Python Package Index
@@ -366,14 +381,15 @@ jobs:
           found_names="$(cd dist && find . -mindepth 1 -maxdepth 1 -printf '%P\n' | LC_ALL=C sort)"
           if [ "$expected_names" != "$found_names" ]; then echo "::error::The downloaded files are not exactly the files the build job made."; exit 1; fi
           ls -l dist
-      # skip-existing: a file the index already holds is skipped, so that an
-      # upload that stopped part of the way can be completed by running this
-      # job again ("Re-run failed jobs").
+      # No skip-existing: it could hide a different file of the same name.
+      # An upload that stopped part of the way is completed by running this
+      # job again ("Re-run failed jobs"): it uploads the same files again,
+      # and the index is expected to accept a file it already holds
+      # unchanged and to refuse one that differs.
       - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
         with:
           packages-dir: dist/
           print-hash: true
-          skip-existing: true
 
   release:
     name: Make the GitHub release

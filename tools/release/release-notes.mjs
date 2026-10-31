@@ -79,18 +79,25 @@ const text = [
   `Version ${version}${version.startsWith('0.') ? ', a draft' : ''}. Published as it is, by one author in their own time.`,
   ...opening,
 ];
-if (npmStaged || pythonPublished.length) {
-  const done = [];
-  if (pythonPublished.length) done.push(`it published ${and(pythonPublished)} on the Python Package Index, where each file has an attestation naming this repository and this workflow`);
-  if (npmStaged) done.push(`it staged \`provared\` ${version} on npm, where it becomes public, and installable, only once the author approves it on npmjs.com with their passkey; until then \`npm install provared@${version}\` does not find it`);
-  text.push(`**From the signed tag ${tag}**, the workflow \`.github/workflows/publish.yml\` used each registry's trusted publishing, with no stored password or token: ${done.join('; and ')}.`);
+// Where the version is: one line for each registry, saying plainly what
+// this run sent there and what it did not, so that a run in which one
+// registry received the version and the other did not reads clearly.
+let npmLine;
+if (npmStaged) {
+  npmLine = `- **npm:** this run staged \`provared\` ${version}. It is not public yet: it becomes public, and installable, only once the author approves it on npmjs.com with their passkey. Until then \`npm install provared@${version}\` does not find it.`;
+} else if (npmPresent) {
+  npmLine = `- **npm:** this run sent nothing, because npm already held \`provared\` ${version} when the run began (an earlier attempt of this run staged it and it was approved, or it was published by hand).`;
+} else {
+  npmLine = `- **npm:** this run did not stage \`provared\` ${version}, and npm did not hold it when the run began. It is not on npm.`;
 }
-if (npmPresent) {
-  text.push(`Not staged on npm again, because npm already held \`provared\` ${version} when this run began: an earlier attempt of this run staged it and it was approved, or it was published by hand.`);
-}
-if (pythonKept.length) {
-  text.push(`Not published again, because the Python Package Index already holds that version: ${and(pythonKept)}.${libraryKept ? ` The library itself, \`provared\` ${version}, was put there by an earlier attempt of this run or by hand.` : ''}`);
-}
+const pythonParts = [];
+if (pythonPublished.length) pythonParts.push(`this run published ${and(pythonPublished)}, each file with an attestation naming this repository and this workflow`);
+if (pythonKept.length) pythonParts.push(`this run sent nothing for ${and(pythonKept)}, because the index already held ${pythonKept.length > 1 ? 'those versions' : 'that version'}${libraryKept ? ' (the library itself was put there by an earlier attempt of this run, or by hand)' : ''}`);
+const pythonLine = `- **The Python Package Index:** ${pythonParts.length ? pythonParts.join('; and ') : 'this run published nothing'}.`;
+text.push(
+  `**Where this version is.** From the signed tag ${tag}, the workflow \`.github/workflows/publish.yml\` used each registry's trusted publishing, with no stored password or token.`,
+  `${npmLine}\n${pythonLine}`,
+);
 text.push(
   'Every published version stays on npm and the Python Package Index.',
   `Attached: \`provared-check.html\`, the checking page as one file, which opens from the disk and makes no request. SHA-256: \`${sha256}\`.`,
