@@ -64,7 +64,7 @@ It needs Node.js 24.7 or later, and depends only on the `provared` library.
    the gateway at gateway.example.internal".
 
 4. The person signs the slip with their passkey (on the signing page at
-   prova.red/sign/, or with the library) and the file is saved where the
+   https://sign.prova.red, or with the library) and the file is saved where the
    settings say. Its passkey's thumbprint goes into `issuerKeys`.
 
 5. Check the settings. This reads every rule and says what it maps to, and

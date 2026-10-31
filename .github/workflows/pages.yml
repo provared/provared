@@ -52,6 +52,11 @@ jobs:
           mkdir -p _site/check _site/src _site/samples
           cp -r site/. _site/
           cp page/index.html page/check-page.js page/render.js page/style.css _site/check/
+          # Signing moved to https://sign.prova.red on 25 October 2026 (repository
+          # provared/sign): a passkey made for prova.red could be asked to sign by
+          # any page under prova.red. site/sign/index.html, copied above, says so.
+          # A change to page/sign.html, page/sign-page.js or the library is copied
+          # into provared/sign by hand; nothing here carries it there.
           cp src/*.js _site/src/
           cp samples/office-supplies.jsonl samples/office-supplies.expected.json _site/samples/
           cp provared-check.html _site/
