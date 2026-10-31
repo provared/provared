@@ -31,6 +31,7 @@
       "passkey-user-not-verified",
       "passkey-bad-data",
       "issuer-not-expected",
+      "issuer-origin-not-expected",
       "slip-missing",
       "slip-unusable",
       "chain-broken",

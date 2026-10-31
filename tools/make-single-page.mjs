@@ -8,6 +8,9 @@
 //
 //   node tools/make-single-page.mjs [where to write it; provared-check.html by default]
 //
+// It has no options: an argument that begins with "-", or more than one
+// argument, stops it with code 2 and nothing written.
+//
 // It prints the SHA-256 fingerprint of the file it wrote, so that a copy
 // can be compared with it.
 
@@ -31,19 +34,23 @@ function replaceOnce(text, from, to) {
 }
 
 /**
- * The modules the page needs, each after the modules it imports. For each:
+ * The modules a page needs, each after the modules it imports. For each:
  * its path, its source exactly as it is in the repository, and where each
- * of its imports leads.
+ * of its imports leads. The checking page's by default; the signing page's
+ * for tools/make-sign-site.mjs, which hands in a way of reading each file
+ * at a tag or commit, so that the modules are those of that commit.
+ * @param {string} [start] the page's own script, as a path from the repository's top
+ * @param {(path: string) => string} [readSource] how a file is read; this repository's working tree by default
  * @returns {[string, string, Record<string, string>][]}
  */
-export function pageModules() {
+export function pageModules(start = START, readSource = read) {
   const done = new Map();
   const open = new Set();
   const visit = (path) => {
     if (done.has(path)) return;
     if (open.has(path)) throw new Error(`the modules import one another in a ring at ${path}`);
     open.add(path);
-    const source = read(path);
+    const source = readSource(path);
     const imports = {};
     for (const [, spec] of source.matchAll(IMPORT)) {
       imports[spec] = posix.normalize(posix.join(posix.dirname(path), spec));
@@ -52,7 +59,7 @@ export function pageModules() {
     open.delete(path);
     done.set(path, [path, source, imports]);
   };
-  visit(START);
+  visit(start);
   return [...done.values()];
 }
 
@@ -106,8 +113,30 @@ export function buildSinglePage() {
   return page;
 }
 
+/**
+ * Where to write the page, from the command's arguments: none (the default
+ * name), or one path. Anything else is refused, so that an option such as
+ * `--out x`, which this tool does not have, is never taken as a file name.
+ * @param {string[]} args the arguments after the script's own name
+ * @returns {string}
+ */
+export function outputPath(args) {
+  if (args.length === 0) return 'provared-check.html';
+  const option = args.find((arg) => arg.startsWith('-'));
+  if (option !== undefined) throw new Error(`this tool has no options, so "${option}" is not taken as a file name. Give no argument to write provared-check.html, or give the path of the file to write.`);
+  if (args.length > 1) throw new Error(`this tool takes at most one argument, the file to write, and was given ${args.length}.`);
+  if (args[0] === '') throw new Error('the file to write was given as an empty name.');
+  return args[0];
+}
+
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  const out = process.argv[2] ?? 'provared-check.html';
+  let out;
+  try {
+    out = outputPath(process.argv.slice(2));
+  } catch (error) {
+    console.error(`Stopped: ${error.message} Nothing was written.`);
+    process.exit(2);
+  }
   const page = buildSinglePage();
   writeFileSync(out, page);
   console.log(`written: ${out} (${Buffer.byteLength(page)} bytes)`);

@@ -106,7 +106,7 @@ test('the signing link carries the starting permission, with the agent\'s public
   const { makeAgentKeys } = await import('../recorder.mjs');
   const agent = await makeAgentKeys(folder);
   const link = signingLink(startingPermission(agent.keys));
-  assert.ok(link.startsWith('https://prova.red/sign/#permission='));
+  assert.ok(link.startsWith('https://sign.prova.red/#permission='));
   assert.match(link.split('#permission=')[1], /^[A-Za-z0-9_-]+$/, 'base64url only, so nothing in it needs escaping');
   const permission = fromLink(link);
   assert.deepEqual(permission, startingPermission(agent.keys));
@@ -129,7 +129,7 @@ test('from nothing to a recorded, checked session: init, sign, use, the calls, s
     assert.match(setUp.out, /The hooks are in /);
     const settings = JSON.parse(readFileSync(join(project, '.claude', 'settings.local.json'), 'utf8'));
     assert.deepEqual(Object.keys(settings.hooks).sort(), ['PostToolUse', 'PostToolUseFailure', 'PreToolUse', 'SessionStart']);
-    const link = setUp.out.split('\n').map((l) => l.trim()).find((l) => l.startsWith('https://prova.red/sign/#permission='));
+    const link = setUp.out.split('\n').map((l) => l.trim()).find((l) => l.startsWith('https://sign.prova.red/#permission='));
     assert.ok(link, setUp.out);
     // 2. The person signs on the page: the page lays the fragment over its own starting point, with the times it sets.
     const agent = await loadAgentKeys(folder);

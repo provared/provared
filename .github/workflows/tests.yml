@@ -111,10 +111,12 @@ jobs:
       - name: Fail on any warning but the expected one
         run: sh tools/lint/node-warnings.sh "$RUNNER_TEMP/test-output.txt"
 
-  # The recorder beside Claude Code, the gateway and the central sealer.
-  # Their tests point the name "provared" at this repository's own library
-  # (test/local-library.mjs in each folder), so nothing is installed: they
-  # test the library as it is in this commit, not a published version.
+  # The recorder beside Claude Code, the gateway, the central sealer and
+  # the conformance kit. The first three point the name "provared" at this
+  # repository's own library (test/local-library.mjs in each folder); the
+  # conformance kit loads the library's files from this repository
+  # directly. So nothing is installed: they test the library as it is in
+  # this commit, not a published version.
   javascript-packages:
     name: ${{ matrix.package }}
     runs-on: ubuntu-latest
@@ -122,7 +124,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [integrations/claude-code, gateway, sealer]
+        package: [integrations/claude-code, gateway, sealer, conformance]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

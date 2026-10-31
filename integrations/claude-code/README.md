@@ -30,10 +30,11 @@ published, they become `npm install -g provared-claude-code`.
 `.claude/settings.local.json` (next to anything already there), and
 prints a link and **the fingerprint of the agent's key set** (`keys`
 prints it too). **Open the link in a browser:** the signing page
-opens with a starting permission for this agent filled in. (Signing moved
-to https://sign.prova.red on 25 October 2026; until this package's next
-version the link begins `https://prova.red/sign/`, which now says so:
-open the same link with that part replaced by `https://sign.prova.red/`.)
+opens with a starting permission for this agent filled in. (The link
+begins `https://sign.prova.red/`, the signing page's own address since
+25 October 2026; a link printed by an earlier version begins
+`https://prova.red/sign/`, which now says so: open the same link with that
+part replaced by `https://sign.prova.red/`.)
 Write your name and read the permission: the page shows the same
 fingerprint of the agent's key set, and if it differs from the one
 `init` printed, the page holds someone else's keys, so do not sign. Change
@@ -104,8 +105,39 @@ A permission signed by any other passkey is refused, whether it is
 handed to `renew` or put in place by hand, and the recorder does not
 start while its book, or `slip.json`, holds one. If you made a new
 passkey yourself, add `--new-passkey`; whoever checks the book must then
-name both passkeys. This raises the bar; it does not close the gap: see
-"What the record shows, and what it does not".
+name both passkeys.
+
+Once you sign with a new passkey (say, one made at sign.prova.red, a
+name that serves nothing else), retire the old one:
+`retire-passkey <its thumbprint>`. A retired passkey stays on the list,
+so the permissions it signed stand in the record, the recorder still
+starts on the books that hold them, and still counts limits across those
+books; but a new permission from it is refused, whether or not
+`--new-passkey` is given, until `admit-passkey <its thumbprint>`. The
+command takes effect at once, while the recorder runs or not. The file
+holds both lists (`passkeys`, and among them `retired`); a file written
+by an earlier version has no `retired`, and retires none. If a command
+changes the list while a renewal adds a passkey, both changes are kept:
+the file is read again just before it is written, and no passkey is
+ever taken off it. A narrow window remains between that reading and the
+renaming of the new file into place, since no lock is held. A list that
+would hold no passkey is never written.
+
+Retirement stops new permissions; it does not stop a program that can
+change the recorder's files. At start-up, only the permission last in
+force escapes the checks: the last permission line of `book.jsonl`, or,
+where the recorder starts with no `book.jsonl` (a switch to a new book
+that a stop interrupted), the last permission line of the last kept
+book. That one is taken without the checks, so that a permission that
+has ended since does not stop the recorder from starting. Any other
+permission put in `slip.json`, even one that `book.jsonl` or a kept book
+holds further up, is checked, a retired passkey's among them, and is
+refused if its passkey was retired. So what remains: a program on this
+computer that puts back the permission last in force (in `slip.json`,
+after removing `book.jsonl` where it was last in force in the kept book)
+can resume it, even if its passkey was retired afterwards; and so can
+one that adds a permission's line at the end of either book. This raises the bar; it does not close the gap: see "What
+the record shows, and what it does not".
 
 ## A new book at 90,000 entries
 
@@ -682,9 +714,11 @@ version too (`npx provared-check` takes the latest).
 | `init` | Make the keys if they are missing, write the hooks into this project's `.claude/settings.local.json`, and print the link to sign a permission |
 | `use <file>` | Put a signed permission in place and start the recorder; where a book exists already, the same as `renew` |
 | `renew <file>` | Take a new signed permission into the book, while the recorder runs or not; `--new-passkey` where you signed it with a passkey of yours that signed none before |
+| `retire-passkey <thumbprint>` | Take no new permission from that passkey, with or without `--new-passkey`; what it signed stands, and limits are still counted across the books it signed |
+| `admit-passkey <thumbprint>` | Take new permissions from a retired passkey again |
 | `start` | Run the recorder in this terminal, and see what it says |
 | `ensure` | Start the recorder in the background if it is not running (the hooks run this when a session starts) |
-| `status` | What the recorder holds: the permission, until when, the number of entries, the calls allowed and not yet recorded (`callsNotYetRecorded`), the books kept (`keptBooks`), when a new one is started (`newBookAt`), the feed's token file and how many questions wait (`feed`), and for each witness what it holds and why it is behind (`witnesses`) |
+| `status` | What the recorder holds: the permission, until when, the number of entries, the passkeys whose permissions are in the record and those retired (`trusted`, `retired`), the calls allowed and not yet recorded (`callsNotYetRecorded`), the books kept (`keptBooks`), when a new one is started (`newBookAt`), the feed's token file and how many questions wait (`feed`), and for each witness what it holds and why it is behind (`witnesses`) |
 | `seal` | Seal the book now, with the recorder's three keys, and ask the witnesses named, waiting up to five seconds while no other request waits |
 | `new-book` | Seal the book, keep it as `book-<n>.jsonl`, and start a new one that begins with the permission in force (done by itself at 90,000 entries, or at 100 MB of text) |
 | `check [file]` | The checker's answer for the book, or, given a name such as `book-1.jsonl`, for a book kept before it. Name your passkey with `--issuer <its thumbprint>`, once for each passkey of yours; without it, `check` lists the passkeys the book's permissions name, as read from the book, and the checker takes none of them as one you trust. It names the witnesses in `witnesses.json` (`--witness`) and hands over the statements kept beside the book (`--seal`), unless you give your own |
@@ -897,8 +931,8 @@ The recorder keeps everything in one folder, `~/.provared/claude-code`
 (in your home folder) unless you name another: the agent's private keys
 (`agent-keys.jwk`), the recorder's private keys (`recorder-keys.jwk`),
 the permission it acts under (`slip.json`) and those before it, the list
-of passkeys whose permissions it takes (`trusted-passkeys.json`), the
-book (`book.jsonl`), the books kept before it (`book-1.jsonl` and
+of passkeys whose permissions are in the record, and which of them are
+retired (`trusted-passkeys.json`), the book (`book.jsonl`), the books kept before it (`book-1.jsonl` and
 so on), the token of its feed (`feed-token`, above), the witnesses it
 asks, with their tokens (`witnesses.json`), the statements they handed
 back after a seal's line was written (`witnessed/`), and, while `seal`
@@ -951,7 +985,8 @@ along with everything else. To keep the record on another disk:
   as you, and can run commands: any program on the computer, the agent
   included, can change the files in the recorder's folder (the list of
   trusted passkeys among them), ask the recorder to take a new permission
-  with `--new-passkey`, stop it, or edit the settings that run the hooks.
+  with `--new-passkey`, admit a retired passkey again, stop it, or edit
+  the settings that run the hooks.
   The list of trusted passkeys raises the bar; it does not close the
   gap. The evidence that holds is a checker that names your own passkey
   (`check --issuer`, or `provared-check --issuer`): a permission signed

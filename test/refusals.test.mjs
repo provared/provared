@@ -129,6 +129,11 @@ const REFUSED = {
     const w = await three();
     return checkBook(w.book(), { issuerKeys: ['A'.repeat(43)] });
   },
+  // The test world's passkey signs at http://localhost:8787.
+  'issuer-origin-not-expected': async () => {
+    const w = await three();
+    return checkBook(w.book(), { issuerOrigins: ['https://sign.example.org'] });
+  },
   'slip-missing': async () => {
     const w = await three();
     return checkBook(writeBook(w.entries.slice(1)));

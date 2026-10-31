@@ -54,6 +54,194 @@
   for security faults, and says that a change in behaviour comes with
   tests.
 
+- **A reader may name the address a permission must have been signed
+  at** (25 to 31 October 2026), in both languages. A passkey can be asked
+  to sign by any page under the website name it was made for (its relying
+  party), and what it signs is a fingerprint the person cannot read on the
+  device's prompt; so a page served under that name, or a script on one,
+  could have a passkey made for `prova.red` sign a permission it wrote, by
+  presenting the permission's fingerprint as a sign-in challenge, and a
+  checker, which compared the address only with what the permission itself
+  said, would pass it (the list of threats, section 3, said so since 0.6.0,
+  with no option to close it). Now the checker's option `issuerOrigins`
+  (Python `issuer_origins`; the command line `--origin`, which may be
+  repeated; a box on the checking page) names the addresses at which
+  permissions must have been signed, each in the one form the format
+  allows for `issuer.origin` (`isPageAddress`, Python `is_page_address`,
+  gives the form). A permission signed anywhere else is refused with the
+  new code `issuer-origin-not-expected`, after the passkey has been
+  compared as before, and the stubs under it are not compared; a
+  permission signed at an address named gets a note that says so; a list
+  that is not in that form, or longer than 64, is a problem with the whole
+  check (`bad-field`), never set aside. An approval and a cancellation are
+  held to the permission's address by the passkey check already. The
+  command-line checker says "Signed at an address you named?" where
+  `--origin` was given, and refuses a value not in its plain form. Nothing
+  changes for a reader who names no address, and no record's bytes change.
+  Format description, section 4.4; the list of threats, sections 3, 7 and
+  8; the guide, "How signing works". Shared test files: `slips.json` is
+  made again with eleven new cases (every record in it is signed afresh),
+  `denial-constants.json` with the new code, and `issuer-origins.json`
+  and `issuer-origin-shows.json` are new. Tests:
+  `test/issuer-origins.test.mjs`, `python/tests/test_issuer_origins.py`,
+  and cases in `test/cli.test.mjs`, `test/page.test.mjs` and
+  `test/refusals.test.mjs`.
+
+- **The signing page says why it is served at a name of its own**, and
+  the one tool that writes that site. The page (`page/sign.html`) now
+  says that the passkey it makes belongs to the page's website name and
+  to nothing else, why the page is served at a name that serves nothing
+  else, and that whoever checks a record can name that address; shown
+  inside another page, it now says to open sign.prova.red in a tab of its
+  own (before: prova.red/sign/; the pages name no address with its
+  scheme, which a test holds). `tools/make-sign-site.mjs`
+  writes the whole of the repository `provared/sign`, from which
+  sign.prova.red is served, from this repository: under `site/` the page
+  as `index.html`, its script, the renderer, the style sheet and every
+  module of the library, each byte for byte, with `site/files.sha256` in
+  the form `sha256sum --check` reads; and the repository's own README,
+  publishing workflow (with the actions pinned to the commits this
+  repository's workflow pins) and licence. It takes `--from <tag or
+  commit>`, which the README and the workflow name as where the copies
+  come from, and reads every file with git at that tag or commit, never
+  from the working tree: a file not committed, or changed and not
+  committed, cannot reach the site, and the modules copied are those git
+  holds directly under `src/` there. A name that git cannot find is
+  refused (code 2), and nothing is written. A tag is named as the tag;
+  any other name as the commit's full hash. With `--check` it compares a
+  folder written before with the same files, read the same way, and names
+  what differs. Run against the copy made by hand on 25 October 2026 from
+  tag v0.6.0, with `--from v0.6.0` it finds every file equal; with
+  `--from` this branch's commit it finds the seven files that this change
+  and the one above change (the page, its script, the renderer, and
+  `src/book.js`, `check.js`, `denial.js` and `slip.js`) and their list of
+  fingerprints different, and the README and the workflow, which name
+  where the copies come from. Test: `test/sign-site.test.mjs`, which
+  builds a small repository of its own with a tag, so that it needs
+  neither this repository's tags nor its history.
+  The guide's table of folders names the tool.
+
+- **The recorder beside Claude Code and the Hermes plugin print links to
+  https://sign.prova.red/** (their `SIGNING_PAGE`), where they printed
+  links to prova.red/sign/; their READMEs say what a link printed by an
+  earlier version begins with and how to open it at the new address.
+
+- **The recorder beside Claude Code: a passkey can be retired.** The
+  recorder's list of passkeys, `trusted-passkeys.json`, served two
+  purposes with one list: which passkeys may sign a new permission, and
+  which passkeys' permissions it opens its books with (the book in force
+  and the kept ones, for late receipts and for counting limits across
+  books), and it refuses to start where the book in force holds a
+  permission from a passkey not on it. So a passkey that had signed
+  permissions in the record could not be taken off the list without
+  stopping the recorder. Now the file holds two lists: `passkeys`, every
+  passkey whose permissions are in the record, written and added to as
+  before and never shortened; and among them `retired`, written by the
+  new commands `retire-passkey <thumbprint>` and
+  `admit-passkey <thumbprint>`. A retired passkey's permissions stand,
+  the recorder still starts on the books that hold them and still counts
+  limits across those books, and a new permission from it is refused,
+  with or without `--new-passkey`, by `renew`, by `use`, by the running
+  service and at start-up where a new permission was put in place by
+  hand, until the person admits it again; only a passkey on the list can
+  be retired. The retired list is read from the file at each renewal, so
+  the command counts at once, while the recorder runs or not. The list is
+  read again just before it is written, and the two are merged: every
+  passkey on the file and every one added, never fewer, and the retired
+  list with the one change asked for, written to a temporary file of its
+  own and renamed into place; so `retire-passkey` run at the same moment
+  as a renewal that adds a new passkey keeps both changes (a narrow
+  window remains between that reading and the renaming, since no lock is
+  held); a list that would hold no passkey is never written. At start-up,
+  only the permission last in force is taken without the checks: the
+  last permission line of `book.jsonl`, or, where a switch to a new book
+  was interrupted and there is no `book.jsonl`, the last permission line
+  of the last kept book. Any other permission put in `slip.json`, even one
+  that either book holds further up, goes through the checks, a retired
+  passkey's among them, and no line is added for it. What is left: a
+  program on this computer that puts back the permission last in force
+  (removing `book.jsonl` where it was last in force in the kept book) can
+  resume it, even if its passkey was retired afterwards, and so can one
+  that adds a permission's line at the end of either book. Retirement
+  stops new permissions; it does not stop a program that can change the
+  recorder's files. A file written by an earlier version holds
+  `passkeys` alone and is read as retiring none, so a recorder updated in
+  place starts on its folder as it is; a `retired` that is not a list of
+  thumbprints from `passkeys` stops the recorder, as a malformed
+  `passkeys` does. `status` names the retired passkeys (`retired`). Test:
+  `integrations/claude-code/test/retire.test.mjs`.
+
+- **A workflow that publishes a release from the founder's signed tag**
+  (25 October 2026). `.github/workflows/publish.yml` runs only when a tag
+  such as `v0.7.0` is pushed. Before anything is published it checks that
+  the tag is signed by the release key in `.github/release-signers` and
+  by nothing else, that the tag, `package.json`, `python/pyproject.toml`
+  and the newest heading of this change log name the same version, and
+  that the JavaScript and Python libraries pass their tests on the tagged
+  commit, with the tests of every framework package against the library
+  from that commit. It then publishes the Python packages and stages the
+  npm package, through each registry's trusted publishing, with no stored
+  password or token, and makes the GitHub release with the checking page
+  as one file and its SHA-256. The npm version is staged
+  (`npm stage publish`) and becomes public only when the author approves
+  it on npmjs.com; the run shows the stage ID and the package's
+  integrity value, so that the author approves that one stage, and the
+  release notes say, for each registry, what the run sent there. The
+  Python files are checked
+  against the SHA-256 recorded when they were built before they are
+  uploaded. A version already on a registry is not published again, so a
+  framework package is published only when its own version is raised;
+  where its version is already published and its code differs, the run
+  stops before anything is published. The scripts it runs are in
+  `tools/release/`. Nothing in the npm package or the Python packages
+  changes. Version 0.6.0 and earlier were published by hand.
+- `tools/make-single-page.mjs` refuses an option, or more than one
+  argument, and writes nothing: `--out x` used to write a file named
+  `--out`. It still takes one optional argument, the file to write.
+
+- **A conformance kit**, in `conformance/` (not published): another
+  implementation of the format, in any language, is tested against the
+  shared test files through a small program of its own (an adapter),
+  which the kit hands one case at a time as a line of JSON and whose
+  answer it compares. By default it compares the codes and the shape of
+  each answer, not the words meant for people, as `test-vectors/README.md`
+  sets out; `--words` compares every value. It ends with code 0 only where
+  every case compared matched. An adapter for Provared's own JavaScript
+  library passes all 14,742 cases word for word. Passing it shows
+  agreement on these cases only; it is not a certificate. Its tests run in
+  the test workflow beside the sealer's.
+
+- **The conformance kit, two changes.** By default it no longer counts the
+  sentences in the lists named `notes` and `limits`: another implementation
+  may say the same thing in more or fewer sentences, so only the codes,
+  the items that are not texts and the shape of each answer are compared;
+  `--words` still compares every word and every sentence. And a second,
+  example adapter, `conformance/adapters/provared-public.mjs`, is written
+  only on the functions the npm package offers (`provared` and
+  `provared/check`), and can be pointed at an installed copy of the
+  package with `--package`: it answers 3,099 of the 14,742 cases, all of
+  them matching word for word, and skips the other 11,643, which test
+  parts of the library that are not offered to other programs, saying why
+  for each.
+
+- **The conformance kit, after an independent review.** By default, the
+  findings of an entry (`problems`, `breaches`, `disclosureProblems`) are
+  compared in any order, as the format description says their order is
+  not part of the format; and an entry's own `problems` may hold only
+  some of those stored, at least one, since a checker may stop at the
+  first way an entry fails its own check (where it stopped before the
+  countersignature, "unchecked" is taken in its place). Breaches are
+  still compared in full. `--words` keeps the stored order. The verdict
+  now says how many cases were skipped and not tested, the functions
+  skipped entirely are listed, and `--no-skip` counts any skip as a
+  failure. A reply holding both an answer and a skip is a fault of the
+  adapter. The example adapter reports an error it does not expect as a
+  crash, where it gave the code `check-failed`. The guide gains a table
+  of every function the shared test files name: its section of the
+  format description, whether another implementation may skip it, where
+  its answer is declared, and how its cases are written; and it lists
+  the stored values that are particular to Provared's own library.
+
 - **An OpenTelemetry bridge**, `provared-opentelemetry` 0.1.0, in
   `integrations/opentelemetry/` (not published). It puts each tool call's
   receipt on the trace span that observability tools already show, in one
@@ -126,11 +314,10 @@
   v0.6.0, and serves nothing else. prova.red/sign/ now says that
   signing has moved and offers no signing (`site/sign/index.html`; the
   publishing workflow no longer copies the signing page there). The
-  gateway's README points to the new address. The recorder beside Claude
-  Code and the Hermes plugin still print links to prova.red/sign/, and the
-  signing page itself, shown inside another page, still names that
-  address; each changes with its next reviewed version, and their READMEs
-  now say how to open such a link at the new address.
+  gateway's README points to the new address. (The recorder beside Claude
+  Code, the Hermes plugin and the signing page itself named the old
+  address until the change above; their READMEs said how to open such a
+  link at the new address.)
 - The test workflow is no longer started by a push that changes only the
   record page and the sitemap.
 

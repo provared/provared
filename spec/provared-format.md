@@ -439,6 +439,39 @@ it MUST also confirm that `issuer.key` is one of them. If it was given
 none, it MUST say that the issuer's key was not compared with a known
 key.
 
+If the checker was given the addresses of the pages at which it expects
+slips to have been signed (`issuerOrigins`), it MUST confirm that
+`issuer.origin` is one of them, written exactly the same, and refuse the
+slip otherwise (`issuer-origin-not-expected`). It MAY say, on a slip it
+accepts, that the address is one the reader named. Each address given
+MUST be in the form section 4.1 requires of `issuer.origin`; what is
+given is otherwise a problem with the whole check (`bad-field`), never
+set aside: an address with a capital letter or a path would match
+nothing, and every slip would then read as signed elsewhere. At most 64
+addresses may be given. An approval (section 17) and a cancellation
+(section 22) are signed with the slip's passkey, and step 4 holds each to
+the slip's `issuer.origin`, so the slip's address is the one compared.
+Where no address was given, nothing is compared and nothing is said.
+
+Why a reader names an address. A passkey signs whatever challenge a page
+under its relying party (`issuer.rpId`) hands it: the browser lets any
+page whose website name is that relying party, or a name under it, ask
+the passkey to sign (W3C Web Authentication Level 3, sections 5.1.3 and
+5.1.4). The challenge for a slip, an approval or a cancellation is a
+fingerprint, which the person cannot read on the device's prompt. So a
+page served under that relying party, or a script running on one, can
+have the passkey sign a record it wrote, by presenting the record's
+fingerprint as an ordinary sign-in challenge: the client data then names
+that page's address, the record written by the same party names the
+same address, and steps 2 to 7 all pass. A passkey used to sign records
+SHOULD therefore be made for a relying party name that serves nothing
+but the signing page (such as `sign.example.org`, never `example.org`),
+the signing page SHOULD show the record before it asks the passkey, and
+a reader who knows where the person signs SHOULD name that address, so
+that a slip signed under the same passkey anywhere else is refused. The
+list of threats (`docs/threat-model.md`, section 3) states what this
+closes and what it does not.
+
 The signature counter in the authenticator data is not used: an offline
 checker keeps no state.
 
@@ -2233,7 +2266,7 @@ Content:
 | `rule` | A rule of the software around the agent, outside the slip. |
 
 The format's own list of finding codes, from which `codes` is drawn, is
-every code a checker or the check before acting gives: `not-json`, `bad-envelope`, `bad-base64url`, `too-large`, `unknown-type`, `bad-signatures-layout`, `payload-not-canonical`, `payload-type-mismatch`, `bad-field`, `bad-key`, `signature-invalid`, `passkey-wrong-type`, `passkey-challenge-mismatch`, `passkey-origin-mismatch`, `passkey-rpid-mismatch`, `passkey-user-not-present`, `passkey-user-not-verified`, `passkey-bad-data`, `issuer-not-expected`, `slip-missing`, `slip-unusable`, `chain-broken`, `time-went-backwards`, `duplicate-id`, `duplicate-slip`, `countersignature-invalid`, `countersignature-wrong-stub`, `countersignature-not-possible`, `line-not-canonical`, `unknown-entry`, `approval-mismatch`, `approval-reused`, `approval-invalid`, `approval-not-found`, `approval-dated-after-stub`, `terms-not-found`, `terms-unusable`, `terms-mismatch`, `pass-missing`, `pass-mismatch`, `pass-too-deep`, `cover-invalid`, `cancellation-invalid`, `cancellation-not-found`, `acknowledgement-mismatch`, `vouching-missing`, `seal-mismatch`, `seal-chain-broken`, `sealer-not-expected`, `book-cut-short`, `seal-not-in-book`, `witness-invalid`, `dated-after-stamp`, `stamp-bad-data`, `stamp-wrong-data`, `stamp-invalid`, `headers-invalid`, `record-not-sound`, `proof-invalid`, `root-mismatch`, `check-failed`, `action-not-allowed`, `party-not-allowed`, `outside-valid-time`, `amount-missing`, `over-limit`, `over-each-limit`, `over-count-limit`, `over-period-limit`, `countersignature-missing`, `approval-missing`, `prohibited`, `pass-not-allowed`, `pass-wider`, `after-cancellation`, `outside-terms`.
+every code a checker or the check before acting gives: `not-json`, `bad-envelope`, `bad-base64url`, `too-large`, `unknown-type`, `bad-signatures-layout`, `payload-not-canonical`, `payload-type-mismatch`, `bad-field`, `bad-key`, `signature-invalid`, `passkey-wrong-type`, `passkey-challenge-mismatch`, `passkey-origin-mismatch`, `passkey-rpid-mismatch`, `passkey-user-not-present`, `passkey-user-not-verified`, `passkey-bad-data`, `issuer-not-expected`, `issuer-origin-not-expected`, `slip-missing`, `slip-unusable`, `chain-broken`, `time-went-backwards`, `duplicate-id`, `duplicate-slip`, `countersignature-invalid`, `countersignature-wrong-stub`, `countersignature-not-possible`, `line-not-canonical`, `unknown-entry`, `approval-mismatch`, `approval-reused`, `approval-invalid`, `approval-not-found`, `approval-dated-after-stub`, `terms-not-found`, `terms-unusable`, `terms-mismatch`, `pass-missing`, `pass-mismatch`, `pass-too-deep`, `cover-invalid`, `cancellation-invalid`, `cancellation-not-found`, `acknowledgement-mismatch`, `vouching-missing`, `seal-mismatch`, `seal-chain-broken`, `sealer-not-expected`, `book-cut-short`, `seal-not-in-book`, `witness-invalid`, `dated-after-stamp`, `stamp-bad-data`, `stamp-wrong-data`, `stamp-invalid`, `headers-invalid`, `record-not-sound`, `proof-invalid`, `root-mismatch`, `check-failed`, `action-not-allowed`, `party-not-allowed`, `outside-valid-time`, `amount-missing`, `over-limit`, `over-each-limit`, `over-count-limit`, `over-period-limit`, `countersignature-missing`, `approval-missing`, `prohibited`, `pass-not-allowed`, `pass-wider`, `after-cancellation`, `outside-terms`.
 A code not on this list MUST be refused (`bad-field`), as MUST `codes`
 where `source` is not `check`, and its absence where it is.
 

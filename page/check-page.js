@@ -6,7 +6,7 @@
 // request at all.
 
 import { checkBook, checkShow } from '../src/check.js';
-import { readBlocks, readFingerprints, readHanded, renderResult, shown } from './render.js';
+import { readBlocks, readFingerprints, readHanded, readOrigins, renderResult, shown } from './render.js';
 
 const status = document.getElementById('status');
 const result = document.getElementById('result');
@@ -37,6 +37,13 @@ function trusted() {
     throw new Error('A line in the box for blocks is not the fingerprint of a block. It is 64 characters: the digits 0 to 9 and the letters a to f. Correct it, or empty the box.');
   }
   if (blocks.values.length) options.blocks = blocks.values;
+  // The addresses at which the person expects the permissions to have been
+  // signed: each in the one form the format allows, or the check stops.
+  const origins = readOrigins(document.getElementById('trust-origins').value);
+  if (origins.bad.length) {
+    throw new Error('A line in the box for the address of the signing page is not a page address in its plain form: https://, a website name in lower case, a port only if it is needed, and nothing more, such as https://sign.example.org. Correct it, or empty the box.');
+  }
+  if (origins.values.length) options.issuerOrigins = origins.values;
   return options;
 }
 

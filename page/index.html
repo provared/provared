@@ -20,6 +20,8 @@
     <p class="quiet">A check says more when you tell it which keys and services you expect. Put one fingerprint on each line. Use fingerprints you obtained yourself, from the people concerned.</p>
     <label for="trust-issuer">The person's passkey (its thumbprint)</label>
     <textarea id="trust-issuer" rows="2" spellcheck="false"></textarea>
+    <label for="trust-origins">The address of the page at which the person signs permissions (such as https://sign.example.org; a permission signed at any other address is refused)</label>
+    <textarea id="trust-origins" rows="2" spellcheck="false"></textarea>
     <label for="trust-sealer">Whoever keeps and seals the book (the fingerprint of its key set)</label>
     <textarea id="trust-sealer" rows="2" spellcheck="false"></textarea>
     <label for="trust-stamps">Time-stamp services (the fingerprint of each service's certificate)</label>

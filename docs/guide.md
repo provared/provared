@@ -33,14 +33,14 @@ An Internet-Draft is a working document, not a standard.
 | `src/` | The library: the checker, the writers for every kind of record, the stub writer beside an agent and the connector for an agent's tools. No outside code |
 | `bin/provared-check.mjs` | The checker for the command line |
 | `bin/provared-headers.mjs`, `net/` | A command that fetches the chain of Bitcoin block headers from nodes you name, so that a block time-stamp can be checked with no node of your own. The only code here that makes a network request. Experimental |
-| `page/` | The checking page and the demonstration page |
+| `page/` | The checking page, the signing page and the demonstration page |
 | `demo/` | The demonstration: an invented office agent works under a permission and goes outside it four times |
 | `samples/` | A sample record, written once, that the tests keep checking |
-| `tools/` | Three small tools: one wrote the sample record, one writes the checking page as a single file, one writes the shared test files |
+| `tools/` | Small tools: one wrote the sample record, one writes the checking page as a single file, one writes the shared test files, one writes the record page at prova.red/records/, and one writes the files of the signing page's own site, sign.prova.red |
 | `test/` | The tests |
 | `test-vectors/` | Shared test files: records and values, each with the answer this library gives. Another implementation of the format can be tested against them |
 | `python/` | The Python version, `pip install provared`, which gives the same answers. See its own [README](https://github.com/provared/provared/blob/main/python/README.md), and its examples with three agent frameworks in `python/examples/`, and small packages for two of them in `python/integrations/` |
-| `site/` | The pages at [prova.red](https://prova.red/): what a record proves, with the checker's answer for the sample record, and a worked example. Published with GitHub Pages by `.github/workflows/pages.yml`, which also serves the checking page at `prova.red/check/` and as one file. The pages load nothing from anywhere and keep nothing about a reader |
+| `site/` | The pages at [prova.red](https://prova.red/): what a record proves, with the checker's answer for the sample record, and a worked example. Published with GitHub Pages by `.github/workflows/pages.yml`, which also serves the checking page at `prova.red/check/` and as one file. The signing page is served from a repository of its own at `sign.prova.red`, so that the passkeys made there belong to a name that serves nothing else. The pages load nothing from anywhere and keep nothing about a reader |
 
 The npm package holds `src/`, `bin/`, `net/`, `spec/`, `docs/`,
 `samples/` and the checking page. The tests, the shared test files, the
@@ -909,6 +909,19 @@ defines the name; it cannot see whether the tool really does.
 - **The person** signs a slip with a passkey. A passkey signs a short
   value handed to it; that value is the SHA-256 fingerprint of the slip's
   exact signed bytes, so the signature covers the whole slip.
+- **The signing page is served at an address of its own**,
+  [sign.prova.red](https://sign.prova.red/), which serves nothing else
+  (its files are copied from `page/` by `tools/make-sign-site.mjs` into
+  the public repository `provared/sign`). A passkey can be asked to sign
+  by any page under the website name it was made for, and what it signs
+  is a fingerprint the person cannot read on the device's prompt, so a
+  passkey made for a name that serves other pages could be made to sign
+  a permission by one of them. A passkey made at sign.prova.red can be
+  asked only there. Whoever checks a record can name the address the
+  person signs at (`issuerOrigins`, or `--origin`, or the box on the
+  checking page): a permission signed under the same passkey anywhere
+  else is then refused (`issuer-origin-not-expected`). The list of
+  threats, section 3, says what this closes and what it does not.
 - **The agent and the service** each sign with two keys at once: Ed25519,
   which is today's kind, and ML-DSA-87, which is quantum-safe. A record
   counts only if both signatures check. A forger must break both.
@@ -1104,6 +1117,10 @@ wrong. Never show it as fact: the checking page and the command-line
 checker do not.
 
 Options: `issuerKeys` (the thumbprints of issuer keys you trust),
+`issuerOrigins` (the addresses of the pages at which the person signs
+permissions, such as `https://sign.example.org`, each in the one form
+the format allows; a permission signed anywhere else is refused with
+`issuer-origin-not-expected`; see "How signing works"),
 `sealKeys` (the fingerprints of the key sets of the recorders you
 expect), `stampServices` (the fingerprints of the certificates of the
 time-stamp services you trust), `blocks` (the fingerprints of the
@@ -1127,8 +1144,9 @@ where the record has a seal, the recorder you expect), 1 (no problem
 found, but the agent is outside its slip, not every signature could be
 checked, or you did not name whom you trust) or 2 (a problem was found,
 or what you gave on the command line could not be used). A value that
-is not a fingerprint is refused, never set aside. The checking page
-gives its green answer on the same terms.
+is not a fingerprint, or an address given with `--origin` that is not a
+page address in its plain form, is refused, never set aside. The
+checking page gives its green answer on the same terms.
 
 Writing records: `prepareSlip` and `assembleSlip`, `prepareApproval` and
 `assembleApproval` (the person), `writeStub` (the agent), `countersign`,

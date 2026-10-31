@@ -550,7 +550,7 @@ class Commands(unittest.TestCase):
             out = io.StringIO()
             with contextlib.redirect_stdout(out):
                 self.assertEqual(cli.main(['--folder', str(folder), 'init']), 0)
-            link = next(line for line in out.getvalue().splitlines() if line.startswith('https://prova.red/sign/#permission='))
+            link = next(line for line in out.getvalue().splitlines() if line.startswith('https://sign.prova.red/#permission='))
             permission = json.loads(from_base64url(link.split('=', 1)[1]).decode('utf-8'))
             keys = json.loads((folder / 'agent-keys.jwk').read_text(encoding='utf-8'))['keys']
             self.assertEqual(permission['agent']['keys'], [{'alg': 'Ed25519', 'crv': 'Ed25519', 'kty': 'OKP', 'x': keys[0]['x']},
