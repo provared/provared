@@ -1,13 +1,19 @@
 // Writes the files of the signing page's own site, sign.prova.red, which a
 // second public repository (provared/sign) publishes with GitHub Pages: the
-// signing page and only the files it loads, each copied byte for byte from
-// this repository, and the few files that site needs of its own (the name it
-// is served at, the workflow that publishes it, a README and the licences).
+// signing page and the library files it loads, each copied byte for byte
+// from this repository, a list of their fingerprints, and the few files that
+// repository needs of its own (the workflow that publishes it, a README and
+// the licence).
 //
-//   node tools/make-sign-site.mjs <folder>          write the site into the folder (it may hold a .git folder and
-//                                                   what this tool wrote before, nothing else)
-//   node tools/make-sign-site.mjs <folder> --check  compare a folder written before with this repository as it
-//                                                   stands, and fail where anything differs
+//   node tools/make-sign-site.mjs <folder> --from <tag or commit>
+//       write the whole of the repository provared/sign into the folder,
+//       which may hold a .git folder and what this tool wrote before,
+//       nothing else; "--from" names where the copies come from, as the
+//       README and the workflow say it (a tag, such as v0.6.0, where the
+//       files are those of a release; otherwise the commit)
+//   node tools/make-sign-site.mjs <folder> --from <tag or commit> --check
+//       compare a folder written before with this repository as it stands,
+//       and fail where anything differs
 //
 // Why a site of its own: a passkey can be asked to sign by any page under
 // the website name it was made for, and what it signs is a fingerprint the
@@ -19,12 +25,17 @@
 //
 // How the files are laid out: the page is index.html at the site's root,
 // beside its script, the renderer and the style sheet, and the library's
-// modules are under src/. The page's script imports "../src/check.js"; from
-// an address at the site's root, "../" stays at the root, so that import
-// reaches /src/check.js, and nothing in any copied file is changed.
+// modules are under src/, every one of them, as prova.red serves them
+// beside the checking page. The page's script imports "../src/check.js";
+// from an address at the site's root, "../" stays at the root, so that
+// import reaches /src/check.js, and nothing in any copied file is changed.
+// site/files.sha256 lists each copied file with its SHA-256, in the form
+// that "sha256sum --check" reads, and the workflow checks every file
+// against it before it publishes.
 
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { join, posix, relative, sep } from 'node:path';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pageModules } from './make-single-page.mjs';
 
@@ -53,14 +64,20 @@ export function servedAt(path) {
 
 /**
  * The files copied from this repository: each by its path on the site and
- * its path here. The page, its style sheet, and every module the page's
- * script imports, found through the imports as the single-file checking
- * page finds its own.
+ * its path here. The page, its script, the renderer, its style sheet, and
+ * every module of the library. The modules the page's script imports,
+ * found as the single-file checking page finds its own, must all be among
+ * them, or the tool stops: a page that imported a file from elsewhere
+ * would not load on the site.
  * @returns {Record<string, string>} site path to repository path
  */
 export function copiedFiles() {
-  const files = { 'index.html': 'page/sign.html', 'style.css': 'page/style.css' };
-  for (const [path] of pageModules(START)) files[servedAt(path)] = path;
+  const files = { 'index.html': 'page/sign.html', 'sign-page.js': 'page/sign-page.js', 'render.js': 'page/render.js', 'style.css': 'page/style.css' };
+  for (const name of readdirSync(join(ROOT, 'src')).filter((n) => n.endsWith('.js')).sort()) files[`src/${name}`] = `src/${name}`;
+  for (const [path] of pageModules(START)) {
+    const served = servedAt(path);
+    if (files[served] !== path) throw new Error(`the signing page loads ${path}, which this tool does not copy to the site`);
+  }
   return files;
 }
 
@@ -79,24 +96,43 @@ function pinnedActions() {
 }
 
 /**
- * The files the site needs of its own, by their path in the repository
- * provared/sign: the name it is served at, the workflow that publishes it,
- * a README and the licences.
- * @returns {Record<string, string|Buffer>}
+ * How the README and the workflow name where the copies come from: a tag
+ * where "from" looks like one (v0.6.0), otherwise a commit.
+ * @param {string} from
+ * @returns {{plain: string, marked: string}} "tag v0.6.0", and the same with the name in backticks
  */
-export function ownFiles() {
+export function sourceWords(from) {
+  if (typeof from !== 'string' || !/^[A-Za-z0-9._-]{1,64}$/.test(from)) throw new Error('--from names a tag (such as v0.6.0) or a commit: letters, digits, dots, hyphens and underscores only.');
+  const kind = /^v[0-9]/.test(from) ? 'tag' : 'commit';
+  return { plain: `${kind} ${from}`, marked: `${kind} \`${from}\`` };
+}
+
+/**
+ * The list of fingerprints, in the form "sha256sum --check" reads: one line
+ * for each copied file, by its path from the site's root, in the order of
+ * the paths' characters.
+ * @param {Record<string, Buffer>} copies site path to content
+ * @returns {string}
+ */
+export function fingerprintList(copies) {
+  return Object.keys(copies).sort().map((path) => `${createHash('sha256').update(copies[path]).digest('hex')} *./${path}\n`).join('');
+}
+
+/**
+ * The files the repository provared/sign needs of its own: the workflow
+ * that publishes it, a README and the licence.
+ * @param {string} from where the copies come from (see sourceWords)
+ * @returns {Record<string, string|Buffer>} by their path in that repository
+ */
+export function ownFiles(from) {
   const pins = pinnedActions();
-  const workflow = `# Publishes ${SITE_NAME} with GitHub Pages: the signing page of Provared, and
-# nothing else. The files in site/ are copied as they are; nothing is built.
-# They are written by tools/make-sign-site.mjs in the repository
-# provared/provared, byte for byte from its page/ and src/, and that tool
-# can check this copy against them (node tools/make-sign-site.mjs <this
-# folder> --check).
-#
-# The actions are GitHub's own, each pinned to the exact commit of a
-# released version (the comment gives the version), the same commits that
-# the repository provared/provared pins, so that a later change to a tag
-# cannot change what runs here.
+  const source = sourceWords(from);
+  const workflow = `# Publishes https://${SITE_NAME}: the signing page of Provared and the
+# library files it loads, exactly as they are in the folder site/. Each file
+# is a copy of the same file at ${source.plain} of provared/provared, and
+# site/files.sha256 holds their fingerprints; the run stops if any file
+# differs from its fingerprint. Only GitHub's own actions are used, each
+# pinned to the commit of a released version, as in provared/provared.
 
 name: Publish ${SITE_NAME}
 
@@ -119,16 +155,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: ${pins.checkout}
-      - name: Gather the site
+      - name: Check every file against its fingerprint
         run: |
-          mkdir -p _site
-          cp -r site/. _site/
-          touch _site/.nojekyll
-          find _site -type f | sort
+          cd site
+          sha256sum --check --strict files.sha256
+          test "$(find . -type f ! -name files.sha256 | wc -l)" -eq "$(wc -l < files.sha256)" || { echo "site/ holds a file that files.sha256 does not list."; exit 1; }
+          touch .nojekyll
       - uses: ${pins['configure-pages']}
       - uses: ${pins['upload-pages-artifact']}
         with:
-          path: _site
+          path: site
 
   deploy:
     needs: build
@@ -140,81 +176,62 @@ jobs:
       - id: deployment
         uses: ${pins['deploy-pages']}
 `;
-  const readme = `# The signing page of Provared, at ${SITE_NAME}
+  const readme = `# ${SITE_NAME}
 
-This repository publishes one page, https://${SITE_NAME}/, with GitHub
-Pages: the page on which a person signs a Provared permission (a slip)
-with a passkey, and cancels one. It serves nothing else, on purpose.
+This repository publishes one page: the page on which a person signs a
+Provared permission (a slip) with a passkey, at https://${SITE_NAME}.
 
-## Why a site of its own
-
-A passkey belongs to the website name it was made for (its relying party),
-and the browser lets any page under that name ask it to sign. What a passkey
-signs is a short value, a fingerprint, which the person cannot read on the
-device's prompt. So if the signing page were served under a name that
-serves other pages too, any of those pages, or a script running on one,
-could have the passkey sign a permission it wrote, by presenting the
-permission's fingerprint as an ordinary sign-in challenge. A passkey made
-at ${SITE_NAME} can be asked to sign only by a page under ${SITE_NAME},
-and nothing but the signing page is served there. Whoever checks a record
-can name this address as the one a permission must have been signed at
-(\`provared-check --origin https://${SITE_NAME}\`).
-
-This closes one thing and not everything: whoever can serve a page under
-this name (the host of the site, or whoever holds the domain name) could
-still serve another page here; and a reader who names no address when
-checking is protected only by which passkey they trust. The format
-description (section 4.4) and the list of threats (section 3) in the main
-repository say more.
+Nothing else is ever served at this address, on purpose. A browser lets a
+passkey sign only for the website name it was made for and the addresses
+under it. A passkey made here can therefore be used by no other page: not
+by https://prova.red, not by the application at https://app.prova.red, and
+not by a script that gets onto either of them. If the same passkey could be
+used by another page, that page could present a record's fingerprint as an
+ordinary sign-in question and have the passkey sign a record the person
+never saw. The list of threats of Provared describes this in section 3.
 
 ## What is here
 
-Every file in \`site/\` is a copy, byte for byte, of a file in the main
-repository, https://github.com/provared/provared: the page
-(\`page/sign.html\`, served as \`index.html\`), its script and the renderer
-(\`page/sign-page.js\`, \`page/render.js\`), its style sheet
-(\`page/style.css\`), and under \`src/\` only the modules of the library
-that the page's script imports. They are written by that repository's
-\`tools/make-sign-site.mjs\`, which also checks a copy against the
-originals:
+- \`site/\`: the signing page (\`index.html\`, \`sign-page.js\`, \`render.js\`,
+  \`style.css\`) and the library's modules in \`site/src/\`. Each file is a
+  byte-for-byte copy of the same file at ${source.marked} of
+  https://github.com/provared/provared (\`page/sign.html\` is served here as
+  \`index.html\`). \`site/files.sha256\` holds the SHA-256 fingerprint of each.
+- \`.github/workflows/pages.yml\`: checks every file against its
+  fingerprint and publishes the folder with GitHub Pages.
 
-\`\`\`
-node tools/make-sign-site.mjs <this folder> --check
-\`\`\`
+The page loads nothing from any other site and keeps nothing on a server.
+Its content security policy allows only its own scripts and style sheet.
 
-\`site/CNAME\` names the address, and \`.github/workflows/pages.yml\`
-publishes \`site/\` as it is, with nothing built on the way. The page loads
-nothing from anywhere but its own files, sends nothing anywhere, and keeps
-nothing about a reader; its content security policy allows only its own
-script and style sheet.
+## What it does not protect against
 
-Faults and questions: open an issue in the main repository,
-https://github.com/provared/provared/issues, or write to hello@prova.red.
+GitHub serves this site, so GitHub, or anyone who controls this
+repository or the address's DNS record, could serve a different page here.
+The page shows the permission in words before the passkey is asked, so a
+person can read what they sign.
 
-## Licences
+## Licence
 
-The code is under the Apache License 2.0 (\`LICENSE\`) and this README under
-the Creative Commons Attribution 4.0 licence (\`LICENSE-CC-BY-4.0.txt\`), as
-in the main repository. Copyright 2026 Pavel Izmaylov.
+Apache License 2.0, as for the code of Provared. Copyright 2026 Pavel
+Izmaylov.
 `;
-  return {
-    'site/CNAME': `${SITE_NAME}\n`,
-    '.github/workflows/pages.yml': workflow,
-    'README.md': readme,
-    LICENSE: read('LICENSE'),
-    'LICENSE-CC-BY-4.0.txt': read('LICENSE-CC-BY-4.0.txt'),
-  };
+  return { '.github/workflows/pages.yml': workflow, 'README.md': readme, LICENSE: read('LICENSE') };
 }
 
 /**
  * Every file of the repository provared/sign, by its path there: the
- * copies under site/, and the site's own files.
+ * copies under site/, their list of fingerprints, and the repository's own
+ * files.
+ * @param {string} from where the copies come from (see sourceWords)
  * @returns {Record<string, Buffer|string>}
  */
-export function siteFiles() {
+export function siteFiles(from) {
+  const copies = {};
+  for (const [served, here] of Object.entries(copiedFiles())) copies[served] = read(here);
   const files = {};
-  for (const [served, here] of Object.entries(copiedFiles())) files[posix.join('site', served)] = read(here);
-  Object.assign(files, ownFiles());
+  for (const [served, content] of Object.entries(copies)) files[`site/${served}`] = content;
+  files['site/files.sha256'] = fingerprintList(copies);
+  Object.assign(files, ownFiles(from));
   return files;
 }
 
@@ -234,14 +251,16 @@ function filesUnder(folder) {
 }
 
 /**
- * Write the site into a folder. The folder may hold a .git folder and files
- * this tool writes; any other file stops the tool, so that it never writes
- * into the wrong place and the site never serves anything else.
+ * Write the repository's files into a folder. The folder may hold a .git
+ * folder and files this tool writes; any other file stops the tool, so
+ * that it never writes into the wrong place and the site never serves
+ * anything else.
  * @param {string} folder
+ * @param {string} from where the copies come from (see sourceWords)
  * @returns {string[]} the paths written
  */
-export function writeSite(folder) {
-  const files = siteFiles();
+export function writeSite(folder, from) {
+  const files = siteFiles(from);
   const others = filesUnder(folder).filter((path) => !Object.hasOwn(files, path));
   if (others.length) throw new Error(`${folder} holds files this tool does not write, so nothing was written: ${others.join(', ')}`);
   for (const [path, content] of Object.entries(files)) {
@@ -256,10 +275,11 @@ export function writeSite(folder) {
  * file must be there and equal, byte for byte, and nothing else may be
  * there.
  * @param {string} folder
+ * @param {string} from where the copies come from (see sourceWords)
  * @returns {string[]} what differs, in words; empty where nothing does
  */
-export function checkSite(folder) {
-  const files = siteFiles();
+export function checkSite(folder, from) {
+  const files = siteFiles(from);
   const found = filesUnder(folder);
   const differences = [];
   for (const [path, content] of Object.entries(files)) {
@@ -274,21 +294,23 @@ export function checkSite(folder) {
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  const [folder, flag] = process.argv.slice(2);
-  if (!folder || (flag !== undefined && flag !== '--check')) {
-    console.error('Usage: node tools/make-sign-site.mjs <folder> [--check]');
+  const args = process.argv.slice(2);
+  const check = args.includes('--check');
+  const at = args.indexOf('--from');
+  const from = at >= 0 ? args[at + 1] : undefined;
+  const rest = args.filter((a, i) => a !== '--check' && a !== '--from' && i !== at + 1);
+  const [folder] = rest;
+  if (!folder || rest.length !== 1 || from === undefined) {
+    console.error('Usage: node tools/make-sign-site.mjs <folder> --from <tag or commit> [--check]');
     process.exit(2);
   }
-  if (flag === '--check') {
-    const differences = checkSite(folder);
+  if (check) {
+    const differences = checkSite(folder, from);
     for (const d of differences) console.log(d);
     console.log(differences.length ? `${differences.length} difference(s) between ${folder} and this repository.` : `${folder} is this repository's signing page, byte for byte, and nothing else.`);
     process.exit(differences.length ? 1 : 0);
   }
-  const written = writeSite(folder);
+  const written = writeSite(folder, from);
   for (const path of written) console.log(path);
-  console.log(`${written.length} files written to ${folder}. The name served: ${SITE_NAME}.`);
-  // Not used below; kept so that a reader sees how a path on disk relates to one on the site.
-  void relative;
-  void sep;
+  console.log(`${written.length} files written to ${folder}, as copies at ${sourceWords(from).plain}. The name served: ${SITE_NAME}.`);
 }

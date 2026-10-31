@@ -45,7 +45,7 @@ test('init and keys print the fingerprint of the agent\'s key set, exactly as th
   assert.equal(printed(init.out), fingerprint);
   assert.equal(printed(keys.out), fingerprint);
   // The page shows the same, for the permission the link carries.
-  const link = init.out.split('\n').map((l) => l.trim()).find((l) => l.startsWith('https://prova.red/sign/#permission='));
+  const link = init.out.split('\n').map((l) => l.trim()).find((l) => l.startsWith('https://sign.prova.red/#permission='));
   assert.equal((await agentKeySet(readStartingPermission(new URL(link).hash).permission.agent.keys)).fingerprint, fingerprint);
 });
 

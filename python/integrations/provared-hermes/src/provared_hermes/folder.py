@@ -40,7 +40,7 @@ from provared.signatures import generate_key_set
 
 __all__ = ['Folder', 'FolderError', 'default_folder', 'starting_permission', 'signing_link', 'SIGNING_PAGE']
 
-SIGNING_PAGE = 'https://prova.red/sign/'
+SIGNING_PAGE = 'https://sign.prova.red/'
 PLUGIN = 'provared'
 _THUMBPRINT = re.compile(r'[A-Za-z0-9_-]{43}')
 
