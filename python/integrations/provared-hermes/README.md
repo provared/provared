@@ -196,10 +196,10 @@ hermes provared init
 
 This makes the agent's two keys (Ed25519 and ML-DSA-87) and prints a link
 that opens the signing page with a starting permission filled in, naming
-those keys. (Signing moved to https://sign.prova.red on 25 October 2026;
-until this plugin's next version the link begins
-`https://prova.red/sign/`, which now says so: open the same link with that
-part replaced by `https://sign.prova.red/`.) Change the permission there if you wish,
+those keys. (The link begins `https://sign.prova.red/`, the signing page's
+own address since 25 October 2026; a link printed by an earlier version
+begins `https://prova.red/sign/`, which now says so: open the same link
+with that part replaced by `https://sign.prova.red/`.) Change the permission there if you wish,
 sign it with your passkey, and put the saved file in place:
 
 ```

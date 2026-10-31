@@ -25,7 +25,7 @@ from .pass_ import MAX_PASSES, validate_pass_content
 from .seal import CLOCK_ALLOWANCE_MS, decode_stamps, key_set_fingerprint, validate_seal_content
 from .service import validate_refusal_content, validate_terms_content
 from .signatures import verify_signature
-from .slip import _UNDEFINED, check_passkey_signature, check_slip
+from .slip import _UNDEFINED, check_origins_option, check_passkey_signature, check_slip
 from .standing import validate_acknowledgement_content, validate_cancellation_content, validate_vouching_content, validate_withdrawal_content
 from .denial import validate_denial_content
 from .witness import MAX_WITNESSES, validate_witness_content
@@ -534,11 +534,12 @@ def _fork_reader(reader, whole=False):
 
 # --- the options a checker reads ---
 
-OPTION_NAMES = ['issuerKeys', 'sealKeys', 'stampServices', 'blocks', 'vouchers', 'witnesses', 'disclosures', 'cancellations', 'seals', 'expectedRoot', 'expectedSize', 'withoutMethods']
+OPTION_NAMES = ['issuerKeys', 'issuerOrigins', 'sealKeys', 'stampServices', 'blocks', 'vouchers', 'witnesses', 'disclosures', 'cancellations', 'seals', 'expectedRoot', 'expectedSize', 'withoutMethods']
 
 # The same options, as a Python caller may name them.
 _SNAKE = {
     'issuer_keys': 'issuerKeys',
+    'issuer_origins': 'issuerOrigins',
     'seal_keys': 'sealKeys',
     'stamp_services': 'stampServices',
     'blocks': 'blocks',
@@ -2509,7 +2510,7 @@ def check_book(text, options=None, **named):
     The answer always has the same shape, whatever the book holds. It never
     raises for a bad record: a failed check is a normal answer. The options
     are those of the JavaScript library, by its names or in Python's way:
-    issuer_keys, expected_root, expected_size, stamp_services, blocks,
+    issuer_keys, issuer_origins, expected_root, expected_size, stamp_services, blocks,
     seal_keys, vouchers, disclosures, cancellations, seals, without_methods. See
     the README, "What the checker returns". The content of an entry that
     has problems, or whose "verified" is "none", is given as it was read,
@@ -2556,6 +2557,7 @@ def start_carried(options=None):
     carried.held_seals = None
     try:
         _check_blocks_option(options)
+        check_origins_option(options)
     except Exception as e:
         carried.failure = problem_from(e)
     return carried
@@ -2754,6 +2756,7 @@ def check_show(show, options=None, **named):
             except ValueError:
                 raise Refusal('not-json', 'The Show is not JSON.') from None
         _check_blocks_option(options)
+        check_origins_option(options)
         f.members(show, ['pages', 'root', 'size', 'type'], ['seal'], 'show')
         if show['type'] != 'provared.show.v0' or not isinstance(show['type'], str):
             raise f.fail('show.type', 'must be provared.show.v0.')

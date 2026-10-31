@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // provared-check: check a book or a Show from the command line.
 //
-//   provared-check <file> [--issuer <thumbprint>]... [--sealer <fingerprint>]... [--stamp-service <fingerprint>]...
+//   provared-check <file> [--issuer <thumbprint>]... [--origin <address>]... [--sealer <fingerprint>]... [--stamp-service <fingerprint>]...
 //                  [--block <fingerprint>]... [--voucher <fingerprint>]... [--disclosures <file>] [--cancellation <file>]...
 //                  [--seal <file>]... [--witness <fingerprint>]... [--root <top fingerprint>] [--size <entries>] [--json]
 //
@@ -20,7 +20,7 @@
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { DENIAL_SOURCES, MIN_BLOCKS_AFTER, REFUSAL_REASONS, blocksInChain, checkBook, checkHeaderChain, checkShow, conditionWords, limitWords, neverWords } from '../src/check.js';
+import { DENIAL_SOURCES, MIN_BLOCKS_AFTER, REFUSAL_REASONS, blocksInChain, checkBook, checkHeaderChain, checkShow, conditionWords, isPageAddress, limitWords, neverWords } from '../src/check.js';
 
 // Node.js marks its ML-DSA and SLH-DSA as experimental and says so on every
 // run. The checker does not repeat that warning; any other warning is shown.
@@ -29,16 +29,19 @@ process.on('warning', (w) => {
   if (w.name !== 'ExperimentalWarning') console.error(`${w.name}: ${w.message}`);
 });
 
-const USAGE = `Usage: provared-check <file> [--issuer <thumbprint>]... [--sealer <fingerprint>]... [--stamp-service <fingerprint>]...
-                      [--block <fingerprint>]... [--voucher <fingerprint>]... [--disclosures <file>] [--cancellation <file>]...
-                      [--seal <file>]... [--witness <fingerprint>]... [--root <top fingerprint>] [--size <entries>]
-                      [--headers <file>] [--json]
+const USAGE = `Usage: provared-check <file> [--issuer <thumbprint>]... [--origin <address>]... [--sealer <fingerprint>]...
+                      [--stamp-service <fingerprint>]... [--block <fingerprint>]... [--voucher <fingerprint>]...
+                      [--disclosures <file>] [--cancellation <file>]... [--seal <file>]... [--witness <fingerprint>]...
+                      [--root <top fingerprint>] [--size <entries>] [--headers <file>] [--json]
        provared-check --sample [--json]
 
   <file>           a book (one entry to a line) or a Show (one JSON object)
   --sample         check the sample record that comes with the library, naming the passkey, the recorder and the
                    time-stamp service it was made with as trusted (they are stand-ins, and the people are invented)
   --issuer         the thumbprint of an issuer key you already trust; may be repeated
+  --origin         the address of the page at which the person signs permissions, such as https://sign.example.org
+                   (https://, a website name in lower case, a port only if it is needed, and nothing more); a
+                   permission signed at any other address is refused; may be repeated
   --sealer         the fingerprint of the key set of a recorder you expect to have sealed the book; may be repeated
   --stamp-service  the fingerprint of the certificate of a time-stamp service you trust; may be repeated
   --block          the fingerprint (64 hex characters) of a block of a public blockchain that you trust to be part of the chain;
@@ -68,14 +71,14 @@ const FINGERPRINT = /^[A-Za-z0-9_-]{43}$/;
 const BLOCK = /^[0-9a-f]{64}$/;
 
 // Options that may be repeated, and those that may be given once.
-const LISTS = { '--issuer': 'issuerKeys', '--sealer': 'sealKeys', '--stamp-service': 'stampServices', '--block': 'blocks', '--voucher': 'vouchers', '--witness': 'witnesses', '--cancellation': 'cancellations', '--seal': 'seals' };
+const LISTS = { '--issuer': 'issuerKeys', '--origin': 'issuerOrigins', '--sealer': 'sealKeys', '--stamp-service': 'stampServices', '--block': 'blocks', '--voucher': 'vouchers', '--witness': 'witnesses', '--cancellation': 'cancellations', '--seal': 'seals' };
 const ONCE = { '--disclosures': 'disclosures', '--root': 'expectedRoot', '--size': 'expectedSize', '--headers': 'headers' };
 
 // The arguments, or the reason they cannot be used. A value that is not a
 // fingerprint is refused, never set aside: a typing error must not quietly
 // leave a time-stamp or a name uncounted.
 function parseArguments(argv) {
-  const out = { file: null, sample: false, issuerKeys: [], sealKeys: [], stampServices: [], blocks: [], vouchers: [], witnesses: [], cancellations: [], seals: [], disclosures: undefined, expectedRoot: undefined, expectedSize: undefined, json: false };
+  const out = { file: null, sample: false, issuerKeys: [], issuerOrigins: [], sealKeys: [], stampServices: [], blocks: [], vouchers: [], witnesses: [], cancellations: [], seals: [], disclosures: undefined, expectedRoot: undefined, expectedSize: undefined, json: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--help' || a === '-h') return { help: true };
@@ -93,6 +96,9 @@ function parseArguments(argv) {
         return { error: `The value of ${a} is not a fingerprint. A fingerprint is 43 letters, digits, hyphens or underscores, with no spaces.` };
       }
       if (a === '--block' && !BLOCK.test(value)) return { error: 'The value of --block is not the fingerprint of a block: 64 characters, the digits 0 to 9 and the letters a to f.' };
+      if (a === '--origin' && !isPageAddress(value)) {
+        return { error: 'The value of --origin is not a page address in its plain form: https://, a website name in lower case, a port only if it is needed, and nothing more, such as https://sign.example.org.' };
+      }
       if (a === '--size' && !/^\d{1,6}$/.test(value)) return { error: 'The value of --size is not a number of entries.' };
       if (Object.hasOwn(LISTS, a)) out[LISTS[a]].push(value);
       else out[ONCE[a]] = a === '--size' ? Number(value) : value;
@@ -101,7 +107,7 @@ function parseArguments(argv) {
   }
   if (out.sample) {
     if (out.file !== null) return { error: '--sample names the sample record itself: give no file with it.' };
-    for (const name of ['issuerKeys', 'sealKeys', 'stampServices', 'blocks', 'vouchers', 'witnesses', 'cancellations', 'seals']) {
+    for (const name of ['issuerKeys', 'issuerOrigins', 'sealKeys', 'stampServices', 'blocks', 'vouchers', 'witnesses', 'cancellations', 'seals']) {
       if (out[name].length) return { error: '--sample names what to trust itself: give no other option with it but --json.' };
     }
     if (out.disclosures !== undefined || out.expectedRoot !== undefined || out.expectedSize !== undefined || out.headers !== undefined) {
@@ -503,6 +509,10 @@ function print(result, isShow) {
     console.log(`  Time-stamped in a way you trust?      ${stamped}`);
     if (s.counts.seals || args.witnesses.length) console.log(`  Witnessed by a witness you trust?     ${witnessedWords(s)}${isShow && s.witnessed ? ' (single pages: this says nothing about totals over the whole book)' : ''}`);
     console.log(`  Checked against keys you named?       ${trustWords(s)}`);
+    // Shown only where the person named an address: a permission signed
+    // elsewhere is a problem, reported above, so here every one was signed
+    // at an address they named.
+    if (args.issuerOrigins.length) console.log(`  Signed at an address you named?       yes: every permission was signed at ${[...new Set(args.issuerOrigins)].join(' or ')}`);
     if (args.seals.length) console.log(`  Seals held elsewhere compared?        ${heldWords(result)}`);
   }
   console.log(`  Slips ${s.counts.slips}, stubs ${s.counts.stubs} (countersigned ${s.counts.countersigned}, one-sided ${s.counts.oneSided})${s.counts.seals ? `, seals ${s.counts.seals}` : ''}`);
@@ -608,6 +618,7 @@ try {
 
 const options = {};
 if (args.issuerKeys.length) options.issuerKeys = args.issuerKeys;
+if (args.issuerOrigins.length) options.issuerOrigins = args.issuerOrigins;
 if (args.sealKeys.length) options.sealKeys = args.sealKeys;
 if (args.stampServices.length) options.stampServices = args.stampServices;
 if (args.blocks.length) options.blocks = args.blocks;

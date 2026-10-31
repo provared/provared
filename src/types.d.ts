@@ -420,6 +420,13 @@ export interface CheckResult {
 export interface CheckOptions {
   /** The thumbprints of the issuer keys the checker expects. */
   issuerKeys?: string[];
+  /**
+   * The addresses of the pages at which the checker expects every slip to
+   * have been signed, each in the form of the format description's section
+   * 4.1 (https://, a website name in lower case, a port only if needed). At
+   * most 64. A slip signed at any other address is refused.
+   */
+  issuerOrigins?: string[];
   /** The key set fingerprints of the recorders the checker expects. */
   sealKeys?: Fingerprint[];
   /** The certificate fingerprints of the time-stamp services the checker trusts. */
@@ -481,7 +488,13 @@ export interface Checker {
 /** The options are fixed when the checker is opened. The book so far may be empty. */
 export function openChecker(text?: string, options?: CheckOptions): Promise<Checker>;
 export function checkShow(show: Show | string, options?: CheckOptions): Promise<CheckResult>;
-export function checkSlip(record: SignedRecord, options?: Pick<CheckOptions, 'issuerKeys' | 'withoutMethods' | 'disclosures'>, disclosures?: string[]): Promise<SlipCheck>;
+export function checkSlip(record: SignedRecord, options?: Pick<CheckOptions, 'issuerKeys' | 'issuerOrigins' | 'withoutMethods' | 'disclosures'>, disclosures?: string[]): Promise<SlipCheck>;
+/**
+ * Whether a text is the address of a page in the one form the format allows for a slip's "issuer.origin" (format
+ * description, section 4.1), which is also the form each address in "issuerOrigins" must have: https:// (or
+ * http://localhost), a website name in lower case, a port only where it is needed, and nothing more.
+ */
+export function isPageAddress(text: unknown): boolean;
 export function methodAvailable(alg: string): Promise<boolean>;
 export function thumbprint(key: PublicKey): Promise<string>;
 export function keySetFingerprint(keys: KeySet | SealKeySet): Promise<Fingerprint>;

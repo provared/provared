@@ -460,7 +460,23 @@ async function slipCases() {
     add(`a sound slip, signed with ${alg}`, await signedSlip(w.passkey, w.content));
   }
   const local = await baseSlip('ES256');
-  add('a sound slip, signed on localhost', await signedSlip(local.passkey, local.content));
+  const onLocalhost = await signedSlip(local.passkey, local.content);
+  add('a sound slip, signed on localhost', onLocalhost);
+
+  // The address the slip was signed at, compared with the ones the reader
+  // names (section 4.4): the passkey first, then the address; the list
+  // must be in the one form the format allows.
+  add('a sound slip, with its address named', good, { issuerOrigins: ['https://sign.example.org'] });
+  add('a sound slip, with another address named', good, { issuerOrigins: ['https://example.org'] });
+  add('a sound slip, with two addresses named, its own among them', good, { issuerOrigins: ['https://example.org', 'https://sign.example.org'] });
+  add('a sound slip, with an empty list of addresses named', good, { issuerOrigins: [] });
+  add('a sound slip, with the passkey trusted and its address named', good, { issuerKeys: [issuerKey], issuerOrigins: ['https://sign.example.org'] });
+  add('a sound slip, with another passkey trusted and its address named', good, { issuerKeys: [toBase64url(new Uint8Array(32))], issuerOrigins: ['https://sign.example.org'] });
+  add('a sound slip, with an address named that is not in its plain form', good, { issuerOrigins: ['https://Sign.example.org/'] });
+  add('a sound slip, with addresses named that are not a list', good, { issuerOrigins: 'https://sign.example.org' });
+  add('a sound slip, with 65 addresses named', good, { issuerOrigins: new Array(65).fill('https://sign.example.org') });
+  add('a sound slip, signed on localhost, with its address named', onLocalhost, { issuerOrigins: ['http://localhost:8787'] });
+  add('a sound slip, signed on localhost, with localhost without its port named', onLocalhost, { issuerOrigins: ['http://localhost'] });
 
   // The passkey's answer.
   const assertions = [

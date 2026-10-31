@@ -34,28 +34,74 @@ _DIGITS = re.compile(r'[0-9]+')
 _RP_ID = re.compile(r'[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?')
 
 
+def _page_address_parts(text):
+    """The scheme and the host of a text in the form above, or None where the
+    text is not in that form."""
+    if not isinstance(text, str):
+        return None
+    m = _ORIGIN.fullmatch(text)
+    if not m:
+        return None
+    labels = m.group(2).split('.')
+    port = int(m.group(3)) if m.group(3) is not None else None
+    if (
+        not all(_LABEL.fullmatch(label) for label in labels)
+        or _DIGITS.fullmatch(labels[-1])
+        or (port is not None and (port > 65535 or port == (443 if m.group(1) == 'https' else 80)))
+    ):
+        return None
+    return m.group(1), m.group(2)
+
+
+def is_page_address(text):
+    """Whether a text is the address of a page in the one form the format
+    allows for a slip's "issuer.origin" (format description, section 4.1):
+    "https://" (or "http://localhost"), a website name in lower case, a port
+    only where it is needed, and nothing more. The addresses a reader names
+    as the ones a permission must have been signed at (the option
+    "issuerOrigins") must be in this form too, so that an address with a
+    capital letter or a path is refused, and does not quietly match nothing."""
+    parts = _page_address_parts(text)
+    return parts is not None and (parts[0] == 'https' or (parts[0] == 'http' and parts[1] == 'localhost'))
+
+
 def _check_origin(origin, rp_id):
     f.text(origin, 1, 300, 'issuer.origin')
     if not isinstance(rp_id, str) or not _RP_ID.fullmatch(rp_id):
         raise f.fail('issuer.rpId', 'must be a website name in lower case, such as example.org.')
-    m = _ORIGIN.fullmatch(origin)
-    labels = m.group(2).split('.') if m else []
-    port = int(m.group(3)) if m and m.group(3) is not None else None
-    if (
-        not m
-        or not all(_LABEL.fullmatch(label) for label in labels)
-        or _DIGITS.fullmatch(labels[-1])
-        or (port is not None and (port > 65535 or port == (443 if m.group(1) == 'https' else 80)))
-    ):
+    parts = _page_address_parts(origin)
+    if parts is None:
         raise f.fail(
             'issuer.origin',
             'must be the address of a page: https://, a website name in lower case, a port only if it is needed, and nothing more, such as https://sign.example.org.',
         )
-    scheme, host = m.group(1), m.group(2)
+    scheme, host = parts
     if not (scheme == 'https' or (scheme == 'http' and host == 'localhost')):
         raise f.fail('issuer.origin', 'must begin https://, or http://localhost.')
     if not (host == rp_id or host.endswith('.' + rp_id)):
         raise f.fail('issuer.origin', 'must be on the website that issuer.rpId names.')
+
+
+MAX_ISSUER_ORIGINS = 64
+"""The most addresses a reader may name as the ones a permission must have been signed at."""
+
+
+def check_origins_option(options):
+    """The addresses a reader names as the ones a permission must have been
+    signed at (the option "issuerOrigins"; format description, section 4.4):
+    a list of at most 64, each in the form is_page_address accepts. Anything
+    else is refused, never set aside: an address with a capital letter or a
+    path would match nothing, and every permission would then read as signed
+    elsewhere. Not part of the public interface."""
+    if 'issuerOrigins' not in options:
+        return
+    origins = options['issuerOrigins']
+    sound = isinstance(origins, list) and len(origins) <= MAX_ISSUER_ORIGINS and all(is_page_address(o) for o in origins)
+    if not sound:
+        raise f.fail(
+            'issuerOrigins',
+            'must be a list of at most 64 page addresses, each https://, a website name in lower case, a port only if it is needed, and nothing more, such as https://sign.example.org.',
+        )
 
 
 def validate_limits(actions, limits):
@@ -284,10 +330,12 @@ def check_slip(record, options=None, disclosures=_UNDEFINED):
     """Check one slip (format description, section 4.4).
 
     options: "issuerKeys" (thumbprints of the issuer keys the checker
-    expects), "withoutMethods", "disclosures" (for covered fields: the
-    disclosures handed over, by the fingerprint of the record they belong
-    to). disclosures: the disclosures for this slip, where they come with it
-    (a page of a Show).
+    expects), "issuerOrigins" (the addresses of the pages at which the
+    checker expects the slip to have been signed, each in the form of
+    section 4.1; see is_page_address), "withoutMethods", "disclosures" (for
+    covered fields: the disclosures handed over, by the fingerprint of the
+    record they belong to). disclosures: the disclosures for this slip,
+    where they come with it (a page of a Show).
     """
     result = {
         'kind': 'slip',
@@ -349,6 +397,16 @@ def check_slip(record, options=None, disclosures=_UNDEFINED):
                 raise Refusal('issuer-not-expected', 'The slip was signed by a passkey other than the ones expected.')
         else:
             result['notes'].append("The issuer's key was not compared with a key you already trust. The name on the slip is only a label.")
+
+        # The address the slip was signed at, compared with the ones the reader
+        # named, where they named any (section 4.4). An approval and a
+        # cancellation are signed with the same passkey, and the passkey check
+        # holds each to the slip's address, so the slip's is the one compared.
+        if 'issuerOrigins' in options:
+            check_origins_option(options)
+            if not any(o == issuer['origin'] for o in options['issuerOrigins']):
+                raise Refusal('issuer-origin-not-expected', 'The slip was signed at a page address other than the ones expected.')
+            result['notes'].append(f"This slip was signed at {issuer['origin']}, an address you named.")
     except Exception as e:
         result['problems'].append(problem_from(e))
     return result

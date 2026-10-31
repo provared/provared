@@ -60,6 +60,29 @@ test('--issuer with the right key leaves no note; with a wrong key the record is
   assert.match(wrong.out, /PROBLEM \[issuer-not-expected\]/);
 });
 
+test('--origin: the address the permission was signed at; another address is a problem; a value not in its plain form is refused', () => {
+  // The sample's permission was signed by a stand-in for a passkey at http://localhost:8787.
+  const right = run(sample, '--issuer', expected.issuerKey, '--origin', 'http://localhost:8787');
+  assert.equal(right.code, 1, right.out); // the sample shows the agent outside its slip
+  assert.match(right.out, /Note: This slip was signed at http:\/\/localhost:8787, an address you named\./);
+  assert.match(right.out, /Signed at an address you named\?\s+yes: every permission was signed at http:\/\/localhost:8787\n/);
+  const two = run(sample, '--issuer', expected.issuerKey, '--origin', 'https://sign.example.org', '--origin', 'http://localhost:8787');
+  assert.equal(two.code, 1, two.out);
+  assert.match(two.out, /every permission was signed at https:\/\/sign\.example\.org or http:\/\/localhost:8787\n/);
+  const wrong = run(sample, '--issuer', expected.issuerKey, '--origin', 'https://sign.example.org');
+  assert.equal(wrong.code, 2);
+  assert.match(wrong.out, /PROBLEM \[issuer-origin-not-expected\]/);
+  assert.doesNotMatch(wrong.out, /Signed at an address you named/);
+  // Without --origin the line is not shown, and nothing is said of addresses.
+  assert.doesNotMatch(run(sample).out, /Signed at an address you named|an address you named/);
+  const malformed = run(sample, '--origin', 'https://Sign.example.org/');
+  assert.equal(malformed.code, 2);
+  assert.match(malformed.err, /The value of --origin is not a page address in its plain form/);
+  assert.equal(run(sample, '--origin').code, 2);
+  assert.equal(run('--sample', '--origin', 'http://localhost:8787').code, 2);
+  assert.match(run('--help').out, /--origin\s+the address of the page at which the person signs permissions/);
+});
+
 test('--json prints the whole result', () => {
   const r = run(sample, '--json');
   const result = JSON.parse(r.out);

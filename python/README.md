@@ -172,7 +172,7 @@ of an agent behind the writer in one line. `key_set_from_seeds` and `key_set_see
 agent's keys between runs as two 32-byte seeds.
 
 Names follow Python's way (`check_book`, `write_stub`). Options may be
-given as keyword arguments (`issuer_keys`, `expected_root`,
+given as keyword arguments (`issuer_keys`, `issuer_origins`, `expected_root`,
 `stamp_services`, `seal_keys`, `vouchers`, `witnesses`, `disclosures`,
 `cancellations`, `seals`, `without_methods`), or as one dict with the names the
 JavaScript library uses (`issuerKeys` and so on). Records and answers
