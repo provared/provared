@@ -961,6 +961,7 @@ test('a body waits as its bytes only, is turned away by the waiting limits befor
       () => (answered = true),
       () => (answered = true),
     );
+    // eslint-disable-next-line no-unmodified-loop-condition -- both are set by callbacks that run while the loop waits.
     while (stamping === 0 && !answered) await pause(50);
     assert.equal(stamping, 1, 'the seal holds the queue');
     // A body that is not JSON waits for its turn unread: no answer while the seal holds the queue.

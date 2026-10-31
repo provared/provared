@@ -89,6 +89,7 @@ function readCredential(upstream, root) {
     secret = secret.replace(/\r?\n$/, '');
   } else {
     secret = process.env[c.env];
+    // eslint-disable-next-line security/detect-possible-timing-attacks -- asks only whether the variable is set, which reveals nothing about the secret.
     if (secret === undefined) throw new Error(`upstream "${upstream.name}": the environment holds no ${c.env}.`);
   }
   if (secret === '' || /[\r\n\0]/.test(secret)) throw new Error(`upstream "${upstream.name}": the credential is empty, or holds a line break.`);

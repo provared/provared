@@ -162,10 +162,12 @@ const EVALS = new Set(['eval', 'iex', 'invoke-expression']);
 // Programs that run the words after them as a command line, again and again or once for each input.
 const REPEATERS = new Set(['watch', 'parallel']);
 // The option that hands a shell its command line: -c, or a cluster with c (-lc, -ec) for the Unix shells; /c or /k for cmd; -Command or a shortening of it for PowerShell.
+// eslint-disable-next-line security/detect-unsafe-regex -- no repetition inside repetition can match the same text two ways (only optional letters, each at most once), so matching takes time in proportion to the input.
 const handsLine = (shell, word) => (shell === 'cmd' ? /^\/[ck]$/i.test(word) : shell === 'powershell' || shell === 'pwsh' ? /^-c(o(m(m(a(n(d)?)?)?)?)?)?$/i.test(word) : /^-[a-z]*c[a-z]*$/i.test(word));
 // The options of any other program whose value, written in quotation marks, is a command line: -c, or a cluster of
 // small letters ending in c (su -c, script -qc, flock -c); --command; PowerShell's -Command or a shortening of it of two
 // letters or more; Start-Process's -ArgumentList or -Args; and env's -S or --split-string.
+// eslint-disable-next-line security/detect-unsafe-regex -- no repetition inside repetition can match the same text two ways (only optional letters, each at most once), so matching takes time in proportion to the input.
 const linesOption = (owner, word) => /^-[a-z]*c$/.test(word) || /^(?:--command|-co(?:m(?:m(?:a(?:n(?:d)?)?)?)?)?|-argumentlist|-args)$/i.test(word)
   || (owner === 'env' && (word === '-S' || word === '--split-string'));
 // git's own options before the command that take the next word as their value.
@@ -176,7 +178,9 @@ const SSH_VALUED = new Set(['-B', '-b', '-c', '-D', '-E', '-e', '-F', '-I', '-i'
 const MOVES = new Set(['mv', 'move', 'move-item', 'mi']);
 const NULL_DEVICES = new Set(['/dev/null', 'nul', '$null', 'nul:']);
 // Interpreters, which may run a script written in the command line; and Python's launchers, whose -m names a module.
+// eslint-disable-next-line security/detect-unsafe-regex -- no repetition inside repetition can match the same text two ways (digits split by a full stop the digits cannot match), so matching takes time in proportion to the input.
 const INTERPRETERS = /^(python(\d+(\.\d+)?)?|pythonw|py|node|nodejs|deno|bun|ruby|perl|php|pwsh|powershell)$/;
+// eslint-disable-next-line security/detect-unsafe-regex -- no repetition inside repetition can match the same text two ways (digits split by a full stop the digits cannot match), so matching takes time in proportion to the input.
 const PYTHONS = /^(python(\d+(\.\d+)?)?|pythonw|py)$/;
 // A script's own calls that delete.
 const SCRIPT_DELETES = /(?:\b(?:shutil\.rmtree|rmtree|os\.(?:remove|unlink|rmdir|removedirs)|(?:unlink|rm|rmdir)Sync|fs(?:\.promises)?\.(?:rm|rmdir|unlink)|FileUtils\.(?:rm_rf|rm_r|rm_f|rm|remove_dir|remove_entry|remove)|Deno\.remove(?:Sync)?|(?:File|Directory)\]?(?:\.|::)Delete)|\.(?:unlink|rmdir)\b)\s*[("']|\bunlink\b/i;
@@ -444,6 +448,7 @@ const setting = (word) => /^[A-Za-z_][A-Za-z0-9_]*=/.test(word);
 // A redirection: 2>/dev/null, >log.txt, <in.txt, 2>&1, >&2, &>log.txt, or the sign alone, whose target is the next word.
 const redirection = (word) => /^\d*(>>?|<|&>|>&)/.test(word);
 // A redirection that empties its file: >file, 2>file, &>file, or the sign alone, whose target is the next word (not >>, which adds to its file, nor >&2).
+// eslint-disable-next-line security/detect-unsafe-regex -- no repetition inside repetition can match the same text two ways (one repeated part on each side of the sign >), so matching takes time in proportion to the input.
 const EMPTIES = /^(?:\d*|&)>([^>&][\s\S]*)?$/;
 
 // The program a simple command runs, the words handed to it, and its place among the words.
@@ -543,6 +548,7 @@ function lineOf(name, args) {
   if (start === -1) return null;
   if (start <= -2) return [args[-2 - start].slice(name === 'cmd' ? 2 : 3), ...args.slice(-1 - start)].join(' ');
   // PowerShell's -Command (or a shortening of it) names the line given to iex or Invoke-Expression; eval takes none.
+  // eslint-disable-next-line security/detect-unsafe-regex -- no repetition inside repetition can match the same text two ways (only optional letters, each at most once), so matching takes time in proportion to the input.
   const line = name === 'iex' || name === 'invoke-expression' ? args.filter((a) => !/^-c(o(m(m(a(n(d)?)?)?)?)?)?$/i.test(a)) : args.slice(start);
   return line.join(' ');
 }

@@ -15,6 +15,20 @@
 # the framework tests run their agents with stand-in models, inside a guard
 # that refuses any connection.
 #
+# Warnings count as failures. The Python tests run with "-W error", so a
+# warning stops them as an error would. The JavaScript tests run without
+# hiding Node.js's warnings (with "set -o pipefail", so that a failing run
+# is not hidden by the copy of its output), and a step after each fails on any warning
+# other than Node.js's notice that ML-DSA or SLH-DSA is experimental
+# (tools/lint/node-warnings.sh).
+#
+# Static analysis: ESLint over the JavaScript and Ruff over the Python,
+# with rules that look for faults (eval, unsafe regular expressions,
+# subprocess with shell=True, weak fingerprint methods and the like), not
+# style. Both are development tools only, kept in tools/lint/ at exact
+# versions (its package-lock.json, and requirements.txt with each file's
+# fingerprint), and are not part of any published package.
+#
 # The actions are GitHub's own, each pinned to the exact commit of a
 # released version (the comment gives the version), so that a later change
 # to a tag cannot change what runs here.
@@ -47,6 +61,36 @@ env:
   PYTHONUNBUFFERED: '1'
 
 jobs:
+  # Static analysis of the JavaScript (ESLint) and the Python (Ruff), with
+  # the settings in tools/lint/. A finding that is not a fault is set aside
+  # on its own line, with a comment that gives the reason.
+  lint:
+    name: Static analysis (ESLint and Ruff)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14'
+      # The exact versions in tools/lint/package-lock.json; no install script runs.
+      - name: Install ESLint
+        working-directory: tools/lint
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Run ESLint
+        working-directory: tools/lint
+        run: npm run lint
+      # pip takes only the files whose fingerprints tools/lint/requirements.txt gives.
+      - name: Install Ruff
+        run: python -m pip install --require-hashes -r tools/lint/requirements.txt
+      - name: Run Ruff
+        run: ruff check --config tools/lint/ruff.toml --output-format github python tools/release
+
   # The library's own tests, the same files as "npm test" at the top of the
   # repository: only test/**/*.test.mjs, so that the packages below, and
   # the helper files beside their tests, are not run here. Each package is
@@ -64,7 +108,9 @@ jobs:
         with:
           node-version: 24
       - name: Run the tests
-        run: node --disable-warning=ExperimentalWarning --test 'test/**/*.test.mjs'
+        run: set -o pipefail; node --test 'test/**/*.test.mjs' 2>&1 | tee "$RUNNER_TEMP/test-output.txt"
+      - name: Fail on any warning but the expected one
+        run: sh tools/lint/node-warnings.sh "$RUNNER_TEMP/test-output.txt"
 
   # The recorder beside Claude Code, the gateway, the central sealer and
   # the conformance kit. The first three point the name "provared" at this
@@ -87,9 +133,12 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
+      # As "npm test" in each folder, without hiding warnings.
       - name: Run the tests
         working-directory: ${{ matrix.package }}
-        run: npm test
+        run: set -o pipefail; node --test test/*.test.mjs 2>&1 | tee "$RUNNER_TEMP/test-output.txt"
+      - name: Fail on any warning but the expected one
+        run: sh tools/lint/node-warnings.sh "$RUNNER_TEMP/test-output.txt"
 
   # The OpenTelemetry bridge. Unlike the packages above, its tests need
   # packages of their own: OpenTelemetry's API, its SDK and its context
@@ -113,9 +162,12 @@ jobs:
       - name: Install the packages the tests need
         working-directory: integrations/opentelemetry
         run: npm ci --ignore-scripts --no-audit --no-fund
+      # As "npm test", without hiding warnings.
       - name: Run the tests, at the locked versions
         working-directory: integrations/opentelemetry
-        run: npm test
+        run: set -o pipefail; node --test test/*.test.mjs 2>&1 | tee "$RUNNER_TEMP/test-output.txt"
+      - name: Fail on any warning but the expected one, at the locked versions
+        run: sh tools/lint/node-warnings.sh "$RUNNER_TEMP/test-output.txt"
       - name: Install the newest releases, with no lock file
         working-directory: integrations/opentelemetry
         run: npm install --no-save --no-package-lock --ignore-scripts --no-audit --no-fund "@opentelemetry/api@^1.9.0" @opentelemetry/sdk-trace@latest @opentelemetry/context-async-hooks@latest
@@ -125,7 +177,9 @@ jobs:
           for p in api sdk-trace context-async-hooks; do node -p "'@opentelemetry/$p ' + require('./node_modules/@opentelemetry/$p/package.json').version"; done
       - name: Run the tests, at the newest releases
         working-directory: integrations/opentelemetry
-        run: npm test
+        run: set -o pipefail; node --test test/*.test.mjs 2>&1 | tee "$RUNNER_TEMP/test-output.txt"
+      - name: Fail on any warning but the expected one, at the newest releases
+        run: sh tools/lint/node-warnings.sh "$RUNNER_TEMP/test-output.txt"
 
   # The library in Python, on the oldest and the newest Python it supports.
   python:
@@ -147,7 +201,7 @@ jobs:
         run: python -m pip install ./python
       - name: Run the tests
         working-directory: python
-        run: python -m unittest discover -s tests
+        run: python -W error -m unittest discover -s tests
 
   # The packages for LangChain, Pydantic AI and Agno. Each is installed
   # beside the library from this commit, with no versions pinned, so pip
@@ -172,12 +226,18 @@ jobs:
       # Both in one command, so that pip uses the library from this commit,
       # not the one on the Python Package Index.
       - name: Install the library and the package
-        run: python -m pip install ./python ./python/integrations/${{ matrix.package }}
+        env:
+          PACKAGE: ${{ matrix.package }}
+        run: python -m pip install ./python "./python/integrations/$PACKAGE"
       - name: Show the versions being tested
         run: python -m pip list
+      # Warnings stop the tests, as errors would. One is set aside: LangSmith,
+      # which LangChain installs, calls asyncio.iscoroutinefunction when it is
+      # imported, which Python 3.14 marks as deprecated. The filter names that
+      # module only, so the same warning from this repository's code still fails.
       - name: Run the tests
         working-directory: python/integrations/${{ matrix.package }}
-        run: python -m unittest discover -s tests
+        run: python -W error -W "ignore:'asyncio.iscoroutinefunction' is deprecated:DeprecationWarning:langsmith._internal._beta_decorator" -m unittest discover -s tests
 
   # The plugin for Hermes Agent. Hermes is not taken from the Python Package
   # Index (its "hermes-agent" there stopped at 0.19.0), so its source is
@@ -240,9 +300,14 @@ jobs:
           print(f'provared {have} fits the plugin\'s bound.')
       - name: Show the versions being tested
         run: python -m pip list
+      # Warnings stop the tests, as errors would, except the plugin's own
+      # notices to the person, which begin "Provared" and are RuntimeWarnings
+      # raised inside Hermes on purpose (for example when another plugin's
+      # middleware comes after it). Turned into errors, Hermes would handle
+      # them as failures of the tool, and the tests would test something else.
       - name: Run the tests
         working-directory: python/integrations/provared-hermes
-        run: python -m unittest discover -s tests
+        run: python -W error -W "default:Provared:RuntimeWarning" -m unittest discover -s tests
 
   # The examples, with each framework at the exact version that
   # python/examples/requirements.txt names. The framework packages above
@@ -260,9 +325,13 @@ jobs:
           python-version: '3.14'
       - name: Install the examples' requirements and the library
         run: python -m pip install -r python/examples/requirements.txt ./python
+      # Warnings stop the tests, as errors would. One is set aside: LangSmith,
+      # which LangChain installs, calls asyncio.iscoroutinefunction when it is
+      # imported, which Python 3.14 marks as deprecated. The filter names that
+      # module only, so the same warning from this repository's code still fails.
       - name: Run the tests
         working-directory: python/examples
-        run: python -m unittest test_examples -v
+        run: python -W error -W "ignore:'asyncio.iscoroutinefunction' is deprecated:DeprecationWarning:langsmith._internal._beta_decorator" -m unittest test_examples -v
 
   # The JavaScript example (examples/frameworks/), with the Vercel AI SDK
   # and every package beneath it at the exact versions that its

@@ -8,7 +8,7 @@ import sys
 import tempfile
 import unittest
 
-from provared import check_book, check_slip, thumbprint
+from provared import Refusal, check_book, check_slip, thumbprint
 from provared.dev import DEVELOPMENT_MARK, development_passkey, development_recorder, development_slip
 
 SEND = 'provared.message.send'
@@ -44,7 +44,7 @@ class DevelopmentStandIn(unittest.TestCase):
         self.assertEqual(check_slip(forced.slip, {'issuerKeys': forced.issuer_keys})['content']['issuer']['origin'], 'http://localhost')
 
     def test_the_stand_in_refuses_what_prepare_slip_refuses(self):
-        with self.assertRaises(Exception):
+        with self.assertRaises(Refusal):
             development_slip()
         with self.assertRaises(TypeError):
             development_slip('send')

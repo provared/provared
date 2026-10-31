@@ -37,8 +37,12 @@ def stop(message):
 
 
 def read(address):
-    request = urllib.request.Request(address, headers={"Accept": "application/json"})
-    with urllib.request.urlopen(request, timeout=60) as answer:
+    # Only https: the second address comes from the index's own answer.
+    if not address.startswith("https://"):
+        stop(f"the address {address!r} is not an https address, so it was not read.")
+    # The two S310 notes are set aside: the line above allows https alone.
+    request = urllib.request.Request(address, headers={"Accept": "application/json"})  # noqa: S310
+    with urllib.request.urlopen(request, timeout=60) as answer:  # noqa: S310
         return answer.read()
 
 

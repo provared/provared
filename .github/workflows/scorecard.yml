@@ -1,0 +1,110 @@
+# Runs the OpenSSF (Open Source Security Foundation) Scorecard over this
+# repository and publishes its result, which the badge in the README shows.
+#
+# Scorecard reads the repository and its settings and scores a set of
+# practices: whether the workflows' tokens are kept to what they need,
+# whether actions are pinned, whether branches are protected, whether
+# releases are signed, and so on. Its checks are listed at
+# https://github.com/ossf/scorecard/blob/main/docs/checks.md. A score is
+# a measure of practices, not a review of the code.
+#
+# When: on every push to main; every Sunday, so that the checks that look
+# at the passing of time (such as whether the project is maintained) stay
+# current; and when a branch protection rule changes, so that the result
+# shows the new rule. Scorecard runs only on the default branch.
+#
+# What it sends: the result, signed with this run's GitHub identity token,
+# to the Scorecard project's public service (api.scorecard.dev), which
+# serves the badge; and the same result to GitHub's code scanning page of
+# this repository. It uses no stored secret, only the run's own automatic
+# token.
+#
+# Laid out as the Scorecard project's own example for a public repository
+# (examples/scorecard.yml in https://github.com/ossf/scorecard-action, as
+# on its main branch, read 31 October 2026; the file is not in the commit
+# pinned below). The Scorecard service accepts a published result only
+# from a workflow that keeps to its rules: no environment variables or
+# defaults at the top or in the job, no write permission at the top, and
+# in the job only actions from its short approved list.
+#
+# Unlike the other workflows here, one action is not GitHub's own:
+# ossf/scorecard-action, made by the Open Source Security Foundation. Every
+# action is pinned to the exact commit of a released version (the comment
+# gives the version), so that a later change to a tag cannot change the
+# action's own files. For the Scorecard action that does not fix everything
+# that runs: its action.yaml, at the pinned commit, runs the container
+# docker://ghcr.io/ossf/scorecard-action:v2.5.0, chosen by its tag, so the
+# Scorecard project could change that container without changing the
+# commit. The image the tag named on 31 October 2026 was
+# sha256:1e1481c65fc2407d3fd6ab18a23c741eb4d1c0d9359ebafc4b3ab13aa61d8627.
+# It cannot be pinned by that fingerprint here: the Scorecard service
+# accepts a result only from the named action, not from the container run
+# directly. What the container can reach is small: the job's token can
+# only send results to the code scanning page and ask for an identity
+# token; it has no "contents" permission, so it cannot change the
+# repository. At worst a changed container could publish a false result,
+# on this repository's Security tab and at api.scorecard.dev.
+
+name: Scorecard
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    # Every Sunday at 14:15 UTC.
+    - cron: '15 14 * * 0'
+  # So that the result shows a change to the rules that protect main.
+  branch_protection_rule:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# No permission at the top: the one job below names the two it needs.
+permissions: {}
+
+# No job here may read or write GitHub's cache for this repository.
+# GitHub's workflow syntax documents this key; actionlint 1.7.12 does not
+# know it yet and reports it, wrongly.
+cache-mode: none
+
+jobs:
+  analysis:
+    name: Scorecard analysis
+    runs-on: ubuntu-latest
+    # Scorecard supports only the default branch.
+    if: ${{ github.event.repository.default_branch == github.ref_name }}
+    permissions:
+      # To send the result to this repository's code scanning page.
+      security-events: write
+      # To sign the result sent to api.scorecard.dev.
+      id-token: write
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run Scorecard
+        uses: ossf/scorecard-action@fa7117db83c52d787ae5a89f350999701505d78e # v2.5.0
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          # Needed for the badge: the result replaces the Scorecard
+          # project's own weekly scan of this repository.
+          publish_results: true
+
+      # The result as a file on the run's page, kept five days.
+      - name: Keep the result with the run
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: SARIF file
+          path: results.sarif
+          retention-days: 5
+
+      - name: Send the result to code scanning
+        if: ${{ always() }}
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          sarif_file: results.sarif

@@ -1258,14 +1258,14 @@ def _first(pattern, flags=0):
     out = []
     in_class = False
     for token in re.findall(r'\\.|.', pattern, re.S):
-        if token == r'\s':
+        if token == r'\s':  # noqa: S105 -- "token" is a piece of a pattern being read, not a secret
             out.append(_S[1:-1] if in_class else _S)
-        elif token == '.' and not in_class:
+        elif token == '.' and not in_class:  # noqa: S105 -- "token" is a piece of a pattern being read, not a secret
             out.append('[^\n\r\u2028\u2029]')
         else:
-            if token == '[':
+            if token == '[':  # noqa: S105 -- "token" is a piece of a pattern being read, not a secret
                 in_class = True
-            elif token == ']':
+            elif token == ']':  # noqa: S105 -- "token" is a piece of a pattern being read, not a secret
                 in_class = False
             out.append(token)
     return re.compile(''.join(out), flags | re.A)

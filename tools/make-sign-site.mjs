@@ -90,6 +90,7 @@ export function sourceAt(from, repo = ROOT) {
   };
   const tagged = find(`refs/tags/${from}`);
   const commit = tagged || find(from);
+  // eslint-disable-next-line security/detect-unsafe-regex -- fixed-length runs of hex digits, with one optional part: no text can match two ways.
   if (!/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/.test(commit)) {
     throw new Error(`git finds no tag or commit named ${from} in ${repo}, so nothing was written or compared.`);
   }
@@ -176,6 +177,7 @@ function pinnedActions(source) {
   const own = source.show('.github/workflows/pages.yml').toString('utf8');
   const pins = {};
   for (const name of ['checkout', 'configure-pages', 'upload-pages-artifact', 'deploy-pages']) {
+    // eslint-disable-next-line security/detect-non-literal-regexp -- built from the four action names listed just above, which hold only letters and hyphens.
     const m = own.match(new RegExp(`uses: actions/${name}@([0-9a-f]{40}) # (v[0-9.]+)`));
     if (!m) throw new Error(`.github/workflows/pages.yml does not pin actions/${name} to a commit`);
     pins[name] = `actions/${name}@${m[1]} # ${m[2]}`;

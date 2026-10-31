@@ -83,7 +83,10 @@ def _status(folder):
     except FolderError as e:
         _say(str(e))
         trusted = []
-    _say(f"The passkeys this plugin trusts: {', '.join(trusted) or 'none yet (the first \"use\" names one)'}.")
+    # Worked out first: Python 3.11, which this plugin supports, does not
+    # allow a backslash inside an f-string's braces.
+    named = ', '.join(trusted) or 'none yet (the first "use" names one)'
+    _say(f'The passkeys this plugin trusts: {named}.')
     try:
         slip = folder.placed_slip()
         content = json.loads(from_base64url(slip['payload']).decode('utf-8'))

@@ -7,7 +7,9 @@ own time, and help is welcome in these forms.
 https://github.com/provared/provared/issues, or write to hello@prova.red.
 Say what you did, what you expected and what happened; a record that
 shows the fault is the best report. A fault in the security of a record
-goes by email first: see `SECURITY.md`.
+is reported privately first, through GitHub's private reporting form
+(https://github.com/provared/provared/security/advisories/new) or by
+email to hello@prova.red: see `SECURITY.md`.
 
 **Questions about the format.** The format is described exactly in
 `spec/provared-format.md`, and its core is an individual Internet-Draft
@@ -33,8 +35,9 @@ Until then a change sent as a pull request is read, and may be rewritten
 by the author in their own words rather than merged.
 
 **What to expect.** The author answers within a few days. Tests are
-written with `node:test` and Python's `unittest`, with no test framework;
-the library has no runtime dependencies in JavaScript and one (the
+written with `node:test` and Python's `unittest`, with no test framework.
+A change in behaviour comes with tests that show it, in the same change.
+The library has no runtime dependencies in JavaScript and one (the
 package `cryptography`) in Python, and that does not change. Every
 change is listed in `CHANGELOG.md`. The style is plain English: short
 sentences, no jargon, and "evidence, not a verdict" on every document.

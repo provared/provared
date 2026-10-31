@@ -232,6 +232,7 @@ export function apart(a, b) {
  */
 export function nodeAddress(text) {
   const line = String(text).split('#')[0].trim();
+  // eslint-disable-next-line security/detect-unsafe-regex -- no repetition inside repetition can match the same text two ways (labels split by a full stop the labels cannot match), so matching takes time in proportion to the input.
   const m = line.match(/^\[([0-9a-fA-F:.]+)\](?::(\d{1,5}))?$/) ?? line.match(/^([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*)\.?(?::(\d{1,5}))?$/);
   if (!m) return null;
   const host = m[1].toLowerCase();

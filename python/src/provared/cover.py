@@ -12,7 +12,6 @@
 #
 # Format description, section 24.
 
-import re
 
 from . import _js
 from .encoding import Refusal, canonical_json, from_base64url, from_utf8, parse_canonical, random_id, sha256, to_base64url, utf8

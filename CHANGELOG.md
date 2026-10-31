@@ -2,6 +2,63 @@
 
 ## Unreleased
 
+- **OpenSSF Scorecard.** A workflow, `.github/workflows/scorecard.yml`,
+  runs the Open Source Security Foundation's Scorecard on each push to
+  main, every Sunday and when a branch protection rule changes, and
+  publishes the result to api.scorecard.dev and to this repository's code
+  scanning page. Laid out as the Scorecard project's own example; no
+  permission at the top, and only `security-events: write` and
+  `id-token: write` in its one job. It is the first workflow here to use
+  an action that is not GitHub's own (`ossf/scorecard-action` v2.5.0,
+  pinned to its commit). Pinning fixes the action's own files, not all
+  that runs: at that commit the action runs the container
+  `ghcr.io/ossf/scorecard-action:v2.5.0`, chosen by its tag (on
+  31 October 2026 the tag named the image
+  sha256:1e1481c65fc2407d3fd6ab18a23c741eb4d1c0d9359ebafc4b3ab13aa61d8627).
+  It cannot be pinned by that fingerprint, because the Scorecard service
+  takes a result only from the named action. The job's token can only
+  send results to the code scanning page and ask for an identity token,
+  so at worst a changed container could publish a false result. The
+  README shows the Scorecard badge.
+
+- **Static analysis.** `.github/workflows/tests.yml` gains a job that runs
+  ESLint over the JavaScript and Ruff over the Python on every push and
+  pull request, with rules that look for faults (eval, unsafe regular
+  expressions, child processes, weak fingerprint methods, subprocess with
+  shell=True and the like), not style. Both are development tools only,
+  kept in `tools/lint/` at exact versions (its `package-lock.json`, and
+  `requirements.txt` with each file's fingerprint), and are in neither
+  published package. A finding that is not a fault is set aside on its
+  own line, with a comment giving the reason. Faults found and fixed, none
+  changing what the library does: the Hermes plugin's `cli.py` used a
+  backslash inside an f-string's braces, which Python 3.11, the oldest
+  the plugin supports, cannot read; three Python tests expected any
+  exception where the library raises `Refusal`, and now expect
+  `Refusal`; three imports were never used. ESLint also covers
+  `conformance/`, and Ruff also covers `tools/release/`; there
+  `compare_wheel.py` now reads only `https://` addresses, since the
+  second address it reads comes from the index's own answer.
+
+- **Warnings are failures.** The Python tests run with `python -W error`
+  (with two filters: a warning raised inside a LangChain dependency on
+  Python 3.14, and, in the Hermes plugin's job, the plugin's own notices to
+  the person, which it raises inside Hermes on purpose). The JavaScript tests no longer hide Node.js's warnings,
+  and a step after each run fails on any warning other than Node.js's
+  notice that ML-DSA or SLH-DSA is experimental
+  (`tools/lint/node-warnings.sh`); each run keeps its own exit code
+  (`set -o pipefail`), so a failing run is not hidden by the step that
+  saves its output. One was found and fixed: the seal
+  writer handed a Web Crypto key of another method to Node.js's
+  `createPrivateKey`, which Node.js has deprecated (DEP0203); such a key
+  is now refused before it is handed over, with the same answer as before.
+
+- **Smaller changes.** The site's publishing workflow gives each job only
+  the permissions it needs (`pages: write` and `id-token: write` in the
+  deploy job alone) and checks out without keeping a token.
+  `CONTRIBUTING.md` names GitHub's private reporting form beside email
+  for security faults, and says that a change in behaviour comes with
+  tests.
+
 - **A reader may name the address a permission must have been signed
   at** (25 to 31 October 2026), in both languages. A passkey can be asked
   to sign by any page under the website name it was made for (its relying

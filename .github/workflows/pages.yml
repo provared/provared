@@ -28,10 +28,8 @@ on:
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
+# No permission at the top: each job names only what it needs.
+permissions: {}
 
 concurrency:
   group: pages
@@ -40,8 +38,15 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      # To check out the repository and fetch the record from its release.
+      contents: read
+      # For actions/configure-pages, which reads the site's Pages settings.
+      pages: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
@@ -82,6 +87,11 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    # The two that GitHub's Pages documentation names for the deploying job:
+    # to publish the site, and to prove to Pages that this run asked for it.
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
