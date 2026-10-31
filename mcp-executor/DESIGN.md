@@ -155,7 +155,8 @@ gives one; `with` the executor's id; `details`:
 | `provared.request-id` | the same identifier, as sent to the server in `_meta` (absent with `callIdInMeta: false`) | yes |
 | `provared.trace-id` | the trace-id of a well-formed `traceparent` in the call's `_meta` | yes |
 | `mcp.result` | the server's `result`, in the one form of RFC 8785 (added after the call) | no, a label |
-| `provared.error` | the error text (added after the call where there was no result) | yes |
+| `provared.error` | the error text (added after the call where there was no result, or where the result could not be fingerprinted or the answer not read) | yes |
+| `executor.written-late` | a fixed text; only in a receipt written at a restart, from the copy | no, a label |
 
 `mcp.tool`, `mcp.result` and `executor.call` are labels. The founder has
 decided (F-158) that reserved document names for a tool's name and a
@@ -249,7 +250,10 @@ itself has a problem.
   else naming `provared.error` with a fixed text saying the outcome is not
   known. Where that permission is no longer the one in force, the executor
   does not start and says what to do (put the old permission back for one
-  start). The founder has kept this automatic late receipt (F-158). An
+  start). Such a receipt names `executor.written-late`, so that the book
+  itself says so: its `when` is the time the call was sent, and its
+  countersignature is dated at the restart, so a reader sees both times.
+  The founder has kept this automatic late receipt (F-158). An
   acknowledgement command, as the gateway has, is stage 2.
 - **The copy cannot be read** (its key missing with lines present; no line
   checks; a line cut by a stop): the executor does not start.
@@ -686,14 +690,20 @@ for good (the first review's S1). The other way: leave the `sending` line
 open with no `done`; then the outcome the executor knew would be lost
 too.
 
-**X38. Each `tools/call` goes to the server under an id of the executor's
-own, unique for the session, and the answer comes back under the client's
-id.** Cancellations are renamed the same way, and a late answer under a
-settled id is dropped (the last 10,000 settled ids are kept). Why: a
-server that answers after a timeout or a cancellation would otherwise have
-its answer taken for a later call's that reuses the client's id (M1). The
-other way: forward the client's ids and refuse to reuse one; it would
-refuse honest reuse.
+**X38. Every request goes to the server under an id of the executor's
+own, unique for the session and not guessable, and the answer comes back
+under the client's id, spliced into the server's raw bytes.** (As first
+built after the first review, only tool calls were renamed, the ids were
+a plain count, and the answer was re-serialised; the second review found
+both faults, R1 and R2.) Cancellations are renamed the same way, and a
+late answer under a settled id is dropped (the last 10,000 settled ids are
+kept). Why: a server that answers after a timeout or a cancellation would
+otherwise have its answer taken for a later call's that reuses the
+client's id (M1); a client that guessed an executor id could settle a
+call in flight with another request's answer (R2); re-serialising lost
+numbers beyond 2^53 - 1 and the spellings of numbers (R1). The other way:
+forward the client's ids and refuse to reuse one; it would refuse honest
+reuse.
 
 **X39. A notification whose method is not one of the protocol's own
 (`notifications/…`) is dropped and logged.** Why: a `tools/call` sent
@@ -741,6 +751,46 @@ gateway's rule says (L3). The other way: accept it where it is not read.
 **X48. A permission that names other services beside the executor gets a
 warning.** Why: a receipt that names one of them, written by whoever
 holds the agent's keys, would not be a finding (L6).
+
+**X49. The server's lines are read without the rule on whole numbers;
+the agent's lines are read with it.** A tool result holding a number
+beyond 2^53 - 1 (as the ids of many services are) reaches the client in
+the server's own bytes, and the receipt names `provared.error` with the
+fixed text RESULT_NOT_FINGERPRINTED, because the one form of RFC 8785
+cannot hold such a number. Why: the first fix refused such answers, so the
+call timed out and the receipt named a false timeout (R1). The other way:
+refuse them; a common case would then never work.
+
+**X50. A server line the executor cannot read as a message, whose
+top-level id it can still find, goes to the client under the client's id
+as the server wrote it; a tool call then gets a receipt naming
+`provared.error` with the fixed text UNREADABLE_ANSWER.** Why: the client
+is the judge of its server's answers; the record must still say what the
+executor saw (R1). The other way: drop the line and let the call time out,
+with a false timeout in the receipt.
+
+**X51. A filtered `tools/list` is the one answer the executor rebuilds,
+and it keeps every number as the server wrote it** (read with Node.js's
+raw-number reader, written back as those digits). The other way: filter
+the raw text; more code for one case.
+
+**X52. Requests other than tool calls that the server never answers are
+forgotten past 1,000, the oldest first; tool calls never are.** Why: a
+server that never answers would otherwise grow the executor's memory
+without bound (R3). Stated: a forgotten request's late answer is handed on
+under the executor's id, which the client ignores.
+
+**X53. A receipt written at a restart names `executor.written-late`, the
+fingerprint of a fixed text, beside what the copy knew of the outcome.**
+Its `when` is the time the call was sent; its countersignature is dated
+at the restart. Why: the book itself should say that the executor wrote
+the receipt late, not only the executor's copy (X37). The other way: a
+reserved document name, which is the founder's to add to the format.
+
+**X54. Vendor-prefixed extension notifications from the client (any
+notification whose method does not begin `notifications/`) are dropped
+and logged, as X39 says.** Stated here because such notifications exist
+in extensions; a later version may allow a list of prefixes.
 
 **X36. The tests use a made-up MCP server written for them
 (`test/fake-server.mjs`), started as a real process, with tools that

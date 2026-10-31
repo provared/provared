@@ -117,7 +117,9 @@ test('M1: a server that ignores cancellation answers late; the late answer is dr
     assert.ok(docs(stubs[0])['provared.error'], 'the first receipt names the error');
     assert.equal(docs(stubs[1])[RESULT_DOCUMENT], await argumentsFingerprint(second.result), 'the second names its own result');
     const seen = w.fakeSeen().filter((s) => s.seen?.method === 'tools/call').map((s) => s.seen.id);
-    assert.deepEqual(seen, ['provared-1', 'provared-2'], 'each call went to the server under an id of the executor\'s own');
+    assert.match(seen[0], /^provared-1-/);
+    assert.match(seen[1], /^provared-2-/);
+    assert.notEqual(seen[0], seen[1], 'each call went to the server under an id of its own');
   } finally {
     await w.close();
   }

@@ -54,6 +54,11 @@ function onMessage(m) {
   if (method === 'server/discover') return result(id, { resultType: 'complete', supportedVersions: ['2026-07-28'], capabilities: { tools: {} }, _meta: { 'io.modelcontextprotocol/serverInfo': { name: 'fake-server', version: '0.0.1' } } });
   if (method === 'initialize') return result(id, { protocolVersion: params.protocolVersion ?? '2025-11-25', capabilities: { tools: { listChanged: false } }, serverInfo: { name: 'fake-server', version: '0.0.1' } });
   if (method === 'ping') return result(id, {});
+  if (method === 'never') return; // a request that is never answered
+  if (method === 'tools/list' && params.cursor === 'page2' && process.env.FAKE_BIG_LIST) {
+    // The answer written as raw text, so that the number is exact: a whole number beyond 2^53 - 1 in a tool's definition.
+    return process.stdout.write(`{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"resultType":"complete","tools":[{"name":"error","description":"A protocol error.","inputSchema":{"type":"object"}},{"name":"hidden","description":"No rule.","inputSchema":{"type":"object"},"ordinal":1234567890123456789},{"name":"big","description":"A large answer.","inputSchema":{"type":"object"},"ordinal":1234567890123456789}]}}\n`);
+  }
   if (method === 'tools/list') {
     const page = params.cursor === 'page2' ? TOOLS.slice(5) : TOOLS.slice(0, 5);
     return result(id, { resultType: 'complete', tools: page, ...(params.cursor === 'page2' ? {} : { nextCursor: 'page2' }) });
@@ -80,6 +85,8 @@ function onMessage(m) {
       }, args.ms ?? 200);
       return;
     }
+    if (name === 'bigint') return process.stdout.write(`{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"resultType":"complete","content":[{"type":"text","text":"ok"}],"structuredContent":{"snowflake":1234567890123456789,"ratio":1.50}}}\n`);
+    if (name === 'garbage') return process.stdout.write(`{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"resultType":"complete","a":1,"a":2}}\n`);
     if (name === 'weird') return send({ jsonrpc: '2.0', id, result: { resultType: 'complete', content: [{ type: 'text', text: 'a lone surrogate follows: \ud800' }] } });
     if (name === 'ask') {
       const askId = serverRequestId++;

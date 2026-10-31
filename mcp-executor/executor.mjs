@@ -30,7 +30,7 @@ import { delimiter, isAbsolute, resolve } from 'node:path';
 import { argumentsFingerprint, checkBook, countersign, denialCodes, entryLine, fingerprint, fromBase64url, identifierFingerprint, openRecorder, randomId, thumbprint } from 'provared';
 import { loadCopyKey, openCopy, readCopy, unfinished } from './copy.mjs';
 import { aboutSlip, bookFile, loadKeyFile, readIfThere, slipFrom, untilFree } from './files.mjs';
-import { CODES, MAX_LINE_BYTES, idKey, isId, notificationLine, readLines, readMessage, repeatedName, responseLine } from './jsonrpc.mjs';
+import { CODES, MAX_LINE_BYTES, idKey, isId, notificationLine, readLines, readMessage, repeatedName, responseLine, spliceId, topLevelId, unsafeInteger } from './jsonrpc.mjs';
 
 /** The document, in each stub and denial, whose fingerprint is that of the executor's own identifier for the call (a label, not a reserved name). */
 export const CALL_DOCUMENT = 'executor.call';
@@ -44,7 +44,15 @@ export const CALL_META = 'red.prova/call-id';
 export const UNLISTED_ACTION = 'executor.unlisted';
 
 export const OUTCOME_UNKNOWN = 'The executor stopped while this call was with the tool server, so its outcome is not known. The receipt was written when the executor next started, from its own copy of what it had sent.';
-export const RESULT_NOT_FINGERPRINTED = 'The tool server answered, and its result could not be written in the one form of RFC 8785 (text that is not well-formed Unicode, or a number JSON cannot write), so the receipt names no result.';
+export const RESULT_NOT_FINGERPRINTED = 'The tool server answered, and its result could not be written in the one form of RFC 8785 (text that is not well-formed Unicode, a number JSON cannot write, or a whole number beyond 9,007,199,254,740,991), so the receipt names no result.';
+/** The error text a receipt names where the server's answer could not be read as a message; the answer went to the client as it was. */
+export const UNREADABLE_ANSWER = 'The tool server answered with a line the executor could not read as a message (not JSON, a member name given twice, or not a response), so the receipt names no result. The line was handed to the agent as it was.';
+/** The document a receipt written at a restart names, and the text its fingerprint is of. */
+export const WRITTEN_LATE_DOCUMENT = 'executor.written-late';
+export const WRITTEN_LATE = 'This receipt was written when the executor next started, from its own copy of what it had sent: the executor stopped before the receipt could be written. Its date is the time the call was sent; the countersignature is dated at the restart.';
+
+/** The most requests other than tool calls kept waiting for the server's answer; past it the oldest is forgotten. */
+export const MAX_MAPPED = 1000;
 
 /** The most tools/list requests whose answers wait to be filtered. */
 export const MAX_LISTS = 256;
@@ -503,7 +511,7 @@ export async function openExecutor(config, more = {}) {
       }
       // What the copy knows of the outcome, where the receipt was made and could not be written; else the fixed text.
       const known = Array.isArray(d?.documents) && d.documents.length ? d.documents : null;
-      const details = [...(Array.isArray(s.details) ? s.details : []), ...(known ?? [{ name: 'provared.error', sha256: await identifierFingerprint(OUTCOME_UNKNOWN) }])];
+      const details = [...(Array.isArray(s.details) ? s.details : []), ...(known ?? [{ name: 'provared.error', sha256: await identifierFingerprint(OUTCOME_UNKNOWN) }]), { name: WRITTEN_LATE_DOCUMENT, sha256: await identifierFingerprint(WRITTEN_LATE) }];
       let made;
       try {
         made = await writer.record({ action: s.action, ...(s.amount ? { amount: s.amount } : {}), with: settings.service, details }, { when: Date.parse(s.when), countersign: (stub) => countersign(stub, p.executorKeys.privateKeys, now()) });
@@ -562,15 +570,37 @@ export async function openExecutor(config, more = {}) {
     };
     child.stdin.on('error', (e) => log({ event: 'server-stdin-error', error: e.message }));
 
-    // The calls the executor is handling, by the client's id; and by the
-    // id of the executor's own under which each goes to the server, unique
-    // for the session, so that an answer that comes late (after a timeout
-    // or a cancellation) can never be taken for the answer to a later call
-    // that reuses the client's id.
+    // Every request from the client goes to the server under an id of the
+    // executor's own, unique for the session and not guessable (a number
+    // and a random part), and the answer comes back under the client's id,
+    // spliced into the server's raw bytes. So nothing the client sends can
+    // collide with a call in flight, and an answer that comes late (after
+    // a timeout or a cancellation) can never be taken for the answer to a
+    // later request. "mapped" holds every request in flight by its server
+    // id: tool calls ("call"), tools/list requests to be filtered ("list"),
+    // unlisted calls sent on ("forwarded") and all others ("request"). Tool
+    // calls are also held by the client's id ("calls"), for a repeated id
+    // and for cancellation.
+    /** @type {Map<string, {id: any, kind: string, call?: object}>} */
+    const mapped = new Map();
     /** @type {Map<string, {id: any, serverId: string, state: string, settle?: (outcome: object) => void, cancelled?: boolean}>} */
     const calls = new Map();
-    const byServerId = new Map();
     let nextServerId = 1;
+    const newServerId = () => `provared-${nextServerId++}-${randomId()}`;
+    // Requests that are not tool calls are forgotten after MAX_MAPPED of them wait unanswered, the oldest first (a server that never answers).
+    const waitingOrder = [];
+    const remember = (serverId, entry) => {
+      mapped.set(serverId, entry);
+      if (entry.kind === 'call') return;
+      waitingOrder.push(serverId);
+      while (waitingOrder.length > MAX_MAPPED) {
+        const old = waitingOrder.shift();
+        if (mapped.get(old)?.kind !== 'call') mapped.delete(old);
+      }
+    };
+    const forget = (serverId) => {
+      mapped.delete(serverId);
+    };
     // The server ids of calls that were settled before the server answered; a late answer under one is dropped.
     const settled = new Set();
     const MAX_SETTLED = 10000;
@@ -578,13 +608,14 @@ export async function openExecutor(config, more = {}) {
       settled.add(serverId);
       if (settled.size > MAX_SETTLED) settled.delete(settled.values().next().value);
     };
-    // The tools/list requests whose answers are to be filtered: by id.
-    const lists = new Map();
 
     const answerError = (id, code, message, data) => toClient(responseLine(id, { error: { code, message, ...(data === undefined ? {} : { data }) } }));
 
-    /** The server's response, as a line for the client, with the client's id in place of the executor's. */
-    const forClient = (m, id) => Buffer.from(`${JSON.stringify({ ...m, id })}\n`);
+    /** The server's raw line for the client, with the client's id spliced in place of the executor's and nothing else changed. */
+    const forClient = (text, id) => {
+      const spliced = spliceId(text, id);
+      return Buffer.from(`${spliced ?? text}\n`);
+    };
 
     // A call that was begun and whose server-side outcome arrives, or never does.
     function awaitOutcome(call, callId) {
@@ -611,19 +642,19 @@ export async function openExecutor(config, more = {}) {
       if (typeof name !== 'string' || !TOOL_NAME.test(name)) return answerError(id, CODES.invalidParams, 'The tool name must be 1 to 128 letters, digits, underscores, hyphens or full stops.');
       if (Object.hasOwn(params, 'arguments') && !isObject(params.arguments)) return answerError(id, CODES.invalidParams, 'The arguments must be an object.');
       if (Object.hasOwn(params, '_meta') && !isObject(params._meta)) return answerError(id, CODES.invalidParams, 'The _meta member must be an object.');
-      const serverId = `provared-${nextServerId++}`;
+      const serverId = newServerId();
       const call = { id, serverId, state: 'queued', cancelled: false };
-      calls.set(key, call);
-      byServerId.set(serverId, call);
       const callId = randomId();
       try {
         const rule = settings.tools.get(name);
         if (!rule && settings.unlisted === 'forward') {
           log({ event: 'forwarded-unlisted', tool: name, call: callId });
-          call.state = 'forwarded';
-          toServer(Buffer.from(`${JSON.stringify({ ...message, id: serverId })}\n`));
+          remember(serverId, { id, kind: 'forwarded' });
+          toServer(Buffer.from(`${spliceId(text, serverId)}\n`));
           return;
         }
+        calls.set(key, call);
+        remember(serverId, { id, kind: 'call', call });
         const argsText = Object.hasOwn(params, 'arguments') ? JSON.stringify(params.arguments) : undefined;
         const args = params.arguments;
         const details = [
@@ -712,7 +743,11 @@ export async function openExecutor(config, more = {}) {
                 detailsAfter: async (o) => {
                   if (o.kind === 'error') afterDocuments = [{ name: 'provared.error', sha256: await identifierFingerprint(o.text) }];
                   else if (o.kind === 'server-error') afterDocuments = [{ name: 'provared.error', sha256: await identifierFingerprint(o.errorText) }];
-                  else {
+                  else if (o.kind === 'unreadable') afterDocuments = [{ name: 'provared.error', sha256: await identifierFingerprint(UNREADABLE_ANSWER) }];
+                  else if (o.unsafe) {
+                    log({ event: 'result-not-fingerprinted', call: callId, error: 'The result holds a whole number beyond 9,007,199,254,740,991.' });
+                    afterDocuments = [{ name: 'provared.error', sha256: await identifierFingerprint(RESULT_NOT_FINGERPRINTED) }];
+                  } else {
                     try {
                       afterDocuments = [{ name: RESULT_DOCUMENT, sha256: await argumentsFingerprint(o.result) }];
                     } catch (e) {
@@ -761,7 +796,7 @@ export async function openExecutor(config, more = {}) {
           }
           if (sent) {
             stop(`a call was sent and its receipt could not be written (${e.message}).`, 'receipt-not-written');
-            if (outcome && outcome.kind !== 'error') toClient(forClient(outcome.message, id));
+            if (outcome && outcome.kind !== 'error') toClient(forClient(outcome.text, id));
             else answerError(id, CODES.notRecorded, 'The executor could not write the receipt of this call.');
             return;
           }
@@ -789,11 +824,11 @@ export async function openExecutor(config, more = {}) {
         if (done.detailsAfter?.problem) log({ event: 'details-not-added', call: callId, problem: done.detailsAfter.problem.code });
         log({ event: 'taken', call: callId, tool: name, action: rule.action, outcome: outcome.kind, stub: done.stub.fingerprint, countersigned: done.stub.countersignature.accepted, saved: !stopped });
         if (outcome.kind === 'error') answerError(id, outcome.code ?? CODES.noAnswer, outcome.text, { 'red.prova/stub': done.stub.fingerprint });
-        else toClient(forClient(outcome.message, id));
+        else toClient(forClient(outcome.text, id));
       } finally {
         if (call.timer) clearTimeout(call.timer);
         calls.delete(key);
-        if (call.state !== 'forwarded') byServerId.delete(serverId);
+        if (mapped.get(serverId)?.kind === 'call') forget(serverId);
       }
     }
 
@@ -807,19 +842,23 @@ export async function openExecutor(config, more = {}) {
             return answerError(read.id, read.refused.code, read.refused.message);
           }
           const m = read.message;
-          if (read.kind === 'request' && m.method === 'tools/call') {
-            handleCall(m.id, m, read.text).catch((e) => {
-              log({ event: 'call-failed', error: e.message });
-              answerError(m.id, CODES.notRecorded, `The executor could not handle this call: ${e.message}`);
-            });
-            return;
-          }
-          if (read.kind === 'request' && m.method === 'tools/list' && settings.hideUnlisted) {
-            if (lists.size >= MAX_LISTS) {
-              log({ event: 'refused', code: 'too-many-lists', waiting: lists.size });
-              return answerError(m.id, CODES.notRecorded, `The executor already has ${lists.size} tools/list requests waiting for the server, the most it keeps; ask again when one has been answered.`);
+          if (read.kind === 'request') {
+            if (m.method === 'tools/call') {
+              handleCall(m.id, m, read.text).catch((e) => {
+                log({ event: 'call-failed', error: e.message });
+                answerError(m.id, CODES.notRecorded, `The executor could not handle this call: ${e.message}`);
+              });
+              return;
             }
-            lists.set(idKey(m.id), true);
+            // Every other request goes under an id of the executor's own too.
+            const list = m.method === 'tools/list' && settings.hideUnlisted;
+            if (list && [...mapped.values()].filter((e) => e.kind === 'list').length >= MAX_LISTS) {
+              log({ event: 'refused', code: 'too-many-lists' });
+              return answerError(m.id, CODES.notRecorded, `The executor already has ${MAX_LISTS} tools/list requests waiting for the server, the most it keeps; ask again when one has been answered.`);
+            }
+            const serverId = newServerId();
+            remember(serverId, { id: m.id, kind: list ? 'list' : 'request' });
+            return toServer(Buffer.from(`${spliceId(read.text, serverId) ?? JSON.stringify({ ...m, id: serverId })}\n`));
           }
           if (read.kind === 'notification') {
             // A notification is one-way, so a request's method sent without an id
@@ -845,9 +884,11 @@ export async function openExecutor(config, more = {}) {
                   settle({ kind: 'error', text: 'The agent cancelled this call while it was with the tool server, so its outcome is not known.', code: CODES.noAnswer });
                   return;
                 }
-                if (call.state === 'forwarded') return void toServer(renamed);
                 if (call.state === 'queued') return; // never sent: nothing for the server to cancel
               }
+              // Another request in flight under the client's id: renamed for the server.
+              const other = [...mapped.entries()].find(([, e]) => e.kind !== 'call' && idKey(e.id) === idKey(m.params.requestId));
+              if (other) return void toServer(Buffer.from(`${JSON.stringify({ ...m, params: { ...m.params, requestId: other[0] } })}\n`));
             }
           }
           toServer(Buffer.from(`${read.text}\n`));
@@ -861,40 +902,74 @@ export async function openExecutor(config, more = {}) {
     });
 
     // --- from the server ---
+    /** The entry for a server id, or undefined. */
+    const entryFor = (id) => (typeof id === 'string' ? mapped.get(id) : undefined);
+    /** Settle a tool call's outcome from the server's line. */
+    const settleCall = (call, outcome) => {
+      clearTimeout(call.timer);
+      const settle = call.settle;
+      call.settle = null;
+      settle(outcome);
+    };
     readLines(child.stdout, {
       onLine: (line) => {
-        const read = readMessage(line);
+        const read = readMessage(line, { strictNumbers: false });
         if (read.refused) {
-          // Not a message the executor can read: handed on as it is, for the client to judge.
-          log({ event: 'server-line-not-read', code: read.refused.code });
+          // Not a message the executor can read strictly. Where its top-level id can
+          // still be found and names a request in flight, the raw bytes go to the
+          // client under the client's id; a tool call then gets a receipt that says
+          // the answer could not be read. Otherwise the line is handed on as it is.
+          let text = null;
+          try {
+            text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(line);
+          } catch {
+            text = null;
+          }
+          const found = text === null ? null : topLevelId(text);
+          const entry = found ? entryFor(found.value) : undefined;
+          log({ event: 'server-line-not-read', code: read.refused.code, ...(entry ? { matched: entry.kind } : {}) });
+          if (entry?.kind === 'call' && entry.call.state === 'sent' && entry.call.settle) return settleCall(entry.call, { kind: 'unreadable', text, errorText: UNREADABLE_ANSWER });
+          if (entry && entry.kind !== 'call') {
+            forget(found.value);
+            return toClient(forClient(text, entry.id));
+          }
           return toClient(Buffer.concat([line, Buffer.from('\n')]));
         }
         const m = read.message;
         if (read.kind === 'response') {
-          const call = typeof m.id === 'string' ? byServerId.get(m.id) : undefined;
-          if (call && call.state === 'sent' && call.settle) {
-            clearTimeout(call.timer);
-            const settle = call.settle;
-            call.settle = null;
-            if (Object.hasOwn(m, 'result')) settle({ kind: 'answer', message: m, result: m.result });
-            else settle({ kind: 'server-error', message: m, errorText: `The tool server answered with an error: ${JSON.stringify(m.error)}` });
-            return;
-          }
-          if (call && call.state === 'forwarded') {
-            byServerId.delete(call.serverId);
-            return toClient(forClient(m, call.id));
-          }
-          if ((call && call.state === 'sent') || (typeof m.id === 'string' && settled.has(m.id))) {
+          const entry = entryFor(m.id);
+          if (entry?.kind === 'call') {
+            const call = entry.call;
+            if (call.state === 'sent' && call.settle) {
+              const unsafe = unsafeInteger(read.text) !== null;
+              if (Object.hasOwn(m, 'result')) settleCall(call, { kind: 'answer', text: read.text, result: m.result, unsafe });
+              else settleCall(call, { kind: 'server-error', text: read.text, errorText: `The tool server answered with an error: ${JSON.stringify(m.error)}` });
+              return;
+            }
             log({ event: 'late-answer-dropped', id: m.id });
             return;
           }
-          const key = idKey(m.id);
-          if (lists.delete(key) && Object.hasOwn(m, 'result') && isObject(m.result) && Array.isArray(m.result.tools)) {
-            const shown = m.result.tools.filter((t) => isObject(t) && typeof t.name === 'string' && settings.tools.has(t.name));
-            if (shown.length !== m.result.tools.length) log({ event: 'tools-hidden', hidden: m.result.tools.length - shown.length });
-            return toClient(Buffer.from(`${JSON.stringify({ ...m, result: { ...m.result, tools: shown } })}\n`));
+          if (typeof m.id === 'string' && settled.has(m.id)) {
+            log({ event: 'late-answer-dropped', id: m.id });
+            return;
           }
-          lists.delete(key);
+          if (entry?.kind === 'list' && Object.hasOwn(m, 'result') && isObject(m.result) && Array.isArray(m.result.tools)) {
+            forget(m.id);
+            // Read again with every number kept as the server wrote it, so that filtering changes nothing else.
+            let exact;
+            try {
+              exact = JSON.parse(read.text, (k, v, context) => (typeof v === 'number' ? JSON.rawJSON(context.source) : v));
+            } catch {
+              exact = m;
+            }
+            const shown = exact.result.tools.filter((t) => isObject(t) && typeof t.name === 'string' && settings.tools.has(t.name));
+            if (shown.length !== exact.result.tools.length) log({ event: 'tools-hidden', hidden: exact.result.tools.length - shown.length });
+            return toClient(Buffer.from(`${JSON.stringify({ ...exact, id: entry.id, result: { ...exact.result, tools: shown } })}\n`));
+          }
+          if (entry) {
+            forget(m.id);
+            return toClient(forClient(read.text, entry.id));
+          }
         }
         toClient(Buffer.concat([line, Buffer.from('\n')]));
       },

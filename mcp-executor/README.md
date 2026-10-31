@@ -212,14 +212,19 @@ It needs Node.js 24.7 or later, and depends only on the `provared` library.
    no whole number beyond 9,007,199,254,740,991 anywhere in it (two readers
    would hold it differently), an id that is text or a whole number.
    Anything else is answered with a JSON-RPC error and goes no further: the
-   method the executor reads must be the one the server acts on. A line
+   method the executor reads must be the one the server acts on. (The rule
+   on whole numbers is stricter than the gateway's: it holds for the whole
+   line, the arguments included, not only where an amount is read.) A line
    over 16 MiB is refused. A notification whose method is not one of the
    protocol's own (`notifications/…`), such as a `tools/call` sent without
-   an id, is dropped and logged: it would reach the server unchecked.
-   Each `tools/call` goes to the server under an id of the executor's own,
-   unique for the session, and the answer comes back to the client under
-   the client's id; so an answer that arrives late, after a timeout or a
-   cancellation, can never be taken for the answer to a later call that
+   an id, is dropped and logged: it would reach the server unchecked; so is
+   a vendor's own extension notification under another prefix. Every
+   request, not only `tools/call`, goes to the server under an id of the
+   executor's own (`provared-<number>-<random text>`, unique for the
+   session and not guessable), and the answer comes back to the client
+   under the client's id; so nothing the client sends can collide with a
+   call in flight, and an answer that arrives late, after a timeout or a
+   cancellation, can never be taken for the answer to a later request that
    reuses an id. A call past `maxWaiting` is answered with error 1001.
 2. **The rule**, by the tool's name (1 to 128 letters, digits, `_`, `-` and
    `.`; any other name is refused with -32602).
@@ -245,7 +250,10 @@ It needs Node.js 24.7 or later, and depends only on the `provared` library.
    result, `provared.error` (the text of the error the client is given, or
    the server's JSON-RPC error as JSON). A result that cannot be written in
    that form (text that is not well-formed Unicode, a number JSON cannot
-   write) gets `provared.error` with a fixed text saying so. The
+   write, a whole number beyond 9,007,199,254,740,991) gets
+   `provared.error` with a fixed text saying so; so does an answer the
+   executor could not read as a message at all (not JSON, a member name
+   given twice), which still reaches the client as it was. The
    `inputResponses` and `requestState` of a retried multi round-trip call
    are not bound: only `arguments` are.
 7. **A call that was sent always gets its stub**, whatever happened: the
@@ -259,8 +267,12 @@ It needs Node.js 24.7 or later, and depends only on the `provared` library.
    what the executor knew of the outcome instead; the call stays
    unfinished, the executor takes no more calls, and the next start writes
    the receipt from the copy with that outcome.
-8. **The answer to the client** is the server's, with the client's id in
-   place of the executor's and nothing else changed. Where there is none,
+8. **The answer to the client** is the server's own bytes, with the
+   client's id spliced in place of the executor's and nothing else
+   changed: numbers keep their digits and spellings, however large. (The
+   one answer the executor rebuilds is a filtered `tools/list`, in which
+   each number is still written as the server wrote it.) Where there is
+   none,
    the client gets a JSON-RPC error of the executor's own: code 1002 (no
    answer: the time ran out, the agent cancelled, or the server ended) with
    the stub's fingerprint in `data`. Code 1001 means the call was not
@@ -268,7 +280,10 @@ It needs Node.js 24.7 or later, and depends only on the `provared` library.
    calls waiting. A line from the server that the executor cannot read as
    a message (not UTF-8, not JSON) is handed to the client as it is, and a
    server line over 16 MiB is dropped; a call waiting for either ends by
-   the timeout.
+   the timeout. A request other than a tool call that the server never
+   answers is forgotten after 1,000 such requests have piled up, the
+   oldest first; its answer, if it ever comes, is handed on under the
+   executor's id, which the client does not know and ignores.
 
 One tool call goes through the stub writer at a time; other messages pass
 through at once. A long tool call delays the next tool call.
@@ -291,7 +306,11 @@ from that line, under the permission in force: with the result's or the
 error's fingerprint where the copy holds it (the receipt was made and the
 book could not be written), or else naming `provared.error` with the
 words "The executor stopped while this call was with the tool server, so
-its outcome is not known…". Where the call was sent under another
+its outcome is not known…". Such a receipt also names a document
+`executor.written-late` (the fingerprint of a fixed text), so that the
+book itself says the executor wrote it at a restart: its date is the time
+the call was sent, and its countersignature is dated at the restart, so a
+reader sees the two times apart. Where the call was sent under another
 permission, the executor does not start, and says to put that permission
 back for one start.
 

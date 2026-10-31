@@ -235,7 +235,7 @@ test('the agent cancels a call: while it is with the server the receipt says so;
     assert.match(r1.error.message, /cancelled this call while it was with the tool server/);
     // The server knows the call by the executor's own id, and the cancellation names that id.
     const sentCall = w.fakeSeen().find((s) => s.seen?.method === 'tools/call');
-    assert.match(sentCall.seen.id, /^provared-[0-9]+$/);
+    assert.match(sentCall.seen.id, /^provared-[0-9]+-/);
     assert.ok(w.fakeSeen().some((s) => s.seen?.method === 'notifications/cancelled' && s.seen.params.requestId === sentCall.seen.id));
     let answered = false;
     second.then(

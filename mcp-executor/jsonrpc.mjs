@@ -182,9 +182,11 @@ export function idKey(id) {
  * (two readers may take the first or the last, so the method the executor
  * reads could differ from the one the server acts on); an id that is not
  * text or a whole number; a message that is neither request, notification
- * nor response.
+ * nor response. With "strictNumbers" (the default, for the agent's lines)
+ * a whole number beyond 2^53 - 1 anywhere in the line is refused too; the
+ * server's lines are read without it, and handed on as raw bytes.
  */
-export function readMessage(line) {
+export function readMessage(line, { strictNumbers = true } = {}) {
   let text;
   try {
     text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(line);
@@ -201,7 +203,7 @@ export function readMessage(line) {
   if (!message || typeof message !== 'object') return { refused: { code: CODES.invalidRequest, message: 'A message is a JSON object.' }, id: null };
   const repeated = repeatedName(text);
   if (repeated !== null) return { refused: { code: CODES.invalidRequest, message: 'A member name is given twice in one object of the message, which two readers may read differently.' }, id: null };
-  if (unsafeInteger(text) !== null) return { refused: { code: CODES.invalidRequest, message: 'The message holds a whole number beyond 9,007,199,254,740,991, which two readers may hold differently.' }, id: null };
+  if (strictNumbers && unsafeInteger(text) !== null) return { refused: { code: CODES.invalidRequest, message: 'The message holds a whole number beyond 9,007,199,254,740,991, which two readers may hold differently.' }, id: null };
   const id = Object.hasOwn(message, 'id') ? message.id : undefined;
   const knownId = isId(id) ? id : null;
   if (message.jsonrpc !== '2.0') return { refused: { code: CODES.invalidRequest, message: 'The message does not say "jsonrpc": "2.0".' }, id: knownId };
@@ -219,6 +221,97 @@ export function readMessage(line) {
   }
   if (id === undefined || hasResult === hasError) return { refused: { code: CODES.invalidRequest, message: 'A message is a request, a notification or a response.' }, id: knownId };
   return { kind: 'response', message, text };
+}
+
+/**
+ * The span of the value of the top-level "id" member of a JSON object text:
+ * {start, end, value} (value as JSON.parse reads it), or null where the text
+ * does not begin with an object or has no top-level "id". It walks the text
+ * once, skipping strings and nested values, so it works on a line that
+ * JSON.parse would refuse elsewhere (a repeated name deeper in). The first
+ * top-level "id" counts.
+ */
+export function topLevelId(text) {
+  let i = 0;
+  while (i < text.length && ' \t\r\n'.includes(text[i])) i++;
+  if (text[i] !== '{') return null;
+  i++;
+  const skipSpace = () => {
+    while (i < text.length && ' \t\r\n'.includes(text[i])) i++;
+  };
+  const stringEnd = (from) => {
+    let j = from + 1;
+    while (j < text.length && text[j] !== '"') j += text[j] === '\\' ? 2 : 1;
+    return j + 1;
+  };
+  const valueEnd = (from) => {
+    const c = text[from];
+    if (c === '"') return stringEnd(from);
+    if (c === '{' || c === '[') {
+      let depth = 0;
+      let j = from;
+      while (j < text.length) {
+        const d = text[j];
+        if (d === '"') j = stringEnd(j);
+        else {
+          if (d === '{' || d === '[') depth++;
+          else if (d === '}' || d === ']') {
+            depth--;
+            if (depth === 0) return j + 1;
+          }
+          j++;
+        }
+      }
+      return j;
+    }
+    let j = from;
+    while (j < text.length && !',}] \t\r\n'.includes(text[j])) j++;
+    return j;
+  };
+  for (;;) {
+    skipSpace();
+    if (text[i] === '}' || i >= text.length) return null;
+    if (text[i] !== '"') return null;
+    const keyEnd = stringEnd(i);
+    let key;
+    try {
+      key = JSON.parse(text.slice(i, keyEnd));
+    } catch {
+      return null;
+    }
+    i = keyEnd;
+    skipSpace();
+    if (text[i] !== ':') return null;
+    i++;
+    skipSpace();
+    const start = i;
+    const end = valueEnd(start);
+    if (key === 'id') {
+      let value;
+      try {
+        value = JSON.parse(text.slice(start, end));
+      } catch {
+        return null;
+      }
+      return { start, end, value };
+    }
+    i = end;
+    skipSpace();
+    if (text[i] === ',') i++;
+    else if (text[i] === '}') return null;
+    else return null;
+  }
+}
+
+/**
+ * The text with its top-level "id" value replaced by "newId", and nothing
+ * else changed: numbers and spellings elsewhere survive as the sender wrote
+ * them. Null where the text has no top-level "id".
+ */
+export function spliceId(text, newId) {
+  const at = topLevelId(text);
+  if (!at) return null;
+  return `${text.slice(0, at.start)}${JSON.stringify(newId)}${text.slice(at.end)}`;
 }
 
 /** A response, as one line with its line feed, as a Buffer. */

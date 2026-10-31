@@ -54,6 +54,19 @@
   fingerprinted into receipts and into the permission's `agent.software`;
   the automatic late receipt kept; reserved names for a tool's name and
   result to come in the library and draft -03) is recorded in `DESIGN.md`.
+  A narrow second review of those fixes found one serious and one medium
+  fault in the id mapping, both fixed and tests (`test/review2.test.mjs`):
+  a server answer holding a whole number beyond 2^53 - 1 was refused as
+  unreadable, so the call timed out and the receipt named a false timeout
+  (the server's lines are now read without that rule, reach the client in
+  the server's own bytes with only the id replaced, and such a result is
+  named as one that cannot be fingerprinted; an answer that cannot be read
+  at all still reaches the client, and the receipt says so); and only tool
+  calls were renamed, with guessable ids, so a `ping` under a call's id
+  could settle the call with the ping's answer (every request now goes
+  under an id with a random part). Requests the server never answers are
+  forgotten past 1,000. A receipt written at a restart names
+  `executor.written-late`, so that the book itself says so.
 
 - **OpenSSF Scorecard.** A workflow, `.github/workflows/scorecard.yml`,
   runs the Open Source Security Foundation's Scorecard on each push to

@@ -124,6 +124,7 @@ export function client() {
   const toExecutor = new PassThrough();
   const fromExecutor = new PassThrough();
   const waiting = new Map();
+  let rawText = '';
   const others = [];
   const listeners = [];
   let consumed = 0;
@@ -131,6 +132,7 @@ export function client() {
   let buffer = '';
   fromExecutor.setEncoding('utf8');
   fromExecutor.on('data', (chunk) => {
+    rawText += chunk;
     buffer += chunk;
     for (;;) {
       const at = buffer.indexOf('\n');
@@ -157,6 +159,10 @@ export function client() {
     toExecutor,
     fromExecutor,
     others,
+    /** Everything the client received, as text. */
+    get rawText() {
+      return rawText;
+    },
     raw: (text) => toExecutor.write(text),
     send: (m) => toExecutor.write(`${JSON.stringify(m)}\n`),
     notify(method, params) {
