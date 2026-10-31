@@ -1,0 +1,21 @@
+{
+  "name": "provared-recorder",
+  "version": "0.1.0",
+  "description": "Records Claude Code with Provared: each tool call is checked against a permission you sign with your own passkey, refused if it is outside it, and receipted if it is taken. Evidence, not a verdict.",
+  "author": {
+    "name": "Pavel Izmaylov",
+    "url": "https://prova.red"
+  },
+  "homepage": "https://prova.red",
+  "repository": "https://github.com/provared/provared",
+  "license": "Apache-2.0 AND CC-BY-4.0",
+  "keywords": [
+    "provared",
+    "audit-trail",
+    "permission",
+    "receipt",
+    "tamper-evident",
+    "passkey",
+    "evidence"
+  ]
+}

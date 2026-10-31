@@ -2,6 +2,45 @@
 
 ## Unreleased
 
+- **The recorder beside Claude Code as a Claude Code plugin.** It can now
+  be installed, with its hooks, in two commands in Claude Code:
+  `/plugin marketplace add provared/provared`, then
+  `/plugin install provared-recorder@provared`. A marketplace file at the
+  top of the repository (`.claude-plugin/marketplace.json`, the place
+  `/plugin marketplace add` looks) lists one plugin, the folder
+  `integrations/claude-code`, which gains `.claude-plugin/plugin.json`
+  (the name `provared-recorder`, the package's version) and
+  `hooks/hooks.json`: the hooks `init` writes, by the plugin's own paths
+  (`${CLAUDE_PLUGIN_ROOT}`), and at the start of a session a new command,
+  `session-start`. It starts the recorder as `ensure` does and, where
+  something stands in the way (no permission yet, a recorder that does not
+  start, the recorder's hooks in force twice), tells the person and Claude
+  in Claude Code's own fields for that; where all is well it says nothing.
+  The folder also gains `package-lock.json`, so that Claude Code installs
+  the library `provared` 0.6.0 into the plugin's copy, with no install
+  script run; nothing else is installed by hand. Nothing signs for the
+  person: they run `init` (which, run from the plugin's folder in Claude
+  Code's plugin cache, writes no hooks), sign at https://sign.prova.red/
+  with their own passkey, and run `use`, as the first session tells them.
+  Before each call the hook, where no permission was ever put in place,
+  now says that, with the same steps, rather than only that the recorder
+  is not running. Checked with Claude Code 2.1.167's own
+  `claude plugin validate`, with and without `--strict`, and by installing
+  the plugin into a Claude Code settings folder of its own.
+
+- **Not recorded twice.** Claude Code runs a plugin's hook and the same
+  hook in a settings file side by side. Before each call, the plugin's
+  hook (and only it: Claude Code names the plugin's folder to it) looks in
+  the person's and the project's settings files for a hook that runs a
+  recorder's `hook.mjs`; where it finds one, it refuses the call and says
+  how to take one of the two out. After a call it records it whatever it
+  finds. A new command, `remove-hooks`, takes the hooks `init` wrote, from
+  any copy of the recorder, out of a project's
+  `.claude/settings.local.json`, and nothing else. `init` gains
+  `--no-hooks`, refuses any other word after it, and warns where it writes
+  hooks while the plugin is installed. The new file `settings-hooks.mjs`
+  is in the npm package.
+
 - **OpenSSF Scorecard.** A workflow, `.github/workflows/scorecard.yml`,
   runs the Open Source Security Foundation's Scorecard on each push to
   main, every Sunday and when a branch protection rule changes, and

@@ -26,9 +26,16 @@
 //                                      ask that witness no more
 //   provared-claude-code stop          stop the service
 //   provared-claude-code keys          make the keys, and print the agent's public keys
+//   provared-claude-code remove-hooks  take the hooks "init" wrote out of this project's
+//                                      .claude/settings.local.json (for the Claude Code plugin)
+//   provared-claude-code session-start what the plugin's hooks run when a session starts: "ensure",
+//                                      and what the person must do, told to them and to Claude
 //
 // From a copy of the repository the same commands run as
-// "node recorder.mjs <command>".
+// "node recorder.mjs <command>". The Claude Code plugin
+// (.claude-plugin/plugin.json and hooks/hooks.json in this folder) runs this
+// same folder from Claude Code's plugin cache, where "init" writes no hooks,
+// since the plugin brings its own.
 //
 // The folder (PROVARED_CLAUDE_CODE_DIR, or ~/.provared/claude-code) holds:
 //   agent-keys.jwk           the agent's two private keys (never share)
@@ -73,6 +80,7 @@ import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkBook, checkSlip, entryLine, fingerprint, fromBase64url, inclusionPath, keySetFingerprint, openRecorder, thumbprint, toBase64url, utf8, verifyInclusion, writeSeal } from 'provared';
 import { createFeed, feedToken, isRandom } from './feed.mjs';
+import { claudeFolder, doubledWords, filesOf, recorderHooksInSettings, removeInitHooks, within } from './settings-hooks.mjs';
 import { firstLineOfFile, replaceDurably, witnessClient } from './witness.mjs';
 import { MAX_RECORDER_WITNESSES, WITNESS_RETRY_MS, WITNESS_WAIT_MS, createWitnessing, heldSealFiles, keepStatement, readWitnessSettings, validAddress, writeWitnessSettings } from './witnessed.mjs';
 
@@ -91,6 +99,18 @@ const HOOK = join(dirname(SELF), 'hook.mjs');
 // How the person runs this program: by its name where it was installed
 // from npm, and by its path from a copy of the repository.
 const RUN = SELF.split(sep).includes('node_modules') ? 'provared-claude-code' : `node ${SELF.includes(' ') ? `"${SELF}"` : SELF}`;
+// Claude Code's plugins folder, and whether this copy is the plugin's, in Claude Code's plugin cache.
+const PLUGINS = process.env.CLAUDE_CODE_PLUGIN_CACHE_DIR || join(claudeFolder(), 'plugins');
+const FROM_PLUGIN = within(SELF, join(PLUGINS, 'cache'));
+// The plugin's name in its marketplace, as Claude Code records an install of it.
+const PLUGIN_ID = 'provared-recorder@';
+function pluginInstalled() {
+  try {
+    return readFileSync(join(PLUGINS, 'installed_plugins.json'), 'utf8').includes(`"${PLUGIN_ID}`);
+  } catch {
+    return false;
+  }
+}
 
 const files = (folder) => ({
   agentKeys: join(folder, 'agent-keys.jwk'),
@@ -1826,10 +1846,10 @@ async function running(port) {
   }
 }
 
-async function ensure(folder, port) {
+async function ensure(folder, port, say = (words) => console.error(words)) {
   if (await running(port)) return 0;
   if (!existsSync(files(folder).slip)) {
-    console.error(`The recorder has no signed permission yet (${files(folder).slip}), so it was not started. Sign one and put it in place: ${RUN} use <the saved file>`);
+    say(`The recorder has no signed permission yet (${files(folder).slip}), so it was not started. Sign one and put it in place: ${RUN} use <the saved file>`);
     return 1;
   }
   const child = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', SELF, 'start'], { detached: true, stdio: 'ignore', env: process.env });
@@ -1838,8 +1858,43 @@ async function ensure(folder, port) {
     await new Promise((r) => setTimeout(r, 250));
     if (await running(port)) return 0;
   }
-  console.error(`The recorder did not start. Run "${RUN} start" to see why.`);
+  say(`The recorder did not start. Run "${RUN} start" to see why.`);
   return 1;
+}
+
+// What the person must do before anything is recorded: nothing signs for them.
+const firstRunWords = () => `Provared: no permission has been signed for this agent yet, so the recorder is not running and every tool call is refused: no record, no action. To set it up, in a terminal:
+  1. ${RUN} init
+     (it makes the agent's keys and prints a link to https://sign.prova.red/, the signing page)
+  2. Open the link, write your name, read the permission and compare the fingerprint of the agent's key set with the one init printed. Sign with your passkey, and save the file the page gives you.
+  3. ${RUN} use <the saved file>
+Nothing signs for you. Once "use" says the recorder is running, each tool call is checked against the permission and recorded.`;
+
+/**
+ * What the Claude Code plugin runs when a session starts: the recorder is
+ * started if it is not running, as "ensure" does; and where something
+ * stands in the way (no permission yet, a recorder that does not start, or
+ * the recorder's hooks in force twice), it is said to the person (Claude
+ * Code's "systemMessage") and to Claude ("additionalContext"), so that
+ * neither takes the refusals that follow for a fault. It always ends with
+ * code 0: a session starts whatever it says. Where all is well, it says
+ * nothing.
+ */
+async function sessionStart(folder, port) {
+  const said = [];
+  const project = process.env.CLAUDE_PROJECT_DIR || process.cwd();
+  const found = recorderHooksInSettings(project);
+  if (found.length > 0) said.push(doubledWords(found, RUN, project));
+  if (!existsSync(files(folder).slip) && !(await running(port))) said.push(firstRunWords());
+  else {
+    const problems = [];
+    if ((await ensure(folder, port, (words) => problems.push(words))) !== 0) said.push(`Provared: ${problems.join(' ')} Until it runs, every tool call is refused.`);
+  }
+  if (said.length > 0) {
+    const words = said.join('\n\n');
+    console.log(JSON.stringify({ systemMessage: words, hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: words } }));
+  }
+  return 0;
 }
 
 function sayRenewed(answer) {
@@ -1918,7 +1973,10 @@ async function slipsListed(text) {
 const USAGE = `Usage: ${RUN} <command>
 
   init          make the keys if they are missing, write the hooks into this project's
-                .claude/settings.local.json, and print a link to sign the permission
+                .claude/settings.local.json, and print a link to sign the permission; with
+                --no-hooks (or as the Claude Code plugin's copy), write no hooks
+  remove-hooks  take the hooks init wrote out of this project's .claude/settings.local.json,
+                for a project where the Claude Code plugin brings them
   use <file>    put a signed permission (slip.json from the signing page) in place, and start
   renew <file>  take a new signed permission into the book, while the recorder runs or not;
                 add --new-passkey if you signed it with a passkey that signed no permission before
@@ -1961,16 +2019,29 @@ async function main(argv) {
     return 0;
   }
   if (command === 'init') {
+    if (rest.some((a) => a !== '--no-hooks')) {
+      console.log(USAGE);
+      return 2;
+    }
     const agent = await makeAgentKeys(folder);
     await makeRecorderKeys(folder);
-    const written = writeHooks(process.cwd());
+    // The plugin's copy, or --no-hooks: no hooks are written, since the plugin brings its own.
+    const noHooks = FROM_PLUGIN || rest.includes('--no-hooks');
+    const written = noHooks ? null : writeHooks(process.cwd());
     console.log(`The agent's keys and the recorder's are in ${folder}. Never share the files there that end in .jwk.`);
     console.log(`The record (the book, the permissions and the keys) is kept in that folder too. Anything that deletes the folder, such as an agent that deletes your home folder, deletes the record with it. To keep it on another disk, set PROVARED_CLAUDE_CODE_DIR to a folder there before you run init, and keep copies of the book elsewhere (see the README).`);
-    console.log(written.added + written.replaced > 0
-      ? `The hooks are in ${written.path}${written.replaced > 0 ? ` (${written.replaced} earlier entries of them brought up to date)` : ''}: Claude Code, started in this folder, asks the recorder before and after each tool call.`
-      : `The hooks were in ${written.path} already. Nothing was changed.`);
-    for (const other of written.others) console.log(`Warning: another hook there names Provared: ${other}. If it is an older copy of this recorder, take it out by hand, or each tool call is asked about and recorded twice.`);
-    if (written.switchedOff) console.log(`Warning: a settings file of this project says "disableAllHooks": true, so Claude Code runs no hook, these included, and nothing is checked or recorded. Take that setting out to record.`);
+    if (!written) {
+      console.log(FROM_PLUGIN
+        ? 'No hooks were written: this copy of the recorder is the Claude Code plugin\'s, and the plugin brings its hooks to every session in which it is turned on.'
+        : 'No hooks were written (--no-hooks): the Claude Code plugin provared-recorder brings them, in every session in which it is turned on.');
+    } else {
+      console.log(written.added + written.replaced > 0
+        ? `The hooks are in ${written.path}${written.replaced > 0 ? ` (${written.replaced} earlier entries of them brought up to date)` : ''}: Claude Code, started in this folder, asks the recorder before and after each tool call.`
+        : `The hooks were in ${written.path} already. Nothing was changed.`);
+      for (const other of written.others) console.log(`Warning: another hook there names Provared: ${other}. If it is an older copy of this recorder, take it out by hand, or each tool call is asked about and recorded twice.`);
+      if (written.switchedOff) console.log(`Warning: a settings file of this project says "disableAllHooks": true, so Claude Code runs no hook, these included, and nothing is checked or recorded. Take that setting out to record.`);
+      if (pluginInstalled()) console.log(`Warning: the Claude Code plugin provared-recorder is installed too. Where it is turned on, its hooks and these both run, and the plugin refuses every tool call in this project until one of the two is taken out: "${RUN} remove-hooks" takes these out again.`);
+    }
     if (SELF.split(sep).includes('_npx')) console.log(`Warning: the hooks point into npm's temporary folder (${dirname(SELF)}), which npm may clear. Install the package (npm install -g provared-claude-code) and run init again.`);
     console.log('\nNext, sign the permission with your passkey. Open this link in a browser: the page is filled in with a');
     console.log('starting permission for this agent, which you can change before you sign. The part after "#" stays in');
@@ -2006,7 +2077,9 @@ async function main(argv) {
     }
     if (command === 'renew') return 0;
     const code = await ensure(folder, port);
-    if (code === 0) console.log(`The recorder is running. Start Claude Code in a project where "${RUN} init" was run, and each tool call is checked and recorded.`);
+    if (code === 0) console.log(FROM_PLUGIN
+      ? 'The recorder is running. In each Claude Code session in which the plugin is turned on, each tool call is checked and recorded.'
+      : `The recorder is running. Start Claude Code in a project where "${RUN} init" was run, or with the Claude Code plugin turned on, and each tool call is checked and recorded.`);
     return code;
   }
   if (command === 'retire-passkey' || command === 'admit-passkey') {
@@ -2042,6 +2115,20 @@ async function main(argv) {
     return null;
   }
   if (command === 'ensure') return ensure(folder, port);
+  if (command === 'session-start') return sessionStart(folder, port);
+  if (command === 'remove-hooks') {
+    const removed = removeInitHooks(process.cwd(), (path, text) => writeFileSync(path, text));
+    if (removed.problem) {
+      console.error(removed.problem);
+      return 1;
+    }
+    console.log(removed.removed > 0
+      ? `Took ${removed.removed} of the recorder's hooks out of ${removed.path}; nothing else there was changed. Start Claude Code again: it reads hooks when a session starts.`
+      : `${removed.path} holds none of the hooks init writes. Nothing was changed.`);
+    const left = recorderHooksInSettings(process.cwd());
+    if (left.length > 0) console.log(`Hooks that run a recorder's hook.mjs are still in ${filesOf(left).join(' and ')}. Where the Claude Code plugin is turned on, take them out by hand.`);
+    return 0;
+  }
   if (command === 'check') {
     // A first word that is not an option names a book: one kept in the folder by its name (book-1.jsonl), or any file.
     let bookFile = f.book;

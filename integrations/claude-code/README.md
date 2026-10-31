@@ -10,7 +10,8 @@ a book that anyone can check with the free checker.
 ## From nothing to a recorded session
 
 A few commands and one step with your passkey. It needs Node.js 24.7 or
-later.
+later. To have Claude Code install it, with its hooks, see "Install as a
+Claude Code plugin" below.
 
 ```
 git clone https://github.com/provared/provared.git
@@ -57,6 +58,110 @@ passkey you name and no other.
 
 On Windows, if PowerShell refuses to run the command, write
 `provared-claude-code.cmd` in its place.
+
+## Install as a Claude Code plugin
+
+The recorder is also a Claude Code plugin, which brings its hooks with
+it: nothing is written into a project's settings. It needs Node.js 24.7
+or later, and npm, on the computer's path. In Claude Code:
+
+```
+/plugin marketplace add provared/provared
+/plugin install provared-recorder@provared
+```
+
+From a terminal, the same is `claude plugin marketplace add
+provared/provared` and `claude plugin install provared-recorder@provared`.
+Adding the marketplace downloads a copy of this repository (about 60 MB);
+`claude plugin marketplace add provared/provared --sparse .claude-plugin
+integrations/claude-code` downloads only the two folders the plugin uses.
+
+Claude Code copies this folder into its plugin cache
+(`~/.claude/plugins/cache/provared/provared-recorder/0.1.0/`) and installs
+the library `provared` beside it, at the exact version `package-lock.json`
+names (0.6.0), with no install script run. There is nothing to install by
+hand.
+
+A plugin is installed for you in every project unless you say otherwise
+(the scope "user"). From then on every tool call, in every session, is
+refused until you have signed a permission: no record, no action. To
+record one project only, install it from that project's folder with
+`claude plugin install provared-recorder@provared --scope local`, or
+choose that scope in `/plugin`.
+
+The first session after installing says what to do, and so does each
+call it refuses:
+
+1. In a terminal: `node <the plugin's folder>/recorder.mjs init`. Claude
+   Code's message gives the whole path. `init` makes the agent's keys and
+   prints a link to https://sign.prova.red/ with the fingerprint of the
+   agent's key set; run from the plugin's folder, it writes no hooks.
+2. Open the link, write your name, read the permission, compare the
+   fingerprint with the one `init` printed, sign with your passkey, and
+   save the file the page gives you.
+3. `node <the plugin's folder>/recorder.mjs use <the saved file>`
+
+Nothing signs for you. From then on each tool call is checked and
+recorded, as with the hooks `init` writes. The other commands (`check`,
+`seal`, `status`, `renew` and the rest) run the same way:
+`node <the plugin's folder>/recorder.mjs <command>`. A copy installed from
+npm (`provared-claude-code <command>`) does the same: both use the folder
+`~/.provared/claude-code`.
+
+What the plugin brings (`hooks/hooks.json`): the hooks `init` writes,
+before, after, and after a failed call, for every tool, with
+`"onFailure": "block"`; and, when a session starts, `session-start`, which
+starts the recorder as `ensure` does and, where something stands in the
+way (no permission yet, a recorder that does not start, or the recorder's
+hooks in force twice), tells you and Claude, so that the refusals that
+follow are not taken for a fault. Where all is well it says nothing.
+
+The record is not kept in the plugin's folder: it stays in
+`~/.provared/claude-code` (or the folder `PROVARED_CLAUDE_CODE_DIR`
+names), so updating or uninstalling the plugin leaves the books, the
+permissions and the keys as they are.
+
+**Updates.** The plugin's version is the one in
+`.claude-plugin/plugin.json`, the same as the npm package's, so Claude
+Code offers an update only when that version changes
+(`claude plugin update provared-recorder@provared`, or `/plugin`). A
+recorder already running keeps the code it started with until it is
+stopped and started again (`stop`, then `ensure`), and the commands
+printed before an update name the folder of the version before it.
+
+**Not twice.** Claude Code runs a plugin's hook and the same hook in a
+settings file side by side. Where the recorder's hooks are both in a
+settings file (written by `init`, or by hand) and brought by the plugin,
+each call would be asked about, and recorded, twice. So before each call
+the plugin's hook looks in your own settings (`~/.claude/settings.json`)
+and the project's (`.claude/settings.json` and
+`.claude/settings.local.json`) for a hook that runs a recorder's
+`hook.mjs` (a file of that name with `recorder.mjs` and `actions.mjs`
+beside it). Where it finds one it refuses the call, and says how to take
+one of the two out:
+
+- `remove-hooks`, run in the project's folder, takes out of
+  `.claude/settings.local.json` the hooks that `init` wrote, from any copy
+  of this recorder, and nothing else there (not a hook of yours that runs
+  the recorder's hook and something more);
+- or turn the plugin off (`/plugin`, or
+  `claude plugin disable provared-recorder@provared`).
+
+Then start Claude Code again: it reads hooks when a session starts.
+Refusing is chosen over stepping aside: a refused call costs a moment,
+while a call that neither recorded, where the other hooks were not in
+fact in force, would leave a gap. After a call has been taken, the plugin
+records it whatever it finds, since two receipts for one call show in the
+record and a missing one would not. An organisation's managed settings
+are not looked at. `init` run from the plugin's folder writes no hooks,
+and `init --no-hooks` does the same from any copy; `init` run from
+another copy, where the plugin is installed, writes them and warns.
+
+**Limits.** As with `init`'s hooks, Claude Code before version 2.1.295
+sets `"onFailure": "block"` aside (see "How it works"). The marketplace
+file is at the top of the repository (`.claude-plugin/marketplace.json`),
+because `/plugin marketplace add provared/provared` looks for it there;
+the plugin itself is this folder.
 
 ## The starting permission
 
@@ -711,7 +816,7 @@ version too (`npx provared-check` takes the latest).
 
 | Command | What it does |
 |---|---|
-| `init` | Make the keys if they are missing, write the hooks into this project's `.claude/settings.local.json`, and print the link to sign a permission |
+| `init` | Make the keys if they are missing, write the hooks into this project's `.claude/settings.local.json`, and print the link to sign a permission; with `--no-hooks`, or run from the Claude Code plugin's folder, write no hooks |
 | `use <file>` | Put a signed permission in place and start the recorder; where a book exists already, the same as `renew` |
 | `renew <file>` | Take a new signed permission into the book, while the recorder runs or not; `--new-passkey` where you signed it with a passkey of yours that signed none before |
 | `retire-passkey <thumbprint>` | Take no new permission from that passkey, with or without `--new-passkey`; what it signed stands, and limits are still counted across the books it signed |
@@ -724,6 +829,8 @@ version too (`npx provared-check` takes the latest).
 | `check [file]` | The checker's answer for the book, or, given a name such as `book-1.jsonl`, for a book kept before it. Name your passkey with `--issuer <its thumbprint>`, once for each passkey of yours; without it, `check` lists the passkeys the book's permissions name, as read from the book, and the checker takes none of them as one you trust. It names the witnesses in `witnesses.json` (`--witness`) and hands over the statements kept beside the book (`--seal`), unless you give your own |
 | `add-witness <address> <fingerprint> <token file>` | Ask a witness (at `http://127.0.0.1:<port>`) to sign for each seal from now on, after checking that it answers there and signs with that key set |
 | `remove-witness <fingerprint>` | Ask that witness no more |
+| `remove-hooks` | Take the hooks `init` wrote, from any copy of this recorder, out of this project's `.claude/settings.local.json`, and nothing else: for a project where the Claude Code plugin brings them |
+| `session-start` | What the Claude Code plugin runs when a session starts: `ensure`, and what stands in the way, if anything, told to you and to Claude |
 | `stop` | Stop the recorder |
 | `keys` | Make the keys, and print the agent's public keys |
 
@@ -1087,6 +1194,12 @@ node --test "integrations/claude-code/test/*.test.mjs"
 They make permissions with the library's development stand-in for a
 passkey, start the recorder in temporary folders on free ports, and run
 the hook as Claude Code would, with its JSON on standard input.
+
+To try the plugin from a copy of the repository, add the copy itself as
+the marketplace (`claude plugin marketplace add <the copy's folder>`).
+Claude Code may then load the plugin in place, from the copy, without
+installing the library into it: run
+`node integrations/claude-code/tools/use-repository-library.mjs` first.
 
 ## Licences
 

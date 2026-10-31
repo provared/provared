@@ -32,6 +32,7 @@
   "files": [
     "recorder.mjs",
     "hook.mjs",
+    "settings-hooks.mjs",
     "actions.mjs",
     "feed.mjs",
     "witness.mjs",
