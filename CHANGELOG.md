@@ -20,6 +20,87 @@
   `tools/release/`. Nothing in the npm package or the Python packages
   changes. Version 0.6.0 and earlier were published by hand.
 
+- **An OpenTelemetry bridge**, `provared-opentelemetry` 0.1.0, in
+  `integrations/opentelemetry/` (not published). It puts each tool call's
+  receipt on the trace span that observability tools already show, in one
+  call: `traceTools` (as `recordTools`) or `traceAct` (as the stub
+  writer's `act`). The span
+  gets `provared.outcome`, `provared.action`, `provared.stub.fingerprint`,
+  `provared.stub.seq`, `provared.stub.countersigned`,
+  `provared.stub.trace_bound`, `provared.slip.fingerprint` and, for a call
+  not taken, `provared.check.codes` and `provared.denial.fingerprint`; a span
+  the bridge starts is an `execute_tool` span as OpenTelemetry's
+  conventions for generative AI describe it. The receipt names the
+  fingerprint of the span's trace id as `provared.trace-id` only for a tool
+  that the caller says sends the trace out with its call, in a
+  `traceparent` header (`sendsTrace: true`; off by default), as section
+  27 of the format description defines the name; the bridge cannot see
+  whether the tool really does. The model's identifier for the call goes
+  on the span as `gen_ai.tool.call.id`, never into the receipt. Only
+  fingerprints, names and codes reach a span: never arguments, amounts,
+  documents, keys, the words of a finding or an error's message. A span is
+  the agent's side's own word; the receipt and the checker are the
+  evidence. `@opentelemetry/api` and `provared` are peer dependencies; the
+  library itself still has none. An error that the tool, or one of its own
+  functions, throws is the tool's error, even a `NotTaken` from another
+  stub writer. `traceAct` adds nothing to a request that comes with an
+  approval made beforehand, or whose `details` is not a list. Its tests run
+  in a job of their own in the test workflow, at the locked versions and
+  again at the newest releases of OpenTelemetry.
+- **An example for a JavaScript agent framework** in
+  `examples/frameworks/` (not in the npm package): an agent built with the
+  Vercel AI SDK (`ai` 7.0.153), with its tools put behind the stub writer
+  with `recordTools`. One order within the slip is run and receipted; one
+  over its limit is not run, leaves no stub, and the agent is told why; the
+  checker finds the book intact and within its slip, and the output says
+  that the slip was signed by a development stand-in, not a person. It
+  uses the SDK's own mock model and passes `telemetry: { isEnabled: false }`.
+  It runs with a guard (`_offline.mjs`) open from before any module is
+  loaded until the program ends, which replaces with refusing functions
+  Node.js's socket connections, `dgram` sends, `dns` look-ups (both
+  `Resolver` classes included), the functions that start a program (`child_process`, `ChildProcess.prototype.spawn` and, where it exists, `process.execve`),
+  `worker_threads.Worker`, `fetch`, `WebSocket`, and `process.binding`
+  for the bindings beneath them; the tests check that nothing was refused.
+  Its own `package.json` and lock file pin every version, so the library
+  keeps no dependencies. A new job in the test workflow runs it. In
+  `docs/guide.md`, the links to the examples and to the Python version's
+  examples now give their full addresses on GitHub, since `examples/` and
+  `python/` are not in the npm package.
+
+- **A "try it" page** at prova.red/try/ (`site/try/`, not yet published).
+  One button. Where the browser has Ed25519 and ML-DSA-87 built in (Chrome,
+  Edge and Brave 155, tried on 13 October 2026), the page makes a new
+  record with the development stand-in for a passkey, under a limit on
+  orders in GBP that the visitor may change, writes a receipt for each of
+  four orders (on purpose, even where the check before acting says no) and
+  checks the record. Elsewhere it reads the sample record and checks it one
+  entry at a time, and says why. The words about the record, what the page
+  does not do and what the check trusts are those of the path shown.
+  Nothing is sent, nothing is stored, and the record made has no seal; the
+  card of its top fingerprint is then headed "The top fingerprint". Linked
+  from the home page and the site map; its logic (`site/try/story.js`) is
+  tested in `test/try-page.test.mjs`. The site's style sheet gains the
+  checking page's rules for the checker's answer, scoped to the new page.
+
+- **Signing moved to https://sign.prova.red** (25 October 2026). A browser
+  lets a passkey sign only for the website name it was made for and the
+  addresses under it, so a passkey made at prova.red/sign/ could be asked
+  to sign by any other page under prova.red (the list of threats, section
+  3). The signing page is now served at sign.prova.red from its own
+  repository, https://github.com/provared/sign, which holds only that page
+  and the library's files, each a byte-for-byte copy of the files at tag
+  v0.6.0, and serves nothing else. prova.red/sign/ now says that
+  signing has moved and offers no signing (`site/sign/index.html`; the
+  publishing workflow no longer copies the signing page there). The
+  gateway's README points to the new address. The recorder beside Claude
+  Code and the Hermes plugin still print links to prova.red/sign/, and the
+  signing page itself, shown inside another page, still names that
+  address; each changes with its next reviewed version, and their READMEs
+  now say how to open such a link at the new address.
+- The test workflow is no longer started by a push that changes only the
+  record page and the sitemap.
+
+- On the "try it" page the checker's answer entry by entry is folded away behind "Show every entry", which opens in place; the story, the summary and what the check does not show stay open.
 ## 0.6.0 (25 October 2026)
 
 Version 0.6.0 adds three kinds of record and the services that use them: the denial (the agent's own side states that an action it was asked for was not taken), seals held elsewhere and handed over beside a book, and witness statements beside a seal, with consistency proofs; and, beside the library, a central sealer, a gateway that writes the receipts for agents that cannot be wrapped, and a recorder beside Claude Code that numbers its books and has them witnessed (none of these three programs is published). What a reader of a book made by 0.5.0 or earlier must know: every such book reads as it did, apart from the cases below; but a checker of 0.5.0 or earlier refuses a book that holds a denial, a seal that gives `book`, or a seal that holds `witnesses`, so a book made with these needs a checker of 0.6.0. The fingerprint of a tool call's arguments is now named `provared.arguments` by default, where it was `arguments`; the fingerprint itself is the same. And a checker of 0.6.0 refuses some time-stamps and keys that 0.5.0 accepted, each listed below: a time-stamp that is not strict DER, that names its signing certificate twice in the same form, or that is signed with Ed25519 under a method other than SHA-512 or with parameters; an ES256 key that is not a point on its curve; and an Ed25519 signature whose number S is not below the order L. A passkey and a time-stamp service that follow their standards produce none of these; the sample record gets the same findings and the same exit code from the command-line checker of both versions, and 0.6.0 adds only a line on witnesses and, with `--json`, the empty members for denials and witnesses.

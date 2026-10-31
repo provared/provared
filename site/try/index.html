@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; form-action 'none'; base-uri 'none'">
+<meta name="description" content="Try Provared in your browser, with nothing to install: a permission with a limit, an agent that orders under it, a signed receipt for each order, and the free checker finding where the agent went outside its permission. Nothing is sent anywhere and nothing is kept.">
+<title>Try Provared</title>
+<link rel="canonical" href="https://prova.red/try/">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Provared">
+<meta property="og:title" content="Try Provared in your browser">
+<meta property="og:description" content="Two minutes, nothing to install: an agent orders under a limit, signs a receipt for each order, and the free checker finds where it went over. Nothing is sent anywhere.">
+<meta property="og:url" content="https://prova.red/try/">
+<meta property="og:image" content="https://prova.red/preview.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://prova.red/preview.png">
+<link rel="stylesheet" href="../style.css?v=5">
+<script src="wait.js" defer></script>
+<script type="module" src="try-page.js"></script>
+</head>
+<body>
+<header>
+  <p class="small"><a href="../"><svg class="mark" viewBox="0 0 64 64" width="20" height="20" aria-hidden="true"><circle cx="32" cy="32" r="32" fill="#8f000f"/><path d="M20 15 H37 L45 23 V49 H20 Z" fill="#ffffff"/><path d="M37 15 V23 H45" fill="none" stroke="#8f000f" stroke-width="2.5" stroke-linejoin="round"/><path d="M25 29 H40 M25 35 H36" stroke="#8f000f" stroke-width="2.5" stroke-linecap="round"/><path d="M24.5 43 C27 39, 29 46, 31.5 42.5 C34 39, 36 46, 40.5 41.5" fill="none" stroke="#8f000f" stroke-width="3" stroke-linecap="round"/></svg>Provared</a></p>
+  <h1>Try it in your browser</h1>
+  <p class="motto">Two minutes, nothing to install. Evidence, not a verdict.</p>
+</header>
+<main>
+
+<p>A person gives an office agent a permission with a limit on what it may spend. The agent places some orders and signs a receipt for each one. Then the free checker reads the record, as a stranger would, and says whether the agent stayed within its permission, and where it did not.</p>
+
+<p>All of it happens in this page, in your browser. Nothing you do here is sent anywhere, and nothing is kept once you close the page. The people, the supplier and the orders are invented.</p>
+
+<div class="card slip">
+  <p id="path">Finding out what your browser can do …</p>
+  <p id="limit-line" hidden><label for="limit">The most the agent may order in total, in GBP (the orders come to 230 GBP):</label> <input id="limit" type="text" inputmode="numeric" autocomplete="off" size="6" value="200"></p>
+  <p><button type="button" class="button" id="run" disabled>Please wait</button></p>
+  <p id="status" class="quiet" role="status" aria-live="polite"></p>
+  <noscript><p>This page needs JavaScript to make and check a record. Without it, read <a href="../over-the-limit.html">the worked example</a>, or use <a href="../check/">the checking page</a>.</p></noscript>
+</div>
+
+<section id="permission" hidden>
+  <h2>1. The permission</h2>
+  <p>In the checker's own words, read from the signed permission:</p>
+  <div class="card slip"><dl id="permission-words"></dl></div>
+  <p class="small quiet" id="permission-note"></p>
+</section>
+
+<section id="acted" hidden>
+  <h2>2. What the agent did, one receipt to an entry</h2>
+  <p id="acted-lead"></p>
+  <ol class="steps" id="steps" aria-live="polite"></ol>
+</section>
+
+<section id="checked" hidden>
+  <h2>3. What the checker says</h2>
+  <p id="checked-lead"></p>
+  <div id="result" class="result"></div>
+</section>
+
+<section id="not-done" hidden>
+  <h2>What this page does not do</h2>
+  <ul id="not-done-list"></ul>
+</section>
+
+<h2>Next</h2>
+<p>To make a record of your own on your computer, with Node.js 24.7 or later, or Python 3.11 or later:</p>
+<pre>npm install provared
+pip install provared
+npx provared-check --sample</pre>
+<p>Check any record in your browser with <a href="../check/">the checking page</a>, which loads nothing from anywhere. The <a href="https://github.com/provared/provared/blob/main/docs/guide.md">guide</a> shows how to put an agent's actions behind the same check. If you do not write code, <a href="../three-minutes.html">Provared in plain words</a> explains it in three minutes.</p>
+
+</main>
+<footer>
+  <p><b>About the author.</b> Pavel Izmaylov builds Provared alone, in their own time and under their own name; on GitHub, <a href="https://github.com/sealwright">sealwright</a>. Every email to <a href="mailto:hello@prova.red?subject=Provared">hello@prova.red</a> is read and answered within a few days.</p>
+  <p>This page loads nothing from anywhere but its own files from prova.red, and keeps nothing about you: no tracking, no cookies, no form, and nothing stored in your browser.</p>
+</footer>
+</body>
+</html>

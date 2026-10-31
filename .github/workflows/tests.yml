@@ -2,10 +2,13 @@
 #
 # When: on every pull request, so that a change is tested before it reaches
 # main; on every push to main, except the daily record page; and every
-# Monday, so that a new release of LangChain, Pydantic AI or Agno that
-# breaks one of the framework packages is found before the people who use
-# them find it. Nothing is cached: every run installs the newest release of
-# each framework that the package allows.
+# Monday, so that a new release of LangChain, Pydantic AI, Agno or
+# OpenTelemetry that breaks one of the packages built on them is found
+# before the people who use them find it. Nothing is cached: every run
+# installs the newest release of each framework that the package allows
+# (the OpenTelemetry bridge is also tested at its locked versions first).
+# The examples' jobs are the exception: they install the exact versions
+# their files name, every run.
 #
 # Nothing here is published, pushed or sent anywhere: the workflow can only
 # read the repository, and it uses no secret. The tests call no AI service;
@@ -21,8 +24,9 @@ name: Tests
 on:
   push:
     branches: [main]
-    # The record page is remade each day and holds no code.
-    paths-ignore: ['site/records/**']
+    # The record page is remade each day and holds no code; remaking it also
+    # changes the sitemap's date.
+    paths-ignore: ['site/records/**', 'site/sitemap.xml']
   pull_request:
   schedule:
     # Every Monday at 06:00 UTC.
@@ -83,6 +87,42 @@ jobs:
           node-version: 24
       - name: Run the tests
         working-directory: ${{ matrix.package }}
+        run: npm test
+
+  # The OpenTelemetry bridge. Unlike the packages above, its tests need
+  # packages of their own: OpenTelemetry's API, its SDK and its context
+  # manager (all under the Apache License 2.0), installed with no install
+  # scripts run. They run twice: first at the exact versions in its
+  # package-lock.json, then at the newest release of each that npm offers,
+  # with no lock file, so that a new release of OpenTelemetry that breaks
+  # the bridge is found. Its tests point "provared" at this commit's
+  # library, as above, and run inside a guard that refuses any connection.
+  javascript-opentelemetry:
+    name: integrations/opentelemetry
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: Install the packages the tests need
+        working-directory: integrations/opentelemetry
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Run the tests, at the locked versions
+        working-directory: integrations/opentelemetry
+        run: npm test
+      - name: Install the newest releases, with no lock file
+        working-directory: integrations/opentelemetry
+        run: npm install --no-save --no-package-lock --ignore-scripts --no-audit --no-fund "@opentelemetry/api@^1.9.0" @opentelemetry/sdk-trace@latest @opentelemetry/context-async-hooks@latest
+      - name: Show the versions being tested
+        working-directory: integrations/opentelemetry
+        run: |
+          for p in api sdk-trace context-async-hooks; do node -p "'@opentelemetry/$p ' + require('./node_modules/@opentelemetry/$p/package.json').version"; done
+      - name: Run the tests, at the newest releases
+        working-directory: integrations/opentelemetry
         run: npm test
 
   # The library in Python, on the oldest and the newest Python it supports.
@@ -221,3 +261,25 @@ jobs:
       - name: Run the tests
         working-directory: python/examples
         run: python -m unittest test_examples -v
+
+  # The JavaScript example (examples/frameworks/), with the Vercel AI SDK
+  # and every package beneath it at the exact versions that its
+  # package-lock.json fixes. It takes the library from this commit. Install
+  # scripts are not run: the example needs none.
+  javascript-examples:
+    name: JavaScript example (Vercel AI SDK)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: Install the examples' exact versions
+        working-directory: examples/frameworks
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Run the tests
+        working-directory: examples/frameworks
+        run: npm test

@@ -6,7 +6,9 @@ within its permission when it is not, lets a signature or a time-stamp
 be forged, or lets the stub writer take an action after the person's
 cancellation reached it, is a security fault.
 
-**Write to hello@prova.red** with the subject "Security", saying what
+**Report it privately on GitHub** through the repository's Security tab
+(https://github.com/provared/provared/security/advisories/new), **or
+write to hello@prova.red** with the subject "Security", saying what
 the fault is and how to show it (a record, a command, a few lines of
 code). The author reads every message and answers within a few days.
 Please do not open a public issue for such a fault until it is fixed,
