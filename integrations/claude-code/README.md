@@ -9,14 +9,22 @@ a book that anyone can check with the free checker.
 
 ## From nothing to a recorded session
 
-Five commands and one step with your passkey. It needs Node.js 24.7 or
+A few commands and one step with your passkey. It needs Node.js 24.7 or
 later.
 
 ```
-npm install -g provared-claude-code
+git clone https://github.com/provared/provared.git
+cd provared/integrations/claude-code
+npm pack
+npm install -g provared-claude-code-0.1.0.tgz
 cd your-project
 provared-claude-code init
 ```
+
+This package is not yet on npm, so the first four lines install it from
+a copy of the repository; `npm pack` makes the package as npm would, so
+that its one dependency, `provared`, is installed with it. Once it is
+published, they become `npm install -g provared-claude-code`.
 
 `init` makes the agent's keys, writes the hooks into the project's
 `.claude/settings.local.json` (next to anything already there), and
