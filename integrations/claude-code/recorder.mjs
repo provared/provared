@@ -401,13 +401,15 @@ function untilFree(step) {
 }
 // A temporary file left by a write or a replacement that failed for the last
 // time (perhaps after part of it was written) is removed. The two ways of
-// writing can be handed in, for the tests.
-export function replaceFile(path, text, { write = writeFileSync, rename = renameSync } = {}) {
+// writing can be handed in, for the tests. "temporary" names the temporary
+// file, beside the file, for a writer that may write at the same moment as
+// another program.
+export function replaceFile(path, text, { write = writeFileSync, rename = renameSync, temporary = `${path}.tmp` } = {}) {
   try {
-    untilFree(() => write(`${path}.tmp`, text));
-    untilFree(() => rename(`${path}.tmp`, path));
+    untilFree(() => write(temporary, text));
+    untilFree(() => rename(temporary, path));
   } catch (e) {
-    try { unlinkSync(`${path}.tmp`); } catch { /* nothing to remove */ }
+    try { unlinkSync(temporary); } catch { /* nothing to remove */ }
     throw e;
   }
 }
@@ -583,11 +585,36 @@ export function readRetired(folder) {
   return readTrustedFile(folder)?.retired ?? [];
 }
 
-// The retired list is kept as the file holds it, unless one is given.
-function writeTrusted(folder, list, retired = readRetired(folder)) {
+/**
+ * Write the list of passkeys. Two commands may change it at the same
+ * moment (say, "retire-passkey" while the running service takes a new
+ * passkey with "renew --new-passkey"), so the file is read again just
+ * before it is written, and the two are merged: "passkeys" is every
+ * passkey there and every one given, never fewer, and "retired" is the
+ * list there with the one change asked for. The file is written to a
+ * temporary file of its own in the same folder and renamed into place,
+ * each step tried again while Windows holds the file busy. A narrow window
+ * remains between that reading and the renaming: no lock is held.
+ * @param {string} folder
+ * @param {string[]} [add] passkeys to have on the list
+ * @param {{retire?: string, admit?: string}|null} [change] one passkey to retire, or to admit again
+ * @param {{beforeRead?: () => void}} [o] for the tests: run just before the file is read again
+ * @returns {{passkeys: string[], retired: string[]}} the lists written
+ */
+export function writeTrusted(folder, add = [], change = null, { beforeRead } = {}) {
   mkdirSync(folder, { recursive: true });
+  beforeRead?.();
+  const held = readTrustedFile(folder);
+  const passkeys = [...new Set([...(held?.passkeys ?? []), ...add])];
+  let retired = held?.retired ?? [];
+  if (change?.retire) retired = [...new Set([...retired, change.retire])];
+  if (change?.admit) retired = retired.filter((k) => k !== change.admit);
+  retired = retired.filter((k) => passkeys.includes(k));
   const about = 'The thumbprints of the passkeys whose permissions are in this recorder\'s record ("passkeys": written by "use", added to by "renew --new-passkey"), and among them those that may sign no new permission ("retired": written by "retire-passkey" and "admit-passkey").';
-  replaceFile(files(folder).trusted, JSON.stringify({ about, passkeys: list, retired: retired.filter((k) => list.includes(k)) }, null, 2) + '\n');
+  const path = files(folder).trusted;
+  const temporary = `${path}.${process.pid}.${nodeCrypto.randomBytes(6).toString('hex')}.tmp`;
+  replaceFile(path, JSON.stringify({ about, passkeys, retired }, null, 2) + '\n', { temporary });
+  return { passkeys, retired };
 }
 
 /**
@@ -599,9 +626,10 @@ function writeTrusted(folder, list, retired = readRetired(folder)) {
  * @param {string} folder
  * @param {string} thumbprint
  * @param {boolean} retire true to retire, false to admit
+ * @param {{beforeRead?: () => void}} [o] for the tests (see writeTrusted)
  * @returns {{passkeys: string[], retired: string[], changed: boolean}} the lists afterwards
  */
-export function retirePasskey(folder, thumbprint, retire) {
+export function retirePasskey(folder, thumbprint, retire, { beforeRead } = {}) {
   if (typeof thumbprint !== 'string' || !THUMBPRINT.test(thumbprint)) throw new Error('A passkey is named by its thumbprint: 43 letters, digits, hyphens or underscores, with no spaces.');
   const held = readTrustedFile(folder);
   if (held === null) throw new Error(`The folder has no list of passkeys yet (${files(folder).trusted}): none has signed a permission for this recorder. The first "use" writes it.`);
@@ -610,9 +638,9 @@ export function retirePasskey(folder, thumbprint, retire) {
   }
   const already = held.retired.includes(thumbprint);
   if (retire === already) return { ...held, changed: false };
-  const retired = retire ? [...held.retired, thumbprint] : held.retired.filter((k) => k !== thumbprint);
-  writeTrusted(folder, held.passkeys, retired);
-  return { passkeys: held.passkeys, retired, changed: true };
+  // Written from the file as it is just before the writing, with this one change, so that a passkey added meanwhile stays.
+  const lists = writeTrusted(folder, [], retire ? { retire: thumbprint } : { admit: thumbprint }, { beforeRead });
+  return { ...lists, changed: true };
 }
 
 /**
@@ -734,6 +762,22 @@ async function passkeysIn(text) {
     }
   }
   return found;
+}
+
+// The fingerprint of the last permission line in a book: the permission in
+// force when the book was kept (a renewal adds the new permission's line).
+// Null where the book has none, or its last permission line cannot be read.
+async function lastSlipIn(text) {
+  const lines = text.split('\n');
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (!lines[i].startsWith('{"slip":')) continue;
+    try {
+      return await fingerprint(fromBase64url(JSON.parse(lines[i]).slip.payload));
+    } catch {
+      return null;
+    }
+  }
+  return null;
 }
 
 async function slipsIn(text) {
@@ -861,12 +905,15 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
   if (taken) {
     // A new book, or a slip put in place while the service was not running:
     // taken in after the same checks as a renewal. Where the folder has no
-    // book and the last kept book holds this slip, a new book that a switch
-    // had begun is completed: the slip was taken in after those checks, and
-    // is not checked again, so that a permission that has ended since does
-    // not keep the recorder from starting (it then refuses every call, and
-    // "status" and "seal" still work).
-    const completing = text === '' && kept.length > 0 && (await slipsIn(readFileSync(kept.at(-1).path, 'utf8'))).has(placed.fingerprint);
+    // book and this slip is the last permission in the last kept book (the
+    // one in force when that book was kept), a new book that a switch had
+    // begun is completed: the slip was taken in after those checks, and is
+    // not checked again, so that a permission that has ended since does not
+    // keep the recorder from starting (it then refuses every call, and
+    // "status" and "seal" still work). Any other slip, even one that the
+    // kept book holds further up, goes through the checks, a retired
+    // passkey's among them.
+    const completing = text === '' && kept.length > 0 && (await lastSlipIn(readFileSync(kept.at(-1).path, 'utf8'))) === placed.fingerprint;
     if (!completing) await checkNewSlip(placed.slip, { agentKeys: agent.keys, trusted, retired: readRetired(folder) });
     text += entryLine({ slip: placed.slip }) + '\n';
   }

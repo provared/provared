@@ -106,17 +106,30 @@ follows the checking steps of the Web Authentication standard.
   expect the person to sign at (`issuerOrigins`, `--origin`, or the box
   on the checking page; format description, section 4.4), with that
   address too, refusing a slip signed anywhere else
-  (`issuer-origin-not-expected`). Three things together close this, and
-  each alone does not: a passkey that signs records is made for a relying
-  party used for nothing else (Provared's own signing page is served at
-  sign.prova.red, a name that serves nothing else; a passkey made there
-  can be asked to sign only by a page under that name); the page that
-  asks for the signature shows the record first; and the reader names
-  that address. What stays open: a reader who names no address is
-  protected only by which passkey they trust; whoever serves the signing
-  page's name (the host of the site, or whoever holds its domain name)
-  can serve another page there; and a passkey made at a name that serves
-  other pages stays exposed however the reader checks later records.
+  (`issuer-origin-not-expected`). What each measure does:
+  - A passkey made for a name that serves only the signing page closes
+    this for that passkey: the device lets it sign only for pages under
+    that name, so no other page can have it sign anything. Provared's own
+    signing page is served at sign.prova.red, a name that serves nothing
+    else.
+  - A reader who names the address is protected by naming alone, whatever
+    name the passkey was made for: the client data the passkey signs must
+    say that address, so a record signed at any other page under the
+    `rpId` is refused.
+  - A page that shows the record before it asks for the signature helps
+    only against a page that asks openly for a record to be signed. It
+    does nothing against a prompt dressed as a sign-in, which shows no
+    record.
+  - Naming an address protects only the reader who names it. It does not
+    stop the passkey signing records at other pages, which readers who
+    name no address, or name another one, accept.
+
+  What stays open: a reader who names no address is protected only by
+  which passkey they trust; whoever serves the named address (the host of
+  the site, or whoever holds its domain name) can serve another page
+  there, and a reader's naming does not tell that page from the real one;
+  and a passkey made for a name that serves other pages stays exposed to
+  every reader who does not name the address.
 
 ## 4. The Stub and the countersignature
 

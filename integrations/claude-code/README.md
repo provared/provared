@@ -116,9 +116,23 @@ books; but a new permission from it is refused, whether or not
 `--new-passkey` is given, until `admit-passkey <its thumbprint>`. The
 command takes effect at once, while the recorder runs or not. The file
 holds both lists (`passkeys`, and among them `retired`); a file written
-by an earlier version has no `retired`, and retires none. This raises the
-bar; it does not close the gap: see "What the record shows, and what it
-does not".
+by an earlier version has no `retired`, and retires none. If a command
+changes the list while a renewal adds a passkey, both changes are kept:
+the file is read again just before it is written, and no passkey is
+ever taken off it.
+
+Retirement stops new permissions; it does not stop a program that can
+change the recorder's files. The one permission it cannot keep out is the
+one that was last in force in the last kept book: when the recorder
+starts with no `book.jsonl` and that permission in `slip.json`, it takes
+it as the completion of a switch to a new book, without the checks, so
+that a permission that has ended since does not stop the recorder from
+starting. So a program on this computer that removes `book.jsonl` and
+puts that permission back can resume it, even if its passkey was retired
+afterwards; and so can one that adds a permission's line at the end of
+the kept book. Any other permission is checked, a retired passkey's
+among them. This raises the bar; it does not close the gap: see "What
+the record shows, and what it does not".
 
 ## A new book at 90,000 entries
 

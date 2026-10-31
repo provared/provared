@@ -51,12 +51,22 @@
   publishing workflow (with the actions pinned to the commits this
   repository's workflow pins) and licence. It takes `--from <tag or
   commit>`, which the README and the workflow name as where the copies
-  come from; with `--check` it compares a folder written before with this
-  repository, and names what differs. Run against the copy made by hand on
-  25 October 2026 from tag v0.6.0, it finds that copy equal in every file
-  but the seven that this change and the one above change (the page, its
-  script, the renderer, and `src/book.js`, `check.js`, `denial.js` and
-  `slip.js`) and their fingerprints. Test: `test/sign-site.test.mjs`.
+  come from, and reads every file with git at that tag or commit, never
+  from the working tree: a file not committed, or changed and not
+  committed, cannot reach the site, and the modules copied are those git
+  holds directly under `src/` there. A name that git cannot find is
+  refused (code 2), and nothing is written. A tag is named as the tag;
+  any other name as the commit's full hash. With `--check` it compares a
+  folder written before with the same files, read the same way, and names
+  what differs. Run against the copy made by hand on 25 October 2026 from
+  tag v0.6.0, with `--from v0.6.0` it finds every file equal; with
+  `--from` this branch's commit it finds the seven files that this change
+  and the one above change (the page, its script, the renderer, and
+  `src/book.js`, `check.js`, `denial.js` and `slip.js`) and their list of
+  fingerprints different, and the README and the workflow, which name
+  where the copies come from. Test: `test/sign-site.test.mjs`, which
+  builds a small repository of its own with a tag, so that it needs
+  neither this repository's tags nor its history.
   The guide's table of folders names the tool.
 
 - **The recorder beside Claude Code and the Hermes plugin print links to
@@ -80,11 +90,26 @@
   the recorder still starts on the books that hold them and still counts
   limits across those books, and a new permission from it is refused,
   with or without `--new-passkey`, by `renew`, by `use`, by the running
-  service and at start-up where one was put in place by hand, until the
-  person admits it again; only a passkey on the list can be retired. The
-  retired list is read from the file at each renewal, so the command
-  counts at once, while the recorder runs or not, and a renewal that adds
-  a new passkey keeps it. A file written by an earlier version holds
+  service and at start-up where a new permission was put in place by
+  hand, until the person admits it again; only a passkey on the list can
+  be retired. The retired list is read from the file at each renewal, so
+  the command counts at once, while the recorder runs or not. The list is
+  read again just before it is written, and the two are merged: every
+  passkey on the file and every one added, never fewer, and the retired
+  list with the one change asked for, written to a temporary file of its
+  own and renamed into place; so `retire-passkey` run at the same moment
+  as a renewal that adds a new passkey keeps both changes (a narrow
+  window remains between that reading and the renaming, since no lock is
+  held). At start-up, a new book that a switch had begun is completed
+  without the checks only with the permission that was last in force in
+  the last kept book (its last permission line); any other permission
+  that book holds goes through the checks, a retired passkey's among
+  them. What is left: a program on this computer that removes `book.jsonl`
+  and puts back the permission that was last in force in the kept book
+  can resume it, even if its passkey was retired afterwards, and so can
+  one that adds a permission's line at the end of the kept book.
+  Retirement stops new permissions; it does not stop a program that can
+  change the recorder's files. A file written by an earlier version holds
   `passkeys` alone and is read as retiring none, so a recorder updated in
   place starts on its folder as it is; a `retired` that is not a list of
   thumbprints from `passkeys` stops the recorder, as a malformed

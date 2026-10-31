@@ -10,10 +10,17 @@
 //       which may hold a .git folder and what this tool wrote before,
 //       nothing else; "--from" names where the copies come from, as the
 //       README and the workflow say it (a tag, such as v0.6.0, where the
-//       files are those of a release; otherwise the commit)
+//       files are those of a release; otherwise the commit, by its full
+//       hash)
 //   node tools/make-sign-site.mjs <folder> --from <tag or commit> --check
-//       compare a folder written before with this repository as it stands,
-//       and fail where anything differs
+//       compare a folder written before with the same files, read in the
+//       same way, and fail where anything differs
+//
+// Every file is read with git, at the tag or commit that "--from" names,
+// never from the working tree: a file changed and not committed, or one that
+// git does not hold, cannot reach the site, so the README's words "a copy of
+// the same file at tag ..." are true of every file. A name that git cannot
+// find stops the tool before anything is written or compared.
 //
 // Why a site of its own: a passkey can be asked to sign by any page under
 // the website name it was made for, and what it signs is a fingerprint the
@@ -33,6 +40,7 @@
 // that "sha256sum --check" reads, and the workflow checks every file
 // against it before it publishes.
 
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -44,8 +52,84 @@ const ROOT = fileURLToPath(new URL('..', import.meta.url));
 export const SITE_NAME = 'sign.prova.red';
 /** The page's own script, from which the modules it loads are found. */
 const START = 'page/sign-page.js';
+/** The page's files, each by its path on the site and its path here; the library's modules are added to them. */
+const PAGE_FILES = { 'index.html': 'page/sign.html', 'sign-page.js': 'page/sign-page.js', 'render.js': 'page/render.js', 'style.css': 'page/style.css' };
 
-const read = (path) => readFileSync(join(ROOT, path));
+/**
+ * Check the form of the name given with "--from": a tag or a commit, of
+ * letters, digits, dots, hyphens and underscores, beginning with a letter
+ * or a digit, so that git can never read it as an option.
+ * @param {string} from
+ */
+export function checkName(from) {
+  if (typeof from !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(from)) {
+    throw new Error('--from names a tag (such as v0.6.0) or a commit: letters, digits, dots, hyphens and underscores only, beginning with a letter or a digit.');
+  }
+}
+
+const git = (repo, args) => execFileSync('git', ['-C', repo, ...args], { maxBuffer: 256 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+
+/**
+ * Where the copies come from: the tag or commit that "from" names in the
+ * repository at "repo", read with git, never from the working tree. A name
+ * that is a tag (refs/tags/<from>) is used as that tag; any other name as
+ * the commit git finds for it, and is then named by the commit's full hash.
+ * A name that git cannot find is refused.
+ * @param {string} from
+ * @param {string} [repo] the repository's top folder; this one by default
+ * @returns {{repo: string, tag: string|null, commit: string, show: (path: string) => Buffer, modules: () => string[]}}
+ */
+export function sourceAt(from, repo = ROOT) {
+  checkName(from);
+  const find = (name) => {
+    try {
+      return git(repo, ['rev-parse', '--verify', '--quiet', `${name}^{commit}`]).toString('utf8').trim();
+    } catch {
+      return '';
+    }
+  };
+  const tagged = find(`refs/tags/${from}`);
+  const commit = tagged || find(from);
+  if (!/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/.test(commit)) {
+    throw new Error(`git finds no tag or commit named ${from} in ${repo}, so nothing was written or compared.`);
+  }
+  const where = tagged ? `tag ${from}` : `commit ${commit}`;
+  // Every file the tool may read, as git holds it at that commit: their list
+  // (ls-tree), then their contents (cat-file --batch), in two calls of git,
+  // because each call of git can take about a second on some computers.
+  // Only ordinary files (modes 100644 and 100755) are read: a link is not.
+  const paths = new Map();
+  for (const line of git(repo, ['ls-tree', '-r', '-z', commit, '--', 'page', 'src', 'LICENSE', '.github/workflows/pages.yml']).toString('utf8').split('\0')) {
+    const m = /^(?:100644|100755) blob ([0-9a-f]+)\t(.+)$/.exec(line);
+    if (m) paths.set(m[2], m[1]);
+  }
+  const ids = [...new Set(paths.values())];
+  const held = new Map();
+  if (ids.length > 0) {
+    const out = execFileSync('git', ['-C', repo, 'cat-file', '--batch'], { input: `${ids.join('\n')}\n`, maxBuffer: 256 * 1024 * 1024, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+    let at = 0;
+    while (at < out.length) {
+      const end = out.indexOf(0x0a, at);
+      const head = /^([0-9a-f]+) blob (\d+)$/.exec(out.subarray(at, end).toString('utf8'));
+      if (!head) throw new Error(`git did not give the file ${out.subarray(at, end).toString('utf8')} as expected, so nothing was written or compared.`);
+      const size = Number(head[2]);
+      held.set(head[1], Buffer.from(out.subarray(end + 1, end + 1 + size)));
+      at = end + 1 + size + 1;
+    }
+  }
+  // A file exactly as git holds it at that commit.
+  const show = (path) => {
+    const content = held.get(paths.get(path));
+    if (content === undefined) throw new Error(`${path} is not in ${where}, so nothing was written or compared.`);
+    return Buffer.from(content);
+  };
+  // The library's modules: the files git holds directly under src/ at that commit whose names end in .js.
+  const modules = () => [...paths.keys()].filter((path) => /^src\/[^/]+\.js$/.test(path)).sort();
+  return { repo, tag: tagged ? from : null, commit, show, modules };
+}
+
+// A source found already, or the one "from" names.
+const given = (from, repo) => (typeof from === 'string' ? sourceAt(from, repo) : from);
 
 /**
  * Where each file of this repository is served on the site: the page as
@@ -65,16 +149,20 @@ export function servedAt(path) {
 /**
  * The files copied from this repository: each by its path on the site and
  * its path here. The page, its script, the renderer, its style sheet, and
- * every module of the library. The modules the page's script imports,
- * found as the single-file checking page finds its own, must all be among
- * them, or the tool stops: a page that imported a file from elsewhere
- * would not load on the site.
+ * every module of the library, as git holds them at "from". The modules the
+ * page's script imports, found as the single-file checking page finds its
+ * own, must all be among them, or the tool stops: a page that imported a
+ * file from elsewhere would not load on the site.
+ * @param {string|ReturnType<typeof sourceAt>} from a tag or commit (see sourceAt), or a source found already
+ * @param {string} [repo] the repository's top folder; this one by default
  * @returns {Record<string, string>} site path to repository path
  */
-export function copiedFiles() {
-  const files = { 'index.html': 'page/sign.html', 'sign-page.js': 'page/sign-page.js', 'render.js': 'page/render.js', 'style.css': 'page/style.css' };
-  for (const name of readdirSync(join(ROOT, 'src')).filter((n) => n.endsWith('.js')).sort()) files[`src/${name}`] = `src/${name}`;
-  for (const [path] of pageModules(START)) {
+export function copiedFiles(from, repo = ROOT) {
+  const source = given(from, repo);
+  const files = { ...PAGE_FILES };
+  for (const path of source.modules()) files[path] = path;
+  const text = (path) => source.show(path).toString('utf8');
+  for (const [path] of pageModules(START, text)) {
     const served = servedAt(path);
     if (files[served] !== path) throw new Error(`the signing page loads ${path}, which this tool does not copy to the site`);
   }
@@ -82,10 +170,10 @@ export function copiedFiles() {
 }
 
 // The four actions the publishing workflow uses, pinned to the exact commits
-// that this repository's own workflow pins them to, read from it, so that
-// the two cannot drift apart.
-function pinnedActions() {
-  const own = readFileSync(join(ROOT, '.github', 'workflows', 'pages.yml'), 'utf8');
+// that this repository's own workflow pins them to, read from it at the same
+// tag or commit, so that the two cannot drift apart.
+function pinnedActions(source) {
+  const own = source.show('.github/workflows/pages.yml').toString('utf8');
   const pins = {};
   for (const name of ['checkout', 'configure-pages', 'upload-pages-artifact', 'deploy-pages']) {
     const m = own.match(new RegExp(`uses: actions/${name}@([0-9a-f]{40}) # (v[0-9.]+)`));
@@ -96,15 +184,14 @@ function pinnedActions() {
 }
 
 /**
- * How the README and the workflow name where the copies come from: a tag
- * where "from" looks like one (v0.6.0), otherwise a commit.
- * @param {string} from
+ * How the README and the workflow name where the copies come from: the tag
+ * where "--from" names one, otherwise the commit by its full hash.
+ * @param {{tag: string|null, commit: string}} source (see sourceAt)
  * @returns {{plain: string, marked: string}} "tag v0.6.0", and the same with the name in backticks
  */
-export function sourceWords(from) {
-  if (typeof from !== 'string' || !/^[A-Za-z0-9._-]{1,64}$/.test(from)) throw new Error('--from names a tag (such as v0.6.0) or a commit: letters, digits, dots, hyphens and underscores only.');
-  const kind = /^v[0-9]/.test(from) ? 'tag' : 'commit';
-  return { plain: `${kind} ${from}`, marked: `${kind} \`${from}\`` };
+export function sourceWords({ tag, commit }) {
+  const [kind, name] = tag ? ['tag', tag] : ['commit', commit];
+  return { plain: `${kind} ${name}`, marked: `${kind} \`${name}\`` };
 }
 
 /**
@@ -121,12 +208,14 @@ export function fingerprintList(copies) {
 /**
  * The files the repository provared/sign needs of its own: the workflow
  * that publishes it, a README and the licence.
- * @param {string} from where the copies come from (see sourceWords)
+ * @param {string|ReturnType<typeof sourceAt>} from where the copies come from (see sourceAt)
+ * @param {string} [repo] the repository's top folder; this one by default
  * @returns {Record<string, string|Buffer>} by their path in that repository
  */
-export function ownFiles(from) {
-  const pins = pinnedActions();
-  const source = sourceWords(from);
+export function ownFiles(from, repo = ROOT) {
+  const at = given(from, repo);
+  const pins = pinnedActions(at);
+  const source = sourceWords(at);
   const workflow = `# Publishes https://${SITE_NAME}: the signing page of Provared and the
 # library files it loads, exactly as they are in the folder site/. Each file
 # is a copy of the same file at ${source.plain} of provared/provared, and
@@ -215,23 +304,25 @@ person can read what they sign.
 Apache License 2.0, as for the code of Provared. Copyright 2026 Pavel
 Izmaylov.
 `;
-  return { '.github/workflows/pages.yml': workflow, 'README.md': readme, LICENSE: read('LICENSE') };
+  return { '.github/workflows/pages.yml': workflow, 'README.md': readme, LICENSE: at.show('LICENSE') };
 }
 
 /**
  * Every file of the repository provared/sign, by its path there: the
  * copies under site/, their list of fingerprints, and the repository's own
- * files.
- * @param {string} from where the copies come from (see sourceWords)
+ * files, all read with git at "from".
+ * @param {string} from where the copies come from (see sourceAt)
+ * @param {string} [repo] the repository's top folder; this one by default
  * @returns {Record<string, Buffer|string>}
  */
-export function siteFiles(from) {
+export function siteFiles(from, repo = ROOT) {
+  const source = sourceAt(from, repo);
   const copies = {};
-  for (const [served, here] of Object.entries(copiedFiles())) copies[served] = read(here);
+  for (const [served, here] of Object.entries(copiedFiles(source))) copies[served] = source.show(here);
   const files = {};
   for (const [served, content] of Object.entries(copies)) files[`site/${served}`] = content;
   files['site/files.sha256'] = fingerprintList(copies);
-  Object.assign(files, ownFiles(from));
+  Object.assign(files, ownFiles(source));
   return files;
 }
 
@@ -254,13 +345,15 @@ function filesUnder(folder) {
  * Write the repository's files into a folder. The folder may hold a .git
  * folder and files this tool writes; any other file stops the tool, so
  * that it never writes into the wrong place and the site never serves
- * anything else.
+ * anything else. Every file is read before any is written, so a name that
+ * git cannot find writes nothing.
  * @param {string} folder
- * @param {string} from where the copies come from (see sourceWords)
+ * @param {string} from where the copies come from (see sourceAt)
+ * @param {string} [repo] the repository's top folder; this one by default
  * @returns {string[]} the paths written
  */
-export function writeSite(folder, from) {
-  const files = siteFiles(from);
+export function writeSite(folder, from, repo = ROOT) {
+  const files = siteFiles(from, repo);
   const others = filesUnder(folder).filter((path) => !Object.hasOwn(files, path));
   if (others.length) throw new Error(`${folder} holds files this tool does not write, so nothing was written: ${others.join(', ')}`);
   for (const [path, content] of Object.entries(files)) {
@@ -271,15 +364,16 @@ export function writeSite(folder, from) {
 }
 
 /**
- * Compare a folder written before with this repository as it stands: every
- * file must be there and equal, byte for byte, and nothing else may be
- * there.
+ * Compare a folder written before with the files this tool writes, read
+ * with git at "from" exactly as writeSite reads them: every file must be
+ * there and equal, byte for byte, and nothing else may be there.
  * @param {string} folder
- * @param {string} from where the copies come from (see sourceWords)
+ * @param {string} from where the copies come from (see sourceAt)
+ * @param {string} [repo] the repository's top folder; this one by default
  * @returns {string[]} what differs, in words; empty where nothing does
  */
-export function checkSite(folder, from) {
-  const files = siteFiles(from);
+export function checkSite(folder, from, repo = ROOT) {
+  const files = siteFiles(from, repo);
   const found = filesUnder(folder);
   const differences = [];
   for (const [path, content] of Object.entries(files)) {
@@ -304,13 +398,20 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     console.error('Usage: node tools/make-sign-site.mjs <folder> --from <tag or commit> [--check]');
     process.exit(2);
   }
+  let words;
+  try {
+    words = sourceWords(sourceAt(from)).plain;
+  } catch (e) {
+    console.error(e.message);
+    process.exit(2);
+  }
   if (check) {
     const differences = checkSite(folder, from);
     for (const d of differences) console.log(d);
-    console.log(differences.length ? `${differences.length} difference(s) between ${folder} and this repository.` : `${folder} is this repository's signing page, byte for byte, and nothing else.`);
+    console.log(differences.length ? `${differences.length} difference(s) between ${folder} and this repository's signing page at ${words}.` : `${folder} is this repository's signing page at ${words}, byte for byte, and nothing else.`);
     process.exit(differences.length ? 1 : 0);
   }
   const written = writeSite(folder, from);
   for (const path of written) console.log(path);
-  console.log(`${written.length} files written to ${folder}, as copies at ${sourceWords(from).plain}. The name served: ${SITE_NAME}.`);
+  console.log(`${written.length} files written to ${folder}, as copies at ${words}. The name served: ${SITE_NAME}.`);
 }

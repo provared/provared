@@ -34,18 +34,20 @@ function replaceOnce(text, from, to) {
  * The modules a page needs, each after the modules it imports. For each:
  * its path, its source exactly as it is in the repository, and where each
  * of its imports leads. The checking page's by default; the signing page's
- * for tools/make-sign-site.mjs.
+ * for tools/make-sign-site.mjs, which hands in a way of reading each file
+ * at a tag or commit, so that the modules are those of that commit.
  * @param {string} [start] the page's own script, as a path from the repository's top
+ * @param {(path: string) => string} [readSource] how a file is read; this repository's working tree by default
  * @returns {[string, string, Record<string, string>][]}
  */
-export function pageModules(start = START) {
+export function pageModules(start = START, readSource = read) {
   const done = new Map();
   const open = new Set();
   const visit = (path) => {
     if (done.has(path)) return;
     if (open.has(path)) throw new Error(`the modules import one another in a ring at ${path}`);
     open.add(path);
-    const source = read(path);
+    const source = readSource(path);
     const imports = {};
     for (const [, spec] of source.matchAll(IMPORT)) {
       imports[spec] = posix.normalize(posix.join(posix.dirname(path), spec));
