@@ -15,7 +15,10 @@
   password or token, and makes the GitHub release with the checking page
   as one file and its SHA-256. The npm version is staged
   (`npm stage publish`) and becomes public only when the author approves
-  it on npmjs.com; the release notes say so. The Python files are checked
+  it on npmjs.com; the run shows the stage ID and the package's
+  integrity value, so that the author approves that one stage, and the
+  release notes say, for each registry, what the run sent there. The
+  Python files are checked
   against the SHA-256 recorded when they were built before they are
   uploaded. A version already on a registry is not published again, so a
   framework package is published only when its own version is raised;
