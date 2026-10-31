@@ -2,7 +2,10 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { readBlocks, readFingerprints, readOrigins, showTime, shown } from '../page/render.js';
+import { readFileSync } from 'node:fs';
+import { checkBook } from '../src/check.js';
+import { developmentRecorder } from '../src/dev.js';
+import { readBlocks, readFingerprints, readOrigins, showTime, shown, topFingerprintHeading } from '../page/render.js';
 
 test('a line in the box for the signing page\'s address that is not a page address in its plain form is kept apart, never dropped', () => {
   assert.deepEqual(readOrigins('https://sign.example.org\n  http://localhost:8787  \n\n'), { values: ['https://sign.example.org', 'http://localhost:8787'], bad: [] });
@@ -38,4 +41,18 @@ test('a line in a trust box that is not a fingerprint is kept apart, never dropp
   assert.deepEqual(readBlocks(`${block}\n${block.toUpperCase()}\n`), { values: [block, block.toUpperCase()], bad: [] });
   assert.deepEqual(readBlocks(`${block}\n${fingerprint}\n${block.slice(1)}`), { values: [block], bad: [fingerprint, block.slice(1)] });
   assert.deepEqual(readBlocks(''), { values: [], bad: [] });
+});
+
+test('the top fingerprint is headed "(the Seal)" only where the record holds a seal', async () => {
+  const { recorder, issuerKeys } = await developmentRecorder({ actions: ['provared.message.send'], purpose: 'A book with no seal.' });
+  await recorder.act({ action: 'provared.message.send' }, async () => {});
+  const unsealed = await checkBook(recorder.book(), { issuerKeys });
+  assert.equal(unsealed.summary.counts.seals, 0);
+  assert.ok(unsealed.root);
+  assert.equal(topFingerprintHeading(unsealed), 'The top fingerprint');
+
+  const sample = readFileSync(new URL('../samples/office-supplies.jsonl', import.meta.url), 'utf8');
+  const sealed = await checkBook(sample, {});
+  assert.ok(sealed.summary.counts.seals > 0);
+  assert.equal(topFingerprintHeading(sealed), 'The top fingerprint (the Seal)');
 });
