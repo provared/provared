@@ -6,7 +6,7 @@
           {
             "type": "command",
             "command": "node",
-            "args": ["--disable-warning=ExperimentalWarning", "${CLAUDE_PLUGIN_ROOT}/recorder.mjs", "session-start"],
+            "args": ["--disable-warning=ExperimentalWarning", "${CLAUDE_PLUGIN_ROOT}/plugin.mjs", "session-start"],
             "timeout": 30
           }
         ]
@@ -19,7 +19,7 @@
           {
             "type": "command",
             "command": "node",
-            "args": ["--disable-warning=ExperimentalWarning", "${CLAUDE_PLUGIN_ROOT}/hook.mjs"],
+            "args": ["--disable-warning=ExperimentalWarning", "${CLAUDE_PLUGIN_ROOT}/plugin.mjs", "hook"],
             "timeout": 30,
             "onFailure": "block"
           }
@@ -33,7 +33,7 @@
           {
             "type": "command",
             "command": "node",
-            "args": ["--disable-warning=ExperimentalWarning", "${CLAUDE_PLUGIN_ROOT}/hook.mjs"],
+            "args": ["--disable-warning=ExperimentalWarning", "${CLAUDE_PLUGIN_ROOT}/plugin.mjs", "hook"],
             "timeout": 30,
             "onFailure": "block"
           }
@@ -47,7 +47,7 @@
           {
             "type": "command",
             "command": "node",
-            "args": ["--disable-warning=ExperimentalWarning", "${CLAUDE_PLUGIN_ROOT}/hook.mjs"],
+            "args": ["--disable-warning=ExperimentalWarning", "${CLAUDE_PLUGIN_ROOT}/plugin.mjs", "hook"],
             "timeout": 30,
             "onFailure": "block"
           }

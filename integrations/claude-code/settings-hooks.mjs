@@ -16,7 +16,7 @@
 // of this recorder, installed from npm, from a copy of the repository or as
 // the plugin, written by "init" or by hand.
 
-import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 
@@ -54,8 +54,31 @@ export function within(path, folder) {
   return plain(path) === f || plain(path).startsWith(`${f}/`);
 }
 
-// The words of one command line: a word in quotation marks is one word.
-const lineWords = (line) => [...line.matchAll(/"([^"]*)"|'([^']*)'|(\S+)/g)].map((m) => m[1] ?? m[2] ?? m[3]);
+// The words of one command line, as a shell splits it: blanks part words;
+// text in double or single quotation marks is part of the word it stands
+// in, blanks and all, so that "$CLAUDE_PROJECT_DIR"/hooks/hook.mjs is one
+// word. A backslash is kept as it is (a Windows path), not read as an escape.
+export function lineWords(line) {
+  const words = [];
+  let word = null;
+  let quote = null;
+  for (const ch of line) {
+    if (quote) {
+      if (ch === quote) quote = null;
+      else word += ch;
+    } else if (ch === '"' || ch === '\'') {
+      quote = ch;
+      word ??= '';
+    } else if (/\s/.test(ch)) {
+      if (word !== null) words.push(word);
+      word = null;
+    } else {
+      word = (word ?? '') + ch;
+    }
+  }
+  if (word !== null) words.push(word);
+  return words;
+}
 
 /** The words of a command hook: its program and arguments, as Claude Code is handed them. */
 export function hookWords(h) {
@@ -64,12 +87,25 @@ export function hookWords(h) {
   return lineWords(h.command.trim());
 }
 
-// A word with the project's folder put in, as Claude Code puts it in.
-const expand = (word, project) => word.replace(/\$\{CLAUDE_PROJECT_DIR\}|\$CLAUDE_PROJECT_DIR|%CLAUDE_PROJECT_DIR%/g, () => project ?? '');
+/**
+ * A word with the folders a hook's command may name put in: the project's
+ * (${CLAUDE_PROJECT_DIR}, $CLAUDE_PROJECT_DIR, %CLAUDE_PROJECT_DIR%,
+ * $env:CLAUDE_PROJECT_DIR) and the person's home folder (~ at the start,
+ * ${HOME}, $HOME, %USERPROFILE%, $env:USERPROFILE).
+ */
+export function expand(word, project) {
+  const home = homedir();
+  return word
+    .replace(/\$\{CLAUDE_PROJECT_DIR\}|\$env:CLAUDE_PROJECT_DIR|\$CLAUDE_PROJECT_DIR|%CLAUDE_PROJECT_DIR%/g, () => project ?? '')
+    .replace(/\$\{HOME\}|\$HOME(?![A-Za-z0-9_])|%USERPROFILE%|\$env:USERPROFILE(?![A-Za-z0-9_])/g, () => home)
+    .replace(/^~(?=$|[\\/])/, () => home);
+}
 
 /**
  * Whether a word names one of the recorder's own scripts ("hook.mjs" or
- * "recorder.mjs"), in a folder that holds this recorder's files.
+ * "recorder.mjs"): in a folder that holds this recorder's files, or, where
+ * the file is no longer there, on a path that names Provared (a copy since
+ * deleted or moved, whose hook still runs, and fails, at every call).
  * @param {string} word
  * @param {string} name "hook.mjs" or "recorder.mjs"
  * @param {string} [project] the folder a relative path is read from
@@ -78,14 +114,20 @@ export function namesScript(word, name, project) {
   const path = expand(word, project);
   const parts = path.split(/[\\/]/);
   if (parts.at(-1) !== name) return false;
-  const folder = dirname(resolve(project ?? '.', path));
-  return ['hook.mjs', 'recorder.mjs', 'actions.mjs'].every((f) => existsSync(join(folder, f)));
+  const file = resolve(project ?? '.', path);
+  if (!existsSync(file)) return /provared/i.test(path);
+  return ['hook.mjs', 'recorder.mjs', 'actions.mjs'].every((f) => existsSync(join(dirname(file), f)));
 }
 
-function readSettings(file) {
+// What the plugin's hook looks through before each call, at most, so that it always answers in time:
+// a settings file larger than this is not read, at most this many words are looked at, for at most this long.
+export const SCAN_LIMITS = { bytes: 1024 * 1024, words: 20000, ms: 2000 };
+
+function readSettings(file, maxBytes = Infinity) {
   try {
+    if (statSync(file).size > maxBytes) return { tooLarge: true };
     const text = readFileSync(file, 'utf8');
-    return { settings: JSON.parse(text.replace(/^\uFEFF/, '')), mark: text.startsWith('\uFEFF') ? '\uFEFF' : '' };
+    return { settings: JSON.parse(text.replace(/^﻿/, '')), mark: text.startsWith('﻿') ? '﻿' : '', text };
   } catch {
     return null;
   }
@@ -94,28 +136,37 @@ function readSettings(file) {
 /**
  * The recorder's hooks in the settings files Claude Code reads for a
  * project: each hook, in the events that ask about a call, whose command
- * names a recorder's "hook.mjs".
+ * names a recorder's "hook.mjs". Where a file is larger than the limit, or
+ * there are more words than the limit, or looking takes longer than the
+ * limit, it stops and says why ("problem"), so that the caller can refuse
+ * rather than answer late.
  * @param {string} [project]
  * @param {string[]} [files]
- * @returns {{file: string, event: string, command: string}[]}
+ * @param {{bytes: number, words: number, ms: number}} [limits]
+ * @returns {{found: {file: string, event: string, command: string}[], problem: string|null}}
  */
-export function recorderHooksInSettings(project, files = settingsFiles(project)) {
+export function recorderHooksInSettings(project, files = settingsFiles(project), limits = SCAN_LIMITS) {
   const found = [];
+  const until = Date.now() + limits.ms;
+  let words = 0;
   for (const file of files) {
-    const read = readSettings(file);
+    const read = readSettings(file, limits.bytes);
+    if (read?.tooLarge) return { found, problem: `the settings file ${file} is larger than ${Math.round(limits.bytes / 1024)} KB, so it was not looked through for the recorder's hooks` };
     const hooks = read?.settings?.hooks;
     if (!hooks || typeof hooks !== 'object' || Array.isArray(hooks)) continue;
     for (const event of CALL_EVENTS) {
       if (!Array.isArray(hooks[event])) continue;
       for (const group of hooks[event]) {
         for (const h of group && Array.isArray(group.hooks) ? group.hooks : []) {
-          const words = hookWords(h);
-          if (words.some((w) => namesScript(w, 'hook.mjs', project))) found.push({ file, event, command: words.join(' ') });
+          const these = hookWords(h);
+          words += these.length;
+          if (words > limits.words || Date.now() > until) return { found, problem: `the hooks in ${file} hold too much to be looked through in time for the recorder's own` };
+          if (these.some((w) => namesScript(w, 'hook.mjs', project))) found.push({ file, event, command: these.join(' ') });
         }
       }
     }
   }
-  return found;
+  return { found, problem: null };
 }
 
 /** The files that hold the hooks found, each once. */
@@ -158,7 +209,7 @@ export function initKind(h, project) {
  * a project's .claude/settings.local.json, and nothing else: a group left
  * with no hook goes, and so does an event left with no group. The file is
  * written only where something was taken out, with a byte-order mark if it
- * had one.
+ * had one, as JSON indented by two spaces: other formatting is not kept.
  * @returns {{path: string, removed: number, problem?: string}}
  */
 export function removeInitHooks(project, write) {
@@ -185,7 +236,8 @@ export function removeInitHooks(project, write) {
     if (groups.length > 0) hooks[event] = groups;
     else delete hooks[event];
   }
-  if (removed > 0) write(path, read.mark + JSON.stringify(read.settings, null, 2) + '\n');
+  // The text read is handed on, so that the writer can refuse where the file changed since.
+  if (removed > 0) write(path, read.mark + JSON.stringify(read.settings, null, 2) + '\n', read.text);
   return { path, removed };
 }
 
