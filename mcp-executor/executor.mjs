@@ -536,6 +536,8 @@ export async function openExecutor(config, more = {}) {
   };
 
   let attached = null;
+  // How many requests the executor holds for the server's answer: tool calls, and all others (for status and for tests).
+  const stats = { calls: 0, requests: 0 };
 
   /**
    * Start the tool server, and carry messages between the agent's client
@@ -591,15 +593,18 @@ export async function openExecutor(config, more = {}) {
     const waitingOrder = [];
     const remember = (serverId, entry) => {
       mapped.set(serverId, entry);
+      stats.requests = mapped.size;
       if (entry.kind === 'call') return;
       waitingOrder.push(serverId);
       while (waitingOrder.length > MAX_MAPPED) {
         const old = waitingOrder.shift();
         if (mapped.get(old)?.kind !== 'call') mapped.delete(old);
       }
+      stats.requests = mapped.size;
     };
     const forget = (serverId) => {
       mapped.delete(serverId);
+      stats.requests = mapped.size;
     };
     // The server ids of calls that were settled before the server answered; a late answer under one is dropped.
     const settled = new Set();
@@ -654,6 +659,7 @@ export async function openExecutor(config, more = {}) {
           return;
         }
         calls.set(key, call);
+        stats.calls = calls.size;
         remember(serverId, { id, kind: 'call', call });
         const argsText = Object.hasOwn(params, 'arguments') ? JSON.stringify(params.arguments) : undefined;
         const args = params.arguments;
@@ -829,6 +835,7 @@ export async function openExecutor(config, more = {}) {
         if (call.timer) clearTimeout(call.timer);
         calls.delete(key);
         if (mapped.get(serverId)?.kind === 'call') forget(serverId);
+        stats.calls = calls.size;
       }
     }
 
@@ -1035,6 +1042,8 @@ export async function openExecutor(config, more = {}) {
     writer,
     /** Why the executor takes no more calls, or null. */
     stopped: () => stopped,
+    /** How many tool calls, and how many requests of every kind, wait for the server's answer. */
+    status: () => ({ ...stats }),
     /** Thumbprints of the executor's own keys, for the person who writes the permission. */
     async thumbprints() {
       return Promise.all(p.executorKeys.keys.map((k) => thumbprint(k)));

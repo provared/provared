@@ -117,8 +117,10 @@ test('R3: requests the server never answers are forgotten past the cap, the olde
   try {
     for (let i = 0; i < MAX_MAPPED + 5; i++) w.client.send({ jsonrpc: '2.0', id: `nv${i}`, method: 'never' });
     await until(() => w.fakeSeen().filter((s) => s.seen?.method === 'never').length === MAX_MAPPED + 5, { timeout: 20000 });
+    assert.equal(w.executor.status().requests, MAX_MAPPED, 'the oldest five are forgotten');
     const ping = await w.client.request('ping');
     assert.deepEqual(ping.result, {}, 'the executor goes on');
+    assert.equal(w.executor.status().requests, MAX_MAPPED - 1, 'the ping pushed out one more, and was then answered and forgotten');
     // The server now answers the first "never" late: its id is forgotten, so the line is handed on as it is (the client ignores an unknown id).
     const first = w.fakeSeen().find((s) => s.seen?.method === 'never').seen.id;
     const last = w.fakeSeen().filter((s) => s.seen?.method === 'never').at(-1).seen.id;
