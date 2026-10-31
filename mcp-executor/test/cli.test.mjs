@@ -14,9 +14,44 @@ const { world, until } = await import('./world.mjs');
 
 const BIN = fileURLToPath(new URL('../bin.mjs', import.meta.url));
 
+// Every process a test starts is ended when the test is over, whatever
+// happened in it: a child left alive would keep this process alive too.
+const children = new Set();
+function start(args, cwd) {
+  const child = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', BIN, ...args], { cwd, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+  children.add(child);
+  child.on('exit', () => children.delete(child));
+  return child;
+}
+/** End a child: close its input, give it a moment to exit on its own, then end it. */
+function end(child, wait = 3000) {
+  return new Promise((done) => {
+    if (child.exitCode !== null || child.signalCode !== null) return done(child.exitCode);
+    const t = setTimeout(() => child.kill(), wait);
+    child.on('exit', (code) => {
+      clearTimeout(t);
+      done(code);
+    });
+    try {
+      child.stdin.end();
+    } catch {
+      child.kill();
+    }
+  });
+}
+process.on('exit', () => {
+  for (const c of children) {
+    try {
+      c.kill();
+    } catch {
+      // Already gone.
+    }
+  }
+});
+
 function run(args, { input, cwd } = {}) {
   return new Promise((done) => {
-    const child = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', BIN, ...args], { cwd, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+    const child = start(args, cwd);
     const out = [];
     const err = [];
     child.stdout.on('data', (c) => out.push(c));
@@ -72,24 +107,27 @@ test('keys makes the key files once and prints what goes into the permission; ch
 
 test('stdio: started as the tool server, the executor speaks MCP on its own streams, writes nothing else to standard output, and ends when its input ends', async () => {
   const w = await world({ open: false });
-  const child = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', BIN, 'stdio', '--config', w.configPath], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+  const child = start(['stdio', '--config', w.configPath]);
   const out = [];
   const err = [];
   child.stdout.on('data', (c) => out.push(c));
   child.stderr.on('data', (c) => err.push(c));
   const lines = () => Buffer.concat(out).toString('utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
-  child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'server/discover', params: { _meta: { 'io.modelcontextprotocol/protocolVersion': '2026-07-28', 'io.modelcontextprotocol/clientCapabilities': {} } } })}\n`);
-  await until(() => lines().some((m) => m.id === 1));
-  child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'echo', arguments: { hello: 'world' } } })}\n`);
-  await until(() => lines().some((m) => m.id === 2));
-  child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'hidden' } })}\n`);
-  await until(() => lines().some((m) => m.id === 3));
-  const got = lines();
-  assert.equal(got[0].result.supportedVersions[0], '2026-07-28');
-  assert.equal(got[1].result.structuredContent.token, 'made-up-token-for-the-tests');
-  assert.equal(got[2].result.isError, true);
-  child.stdin.end();
-  const code = await new Promise((done) => child.on('exit', done));
+  let code;
+  try {
+    child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'server/discover', params: { _meta: { 'io.modelcontextprotocol/protocolVersion': '2026-07-28', 'io.modelcontextprotocol/clientCapabilities': {} } } })}\n`);
+    await until(() => lines().some((m) => m.id === 1));
+    child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'echo', arguments: { hello: 'world' } } })}\n`);
+    await until(() => lines().some((m) => m.id === 2));
+    child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'hidden' } })}\n`);
+    await until(() => lines().some((m) => m.id === 3));
+    const got = lines();
+    assert.equal(got[0].result.supportedVersions[0], '2026-07-28');
+    assert.equal(got[1].result.structuredContent?.token, 'made-up-token-for-the-tests');
+    assert.equal(got[2].result.isError, true);
+  } finally {
+    code = await end(child);
+  }
   assert.equal(code, 0, 'the server ended on its own when its input ended, and so did the executor');
   const stderr = Buffer.concat(err).toString('utf8');
   assert.match(stderr, /fake-server: started/, 'the server\'s standard error passes through');
