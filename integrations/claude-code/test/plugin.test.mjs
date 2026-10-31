@@ -327,6 +327,10 @@ test('the forms of a hook\'s command in which the recorder\'s hook is recognised
   const lone = tempFolder('provared-lone-');
   writeFileSync(join(lone, 'hook.mjs'), '');
   assert.equal(found({ type: 'command', command: 'node', args: [join(lone, 'hook.mjs')] }), 0, 'a file of that name with no recorder beside it');
+  // A settings file with comments, and a comma before a closing bracket, is read as JSON with comments.
+  const hookPath = join(pluginRoot, 'hook.mjs').split(sep).join('/');
+  writeFileSync(settings, `{\n  // the recorder\n  "hooks": { "PostToolUse": [ { "hooks": [ { "type": "command", "command": "node ${hookPath}" }, ] } ] }, /* end */\n}\n`);
+  assert.equal(recorderHooksInSettings(repository, [settings]).found.length, 1);
   assert.deepEqual(lineWords('node "a b"/c \'d\'e f'), ['node', 'a b/c', 'de', 'f']);
   assert.deepEqual(lineWords('node a"b c"d --x="1 2"'), ['node', 'ab cd', '--x=1 2'], 'quotation marks in the middle of a word');
 });
@@ -508,6 +512,7 @@ test('whatever stops the plugin\'s entry, a call is refused before it is taken, 
     assert.equal(before.code, 0, `${what}: ${before.err}`);
     assert.equal(before.decision?.permissionDecision, 'deny', what);
     assert.match(before.decision.permissionDecisionReason, /not taken/, what);
+    if (what === 'module.registerHooks missing') assert.match(before.decision.permissionDecisionReason, /module\.registerHooks is missing\): the recorder needs Node\.js 24\.7 or later/);
     for (const event of ['PostToolUse', 'PostToolUseFailure']) {
       const after = await runPlugin(pluginArgs(event, copy), { env, input: callInput(event, 'Bash', { command: 'npm test' }) });
       assert.equal(after.code, 2, `${what}, ${event}: ${after.out} ${after.err}`);
