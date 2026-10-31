@@ -2,6 +2,49 @@
 
 ## Unreleased
 
+- **A conformance kit**, in `conformance/` (not published): another
+  implementation of the format, in any language, is tested against the
+  shared test files through a small program of its own (an adapter),
+  which the kit hands one case at a time as a line of JSON and whose
+  answer it compares. By default it compares the codes and the shape of
+  each answer, not the words meant for people, as `test-vectors/README.md`
+  sets out; `--words` compares every value. It ends with code 0 only where
+  every case compared matched. An adapter for Provared's own JavaScript
+  library passes all 14,742 cases word for word. Passing it shows
+  agreement on these cases only; it is not a certificate. Its tests run in
+  the test workflow beside the sealer's.
+
+- **The conformance kit, two changes.** By default it no longer counts the
+  sentences in the lists named `notes` and `limits`: another implementation
+  may say the same thing in more or fewer sentences, so only the codes,
+  the items that are not texts and the shape of each answer are compared;
+  `--words` still compares every word and every sentence. And a second,
+  example adapter, `conformance/adapters/provared-public.mjs`, is written
+  only on the functions the npm package offers (`provared` and
+  `provared/check`), and can be pointed at an installed copy of the
+  package with `--package`: it answers 3,099 of the 14,742 cases, all of
+  them matching word for word, and skips the other 11,643, which test
+  parts of the library that are not offered to other programs, saying why
+  for each.
+
+- **The conformance kit, after an independent review.** By default, the
+  findings of an entry (`problems`, `breaches`, `disclosureProblems`) are
+  compared in any order, as the format description says their order is
+  not part of the format; and an entry's own `problems` may hold only
+  some of those stored, at least one, since a checker may stop at the
+  first way an entry fails its own check (where it stopped before the
+  countersignature, "unchecked" is taken in its place). Breaches are
+  still compared in full. `--words` keeps the stored order. The verdict
+  now says how many cases were skipped and not tested, the functions
+  skipped entirely are listed, and `--no-skip` counts any skip as a
+  failure. A reply holding both an answer and a skip is a fault of the
+  adapter. The example adapter reports an error it does not expect as a
+  crash, where it gave the code `check-failed`. The guide gains a table
+  of every function the shared test files name: its section of the
+  format description, whether another implementation may skip it, where
+  its answer is declared, and how its cases are written; and it lists
+  the stored values that are particular to Provared's own library.
+
 - **An OpenTelemetry bridge**, `provared-opentelemetry` 0.1.0, in
   `integrations/opentelemetry/` (not published). It puts each tool call's
   receipt on the trace span that observability tools already show, in one
