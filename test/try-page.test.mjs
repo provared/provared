@@ -69,11 +69,11 @@ test('the sample path names only the browsers that were tried, and the refusal o
   assert.match(limitRefusal(), /from 1 to 10,000\./);
 });
 
-test('the renderer still heads the top fingerprint as the try page expects, so the page can relabel it where there is no seal', () => {
+test('the try page leaves the heading of the top fingerprint to the renderer, which names the Seal only where there is one', () => {
   const render = readFileSync(new URL('../page/render.js', import.meta.url), 'utf8');
   const page = readFileSync(new URL('../site/try/try-page.js', import.meta.url), 'utf8');
-  assert.ok(render.includes("'The top fingerprint (the Seal)'"), 'page/render.js no longer holds the heading the try page relabels: change both together');
-  assert.ok(page.includes("'The top fingerprint (the Seal)'"));
+  assert.ok(render.includes('topFingerprintHeading(result)'));
+  assert.ok(!page.includes('the Seal'), 'the try page relabels the heading again; the renderer already heads it by what the record holds');
 });
 
 test('the renderer still names its list of entries as the try page folds it', () => {
