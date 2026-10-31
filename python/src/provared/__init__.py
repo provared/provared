@@ -54,7 +54,7 @@ from .recorder import COUNTERSIGN_WITHIN_MS, DENIALS_PER_HOUR, SIGN_WITHIN_MS, R
 from .seal import key_set_fingerprint
 from .service import REFUSAL_REASONS, write_refusal, write_terms
 from .signatures import Signer, generate_key_set, key_set_from_seeds, key_set_seeds, method_available, signer_from_key
-from .slip import COVERABLE, assemble_slip, check_slip, prepare_slip
+from .slip import COVERABLE, assemble_slip, check_slip, is_page_address, prepare_slip
 from .standing import VOUCHED_KINDS, assemble_cancellation, prepare_cancellation, write_acknowledgement, write_vouching, write_withdrawal
 from .stub import countersign, write_stub
 from .tools import NotTaken, arguments_fingerprint, record_function, record_tools
@@ -72,7 +72,7 @@ __all__ = [
     'DOCUMENT_NAMES', 'RESERVED_DOCUMENT_PREFIX', 'http_request_fingerprint', 'http_response_fingerprint', 'identifier_fingerprint',
     'Refusal', 'action_kind', 'assemble_approval', 'assemble_cancellation', 'assemble_slip', 'block_fingerprint', 'block_stamp_item',
     'check_before', 'check_book', 'check_show', 'check_slip', 'condition_words', 'countersign', 'entry_line', 'fingerprint',
-    'format_time', 'from_base64url', 'generate_key_set', 'key_set_fingerprint', 'limit_words', 'make_show', 'method_available',
+    'format_time', 'from_base64url', 'generate_key_set', 'is_page_address', 'key_set_fingerprint', 'limit_words', 'make_show', 'method_available',
     'never_words', 'open_checker', 'prepare_approval', 'prepare_cancellation', 'prepare_slip', 'random_id', 'sha256', 'thumbprint',
     'to_base64url', 'utf8', 'write_acknowledgement', 'write_book', 'write_pass', 'write_refusal', 'write_stub', 'write_terms',
     'write_vouching', 'write_withdrawal',

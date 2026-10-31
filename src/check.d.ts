@@ -5,6 +5,7 @@ export {
   checkShow,
   openChecker,
   checkSlip,
+  isPageAddress,
   methodAvailable,
   thumbprint,
   keySetFingerprint,

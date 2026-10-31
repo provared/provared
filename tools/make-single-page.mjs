@@ -31,12 +31,14 @@ function replaceOnce(text, from, to) {
 }
 
 /**
- * The modules the page needs, each after the modules it imports. For each:
+ * The modules a page needs, each after the modules it imports. For each:
  * its path, its source exactly as it is in the repository, and where each
- * of its imports leads.
+ * of its imports leads. The checking page's by default; the signing page's
+ * for tools/make-sign-site.mjs.
+ * @param {string} [start] the page's own script, as a path from the repository's top
  * @returns {[string, string, Record<string, string>][]}
  */
-export function pageModules() {
+export function pageModules(start = START) {
   const done = new Map();
   const open = new Set();
   const visit = (path) => {
@@ -52,7 +54,7 @@ export function pageModules() {
     open.delete(path);
     done.set(path, [path, source, imports]);
   };
-  visit(START);
+  visit(start);
   return [...done.values()];
 }
 

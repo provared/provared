@@ -13,10 +13,10 @@ from .keys import thumbprint
 from .seal import key_set_fingerprint
 from .service import REFUSAL_REASONS
 from .signatures import method_available
-from .slip import check_slip
+from .slip import check_slip, is_page_address
 
 __all__ = [
     'DENIAL_SOURCES', 'LIMITS', 'MIN_BLOCKS_AFTER', 'REFUSAL_REASONS', 'block_fingerprint', 'blocks_in_chain', 'check_book', 'check_header_chain',
-    'check_show', 'check_slip', 'condition_words', 'key_set_fingerprint', 'limit_words', 'method_available', 'never_words',
+    'check_show', 'check_slip', 'condition_words', 'is_page_address', 'key_set_fingerprint', 'limit_words', 'method_available', 'never_words',
     'open_checker', 'thumbprint',
 ]

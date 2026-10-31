@@ -520,8 +520,49 @@ async function heldSealBeforeCases() {
   return cases;
 }
 
+// --- the address a permission must have been signed at ---
+//
+// Named by the reader (format description, section 4.4): a whole book, and
+// a Show of its pages. The test world's passkey signs at
+// http://localhost:8787 (helpers/passkey.mjs).
+
+async function originWorld() {
+  const w = await makeWorld();
+  await w.add({ value: 30 });
+  await w.add({ value: 60 });
+  return { w, trusted: { issuerKeys: [await thumbprint(w.passkey.key)] } };
+}
+
+async function issuerOriginCases() {
+  const cases = [];
+  const add = (name, text, options = {}) => cases.push({ name, text, options: withoutSlh(options) });
+  const { w, trusted } = await originWorld();
+  const book = w.book();
+  add('two stubs, the slip signed at an address named', book, { ...trusted, issuerOrigins: ['http://localhost:8787'] });
+  add('two stubs, the slip signed at an address not named', book, { ...trusted, issuerOrigins: ['https://sign.example.org'] });
+  add('two stubs, an address named and no passkey trusted', book, { issuerOrigins: ['http://localhost:8787'] });
+  add('two stubs, an address named and another passkey trusted', book, { issuerKeys: [toBase64url(new Uint8Array(32))], issuerOrigins: ['http://localhost:8787'] });
+  add('two stubs, an address named that is not in its plain form', book, { ...trusted, issuerOrigins: ['http://localhost:8787/'] });
+  add('two stubs, addresses named that are not a list', book, { ...trusted, issuerOrigins: 'http://localhost:8787' });
+  add('two stubs, 65 addresses named', book, { ...trusted, issuerOrigins: new Array(65).fill('http://localhost:8787') });
+  return cases;
+}
+
+async function issuerOriginShowCases() {
+  const cases = [];
+  const add = (name, show, options = {}) => cases.push({ name, show, options: withoutSlh(options) });
+  const { w, trusted } = await originWorld();
+  const show = await makeShow(w.book(), [0, 1]);
+  add('a slip and a stub, the slip signed at an address named', show, { ...trusted, issuerOrigins: ['http://localhost:8787'] });
+  add('a slip and a stub, the slip signed at an address not named', show, { ...trusted, issuerOrigins: ['https://sign.example.org'] });
+  add('a slip and a stub, an address named that is not in its plain form', show, { ...trusted, issuerOrigins: ['http://localhost:8787/'] });
+  return cases;
+}
+
 /** Each set of cases, by the name of its file. */
 export const CASES = {
+  'issuer-origins': async () => finish('Checking a whole book with the address its permission must have been signed at named (format description, section 4.4), on a device without SLH-DSA.', 'checkBook', await issuerOriginCases(), ANSWER),
+  'issuer-origin-shows': async () => finish('Checking a Show with the address its permission must have been signed at named (format description, sections 4.4 and 11), on a device without SLH-DSA.', 'checkShow', await issuerOriginShowCases(), ANSWER),
   'held-seals': async () => finish('Checking a whole book with seals held elsewhere handed over beside it (format description, section 21.5), on a device without SLH-DSA.', 'checkBook', await heldSealCases(), ANSWER),
   'held-seal-shows': async () => finish('Checking a Show with seals held elsewhere handed over beside it (format description, sections 11 and 21.5), on a device without SLH-DSA.', 'checkShow', await heldSealShowCases(), ANSWER),
   'held-seals-before': async () => finish('The check before acting with seals held elsewhere handed over beside the book (format description, sections 20 and 21.5), on a device without SLH-DSA.', 'checkBefore', await heldSealBeforeCases(), ANSWER),

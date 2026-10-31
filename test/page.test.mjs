@@ -2,7 +2,14 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { readBlocks, readFingerprints, showTime, shown } from '../page/render.js';
+import { readBlocks, readFingerprints, readOrigins, showTime, shown } from '../page/render.js';
+
+test('a line in the box for the signing page\'s address that is not a page address in its plain form is kept apart, never dropped', () => {
+  assert.deepEqual(readOrigins('https://sign.example.org\n  http://localhost:8787  \n\n'), { values: ['https://sign.example.org', 'http://localhost:8787'], bad: [] });
+  assert.deepEqual(readOrigins('https://sign.example.org\nhttps://Sign.example.org/\nsign.example.org'), { values: ['https://sign.example.org'], bad: ['https://Sign.example.org/', 'sign.example.org'] });
+  assert.deepEqual(readOrigins('https://sign.example.org:8443 http://sign.example.org'), { values: ['https://sign.example.org:8443'], bad: ['http://sign.example.org'] });
+  assert.deepEqual(readOrigins(''), { values: [], bad: [] });
+});
 
 test('a time from a record is shown in words', () => {
   assert.equal(showTime('2026-10-05T09:00:00Z'), '5 October 2026, 09:00:00 UTC');

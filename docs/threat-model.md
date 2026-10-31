@@ -91,20 +91,32 @@ follows the checking steps of the Web Authentication standard.
   section 6b. Slips should still be short-lived.
 - Who the issuer is. The slip proves which key signed, not whose key it
   is.
-- Against a page that has the passkey sign a record dressed as a sign-in.
-  A passkey signs only a challenge, and the challenge for a slip, an
-  approval or a cancellation is the fingerprint of the record, which the
-  person cannot read on the device's prompt. Any page at an origin under
-  the slip's `rpId` (the website's own operator, a script running on one
-  of its pages, or the operator of any subdomain) can hand the device the
-  fingerprint of a record it wrote as an ordinary sign-in challenge: the
-  client data of a sign-in and of a record have the same shape, and the
-  person sees a sign-in prompt. No device and no page need be broken into.
-  The checker compares the origin and the rpId only with what the slip
-  itself says. So a passkey that signs records should be registered to a
-  relying party (an `rpId`) used for nothing else, and the page that asks
-  for the signature should show the record first. The checker has no
-  option yet by which a reader names the origin they expect.
+- Against a page that has the passkey sign a record dressed as a sign-in,
+  where the passkey's website name (its `rpId`) serves anything but the
+  signing page. A passkey signs only a challenge, and the challenge for a
+  slip, an approval or a cancellation is the fingerprint of the record,
+  which the person cannot read on the device's prompt. Any page at an
+  origin under the slip's `rpId` (the website's own operator, a script
+  running on one of its pages, or the operator of any subdomain) can hand
+  the device the fingerprint of a record it wrote as an ordinary sign-in
+  challenge: the client data of a sign-in and of a record have the same
+  shape, and the person sees a sign-in prompt. No device and no page need
+  be broken into. The checker compares the origin and the rpId with what
+  the slip itself says; and, where the reader names the address they
+  expect the person to sign at (`issuerOrigins`, `--origin`, or the box
+  on the checking page; format description, section 4.4), with that
+  address too, refusing a slip signed anywhere else
+  (`issuer-origin-not-expected`). Three things together close this, and
+  each alone does not: a passkey that signs records is made for a relying
+  party used for nothing else (Provared's own signing page is served at
+  sign.prova.red, a name that serves nothing else; a passkey made there
+  can be asked to sign only by a page under that name); the page that
+  asks for the signature shows the record first; and the reader names
+  that address. What stays open: a reader who names no address is
+  protected only by which passkey they trust; whoever serves the signing
+  page's name (the host of the site, or whoever holds its domain name)
+  can serve another page there; and a passkey made at a name that serves
+  other pages stays exposed however the reader checks later records.
 
 ## 4. The Stub and the countersignature
 
@@ -1161,11 +1173,12 @@ it show a pass for a record that does not check.
   It asks for every header from the first block onwards, so a node does
   not learn which blocks matter to the person.
 - What the person hands the checking page beside a record (their own
-  copies of cancellations, disclosures for covered fields, the blocks
-  and fingerprints they trust) is read in the browser and sent nowhere.
-  A file that is not JSON, or a line that is not a fingerprint, stops
-  the check and says so: it is never set aside silently. The sample
-  record is checked without the files handed over.
+  copies of cancellations, disclosures for covered fields, the blocks,
+  the fingerprints and the signing page's address they trust) is read in
+  the browser and sent nowhere. A file that is not JSON, or a line that
+  is not a fingerprint or a page address in its plain form, stops the
+  check and says so: it is never set aside silently. The sample record
+  is checked without the files handed over.
 - The checker depends on no outside code. It uses only the cryptography
   built into the browser or Node.js.
 - **The checking page as one file** (`tools/make-single-page.mjs`) holds
@@ -1241,6 +1254,7 @@ fails if the two differ.
 | `passkey-user-not-verified` | A passkey signature where the device did not confirm the person |
 | `passkey-bad-data` | Passkey values that are cut short or malformed |
 | `issuer-not-expected` | A slip signed by a key other than the ones the checker was told to expect |
+| `issuer-origin-not-expected` | A slip signed at a page address other than the ones the checker was told to expect (section 3) |
 | `slip-missing` | A stub whose slip is not earlier in the book |
 | `slip-unusable` | A stub whose slip failed its own check |
 | `chain-broken` | A stub that is missing, moved, repeated or changed |

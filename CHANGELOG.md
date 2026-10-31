@@ -1,5 +1,40 @@
 # Changelog
 
+## Not yet published (after 0.6.0)
+
+- **A reader may name the address a permission must have been signed
+  at** (25 October 2026), in both languages. A passkey can be asked to
+  sign by any page under the website name it was made for (its relying
+  party), and what it signs is a fingerprint the person cannot read on
+  the device's prompt; so a page served under that name, or a script on
+  one, could have a passkey made for `prova.red` sign a permission it
+  wrote, by presenting the permission's fingerprint as a sign-in
+  challenge, and a checker, which compared the address only with what
+  the permission itself said, would pass it (the list of threats, section
+  3, said so since 0.6.0, with no option to close it). Now the checker's
+  option `issuerOrigins` (Python `issuer_origins`; the command line
+  `--origin`, which may be repeated; a box on the checking page) names
+  the addresses at which permissions must have been signed, each in the
+  one form the format allows for `issuer.origin` (`isPageAddress`, Python
+  `is_page_address`, gives the form). A permission signed anywhere else
+  is refused with the new code `issuer-origin-not-expected`, after the
+  passkey has been compared as before, and the stubs under it are not
+  compared; a permission signed at an address named gets a note that says
+  so; a list that is not in that form, or longer than 64, is a problem
+  with the whole check (`bad-field`), never set aside. An approval and a
+  cancellation are held to the permission's address by the passkey check
+  already. The command-line checker says "Signed at an address you
+  named?" where `--origin` was given, and refuses a value not in its
+  plain form. Nothing changes for a reader who names no address, and no
+  record's bytes change. Format description, section 4.4; the list of
+  threats, sections 3, 7 and 8. Shared test files: `slips.json` is made
+  again with eleven new cases (every record in it is signed afresh),
+  `denial-constants.json` with the new code, and `issuer-origins.json`
+  and `issuer-origin-shows.json` are new. Tests:
+  `test/issuer-origins.test.mjs`, `python/tests/test_issuer_origins.py`,
+  and cases in `test/cli.test.mjs`, `test/page.test.mjs` and
+  `test/refusals.test.mjs`.
+
 ## 0.6.0 (25 October 2026)
 
 Version 0.6.0 adds three kinds of record and the services that use them: the denial (the agent's own side states that an action it was asked for was not taken), seals held elsewhere and handed over beside a book, and witness statements beside a seal, with consistency proofs; and, beside the library, a central sealer, a gateway that writes the receipts for agents that cannot be wrapped, and a recorder beside Claude Code that numbers its books and has them witnessed (none of these three programs is published). What a reader of a book made by 0.5.0 or earlier must know: every such book reads as it did, apart from the cases below; but a checker of 0.5.0 or earlier refuses a book that holds a denial, a seal that gives `book`, or a seal that holds `witnesses`, so a book made with these needs a checker of 0.6.0. The fingerprint of a tool call's arguments is now named `provared.arguments` by default, where it was `arguments`; the fingerprint itself is the same. And a checker of 0.6.0 refuses some time-stamps and keys that 0.5.0 accepted, each listed below: a time-stamp that is not strict DER, that names its signing certificate twice in the same form, or that is signed with Ed25519 under a method other than SHA-512 or with parameters; an ES256 key that is not a point on its curve; and an Ed25519 signature whose number S is not below the order L. A passkey and a time-stamp service that follow their standards produce none of these; the sample record gets the same findings and the same exit code from the command-line checker of both versions, and 0.6.0 adds only a line on witnesses and, with `--json`, the empty members for denials and witnesses.
