@@ -1,0 +1,6 @@
+# The key that signs Provared's release tags, and nothing else.
+# Read on 25 October 2026 from GitHub's public list of the signing keys of the
+# account sealwright (https://api.github.com/users/sealwright/ssh_signing_keys).
+# Fingerprint: SHA256:64cQtHklVRtDUPmbUWpRls28kFcpUnDhFJtpqMHiLbU
+# Used by .github/workflows/publish.yml with: git -c gpg.ssh.allowedSignersFile=.github/release-signers verify-tag
+sealwright namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKzQi3n41arGrJuO4A+WCUktTIwz3OTP29FmAYD6Yiyj

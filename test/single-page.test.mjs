@@ -4,9 +4,13 @@
 
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
-import { buildSinglePage, pageModules } from '../tools/make-single-page.mjs';
+import { buildSinglePage, outputPath, pageModules } from '../tools/make-single-page.mjs';
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const sha256 = (text) => createHash('sha256').update(text, 'utf8').digest('base64');
@@ -60,5 +64,24 @@ test('the single-file page holds the sample record, and is the same every time i
   for (const id of ['modules', 'sample-record']) {
     const held = page.slice(page.indexOf(`id="${id}">`), page.indexOf('</script>', page.indexOf(`id="${id}">`)));
     assert.ok(!held.includes('<'), id);
+  }
+});
+
+test('the tool that builds the page takes one path at most, and refuses an option rather than writing a file named after it', () => {
+  assert.equal(outputPath([]), 'provared-check.html');
+  assert.equal(outputPath(['out/page.html']), 'out/page.html');
+  for (const args of [['--out'], ['--out', 'x.html'], ['-o'], [''], ['a.html', 'b.html']]) {
+    assert.throws(() => outputPath(args), /no options|at most one argument|empty name/, JSON.stringify(args));
+  }
+  // Run as a command, in an empty folder: it stops with code 2, says why, and writes nothing.
+  const tool = fileURLToPath(new URL('../tools/make-single-page.mjs', import.meta.url));
+  const folder = mkdtempSync(join(tmpdir(), 'provared-single-page-'));
+  try {
+    const r = spawnSync(process.execPath, [tool, '--out', 'x.html'], { cwd: folder, encoding: 'utf8' });
+    assert.equal(r.status, 2, r.stderr);
+    assert.match(r.stderr, /^Stopped: .*no options.*Nothing was written\./);
+    assert.deepEqual(readdirSync(folder), []);
+  } finally {
+    rmSync(folder, { recursive: true, force: true });
   }
 });

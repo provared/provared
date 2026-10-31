@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+- **A workflow that publishes a release from the founder's signed tag**
+  (25 October 2026). `.github/workflows/publish.yml` runs only when a tag
+  such as `v0.7.0` is pushed. Before anything is published it checks that
+  the tag is signed by the release key in `.github/release-signers` and
+  by nothing else, that the tag, `package.json`, `python/pyproject.toml`
+  and the newest heading of this change log name the same version, and
+  that the JavaScript and Python libraries pass their tests on the tagged
+  commit, with the tests of every framework package against the library
+  from that commit. It then publishes the Python packages and stages the
+  npm package, through each registry's trusted publishing, with no stored
+  password or token, and makes the GitHub release with the checking page
+  as one file and its SHA-256. The npm version is staged
+  (`npm stage publish`) and becomes public only when the author approves
+  it on npmjs.com; the run shows the stage ID and the package's
+  integrity value, so that the author approves that one stage, and the
+  release notes say, for each registry, what the run sent there. The
+  Python files are checked
+  against the SHA-256 recorded when they were built before they are
+  uploaded. A version already on a registry is not published again, so a
+  framework package is published only when its own version is raised;
+  where its version is already published and its code differs, the run
+  stops before anything is published. The scripts it runs are in
+  `tools/release/`. Nothing in the npm package or the Python packages
+  changes. Version 0.6.0 and earlier were published by hand.
+- `tools/make-single-page.mjs` refuses an option, or more than one
+  argument, and writes nothing: `--out x` used to write a file named
+  `--out`. It still takes one optional argument, the file to write.
+
 - **A conformance kit**, in `conformance/` (not published): another
   implementation of the format, in any language, is tested against the
   shared test files through a small program of its own (an adapter),
