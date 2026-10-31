@@ -71,6 +71,14 @@
   word after it, and warns where it writes hooks while the plugin is
   installed. The new file `settings-hooks.mjs` is in the npm package.
 
+- **The heading of the top fingerprint.** The checking page heads the card
+  of a record's top fingerprint "The top fingerprint (the Seal)" only where
+  the record holds a seal, and "The top fingerprint" where it holds none
+  (`topFingerprintHeading` in `page/render.js`). The "try it" page no
+  longer relabels the heading itself. Nothing else the page shows changes,
+  and the command-line checker, the Python version and the shared test
+  files never held these words.
+
 - **OpenSSF Scorecard.** A workflow, `.github/workflows/scorecard.yml`,
   runs the Open Source Security Foundation's Scorecard on each push to
   main, every Sunday and when a branch protection rule changes, and
