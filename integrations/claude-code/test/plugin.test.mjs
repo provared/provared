@@ -225,6 +225,11 @@ test('with no library for the plugin, it is never taken from a folder above, and
   const ok = await runPlugin([join(cached, 'plugin.mjs'), 'install-library'], { env: { ...env, CLAUDE_PLUGIN_DATA: data } });
   assert.equal(ok.code, 0, ok.err);
   assert.match(ok.out, new RegExp(`installed for the plugin, in .*library-${lockFingerprint()}`));
+  // And where Claude Code put the library beside the plugin, that copy is the one used.
+  cpSync(join(data, `library-${lockFingerprint()}`, 'node_modules'), join(cached, 'node_modules'), { recursive: true });
+  const beside = await runPlugin([join(cached, 'plugin.mjs'), 'install-library'], { env });
+  assert.equal(beside.code, 0, beside.err);
+  assert.ok(beside.out.includes(join(cached, 'node_modules', 'provared')), beside.out);
 });
 
 test('as the plugin, the hooks ask before a call and record it after, as init\'s do', async () => {
