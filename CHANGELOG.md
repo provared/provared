@@ -34,9 +34,17 @@
   the plugin's own `node_modules` where Claude Code put it there, or else
   installs it itself, at a session's start or at a command the person runs,
   with `npm ci --ignore-scripts` from the folder's new `package-lock.json`
-  (exactly 0.6.0, its fingerprint checked, no install script run), into
-  the plugin's data folder, and loads it from there alone, in this program
-  and in every program it starts. Where it cannot, the session says so,
+  (exactly 0.6.0, the package checked by npm against the fingerprint
+  the lockfile holds, no install script run, npm's own program run by Node.js
+  with no shell and stopped for certain at its time limit), into the
+  plugin's data folder, and loads it from there alone, in this program and
+  in every program it starts. After that, the copy is trusted by where it
+  sits, and is not checked again before each use. Whatever goes wrong in
+  the entry itself (a damaged copy, a missing lockfile, a Node.js without
+  `module.registerHooks`), a call is refused before it is taken and Claude
+  Code is told after it, as the hook itself does. A settings file with
+  comments is looked through for the recorder's hooks as JSON with
+  comments. Where it cannot, the session says so,
   every call is refused, and each refusal gives the one command that mends
   it (`plugin.mjs install-library`). Checked with Claude Code 2.1.167's own
   `claude plugin validate`, with and without `--strict`, and by installing

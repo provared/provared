@@ -36,9 +36,10 @@
 
 import { spawnSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { registerHooks } from 'node:module';
-import { basename, dirname, join } from 'node:path';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+// The whole module, not one name: a Node.js without registerHooks then loads this file, and the plugin says plainly what is wrong.
+import * as nodeModule from 'node:module';
+import { basename, delimiter, dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export const ROOT = dirname(fileURLToPath(import.meta.url));
@@ -80,14 +81,55 @@ export function findLibrary(root = ROOT) {
 }
 
 /**
+ * How npm is run: its own program (npm-cli.js), started by this Node.js,
+ * with no shell, so that a time limit stops it for certain. It is looked
+ * for beside this Node.js (as its installer puts it), and then through the
+ * "npm" on the path. Null where none is found.
+ */
+export function npmProgram() {
+  const isFile = (p) => {
+    try {
+      return statSync(p).isFile();
+    } catch {
+      return false;
+    }
+  };
+  const here = dirname(process.execPath);
+  for (const p of [join(here, 'node_modules', 'npm', 'bin', 'npm-cli.js'), join(here, '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js')]) if (isFile(p)) return p;
+  for (const folder of (process.env.PATH ?? process.env.Path ?? '').split(delimiter).filter(Boolean)) {
+    for (const p of [join(folder, 'node_modules', 'npm', 'bin', 'npm-cli.js'), join(folder, '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js')]) if (isFile(p)) return p;
+    const npm = join(folder, 'npm');
+    if (isFile(npm)) {
+      try {
+        const real = realpathSync(npm);
+        if (real.endsWith('npm-cli.js')) return real;
+      } catch {
+        // Not a link to npm's own program.
+      }
+    }
+  }
+  return null;
+}
+
+/** The words npm is run with: exactly what the lockfile names, and no install script run. */
+export const NPM_WORDS = ['ci', '--ignore-scripts', '--omit=dev', '--no-audit', '--no-fund'];
+
+/** Run npm in a folder: its own program, by this Node.js, no shell, stopped for certain at the time limit. */
+export function runNpm(cwd, timeoutMs) {
+  const program = npmProgram();
+  if (!program) return { error: Object.assign(new Error('npm was not found'), { code: 'ENOENT' }) };
+  return spawnSync(process.execPath, [program, ...NPM_WORDS], { cwd, timeout: timeoutMs, killSignal: 'SIGKILL', encoding: 'utf8', windowsHide: true });
+}
+
+/**
  * Install the library into the plugin's data folder, from package-lock.json,
  * with "npm ci --ignore-scripts", in a folder of its own that holds only a
  * copy of package.json's dependencies and the lockfile, then moved into
  * place whole. Gives the copy's folder, or throws with words a person can
  * act on.
- * @param {{timeoutMs?: number, root?: string}} [o]
+ * @param {{timeoutMs?: number, root?: string, npm?: Function}} [o] npm: how npm is run (the tests stand in for it)
  */
-export function installLibrary({ timeoutMs = 20000, root = ROOT } = {}) {
+export function installLibrary({ timeoutMs = 20000, root = ROOT, npm = runNpm } = {}) {
   const data = dataFolder(root);
   if (!data) throw new Error(`Provared's library is not installed beside the plugin (${join(root, 'node_modules', 'provared')}), and the plugin's data folder is not known here. In ${root}, run: npm ci --ignore-scripts --omit=dev`);
   const target = join(data, `library-${lockFingerprint()}`);
@@ -99,11 +141,9 @@ export function installLibrary({ timeoutMs = 20000, root = ROOT } = {}) {
     const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
     writeFileSync(join(work, 'package.json'), JSON.stringify({ name: pkg.name, version: pkg.version, private: true, dependencies: pkg.dependencies }, null, 2));
     copyFileSync(LOCK, join(work, 'package-lock.json'));
-    // npm on Windows is a command file, which Node.js starts only through the shell; the words are fixed here.
-    const windows = process.platform === 'win32';
-    const ran = spawnSync(windows ? 'npm.cmd' : 'npm', ['ci', '--ignore-scripts', '--omit=dev', '--no-audit', '--no-fund'], { cwd: work, timeout: timeoutMs, encoding: 'utf8', shell: windows, windowsHide: true });
+    const ran = npm(work, timeoutMs);
     if (ran.error?.code === 'ETIMEDOUT' || ran.signal) throw new Error(`npm did not finish installing Provared's library within ${Math.round(timeoutMs / 1000)} seconds`);
-    if (ran.error) throw new Error(`npm could not be started (${ran.error.code ?? ran.error.message}): it comes with Node.js, and must be on the path`);
+    if (ran.error) throw new Error(`npm could not be started (${ran.error.code ?? ran.error.message}): it comes with Node.js, beside it or on the path`);
     if (ran.status !== 0) throw new Error(`npm could not install Provared's library: ${(ran.stderr || ran.stdout || '').trim().split('\n').slice(-3).join(' ')}`);
     const got = JSON.parse(readFileSync(join(work, 'node_modules', 'provared', 'package.json'), 'utf8'));
     if (got.version !== lockedVersion()) throw new Error(`npm installed version ${got.version} of Provared's library, not ${lockedVersion()}`);
@@ -139,7 +179,8 @@ let registered = false;
 function register() {
   if (registered) return;
   registered = true;
-  registerHooks({
+  if (typeof nodeModule.registerHooks !== 'function') throw new Error(`This Node.js (${process.version}) cannot point the name "provared" at the plugin's own copy of the library (module.registerHooks is missing): the recorder needs Node.js 24.7 or later.`);
+  nodeModule.registerHooks({
     resolve(specifier, context, nextResolve) {
       if (specifier !== 'provared' && !specifier.startsWith('provared/')) return nextResolve(specifier, context);
       const library = process.env.PROVARED_LIBRARY;

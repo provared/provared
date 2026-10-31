@@ -123,11 +123,68 @@ export function namesScript(word, name, project) {
 // a settings file larger than this is not read, at most this many words are looked at, for at most this long.
 export const SCAN_LIMITS = { bytes: 1024 * 1024, words: 20000, ms: 2000 };
 
-function readSettings(file, maxBytes = Infinity) {
+/**
+ * A JSON text with its comments (two slashes to the end of a line, and a
+ * slash and star to a star and slash)
+ * and its commas before a closing bracket taken out, outside strings: what
+ * a reader of "JSON with comments" would read. Claude Code itself is not
+ * documented to accept comments in a settings file; a file that holds them
+ * is looked through all the same, so that hooks in it are not missed.
+ */
+export function withoutComments(text) {
+  let out = '';
+  let i = 0;
+  while (i < text.length) {
+    const ch = text[i];
+    if (ch === '"') {
+      let j = i + 1;
+      while (j < text.length && text[j] !== '"') j += text[j] === '\\' ? 2 : 1;
+      out += text.slice(i, j + 1);
+      i = j + 1;
+    } else if (ch === '/' && text[i + 1] === '/') {
+      while (i < text.length && text[i] !== '\n') i++;
+    } else if (ch === '/' && text[i + 1] === '*') {
+      const end = text.indexOf('*/', i + 2);
+      i = end < 0 ? text.length : end + 2;
+    } else if (ch === ',' && ']}'.includes(text[nextSignificant(text, i + 1)])) {
+      i++;
+    } else {
+      out += ch;
+      i++;
+    }
+  }
+  return out;
+}
+
+// Where the next character that is neither a blank nor in a comment stands, read forwards once.
+function nextSignificant(text, from) {
+  let i = from;
+  while (i < text.length) {
+    if (/\s/.test(text[i])) i++;
+    else if (text[i] === '/' && text[i + 1] === '/') {
+      const end = text.indexOf('\n', i);
+      i = end < 0 ? text.length : end;
+    } else if (text[i] === '/' && text[i + 1] === '*') {
+      const end = text.indexOf('*/', i + 2);
+      i = end < 0 ? text.length : end + 2;
+    } else return i;
+  }
+  return i;
+}
+
+function readSettings(file, maxBytes = Infinity, { comments = false } = {}) {
   try {
     if (statSync(file).size > maxBytes) return { tooLarge: true };
     const text = readFileSync(file, 'utf8');
-    return { settings: JSON.parse(text.replace(/^﻿/, '')), mark: text.startsWith('﻿') ? '﻿' : '', text };
+    const body = text.replace(/^\uFEFF/, '');
+    let settings;
+    try {
+      settings = JSON.parse(body);
+    } catch (e) {
+      if (!comments) throw e;
+      settings = JSON.parse(withoutComments(body));
+    }
+    return { settings, mark: text.startsWith('\uFEFF') ? '\uFEFF' : '', text };
   } catch {
     return null;
   }
@@ -150,7 +207,7 @@ export function recorderHooksInSettings(project, files = settingsFiles(project),
   const until = Date.now() + limits.ms;
   let words = 0;
   for (const file of files) {
-    const read = readSettings(file, limits.bytes);
+    const read = readSettings(file, limits.bytes, { comments: true });
     if (read?.tooLarge) return { found, problem: `the settings file ${file} is larger than ${Math.round(limits.bytes / 1024)} KB, so it was not looked through for the recorder's hooks` };
     const hooks = read?.settings?.hooks;
     if (!hooks || typeof hooks !== 'object' || Array.isArray(hooks)) continue;

@@ -86,14 +86,21 @@ Claude Code copies this folder into its plugin cache
   fetched from a git repository). Where it is there, it is used.
 - Where it is not, the plugin installs it itself the first time a session
   starts (or at the first command you run): `npm ci --ignore-scripts` from
-  the same `package-lock.json`, so exactly version 0.6.0, checked against
-  the fingerprint the lockfile holds, with no install script run, into the
+  the same `package-lock.json`, so exactly version 0.6.0: npm checks
+  the package it fetches against the fingerprint the lockfile holds, and
+  runs no install script. npm's own program is run by Node.js, with no
+  shell, and stopped for certain at a time limit (20 seconds at the start
+  of a session, 2 minutes at a command of yours). The library goes into the
   plugin's data folder (`~/.claude/plugins/data/provared-recorder-provared/`),
   which Claude Code keeps across updates. That needs the npm registry
-  once, and takes a few seconds.
+  once, and takes a few seconds. After that, the copy is trusted by where
+  it sits: it is not checked again before each use (see "Nothing on the
+  computer is out of the agent's reach").
 - The library is loaded from one of those two places only, by its exact
   path, never from a folder above the plugin (such as your home folder),
   where an unrelated copy could be.
+- The witness (`provared-witness`) has no entry in the plugin: run it from
+  a copy installed from npm, or from a copy of the repository.
 - If it cannot be installed (no npm, no network), the session says so, every
   tool call is refused, and each refusal gives the one command that mends
   it: `node <the plugin's folder>/plugin.mjs install-library`.
@@ -174,6 +181,13 @@ recorder's `hook.mjs`. It recognises these forms, and only these:
   Provared (a copy since deleted or moved, whose hook still runs, and
   fails, at every call).
 
+A settings file with comments in it, or a comma before a closing
+bracket, is read for this as a reader of "JSON with comments" reads it,
+although Claude Code's documents do not say that Claude Code accepts such
+a file (user reports on its issue tracker say it does not); the hooks in
+it are looked at all the same. `remove-hooks` takes hooks out of plain
+JSON only, and leaves any other file as it is.
+
 A hook that reaches the recorder in any other way (a script of your own
 that calls it, a variable of your own, an organisation's managed
 settings) is not recognised, and each call is then asked about and
@@ -205,6 +219,12 @@ settings file larger than 1 MB is not read, at most 20,000 words of hooks
 are looked at, for at most 2 seconds. Past any of these, the call is
 refused, and the message says which. And the hook waits for the recorder
 for at most 25 seconds from its own start, whatever came before.
+
+Whatever goes wrong in the plugin's own entry (a damaged copy, a missing
+lockfile, a Node.js too old to point the name at the plugin's copy of the
+library), a call is refused before it is taken, and Claude Code is told
+after it, as the hook itself does: so a Claude Code too old to read
+`"onFailure": "block"` lets nothing through unchecked for that reason.
 
 `init` run through the plugin (or from a copy in Claude Code's plugin
 cache) writes no hooks, and `init --no-hooks` does the same from any copy;
@@ -1177,6 +1197,11 @@ along with everything else. To keep the record on another disk:
   gap. The evidence that holds is a checker that names your own passkey
   (`check --issuer`, or `provared-check --issuer`): a permission signed
   by any other passkey is then reported as a problem in the record.
+  The plugin's copy of the library, in Claude Code's plugin data folder,
+  is trusted by where it sits, and outlives updates of the plugin: it is
+  checked once, by npm, when it is installed, not before each use. A
+  program that can change it can change the plugin's own files in Claude
+  Code's plugin cache as well.
   Where you do not want the agent able to switch the hooks off, put them
   in Claude Code's managed settings, which only an administrator can
   change, and set `"allowManagedHooksOnly": true` there, so that Claude

@@ -11,7 +11,7 @@
 import './local-library.mjs'; // first: "provared" is this repository's own library
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { test } from 'node:test';
@@ -20,7 +20,7 @@ import { pathToFileURL } from 'node:url';
 const { hookSettings, replaceIfUnchanged, startService, writeHooks } = await import('../recorder.mjs');
 const { freePort, here, runHook, stopService, tempFolder, world } = await import('./world.mjs');
 const { lineWords, recorderHooksInSettings, removeInitHooks, samePath } = await import('../settings-hooks.mjs');
-const { dataFolder, lockFingerprint } = await import('../plugin-library.mjs');
+const { dataFolder, installLibrary, lockFingerprint, lockedVersion, NPM_WORDS, npmProgram } = await import('../plugin-library.mjs');
 
 const pluginRoot = resolve(here, '..');
 const repository = resolve(pluginRoot, '..', '..');
@@ -74,7 +74,8 @@ const pluginArgs = (event, root = pluginRoot) => hooksFile.hooks[event][0].hooks
 /** Run the plugin's entry as Claude Code, or the person, runs it, with JSON on standard input. */
 function runPlugin(args, { env = {}, input = '', cwd } = {}) {
   return new Promise((done) => {
-    const child = spawn(process.execPath, args, { cwd, env: { ...process.env, ...env } });
+    // Without this test file's own way of finding the library (local-library.mjs, through NODE_OPTIONS): the plugin finds it alone, in its programs and in those they start.
+    const child = spawn(process.execPath, args, { cwd, env: { ...process.env, NODE_OPTIONS: '', ...env } });
     let out = '';
     let err = '';
     child.stdout.on('data', (d) => (out += d));
@@ -327,6 +328,7 @@ test('the forms of a hook\'s command in which the recorder\'s hook is recognised
   writeFileSync(join(lone, 'hook.mjs'), '');
   assert.equal(found({ type: 'command', command: 'node', args: [join(lone, 'hook.mjs')] }), 0, 'a file of that name with no recorder beside it');
   assert.deepEqual(lineWords('node "a b"/c \'d\'e f'), ['node', 'a b/c', 'de', 'f']);
+  assert.deepEqual(lineWords('node a"b c"d --x="1 2"'), ['node', 'ab cd', '--x=1 2'], 'quotation marks in the middle of a word');
 });
 
 test('before each call the plugin looks only so far: a settings file too large, too many words, or too long a look refuses the call', async () => {
@@ -435,7 +437,14 @@ test('the start of a session, as the plugin: what the person must do where nothi
   }
 });
 
-test('the start of a session says so where the recorder does not start, and keeps within the hook\'s time', async () => {
+/** A file to load before a program's own (NODE_OPTIONS --import), that holds it back for a while, as a slow computer would. */
+function delayFor(ms) {
+  const file = join(tempFolder('provared-delay-'), 'delay.mjs');
+  writeFileSync(file, `await new Promise((r) => setTimeout(r, ${ms}));\n`);
+  return `--import=${pathToFileURL(file).href}`;
+}
+
+test('the start of a session says so where the recorder does not start, and keeps within the hook\'s time, counted from its own start', async () => {
   const { folder } = await world([]);
   const project = tempFolder('provared-project-');
   // Something else answers on the port, not as the recorder: the recorder cannot start there.
@@ -443,15 +452,102 @@ test('the start of a session says so where the recorder does not start, and keep
   await new Promise((r) => other.listen(0, '127.0.0.1', r));
   const env = { ...asPlugin(folder, project), PROVARED_CLAUDE_CODE_PORT: String(other.address().port) };
   try {
-    const started = Date.now();
-    const r = await runPlugin(pluginArgs('SessionStart'), { env, cwd: project });
+    let started = Date.now();
+    let r = await runPlugin(pluginArgs('SessionStart'), { env, cwd: project });
     assert.ok(Date.now() - started < 29000, 'within the hook\'s 30 seconds');
     assert.equal(r.code, 0, r.err);
-    const said = JSON.parse(r.out);
-    assert.match(said.systemMessage, /The recorder did not start|still starting/);
-    assert.match(said.systemMessage, /every tool call is refused|tool calls are refused/);
+    let said = JSON.parse(r.out);
+    assert.match(said.systemMessage, /The recorder did not start/);
+    assert.match(said.systemMessage, /every tool call is refused/);
+    // Held back 12 seconds before its own code runs: it still ends within 27 seconds of its start, and says the recorder is still starting.
+    started = Date.now();
+    r = await runPlugin(pluginArgs('SessionStart'), { env: { ...env, NODE_OPTIONS: delayFor(12000) }, cwd: project });
+    const took = Date.now() - started;
+    assert.ok(took < 29000, `within the hook's 30 seconds, counted from its own start (took ${took} ms)`);
+    assert.equal(r.code, 0, r.err);
+    said = JSON.parse(r.out);
+    assert.match(said.systemMessage, /still starting/);
   } finally {
     await new Promise((r) => other.close(r));
+  }
+});
+
+test('before a call, the hook waits for the recorder until 25 seconds after its own start, whatever came before', async () => {
+  const { folder } = await world([]);
+  // A recorder that takes the question and never answers.
+  const silent = createServer(() => {});
+  await new Promise((r) => silent.listen(0, '127.0.0.1', r));
+  try {
+    const env = { ...asPlugin(folder, tempFolder('provared-project-')), PROVARED_CLAUDE_CODE_PORT: String(silent.address().port), NODE_OPTIONS: delayFor(8000) };
+    const started = Date.now();
+    const r = await runPlugin(pluginArgs('PreToolUse'), { env, input: callInput('PreToolUse', 'Bash', { command: 'npm test' }) });
+    const took = Date.now() - started;
+    assert.equal(r.decision?.permissionDecision, 'deny', r.err);
+    assert.match(r.decision.permissionDecisionReason, /did not answer/);
+    assert.ok(took > 20000 && took < 29000, `answered 25 seconds after its own start, not 25 seconds after asking (took ${took} ms)`);
+  } finally {
+    silent.closeAllConnections();
+    await new Promise((r) => silent.close(r));
+  }
+});
+
+test('whatever stops the plugin\'s entry, a call is refused before it is taken, and Claude Code is told after it (exit code 2)', async () => {
+  const home = tempFolder('provared-claude-home-');
+  const cases = {
+    'the lockfile missing': (copy) => unlinkSync(join(copy, 'package-lock.json')),
+    'plugin-library.mjs damaged': (copy) => writeFileSync(join(copy, 'plugin-library.mjs'), 'throw new Error("damaged");\n'),
+    'module.registerHooks missing': () => {},
+  };
+  const noHooks = join(tempFolder('provared-preload-'), 'no-register-hooks.cjs');
+  writeFileSync(noHooks, "const m = require('node:module');\nm.registerHooks = undefined;\nm.syncBuiltinESMExports();\n");
+  for (const [what, damage] of Object.entries(cases)) {
+    const copy = cachedCopy(join(home, what.replace(/[^a-z]/g, '-')));
+    damage(copy);
+    const env = { CLAUDE_PLUGIN_ROOT: copy, CLAUDE_PLUGIN_DATA: dataWithLibrary(), PROVARED_CLAUDE_CODE_DIR: join(tempFolder(), 'claude-code'), PROVARED_CLAUDE_CODE_PORT: String(await freePort()), ...(what === 'module.registerHooks missing' ? { NODE_OPTIONS: `--require=${noHooks}` } : {}) };
+    const before = await runPlugin(pluginArgs('PreToolUse', copy), { env, input: callInput('PreToolUse', 'Bash', { command: 'npm test' }) });
+    assert.equal(before.code, 0, `${what}: ${before.err}`);
+    assert.equal(before.decision?.permissionDecision, 'deny', what);
+    assert.match(before.decision.permissionDecisionReason, /not taken/, what);
+    for (const event of ['PostToolUse', 'PostToolUseFailure']) {
+      const after = await runPlugin(pluginArgs(event, copy), { env, input: callInput(event, 'Bash', { command: 'npm test' }) });
+      assert.equal(after.code, 2, `${what}, ${event}: ${after.out} ${after.err}`);
+      assert.match(after.err, /not in the record|not checked or recorded/, what);
+    }
+    const start = await runPlugin(pluginArgs('SessionStart', copy), { env });
+    assert.equal(start.code, 0, what);
+    assert.match(JSON.parse(start.out).systemMessage, /every tool call is refused/, what);
+  }
+});
+
+test('the install: npm\'s own program, run by this Node.js with no shell, with ci and --ignore-scripts; and the version it installed is checked', () => {
+  assert.deepEqual(NPM_WORDS.slice(0, 2), ['ci', '--ignore-scripts']);
+  assert.ok(NPM_WORDS.includes('--omit=dev'));
+  const program = npmProgram();
+  assert.ok(program === null || program.endsWith('npm-cli.js'), String(program));
+  const home = tempFolder('provared-claude-home-');
+  const copy = cachedCopy(home);
+  const saved = process.env.CLAUDE_PLUGIN_DATA;
+  delete process.env.CLAUDE_PLUGIN_DATA;
+  try {
+    const fakeNpm = (version) => (cwd, timeoutMs) => {
+      assert.ok(timeoutMs > 0);
+      assert.ok(existsSync(join(cwd, 'package-lock.json')), 'npm is run where the lockfile is');
+      mkdirSync(join(cwd, 'node_modules', 'provared'), { recursive: true });
+      writeFileSync(join(cwd, 'node_modules', 'provared', 'package.json'), JSON.stringify({ name: 'provared', version }));
+      return { status: 0, stdout: '', stderr: '' };
+    };
+    assert.throws(() => installLibrary({ root: copy, npm: fakeNpm('9.9.9') }), /installed version 9\.9\.9 of Provared's library, not /);
+    const data = join(home, 'plugins', 'data', 'provared-recorder-provared');
+    assert.ok(!existsSync(join(data, `library-${lockFingerprint()}`)), 'a wrong version is not put in place');
+    const installed = installLibrary({ root: copy, npm: fakeNpm(lockedVersion()) });
+    assert.equal(installed, join(data, `library-${lockFingerprint()}`, 'node_modules', 'provared'));
+    assert.deepEqual(readdirSync(data).filter((f) => f.startsWith('.installing-')), [], 'no folder left half made');
+    assert.throws(() => installLibrary({ root: tempFolder('cc-elsewhere-'), npm: fakeNpm(lockedVersion()) }), /data folder is not known here/);
+    const fresh = cachedCopy(tempFolder('provared-claude-home-'));
+    assert.throws(() => installLibrary({ root: fresh, timeoutMs: 1000, npm: () => ({ error: Object.assign(new Error('x'), { code: 'ETIMEDOUT' }) }) }), /did not finish installing Provared's library within 1 seconds/);
+    assert.throws(() => installLibrary({ root: fresh, npm: () => ({ status: 1, stdout: '', stderr: 'E404' }) }), /npm could not install Provared's library: E404/);
+  } finally {
+    if (saved !== undefined) process.env.CLAUDE_PLUGIN_DATA = saved;
   }
 });
 
@@ -460,7 +556,8 @@ test('init, through the plugin\'s entry, with --no-hooks, or from Claude Code\'s
   const folder = join(tempFolder(), 'claude-code');
   const port = await freePort();
   const home = tempFolder('provared-claude-home-');
-  const env = { PROVARED_CLAUDE_CODE_DIR: folder, PROVARED_CLAUDE_CODE_PORT: String(port), CLAUDE_CONFIG_DIR: home, CLAUDE_PLUGIN_DATA: dataWithLibrary() };
+  // recorder.mjs run directly finds the library as the other tests' programs do (local-library.mjs).
+  const env = { PROVARED_CLAUDE_CODE_DIR: folder, PROVARED_CLAUDE_CODE_PORT: String(port), CLAUDE_CONFIG_DIR: home, CLAUDE_PLUGIN_DATA: dataWithLibrary(), NODE_OPTIONS: process.env.NODE_OPTIONS ?? '' };
   const run = (script, args) => runPlugin(['--disable-warning=ExperimentalWarning', script, ...args], { cwd: project, env });
   let r = await run(join(pluginRoot, 'recorder.mjs'), ['init', '--no-hook']);
   assert.equal(r.code, 2, 'a misspelt switch writes nothing');
