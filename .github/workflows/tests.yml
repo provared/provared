@@ -17,7 +17,8 @@
 #
 # Warnings count as failures. The Python tests run with "-W error", so a
 # warning stops them as an error would. The JavaScript tests run without
-# hiding Node.js's warnings, and a step after each fails on any warning
+# hiding Node.js's warnings (with "set -o pipefail", so that a failing run
+# is not hidden by the copy of its output), and a step after each fails on any warning
 # other than Node.js's notice that ML-DSA or SLH-DSA is experimental
 # (tools/lint/node-warnings.sh).
 #
@@ -88,7 +89,7 @@ jobs:
       - name: Install Ruff
         run: python -m pip install --require-hashes -r tools/lint/requirements.txt
       - name: Run Ruff
-        run: ruff check --config tools/lint/ruff.toml --output-format github python
+        run: ruff check --config tools/lint/ruff.toml --output-format github python tools/release
 
   # The library's own tests, the same files as "npm test" at the top of the
   # repository: only test/**/*.test.mjs, so that the packages below, and
@@ -107,7 +108,7 @@ jobs:
         with:
           node-version: 24
       - name: Run the tests
-        run: node --test 'test/**/*.test.mjs' 2>&1 | tee "$RUNNER_TEMP/test-output.txt"
+        run: set -o pipefail; node --test 'test/**/*.test.mjs' 2>&1 | tee "$RUNNER_TEMP/test-output.txt"
       - name: Fail on any warning but the expected one
         run: sh tools/lint/node-warnings.sh "$RUNNER_TEMP/test-output.txt"
 
@@ -135,7 +136,7 @@ jobs:
       # As "npm test" in each folder, without hiding warnings.
       - name: Run the tests
         working-directory: ${{ matrix.package }}
-        run: node --test test/*.test.mjs 2>&1 | tee "$RUNNER_TEMP/test-output.txt"
+        run: set -o pipefail; node --test test/*.test.mjs 2>&1 | tee "$RUNNER_TEMP/test-output.txt"
       - name: Fail on any warning but the expected one
         run: sh tools/lint/node-warnings.sh "$RUNNER_TEMP/test-output.txt"
 
@@ -164,7 +165,7 @@ jobs:
       # As "npm test", without hiding warnings.
       - name: Run the tests, at the locked versions
         working-directory: integrations/opentelemetry
-        run: node --test test/*.test.mjs 2>&1 | tee "$RUNNER_TEMP/test-output.txt"
+        run: set -o pipefail; node --test test/*.test.mjs 2>&1 | tee "$RUNNER_TEMP/test-output.txt"
       - name: Fail on any warning but the expected one, at the locked versions
         run: sh tools/lint/node-warnings.sh "$RUNNER_TEMP/test-output.txt"
       - name: Install the newest releases, with no lock file
@@ -176,7 +177,7 @@ jobs:
           for p in api sdk-trace context-async-hooks; do node -p "'@opentelemetry/$p ' + require('./node_modules/@opentelemetry/$p/package.json').version"; done
       - name: Run the tests, at the newest releases
         working-directory: integrations/opentelemetry
-        run: node --test test/*.test.mjs 2>&1 | tee "$RUNNER_TEMP/test-output.txt"
+        run: set -o pipefail; node --test test/*.test.mjs 2>&1 | tee "$RUNNER_TEMP/test-output.txt"
       - name: Fail on any warning but the expected one, at the newest releases
         run: sh tools/lint/node-warnings.sh "$RUNNER_TEMP/test-output.txt"
 

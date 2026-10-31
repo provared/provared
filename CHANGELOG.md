@@ -34,7 +34,10 @@
   backslash inside an f-string's braces, which Python 3.11, the oldest
   the plugin supports, cannot read; three Python tests expected any
   exception where the library raises `Refusal`, and now expect
-  `Refusal`; three imports were never used.
+  `Refusal`; three imports were never used. ESLint also covers
+  `conformance/`, and Ruff also covers `tools/release/`; there
+  `compare_wheel.py` now reads only `https://` addresses, since the
+  second address it reads comes from the index's own answer.
 
 - **Warnings are failures.** The Python tests run with `python -W error`
   (with two filters: a warning raised inside a LangChain dependency on
@@ -42,7 +45,9 @@
   the person, which it raises inside Hermes on purpose). The JavaScript tests no longer hide Node.js's warnings,
   and a step after each run fails on any warning other than Node.js's
   notice that ML-DSA or SLH-DSA is experimental
-  (`tools/lint/node-warnings.sh`). One was found and fixed: the seal
+  (`tools/lint/node-warnings.sh`); each run keeps its own exit code
+  (`set -o pipefail`), so a failing run is not hidden by the step that
+  saves its output. One was found and fixed: the seal
   writer handed a Web Crypto key of another method to Node.js's
   `createPrivateKey`, which Node.js has deprecated (DEP0203); such a key
   is now refused before it is handed over, with the same answer as before.

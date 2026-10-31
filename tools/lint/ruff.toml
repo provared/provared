@@ -1,6 +1,6 @@
 # Ruff settings for the Python in this repository: static analysis that
 # looks for real faults, not style. Run from the top of the repository with
-#   ruff check --config tools/lint/ruff.toml python
+#   ruff check --config tools/lint/ruff.toml python tools/release
 # Development tools only: nothing here is published.
 
 target-version = "py311"

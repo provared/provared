@@ -9,6 +9,6 @@
     "globals": "17.13.0"
   },
   "scripts": {
-    "lint": "cd ../.. && node tools/lint/node_modules/eslint/bin/eslint.js --config tools/lint/eslint.config.js --max-warnings 0 src bin net page tools integrations gateway sealer"
+    "lint": "cd ../.. && node tools/lint/node_modules/eslint/bin/eslint.js --config tools/lint/eslint.config.js --max-warnings 0 src bin net page tools integrations gateway sealer conformance"
   }
 }

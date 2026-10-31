@@ -30,6 +30,7 @@ if (npm.version !== version) fail(`the tag is ${tag}, but package.json gives the
 if (python.name !== 'provared') fail(`python/pyproject.toml names the project "${python.name}", not "provared".`);
 if (python.version !== version) fail(`the tag is ${tag}, but python/pyproject.toml gives the version ${python.version}.`);
 
+// eslint-disable-next-line security/detect-non-literal-regexp -- built from a version that tagArgument() has checked is three whole numbers, its full stops escaped.
 const heading = new RegExp(`^## ${version.replace(/\./g, '\\.')} \\((0?[1-9]|[12][0-9]|3[01]) (${MONTHS}) (20[0-9]{2})\\)$`);
 if (!heading.test(top.heading)) fail(`the first section of CHANGELOG.md is headed "${top.heading}", not "## ${version} (<day> <month> <year>)".`);
 if (!top.body.some((line) => line.trim())) fail('the first section of CHANGELOG.md is empty.');
