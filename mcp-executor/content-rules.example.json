@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "name": "the scan setting in settings.json stays off",
+      "tool": "write_file",
+      "when": { "pointer": "/path", "matches": "**settings.json" },
+      "content": { "pointer": "/content", "as": "json" },
+      "test": [
+        { "pointer": "/scan", "equals": false, "orAbsent": true },
+        { "pointer": "/upload", "oneOf": ["off", "manual"] },
+        { "pointer": "/debug", "absent": true }
+      ]
+    },
+    {
+      "name": "settings.json is written whole, never edited in part",
+      "tool": ["edit_file", "apply_patch"],
+      "when": { "pointer": "/path", "matches": "**settings.json" }
+    },
+    {
+      "name": "orders go to the one approved supplier",
+      "tool": "order_supplies",
+      "test": { "pointer": "/supplier", "equals": "acme-stationery" }
+    }
+  ]
+}

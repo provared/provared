@@ -31,6 +31,7 @@
   "exports": {
     ".": "./executor.mjs",
     "./compare": "./compare.mjs",
+    "./rules": "./rules.mjs",
     "./jsonrpc": "./jsonrpc.mjs",
     "./package.json": "./package.json"
   },
@@ -43,8 +44,10 @@
     "copy.mjs",
     "jsonrpc.mjs",
     "files.mjs",
+    "rules.mjs",
     "bin.mjs",
     "executor.example.json",
+    "content-rules.example.json",
     "DESIGN.md",
     "LICENSE-CC-BY-4.0.txt"
   ],

@@ -69,6 +69,8 @@ function onMessage(m) {
     const text = (t) => result(id, { resultType: 'complete', content: [{ type: 'text', text: t }] });
     if (name === 'echo') return result(id, { resultType: 'complete', content: [{ type: 'text', text: JSON.stringify(args) }], structuredContent: { args, meta: params._meta ?? null, token: process.env.FAKE_TOKEN ?? null, agentSecret: process.env.AGENT_SECRET ?? null, passed: process.env.PASSED_THROUGH ?? null } });
     if (name === 'order') return text(`Ordered for ${args.total}.`);
+    if (name === 'write_file') return text('Written.');
+    if (name === 'edit_file') return text('Edited.');
     if (name === 'fail') return result(id, { resultType: 'complete', content: [{ type: 'text', text: 'It did not work.' }], isError: true });
     if (name === 'error') return failure(id, -32602, 'Bad arguments.');
     if (name === 'crash') {

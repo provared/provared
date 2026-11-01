@@ -188,9 +188,15 @@ earlier read them as labels).
   name given twice exactly is refused in every message; names that differ
   only in capitals are refused only where a rule reads the amount from the
   arguments.)
+- `contentRules`: optional; the path of a file of rules on the content of
+  a change, tested before a call is let through (see "Rules on the content
+  of a change" below). Its fingerprint is named in every receipt and
+  denial.
 - `unlisted`: `refuse` (default) refuses a call to a tool no rule names and
   writes a denial named `executor.unlisted`; `forward` sends it on with no
-  receipt and no denial, and the record then leaves those calls out.
+  receipt and no denial, and the record then leaves those calls out. With
+  `forward`, a content rule that names a tool no rule in `tools` names
+  stops the start.
 - `hideUnlisted`: whether `tools/list` comes back without such tools.
   Default true.
 - `timeout`: how long the server is given to answer a call, in
@@ -207,6 +213,173 @@ earlier read them as labels).
   once (default 16; 1 to 1,000). A call past it is answered with error 1001
   and nothing is written. At most 256 `tools/list` requests may wait for
   the server's answer.
+
+## Rules on the content of a change
+
+A permission allows kinds of action. Being allowed to change a file is not
+being allowed to change everything the file controls: a call that changes
+a label in a settings file and, with the same edit, switches on a `scan`
+setting is one call of one kind, and the permission accepts both. The
+executor can hold rules on content, in a JSON file of its own named by
+`contentRules`, and test each proposed change against them before it is
+let through. `content-rules.example.json` is a start:
+
+```json
+{
+  "version": 1,
+  "rules": [
+    {
+      "name": "the scan setting in settings.json stays off",
+      "tool": "write_file",
+      "when": { "pointer": "/path", "matches": "**settings.json" },
+      "content": { "pointer": "/content", "as": "json" },
+      "test": { "pointer": "/scan", "equals": false, "orAbsent": true }
+    },
+    {
+      "name": "settings.json is written whole, never edited in part",
+      "tool": ["edit_file", "apply_patch"],
+      "when": { "pointer": "/path", "matches": "**settings.json" }
+    }
+  ]
+}
+```
+
+A rule has:
+
+- `name`: text of 1 to 200 characters, different for each rule. It is
+  shown to the model when the rule refuses, and written into the
+  executor's log and copy.
+- `tool`: the tool's exact name, or a list of 1 to 64 names.
+- `when` (optional): one condition, or a list of up to 16, on the call's
+  arguments; all must hold for the rule to apply. With no `when` the rule
+  applies to every call to the tool.
+- `content` (optional): where the proposed content is in the arguments
+  (`pointer`, a JSON Pointer, RFC 6901) and how to read it (`as`: `json`,
+  the argument is text holding JSON; `value`, the argument is the content
+  itself, as plain data). With no `content` the tests read the arguments
+  themselves. Point it only at an argument the server writes as the whole
+  new content.
+- `test` (optional): one condition, or a list of up to 64, on the content;
+  all must hold. **A rule with no `test` refuses every call it applies
+  to.** That is how to close a route the executor cannot judge: a tool
+  whose arguments carry only a partial edit (an old text and a new text),
+  a template, or a reference to content elsewhere, whose resulting file
+  the executor cannot know.
+
+A condition is `pointer` and exactly one of `equals` (the same JSON value,
+compared in full), `oneOf` (a list of 1 to 64 values), `absent` (`true`:
+nothing may be at the pointer) or `matches` (a pattern over text: `*`
+matches any run of characters other than `/` and `\`, `**` any run of any
+characters, `?` one character other than `/` and `\`, and a `/` or a `\`
+in the pattern matches either separator, so `**/settings.json` matches
+`C:\proj\settings.json`; nothing else is special). A missing value fails `equals`, `oneOf` and `matches`, because
+the executor cannot know what the program defaults to; `orAbsent: true`
+lets it pass. "May not change" cannot be tested without reading the file:
+write "stays equal to" the approved value instead.
+
+The executor tests a call against every rule that names its tool, in the
+file's order, after the amount is read and before the check before acting.
+The first rule that refuses stops the call: the model is told
+`Not taken by the Provared executor: Content rule "…": the value at "/scan"
+in the content at "/content" must equal false, or be absent.`, with
+`red.prova/refused` `content-rule` and `red.prova/rule` in `_meta`, and a
+denial is written. **Content the rule cannot read exactly also refuses
+the call** (`content-unreadable`): not JSON, a member named twice in one
+object or twice once folded (`scan` and `SCAN`), a whole number beyond
+9,007,199,254,740,991, nothing at the content pointer, something other
+than text where JSON text is expected, a text over 4,096 characters where
+a pattern would match it, or arguments with such folded names. A rule that
+let through what it could not read would be a rule any comment in a file
+evades. The executor reads no file and keeps no content: it tests only
+what the call carries. No value from the arguments is written into the
+model's error, the log or the copy.
+
+**The rules file in the record.** Every receipt and every denial names
+`executor.rules`, the SHA-256 of the rules file's parsed content in the
+one form of RFC 8785 (so spacing does not change it; any rule does), and
+a denial by a rule also names `executor.rule`, the fingerprint of the
+rule's name; both are labels. So that a reader can see that the rules in
+force were the ones the person approved, put the same fingerprint into
+the permission's `agent.software` (format description, section 4.1):
+`provared-mcp-executor keys --config executor.json` prints the entry,
+`{"name": "Content rules of <the executor's name>", "sha256": "<the
+fingerprint>"}`, beside the agent's keys. **The executor does not start
+where the permission states software (`agent.software`) and the rules
+file in force is not among it**: the person approved other rules than
+these. **Nor does it start where the permission states rules on content
+(an `agent.software` entry whose name begins `Content rules of `) and the
+settings name no rules file**: it would run without the rules the person
+approved. Where the permission states nothing, it starts and warns.
+`check` reports the rules read and whether the permission states them;
+`compare` reports, for each rules fingerprint the records name, how many
+receipts and denials name it and whether a slip in the book states it,
+and lists as `withoutRules` the executor's receipts and denials under a
+slip that states rules on content which name no rules file.
+
+The rules file is read strictly: UTF-8 (a byte that is not part of a
+character stops the start), JSON, no member named twice, no whole number
+beyond 9,007,199,254,740,991, `"version": 1`, no member that is not part
+of a rules file, a rule or a condition, JSON Pointers as RFC 6901 writes
+them (a `~` only as `~0` or `~1`), up to 1,000 rules, at most 1 MiB, and
+at most 20,000 pattern parts in all (each character, `?` or run of stars
+in a `matches` counts as one), so that testing one call takes at most
+about a quarter of a second on an ordinary computer; anything else stops
+the start and names its place. A rule that names a tool no rule in `tools`
+names gets a warning where `unlisted` is `refuse`: such a call is refused
+as unlisted before any content rule is reached. **Where `unlisted` is
+`forward`, such a rule stops the start**: a call to that tool would be
+sent on with no content rule tested.
+
+**What the rules can never promise.**
+
+- That the setting stays as the rule says by every path. A rule on
+  `write_file` does not see a shell tool that edits the same file, a
+  second tool with another name, the same file given under another
+  argument name the rule's `when` does not read, a path written another
+  way than the pattern expects, a change split over two calls each of
+  which passes, or a file written under another name and moved. An edit
+  by any route that does not go through the executor is not seen at all.
+- That the content was read as the server reads it. The executor refuses
+  what it cannot read exactly, but a server that reads the same text more
+  loosely, or in another encoding, may act on something the executor did
+  not see. A file type the executor cannot read (YAML, TOML, a line-based
+  form; later work) cannot be tested: only a rule with no `test` can
+  refuse such a write.
+- That a tool's arguments show the resulting file. A partial edit, a
+  template, a reference to content kept elsewhere, or a command gives the
+  executor nothing to test; only a refusal outright closes it.
+- That a pattern catches a meaning. `*` and `**` match characters, not
+  files: `**settings.json` also matches `my-settings.json`; a path with
+  other capitals, a trailing space, a trailing full stop
+  (`settings.json.`, which Windows opens as `settings.json`) or a symbolic
+  link is another text. A `/` or `\` in a pattern matches either
+  separator, so that one pattern covers paths written either way; on a
+  server on Linux or macOS, where `\` is an ordinary character in a
+  file name, a `test` used as an allow-list (`matches: "safe/**"`)
+  also accepts `safe\x`, a file in the current folder.
+- That a `when` reads a value of another kind. A `when` with `matches` is
+  met only by text: a path given as a list (`["settings.json"]`) or any
+  other value that is not text does not match, so the rule does not apply
+  and the call goes on to the next rule. Where a server could take a path
+  of another kind, close the tool with a rule with no `test`.
+- That a member is named as the program reads it. Names inside the
+  content are compared exactly: `"SCAN": true` is not `scan`, so it passes
+  an `absent` test, or an `orAbsent` one, on `/scan` (two members that
+  differ only in capitals in one object are refused as unreadable, but a
+  lone `SCAN` is not). A program that reads names without regard to
+  capitals acts on what the rule did not see.
+- That content nested in content is read. `as: "json"` reads one layer: a
+  JSON text inside a JSON string (`"{\"scan\": true}"` as the content's
+  text) is a string to the rule, and its tests on `/scan` find nothing.
+- That the rules were right, or were applied. The record holds the
+  fingerprint of the rules file and, in a denial, of the rule that
+  refused; it does not hold the rules, and a receipt shows only that the
+  executor that wrote it was running those rules. The fingerprint of a
+  short rule name can be guessed from a list of likely names.
+
+The rule writer has to know the tool: which argument carries the whole new
+content, under which name the path is given, and which other tools reach
+the same file.
 
 ## What the executor does with each call
 
@@ -231,7 +404,10 @@ earlier read them as labels).
    reuses an id. A call past `maxWaiting` is answered with error 1001.
 2. **The rule**, by the tool's name (1 to 128 letters, digits, `_`, `-` and
    `.`; any other name is refused with -32602).
-3. **The amount**, as the rule says.
+3. **The amount**, as the rule says. Then **the rules on content**, where
+   the settings name a rules file: a call a rule refuses, or whose content
+   a rule cannot read exactly, is not sent, the model is told which rule,
+   and a denial is written that names the rules file and the rule.
 4. **The check before acting**, through the agent's stub writer. A call it
    refuses is not sent: the client gets a tool result with
    `isError: true` whose text begins "Not taken by the Provared executor"
@@ -248,7 +424,8 @@ earlier read them as labels).
    where there are none), `provared.tool-name` (the tool's name), `executor.call`
    and `provared.request-id` (the executor's identifier), and
    `provared.trace-id` where the call's `_meta` carried a well-formed
-   `traceparent`. After the answer it names `provared.tool-result` (the server's
+   `traceparent`, and `executor.rules` (the fingerprint of the rules file
+   on content) where the settings name one. After the answer it names `provared.tool-result` (the server's
    whole `result`, in the one form of RFC 8785) or, where there was no
    result, `provared.error` (the text of the error the client is given, or
    the server's JSON-RPC error as JSON). A result that cannot be written in
@@ -340,8 +517,10 @@ whoever keeps the book left it out, or the book is older than the copy),
 those whose receipt the executor itself could not write to the book
 (`notWritten`: its own stop, told apart from an omission), those the
 executor sent and never gave a receipt, receipts in the book that name the
-executor and that the copy does not know, and denials the book lacks. It
-ends with code 0 only where everything agrees, every line of the copy
+executor and that the copy does not know, and denials the book lacks.
+Beside these, `withoutRules` lists the executor's receipts and denials
+under a slip that states rules on content and that name no rules file;
+it does not change the code. It ends with code 0 only where everything agrees, every line of the copy
 checks under the key and runs in sequence, and the book itself has no
 problem. The copy key must exist (`compare` makes none), and a book named
 with `--book` must exist.
@@ -363,9 +542,11 @@ did what its result says, or a copy changed by whoever holds the copy key.
 - **Time.** Times are the executor's clock. No seal and no outside
   time-stamp is written yet.
 - **One agent, one server.** One executor serves one agent (one slip, one
-  book) and one server. The HTTP transport, several agents, sealing, keys
-  held in a key service and content rules are designed in `DESIGN.md` and
-  not built.
+  book) and one server. The HTTP transport, several agents, sealing and
+  keys held in a key service are designed in `DESIGN.md` and not built.
+- **The rules on content** test only what a call carries, and prove
+  nothing about calls that do not go through the executor; see "What the
+  rules can never promise" above.
 - **The copy** is only as safe as the folder it is in, and whoever holds
   the copy key can write lines that check.
 

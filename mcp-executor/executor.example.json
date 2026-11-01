@@ -26,6 +26,7 @@
     "order_supplies": { "action": "supplies.order", "amount": { "unit": "GBP", "pointer": "/total" } },
     "send_messages": { "action": "provared.message.send", "amount": { "unit": "messages", "count": "/recipients" } }
   },
+  "contentRules": "content-rules.json",
   "unlisted": "refuse",
   "hideUnlisted": true,
   "timeout": 300000,

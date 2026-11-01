@@ -2,6 +2,57 @@
 
 ## Unreleased
 
+- **The MCP executor tests rules on the content of a change before a
+  call is let through** (F-157, F-158; `mcp-executor/rules.mjs`; choices
+  X56 to X70 in `mcp-executor/DESIGN.md`). A permission allows kinds of
+  action; being allowed to change a file is not being allowed to change
+  everything the file controls. The new setting `contentRules` names a
+  JSON file of rules: each names a tool, says which calls it applies to
+  (`when`: conditions on the arguments), where the proposed content is
+  and how to read it (`content`: a JSON Pointer, as JSON text or as plain
+  data) and what must hold in it (`test`: `equals`, `oneOf`, `absent`,
+  `matches` a plain glob, each at a JSON Pointer, with `orAbsent`). A rule
+  with no `test` refuses every call it applies to, which is how a tool
+  that carries only a partial edit is closed: the executor reads no file
+  and keeps no content. A call a rule refuses (`content-rule`), or whose
+  content the rule cannot read exactly (`content-unreadable`: not JSON, a
+  member named twice or twice once folded, a number beyond 2^53 - 1,
+  nothing at the pointer, not text, a text too long to match), is not
+  sent; the model is told which rule and what it asked for, never a value
+  from the arguments, and a denial is written. Every receipt and denial
+  names `executor.rules`, the SHA-256 of the rules file's parsed content
+  in the one form of RFC 8785; a denial by a rule also names
+  `executor.rule`, the fingerprint of the rule's name; both are labels.
+  The person puts the same fingerprint into the permission's
+  `agent.software` (`keys` prints the entry); where the permission states
+  software and the rules in force are not among it, the executor does not
+  start; where it states nothing, it warns. `check` reports the rules and
+  whether the permission states them; `compare` reports which rules
+  fingerprints the records name and whether a slip states each. The
+  README says plainly what the rules can never promise: an edit by
+  another route, a tool whose arguments do not show the resulting file, a
+  file type the executor cannot read, a pattern that matches characters
+  rather than files. Content in YAML, TOML or line-based forms is later
+  work. No record and no rule of the format changes. 12 new tests, among
+  them a label change let through and the same edit with a hidden setting
+  switched on refused.
+  After an independent review (choices X71 to X77): with `unlisted`
+  `forward`, a content rule for a tool that `tools` does not name stops
+  the start, since such a call was sent on before any content rule was
+  tested and the warning said the opposite; a permission whose
+  `agent.software` states rules on content (an entry named `Content rules
+  of …`) stops the start where the settings name no rules file, and
+  `compare` lists the executor's receipts and denials under such a slip
+  that name no rules file (`withoutRules`); a `/` or a `\` in a pattern
+  matches either separator, as promised, so `**/settings.json` matches
+  `C:\proj\settings.json`; a rules file holds at most 20,000 pattern parts
+  in all, which keeps one call to about a quarter of a second where a
+  chosen file took 9.6 seconds; the file is decoded as strict UTF-8; a
+  JSON Pointer with a `~` not followed by `0` or `1` is refused. Four more
+  limits are stated in the README: a `when` value that is not text does
+  not match; a member in other capitals in the content passes an
+  `absent` or `orAbsent` test; a path with a trailing full stop is another
+  text; JSON text inside a JSON string is not read. 7 new tests.
 - **A reader of another project's receipts: Agent Middleware (AMW)**,
   `integrations/agent-middleware/` (`provared-agent-middleware` 0.1.0, not
   published): the first of the plan's readers of the closest other
