@@ -842,6 +842,9 @@ section 27); any other such name is refused.
 | `provared.request-id` | An identifier the agent's side chose and sent with the call | `identifierFingerprint` |
 | `provared.event-id` | An identifier the platform gave for the call | `identifierFingerprint` |
 | `provared.error` | The error text the agent's software was given | `identifierFingerprint` |
+| `provared.tool-name` | The name of the tool, exactly as the agent's software called it (not the slip's action name) | `identifierFingerprint` |
+| `provared.tool-call-id` | The identifier the model gave the tool call, exactly as received | `identifierFingerprint` |
+| `provared.tool-result` | The tool's result, in the one form of RFC 8785; never the result itself | `argumentsFingerprint` (the same one form) |
 
 `DOCUMENT_NAMES` lists them, each with the exact text it stands for. An
 HTTP request or answer is written as the signature base of RFC 9421
@@ -895,14 +898,22 @@ from its fingerprint.
 
 `recordTools` names the arguments `provared.arguments` by default (before
 version 0.6.0, `arguments`; every checker reads both); a tool can name
-them otherwise through its own `details` function.
+them otherwise through its own `details` function. It does not name the
+tool's name or its result: a tool's `details` function can add
+`provared.tool-name`, and `provared.tool-result` is added after the
+action, through `detailsAfter` of `act`. The MCP executor
+(`mcp-executor/`) names all three where it has them. Each of the three
+may be named once in a stub, and a checker of version 0.6.0 or earlier
+refuses a stub that names any of them.
 
 To show each receipt on the trace span of its call in an observability
 tool, use the OpenTelemetry bridge in `integrations/opentelemetry/` (not
 yet published); a span is a pointer to the receipt, not evidence. It puts
 `provared.trace-id` into a receipt only for a tool that you say sends the
 trace out with its call, in a `traceparent` header, as this section
-defines the name; it cannot see whether the tool really does.
+defines the name; it cannot see whether the tool really does. Where a
+tool gives the model's identifier for the call (`callId`), the receipt
+names it as `provared.tool-call-id`.
 
 ## How signing works
 

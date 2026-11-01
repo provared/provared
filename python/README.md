@@ -211,9 +211,15 @@ description, section 27), and any other such name is refused.
 `http_response_fingerprint` make the fingerprints (a body is bytes, a
 bytearray or a memoryview, after any content coding such as gzip; None
 is no body; a status may be an int, or a float equal to a whole number;
-no header is covered; a trace-id's form is not checked). Only
-`provared.trace-id`, `provared.request-id` and `provared.event-id` may
-be named more than once in a stub. An identifier that the platform gives only
+no header is covered; a trace-id's form is not checked). The tool's
+name and the model's identifier for the call (`provared.tool-name`,
+`provared.tool-call-id`) are fingerprinted with `identifier_fingerprint`,
+and a tool's result (`provared.tool-result`) with `arguments_fingerprint`,
+in the same one form as the arguments. Only `provared.trace-id`,
+`provared.request-id` and `provared.event-id` may be named more than
+once in a stub. `record_tools` and `record_function` name the arguments
+only; a checker of version 0.6.0 or earlier refuses a stub that names any
+of the three names added after it. An identifier that the platform gives only
 in its answer goes in through `details_after` (the JavaScript name
 `detailsAfter` is taken too):
 

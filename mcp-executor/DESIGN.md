@@ -132,7 +132,7 @@ executor, sealing, the acknowledgement command, content rules (F-157).
 7. The answer: the server's response, an error, no answer within the
    time allowed (X18), the agent's cancellation (X20), or the server's end
    (X21). Whatever it is, the call that was sent gets its stub: the stub is
-   signed again with `mcp.result` or `provared.error`, countersigned by
+   signed again with `provared.tool-result` or `provared.error`, countersigned by
    the executor (X11), and written into the book; a `done` line goes into
    the copy.
 8. The server's response goes to the client exactly as the server wrote
@@ -150,18 +150,19 @@ gives one; `with` the executor's id; `details`:
 | Name | Fingerprint of | Reserved? |
 |---|---|---|
 | `provared.arguments` | the call's `arguments`, in the one form of RFC 8785 (`{}` where absent) | yes (section 27) |
-| `mcp.tool` | the tool's name | no, a label |
+| `provared.tool-name` | the tool's name, as the client called it | yes (added after 0.6.0) |
 | `executor.call` | the executor's own identifier for the call | no, a label |
 | `provared.request-id` | the same identifier, as sent to the server in `_meta` (absent with `callIdInMeta: false`) | yes |
 | `provared.trace-id` | the trace-id of a well-formed `traceparent` in the call's `_meta` | yes |
-| `mcp.result` | the server's `result`, in the one form of RFC 8785 (added after the call) | no, a label |
+| `provared.tool-result` | the server's `result`, in the one form of RFC 8785 (added after the call) | yes (added after 0.6.0) |
 | `provared.error` | the error text (added after the call where there was no result, or where the result could not be fingerprinted or the answer not read) | yes |
 | `executor.written-late` | a fixed text; only in a receipt written at a restart, from the copy | no, a label |
 
-`mcp.tool`, `mcp.result` and `executor.call` are labels. The founder has
-decided (F-158) that reserved document names for a tool's name and a
-tool's result will come in the library and in draft -03; until then these
-labels stand, and a checker reads them as labels.
+`executor.call` and `executor.written-late` are labels. The tool's name
+and the tool's result were labels (`mcp.tool`, `mcp.result`) until the
+format reserved `provared.tool-name` and `provared.tool-result` (F-158;
+section 27), which the executor now writes; so the executor needs a
+library later than 0.6.0, and a checker of 0.6.0 refuses its receipts.
 
 **The countersignature.** Signed with the executor's own key set (Ed25519
 and ML-DSA-87), which the permission names in `with` under the executor's
@@ -176,7 +177,7 @@ call (an `isError` result is still "what came back").
 **The denial** (section 28): source `check` with the codes where the check
 before acting refused; source `rule` where no rule names the tool
 (`executor.unlisted`) or the amount cannot be read. It names what was
-asked for (`provared.arguments`, `mcp.tool`, `provared.trace-id`) and
+asked for (`provared.arguments`, `provared.tool-name`, `provared.trace-id`) and
 never `executor.call` or `provared.request-id`, which were never sent.
 
 **The permission** must name the agent's keys as the executor holds them,
@@ -428,8 +429,6 @@ fingerprint of the rules file that the stub names.
   change (a sealer, a witness, an append-only store).
 - Content rules (section 11), once the founder has chosen where they live.
 - Keys held in a key service, through the library's signer interface.
-- A reserved document name for a tool's result, if the founder decides the
-  format should have one; until then `mcp.result` is a label.
 - Listing in the MCP registry, once a published version exists.
 
 ## 13. The choices, numbered for review
@@ -439,7 +438,8 @@ the format: the executor writes ordinary stubs, countersignatures and
 denials.
 
 **X1. A package of its own, `mcp-executor/`, named `provared-mcp-executor`,
-depending on `provared ^0.6.0`.** Two files are copies of the gateway's
+depending on `provared` at a version after 0.6.0 (`>0.6.0`; it was `^0.6.0`
+until the reserved names of X12 came).** Two files are copies of the gateway's
 (`files.mjs`; `test/local-library.mjs`), held identical by a test. Why: the
 package works by name once installed; copying keeps the two executors from
 depending on each other. The other way: an export from the gateway
@@ -526,13 +526,15 @@ stub at no extra cost. The other way: countersign before sending, as a
 record that the executor let the call through; it would then not cover
 what came back.
 
-**X12. The documents a stub names** (section 6). `mcp.tool`, `mcp.result`
-and `executor.call` are labels, not reserved names, because reserving a
-name is a change to the format for the founder (section 27 lists seven).
-`mcp.result` is the server's whole `result` member in the one form of RFC
-8785, because a tool's result has no other canonical text. The other way:
-name only the reserved documents; then nothing in the stub binds the
-answer.
+**X12. The documents a stub names** (section 6). The tool's name and the
+server's result are named under the reserved names `provared.tool-name`
+and `provared.tool-result` (format description, section 27; they were the
+labels `mcp.tool` and `mcp.result` until the format reserved them, under
+F-158). `executor.call` stays a label: it is the executor's own identifier,
+which no other implementation writes. `provared.tool-result` is the
+server's whole `result` member in the one form of RFC 8785, because a
+tool's result has no other canonical text. The other way: name only the
+documents reserved in 0.6.0; then nothing in the stub binds the answer.
 
 **X13. The executor's identifier for the call goes to the server in
 `params._meta["red.prova/call-id"]`, and the stub names it as

@@ -13,7 +13,10 @@
      "provared.trace-id": "The trace-id of the W3C Trace Context \"traceparent\" header that the agent's side sent, which that standard writes as 32 lower-case hexadecimal characters. Its form is not checked.",
      "provared.request-id": "An identifier that the agent's side chose and sent with the call, exactly as sent.",
      "provared.event-id": "An identifier that the platform gave for the call, exactly as it gave it.",
-     "provared.error": "The error text that the agent's software was given, exactly as given."
+     "provared.error": "The error text that the agent's software was given, exactly as given.",
+     "provared.tool-name": "The name of the tool, exactly as the agent's software called it.",
+     "provared.tool-call-id": "The identifier that the model gave the tool call, exactly as the agent's software received it.",
+     "provared.tool-result": "The tool's result, written in the one form of RFC 8785."
     }
    }
   },

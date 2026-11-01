@@ -171,8 +171,11 @@ platform gave the call (`provared.event-id`), of one the agent's side
 chose and sent (`provared.trace-id`, `provared.request-id`), of part
 of the request and the answer (`provared.http-request`: the method, the
 address and the body; `provared.http-response`: the status and the
-body; no header is covered), or of the error the agent was given
-(`provared.error`).
+body; no header is covered), of the error the agent was given
+(`provared.error`), of the name of the tool that was called
+(`provared.tool-name`), of the identifier the model gave the tool call
+(`provared.tool-call-id`) or of the tool's result (`provared.tool-result`,
+in the one form of RFC 8785, as the arguments are).
 
 - *What it shows.* Someone who holds the platform's own log can work the
   fingerprint out again and match the two records, without either
@@ -185,7 +188,11 @@ body; no header is covered), or of the error the agent was given
   share one fingerprint, so a match with one of them does not show that
   it was the same call. Only `provared.trace-id`, `provared.request-id`
   and `provared.event-id` are meant to pick out one call, and only they
-  may be named more than once in a stub.
+  may be named more than once in a stub. `provared.tool-call-id` picks
+  out the model's request for the call, which the agent's software may
+  carry out more than once (a retry): two stubs then name one identifier.
+  A tool's name and a tool's result are content: every call of one tool
+  shares its name's fingerprint, and identical results share one.
 - *The body's bytes* are what RFC 9530 digests: the content after any
   content coding (such as gzip) and before any transfer coding. A
   platform that logs the decoded body of a message sent compressed will
@@ -213,10 +220,13 @@ body; no header is covered), or of the error the agent was given
   match: whoever writes the stub must give the address as sent.
 - *A reserved name not on the list* is refused (`bad-field`), so that a
   name that may be given a meaning later cannot be used now with another;
-  so is one of the four once-only names named twice (two `provared.arguments`
+  so is one of the seven once-only names named twice (two `provared.arguments`
   fingerprints in one stub would leave unclear which was the call's). A
   book written before this rule that holds such a name no longer passes
-  its check.
+  its check. The three names added after version 0.6.0 (`provared.tool-name`,
+  `provared.tool-call-id`, `provared.tool-result`) are refused by a
+  checker of version 0.6.0, which knows the first seven only: a book
+  that names them checks only with a later checker.
 
 ## 4a. Limits, conditions, approvals and the other side's records
 

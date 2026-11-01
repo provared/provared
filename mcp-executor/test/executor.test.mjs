@@ -81,6 +81,9 @@ test('a call the permission allows is sent with the server\'s credential and wit
     assert.equal(stub.countersignature.state, 'valid', 'countersigned with the executor\'s keys');
     const d = docs(stub);
     assert.equal(d['provared.arguments'], await argumentsFingerprint({ b: 2, a: 'one' }));
+    // The tool's name and its result go under the names the format reserves (section 27), not under labels.
+    assert.equal(TOOL_DOCUMENT, 'provared.tool-name');
+    assert.equal(RESULT_DOCUMENT, 'provared.tool-result');
     assert.equal(d[TOOL_DOCUMENT], await identifierFingerprint('echo'));
     assert.equal(d[CALL_DOCUMENT], await identifierFingerprint(seen.meta[CALL_META]));
     assert.equal(d['provared.request-id'], d[CALL_DOCUMENT]);

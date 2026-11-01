@@ -27,11 +27,18 @@ It links them both ways, in one call:
   `provared.trace-id`: the fingerprint of the trace id that header
   carries, which is the span's. That is what the format description,
   section 27, says the name stands for. For any other tool the receipt
-  names no trace, and `provared.stub.trace_bound` on the span says so.
+  names no trace, and `provared.stub.trace_bound` on the span says so;
+- **the receipt names the model's identifier for the call, where you give
+  it.** Where a tool gives `callId` (the identifier the model gave the tool
+  call, such as the `id` of a tool call in the model's answer), its receipt
+  names `provared.tool-call-id`: the fingerprint of that identifier, which
+  section 27 defines so. The same identifier goes on the span as
+  `gen_ai.tool.call.id`.
 
 So from a span in a tracing tool you can always find its receipt in the
-book, and from the receipt of a tool that sends the trace out you can find
-its trace.
+book, from the receipt of a tool that sends the trace out you can find
+its trace, and from a receipt that names the model's identifier you can
+find the tool call in the record of the conversation.
 
 **The bridge cannot see whether a tool really sends the trace.** Your
 `sendsTrace: true` is the agent's side's word, as the receipt is: a
@@ -78,10 +85,12 @@ const tools = traceTools(recorder, described, { span: 'active' });
 A tool may also give `callId`: a function of the second argument it is
 called with (the options a framework hands a tool) that gives the
 identifier the model gave the call. It goes on the span as
-`gen_ai.tool.call.id`, and never into the receipt: it is the model's
-identifier, not the platform's, and `provared.event-id` stands for the
-platform's (section 27). What it gives is used only where it is text of 1
-to 256 characters; anything else is set aside.
+`gen_ai.tool.call.id`, and into the receipt as `provared.tool-call-id`,
+the fingerprint of the identifier (section 27). It is the model's
+identifier, not the platform's: `provared.event-id` stands for the
+platform's, and the bridge never writes that one. What `callId` gives is
+used only where it is text of 1 to 256 characters; anything else is set
+aside, and then neither the span nor the receipt names it.
 
 A tool says that it sends the trace out with `sendsTrace: true`:
 
@@ -99,8 +108,9 @@ call of the stub writer's `act`. As with `act`, a call that is not taken
 is given back, not thrown, and `more.detailsAfter` is passed on. Its span
 is named after `options.toolName`, or else the action where it is 1 to 64
 visible characters with no spaces, or else `action`. The receipt names the
-trace only where `options.sendsTrace` is true, and even then two cases add
-nothing to the request:
+trace only where `options.sendsTrace` is true, and the model's identifier
+only where `options.callId` is given; two cases add nothing to the
+request:
 
 - where `more.approval` is given: the person approved the request as it
   stands, and an approval covers exactly the documents the person saw, so
@@ -121,7 +131,7 @@ The options:
 | `event` | add a span event `provared.not_taken` where a call is not taken | `false` |
 | `onStub` | as for `recordTools` | none |
 | `toolName` | `traceAct` only: the span's tool name | the action |
-| `callId` | `traceAct` only: the model's identifier for the call, 1 to 256 characters, for the span | none |
+| `callId` | `traceAct` only: the model's identifier for the call, 1 to 256 characters, for the span and the receipt | none |
 | `sendsTrace` | `traceAct` only: `perform` sends the trace out with the call; the receipt then names it | `false` |
 
 For `traceTools`, `sendsTrace` and `callId` are members of each tool's
@@ -224,19 +234,25 @@ on any object with `setAttribute`, and does not import OpenTelemetry:
 - For a call not taken with no denial written, the span does not name the
   permission: the check before acting does not give it.
 - A stub may name at most 32 documents (28 where `detailsAfter` is given),
-  and the trace takes one of them. A tool that sends the trace and names
-  32 documents of its own leaves no room: the check before acting then
-  refuses the call (`not_taken`).
-- The meaning of `provared.trace-id` and `provared.event-id` is a draft
-  of the format, to be settled. This package writes only the first, and
-  only in the case section 27 describes.
+  and the trace and the model's identifier take one each. A tool that
+  sends the trace and names 32 documents of its own leaves no room: the
+  check before acting then refuses the call (`not_taken`).
+- The model's identifier picks out the model's request for the call, not
+  the call: where the agent's software runs a tool twice for one request
+  (a retry), two receipts name one identifier.
+- `provared.trace-id`, `provared.tool-call-id` and the other reserved
+  names are part of a draft of the format. This package writes the first
+  two only, each in the case section 27 describes, and never
+  `provared.event-id` (the platform's identifier), which only the caller
+  can name. A checker of `provared` 0.6.0 refuses a receipt that names
+  `provared.tool-call-id`, so this package needs a later version.
 - OpenTelemetry's conventions for generative AI are marked "development":
   their names may change. Span events are being replaced by log records in
   OpenTelemetry, which is why the event is off by default.
 
 ## Versions
 
-`@opentelemetry/api` (`^1.9.0`) and `provared` (`^0.6.0`, that is, 0.6 only, until a later version is tested) are peer
+`@opentelemetry/api` (`^1.9.0`) and `provared` (`>0.6.0`: a version after 0.6.0, the first that knows `provared.tool-call-id`; tested with the library on the main branch) are peer
 dependencies: the application chooses the one copy of each. OpenTelemetry
 asks this of libraries, so that every part of an application uses the one
 tracer provider; and the bridge must use the same copy of `provared` as
