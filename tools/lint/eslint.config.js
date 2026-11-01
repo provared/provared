@@ -7,7 +7,7 @@ import globals from 'globals';
 // The folders checked. ESLint is run from the top of the repository with
 // this file named by --config, so patterns are read from there. The Python
 // folder holds no JavaScript; Ruff checks it (ruff.toml here).
-const FOLDERS = ['src', 'bin', 'net', 'page', 'tools', 'integrations', 'gateway', 'sealer', 'conformance'];
+const FOLDERS = ['src', 'bin', 'net', 'page', 'tools', 'integrations', 'gateway', 'sealer', 'conformance', 'mcp-executor'];
 
 // Rules from ESLint's own list that each catch a fault (code that cannot do
 // what it seems to), not a matter of style.

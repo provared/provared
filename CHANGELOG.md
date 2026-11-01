@@ -2,6 +2,75 @@
 
 ## Unreleased
 
+- **An executor for MCP tool servers**, `mcp-executor/`
+  (`provared-mcp-executor` 0.1.0, not published), stage 1: the stdio
+  transport. An executor, in the words of the Internet-Draft
+  `draft-izmaylov-agent-permission-receipts-02`, is software other than
+  the agent that holds what its actions need and refuses an action the
+  permission does not allow. The agent's MCP client starts the executor as
+  if it were the tool server; the executor starts the real server with its
+  credential (from a file or the executor's own environment, never the
+  agent's), and passes every message of either revision of the protocol
+  through unchanged except two. `tools/call` is matched to an action by
+  the tool's name in a rules file, checked by the check before acting
+  through the agent's stub writer, which the executor holds; a call the
+  permission allows is sent on and gets a receipt that names the executor
+  in `with`, binds the arguments and the server's result by fingerprint,
+  and is countersigned with the executor's own key set once the outcome is
+  known; a call it does not allow is answered as a tool error that says
+  why, and written as a denial. `tools/list` comes back without the tools
+  that have no rule. Beside the book the executor keeps its own copy, one
+  tagged line before each call is sent (made sure to be on the disk
+  first) and one once its receipt is in the book, and `compare` holds that
+  copy against a book to find a receipt that was left out, which the draft
+  leaves unspecified. A call the executor cannot record is not sent. A
+  call cut off by a stop gets its receipt at the next start, from the copy,
+  naming `provared.error`. Lines from the agent are read strictly (no
+  batch, no member name given twice, an id that is text or a whole number),
+  and refused otherwise. The design, the HTTP transport and the content
+  rules of the plan's F-157 (design only), and 36 numbered choices for
+  review are in `mcp-executor/DESIGN.md`. Nothing in the library changes.
+  The test workflow runs the package's tests, and ESLint covers the folder.
+  An independent review of the first draft found one serious fault and
+  six of medium weight, each now fixed and a test (`test/review1.test.mjs`):
+  a receipt lost for good where the book file could not be written after a
+  call (the copy now keeps the outcome and the next start writes the
+  receipt from it); a late answer from a server that ignores cancellation
+  taken for a later call's under the same client id (each call now goes to
+  the server under an id of the executor's own); a `tools/call` sent as a
+  notification forwarded unchecked (dropped); the process staying alive
+  after its server ended (it ends with the server's code); no cap on calls
+  or list requests waiting (`maxWaiting`, default 16; 256 lists); a bare
+  program name found through the client's `PATH` (named by path, or
+  `server.path`, with a warning otherwise); a result that cannot be
+  fingerprinted leaving no outcome in the receipt (`provared.error` with a
+  fixed text). Smaller points: each copy line carries its number, so a
+  line taken out, put twice or moved stops the start; `compare` tells a
+  receipt the executor could not write apart from one the book lacks, does
+  not agree where the book has a problem, and makes no key; a whole number
+  beyond 2^53 - 1 anywhere in a line is refused; `check` writes nothing;
+  a permission naming other services beside the executor is warned about.
+  The founder's decision F-158 (content rules in the executor's settings,
+  fingerprinted into receipts and into the permission's `agent.software`;
+  the automatic late receipt kept; reserved names for a tool's name and
+  result to come in the library and draft -03) is recorded in `DESIGN.md`.
+  A narrow second review of those fixes found one serious and one medium
+  fault in the id mapping, both fixed and tests (`test/review2.test.mjs`):
+  a server answer holding a whole number beyond 2^53 - 1 was refused as
+  unreadable, so the call timed out and the receipt named a false timeout
+  (the server's lines are now read without that rule, reach the client in
+  the server's own bytes with only the id replaced, and such a result is
+  named as one that cannot be fingerprinted; an answer that cannot be read
+  at all still reaches the client, and the receipt says so); and only tool
+  calls were renamed, with guessable ids, so a `ping` under a call's id
+  could settle the call with the ping's answer (every request now goes
+  under an id with a random part). Requests the server never answers are
+  forgotten past 1,000. A receipt written at a restart names
+  `executor.written-late`, so that the book itself says so. A final check
+  found two small points, fixed: a server line naming `id` twice at its
+  top level, or a batch, is matched with no call and handed on as it is,
+  and the call ends by the timeout with a "no answer" receipt.
+
 - **The recorder beside Claude Code as a Claude Code plugin.** It can now
   be installed, with its hooks, in two commands in Claude Code:
   `/plugin marketplace add provared/provared`, then
