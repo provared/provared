@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- The gateway's test "M3: an agent may have only so many calls waiting"
+  no longer depends on how busy the computer is: each wait has 120
+  seconds, not 20, and the status is shown to answer without waiting for a
+  call by the upstream still holding that call, not by a time under one
+  second. It checks the same limit.
 - **Three more reserved document names** (format description, section
   27), in both languages: `provared.tool-name` (the fingerprint of the
   tool's name, exactly as the agent's software called it, which is not the
