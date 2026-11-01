@@ -262,7 +262,7 @@ const html = `<!doctype html>
 <meta name="twitter:title" content="A real record: the coding agent that builds Provared">
 <meta name="twitter:description" content="Kept day by day under a permission the author signed with a passkey. The checker's answer, and the files to check it yourself.">
 <meta name="twitter:image" content="https://prova.red/preview.png">
-<link rel="stylesheet" href="../style.css?v=4">
+<link rel="stylesheet" href="../style.css?v=6">
 </head>
 <body>
 <header>
