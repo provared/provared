@@ -64,9 +64,6 @@ function reset() {
   $('result').replaceChildren();
 }
 
-// The renderer heads the card of the record's top fingerprint "(the Seal)".
-// A record with no seal has a top fingerprint and no seal, so there the card
-// is headed by what it holds.
 /**
  * The checker's answer entry by entry is long (about eight phone screens).
  * The story above already shows each action and the summary, so the
@@ -85,13 +82,6 @@ function foldEntries(result) {
   fold.append(el('summary', '', `Show every entry, as the checker read it (${count} ${count === 1 ? 'entry' : 'entries'})`));
   heading.replaceWith(fold);
   fold.append(heading, ...moved);
-}
-
-function noSealHeading(result) {
-  if (result.summary.counts.seals !== 0) return;
-  for (const h of $('result').querySelectorAll('h3')) {
-    if (h.textContent === 'The top fingerprint (the Seal)') h.textContent = 'The top fingerprint';
-  }
 }
 
 // The live way: a new record, made and checked here.
@@ -117,7 +107,6 @@ async function runLive(limit) {
   $('checked-lead').textContent = 'The free checker now reads the whole record, as a stranger would, and checks every signature in it. It is told to trust the stand-in passkey that signed the permission, which this page made a moment ago. With a real record, you name the passkey of the person you trust.';
   $('checked').hidden = false;
   renderResult($('result'), made.result, { options: { issuerKeys: made.issuerKeys }, checkedBy: words.checkedBy });
-  noSealHeading(made.result);
   foldEntries(made.result);
   const first = made.result.summary.firstBreach;
   $('status').textContent = first === null
@@ -195,7 +184,6 @@ async function runSample() {
   $('checked').hidden = false;
   const result = await checker.result();
   renderResult($('result'), result, { options: trust, checkedBy: words.checkedBy });
-  noSealHeading(result);
   foldEntries(result);
   $('status').textContent = 'Done. The checker\'s answer is below.';
 }

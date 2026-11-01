@@ -28,19 +28,36 @@
 // loaded, a fault in this file), a call is refused before it is taken, and
 // Claude Code is told after it. Where the hook cannot even start, only
 // Claude Code's own setting "onFailure": "block" refuses the call.
+//
+// Run by the Claude Code plugin (hooks/hooks.json), it also looks, before
+// each call, for the recorder's hooks in a settings file of the project or
+// of the person (settings-hooks.mjs): where they are there too, each call
+// would be asked about and recorded twice, so the call is refused and the
+// person is told how to take one of the two out.
 
+import { existsSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { performance } from 'node:perf_hooks';
 
 const PORT = Number(process.env.PROVARED_CLAUDE_CODE_PORT || 8794);
 // The command that starts the recorder beside this hook, by its path, which works however it was installed.
 const RECORDER = fileURLToPath(new URL('./recorder.mjs', import.meta.url));
-const START = `node "${RECORDER}" start`;
+// Run from the Claude Code plugin, its entry (plugin.mjs) names how the person runs its commands.
+const RUN = process.env.PROVARED_CLAUDE_CODE_RUN || `node ${RECORDER.includes(' ') ? `"${RECORDER}"` : RECORDER}`;
+const START = process.env.PROVARED_CLAUDE_CODE_RUN ? `${RUN} start` : `node "${RECORDER}" start`;
+// The recorder's folder, as recorder.mjs names it: whether a permission was ever put in place there.
+const FOLDER = process.env.PROVARED_CLAUDE_CODE_DIR || join(homedir(), '.provared', 'claude-code');
 const AFTER = ['PostToolUse', 'PostToolUseFailure'];
 // How long the hook waits for the recorder: a call waits its turn while the
 // recorder seals the book or takes a new permission. It is less than the
 // hooks' own time-out (30 seconds, as "init" writes them), so that the hook
-// always answers before Claude Code gives up on it.
+// always answers before Claude Code gives up on it: 25 seconds from the
+// program's own start, whatever came before the question (loading, and,
+// for the plugin, looking through the settings files).
 const WAIT_MS = 25000;
+const DEADLINE = performance.timeOrigin + WAIT_MS;
 
 // The input as Claude Code wrote it, and as JSON reads it.
 let given = '';
@@ -69,7 +86,7 @@ async function ask(path, body) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(WAIT_MS),
+    signal: AbortSignal.timeout(Math.max(1000, Math.round(DEADLINE - Date.now()))),
   });
   const answer = await response.json();
   if (!response.ok) throw Object.assign(new Error(answer.error || `the recorder answered ${response.status}`), { refused: true, code: answer.code });
@@ -119,11 +136,27 @@ try {
   const call = { ...request, ...(typeof input.tool_use_id === 'string' ? { toolUseId: input.tool_use_id } : {}) };
 
   if (event === 'PreToolUse') {
+    // Run as the plugin: the recorder's hooks also in a settings file would ask about, and record, each call twice.
+    const settingsHooks = process.env.CLAUDE_PLUGIN_ROOT ? await import('./settings-hooks.mjs') : null;
+    if (settingsHooks?.runAsPlugin(dirname(RECORDER))) {
+      const project = process.env.CLAUDE_PROJECT_DIR || (typeof input.cwd === 'string' ? input.cwd : process.cwd());
+      const { found, problem } = settingsHooks.recorderHooksInSettings(project);
+      if (problem) {
+        deny(`Provared: before each call the plugin looks in the settings files for the recorder's hooks, which would ask about and record each call twice, and ${problem}. This call is not taken. Make the file smaller, or turn the plugin off.`);
+        process.exit(0);
+      }
+      if (found.length > 0) {
+        deny(settingsHooks.doubledWords(found, RUN, project));
+        process.exit(0);
+      }
+    }
     let answer;
     try {
       answer = await ask('/before', call);
     } catch (e) {
-      deny(notRunning(e)
+      deny(notRunning(e) && !existsSync(join(FOLDER, 'slip.json'))
+        ? `Provared: no permission has been signed for this agent yet, so the recorder beside Claude Code is not running, and this call is not recorded and is not taken. Ask the person to set it up, in a terminal: ${RUN} init (it makes the agent's keys and prints a link to https://sign.prova.red/, where they sign the permission with their own passkey), then ${RUN} use <the saved file>. Nothing signs for them.`
+        : notRunning(e)
         ? `Provared: the recorder beside Claude Code is not running, so this call is not recorded and is not taken. Ask the person to start it: ${START}`
         : `Provared: the recorder beside Claude Code did not answer (${e.message}), so this call is not recorded and is not taken.`);
       process.exit(0);
@@ -145,7 +178,7 @@ try {
       ? `Provared: the stub for this call (${which}) is not yet in the book file: ${e.message}. The action was taken.`
       : e.refused || notRunning(e)
         ? `Provared: the stub for this call (${which}) was not written: ${e.message}. The action was taken and is not in the record.`
-        : `Provared: the recorder did not confirm the stub for this call (${which}) within ${WAIT_MS / 1000} seconds (${e.message}). The action was taken and is not shown to be in the record.`);
+        : `Provared: the recorder did not confirm the stub for this call (${which}) within its time (${e.message}). The action was taken and is not shown to be in the record.`);
     process.exit(2);
   }
 } catch (e) {

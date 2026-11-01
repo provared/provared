@@ -567,10 +567,12 @@ test('the service keeps the book on disk and opens it again; its keys are kept a
 });
 
 test('with no recorder running, a call is refused before and reported after', async () => {
-  const free = await startService({ folder: (await world()).folder, port: 0 });
+  const { folder } = await world();
+  const free = await startService({ folder, port: 0 });
   const port = free.port;
   await free.close();
-  const before = await runHook(port, 'PreToolUse', 'Bash', { command: 'npm test' });
+  // The hook is told the recorder's folder, where a permission is in place, so that it says to start the recorder.
+  const before = await runHook(port, 'PreToolUse', 'Bash', { command: 'npm test' }, { env: { PROVARED_CLAUDE_CODE_DIR: folder } });
   assert.equal(before.code, 0);
   assert.equal(before.decision.permissionDecision, 'deny');
   assert.match(before.decision.permissionDecisionReason, /not running/);
