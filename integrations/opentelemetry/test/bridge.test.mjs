@@ -39,6 +39,7 @@ const finished = async () => {
   await provider.forceFlush();
   return exporter.getFinishedSpans();
 };
+const spansNamed = async (name) => (await finished()).filter((s) => s.name === name);
 const spanNamed = async (name) => {
   const spans = (await finished()).filter((s) => s.name === name);
   assert.equal(spans.length, 1, `one span named ${name}`);
@@ -291,8 +292,24 @@ test('the identifier the model gave the call: on the span, never in the receipt'
   await tools.order({ item: 'x' }, { toolCallId: 'call_abc123' });
   const span = await spanNamed('execute_tool order');
   assert.equal(span.attributes['gen_ai.tool.call.id'], 'call_abc123');
-  // It is the model's identifier, not the platform's, so it is not "provared.event-id" (section 27).
-  assert.deepEqual(documentsOf(written[0]).map((d) => d.name), ['provared.arguments']);
+  // It is the model's identifier, so the receipt names it as "provared.tool-call-id", never as "provared.event-id" (section 27).
+  assert.deepEqual(documentsOf(written[0]).map((d) => d.name), ['provared.arguments', 'provared.tool-call-id']);
+  assert.equal(documentsOf(written[0])[1].sha256, await identifierFingerprint('call_abc123'));
+});
+
+test('a "callId" that gives anything but text of 1 to 256 characters is set aside: neither the span nor the receipt names it', async () => {
+  const { recorder } = await shop({ count: 5 });
+  const written = [];
+  const tools = traceTools(
+    recorder,
+    { order: { ...orderTool([]), callId: (extra) => extra?.toolCallId } },
+    { onStub: (s) => written.push(s) },
+  );
+  for (const [i, bad] of [12, '', 'x'.repeat(257), undefined, '\udc00'].entries()) {
+    await tools.order({ item: 'x' }, { toolCallId: bad });
+    assert.deepEqual(documentsOf(written[i]).map((d) => d.name), ['provared.arguments'], String(bad));
+  }
+  for (const span of await spansNamed('execute_tool order')) assert.equal(span.attributes['gen_ai.tool.call.id'], undefined);
 });
 
 test('a tool\'s own documents are kept, and "details: false" leaves only the binding', async () => {
@@ -474,7 +491,26 @@ test('traceAct passes a "details" that is not a list on as it is, for "act" to r
   assert.notEqual(alone.done, true);
 });
 
-test('the only "provared.event-id" in a receipt is the one the caller names: the model\'s identifier never goes in', async () => {
+test('a receipt names "provared.tool-call-id" once: where the caller\'s own documents name it, the bridge adds nothing', async () => {
+  const { recorder } = await shop({ count: 5 });
+  const own = { name: 'provared.tool-call-id', sha256: await identifierFingerprint('call_own') };
+  const written = [];
+  const tools = traceTools(recorder, { order: { action: ORDER, run: async () => 1, details: async () => [own], callId: () => 'call_model_3', sendsTrace: true } }, { onStub: (s) => written.push(s) });
+  assert.equal(await tools.order({}), 1);
+  assert.deepEqual(namesOf(written[0]), ['provared.tool-call-id', 'provared.trace-id']);
+  assert.deepEqual(documentsOf(written[0])[0], own, 'the caller\'s fingerprint stands');
+  assert.equal((await spanNamed('execute_tool order')).attributes['gen_ai.tool.call.id'], 'call_model_3');
+
+  const outcome = await traceAct(recorder, { action: ORDER, details: [own] }, async () => 'ok', {}, { callId: 'call_model_4', sendsTrace: true });
+  assert.equal(outcome.done, true, JSON.stringify(outcome.answer));
+  assert.deepEqual(namesOf(outcome.stub), ['provared.tool-call-id', 'provared.trace-id']);
+  assert.deepEqual(documentsOf(outcome.stub)[0], own);
+  // With nothing to add, the request is handed to "act" as it was given.
+  const same = await traceAct(recorder, { action: ORDER, details: [own] }, async () => 'ok', {}, { callId: 'call_model_5' });
+  assert.deepEqual(namesOf(same.stub), ['provared.tool-call-id']);
+});
+
+test('the only "provared.event-id" in a receipt is the one the caller names: the model\'s identifier goes in as "provared.tool-call-id"', async () => {
   const { recorder } = await shop({ count: 5 });
   const outcome = await traceAct(
     recorder,
@@ -483,16 +519,18 @@ test('the only "provared.event-id" in a receipt is the one the caller names: the
     { detailsAfter: async (r) => [{ name: 'provared.event-id', sha256: await identifierFingerprint(r.id) }] },
     { callId: 'call_model_1', sendsTrace: true },
   );
-  assert.deepEqual(namesOf(outcome.stub), ['provared.trace-id', 'provared.event-id']);
-  assert.equal(documentsOf(outcome.stub)[1].sha256, await identifierFingerprint('platform-1'));
+  assert.deepEqual(namesOf(outcome.stub), ['provared.trace-id', 'provared.tool-call-id', 'provared.event-id']);
+  assert.equal(documentsOf(outcome.stub)[1].sha256, await identifierFingerprint('call_model_1'));
+  assert.equal(documentsOf(outcome.stub)[2].sha256, await identifierFingerprint('platform-1'));
   assert.equal((await spanNamed(`execute_tool ${ORDER}`)).attributes['gen_ai.tool.call.id'], 'call_model_1');
 
   const own = { name: 'provared.event-id', sha256: await identifierFingerprint('platform-2') };
   const written = [];
   const tools = traceTools(recorder, { order: { action: ORDER, run: async () => 1, details: async () => [own], callId: () => 'call_model_2', sendsTrace: true } }, { onStub: (s) => written.push(s) });
   await tools.order({});
-  assert.deepEqual(namesOf(written[0]), ['provared.event-id', 'provared.trace-id']);
+  assert.deepEqual(namesOf(written[0]), ['provared.event-id', 'provared.trace-id', 'provared.tool-call-id']);
   assert.deepEqual(documentsOf(written[0])[0], own);
+  assert.equal(documentsOf(written[0])[2].sha256, await identifierFingerprint('call_model_2'));
 });
 
 test('traceAct names its span after the action only where the action has the form of one', async () => {
@@ -624,7 +662,7 @@ test('options are checked: an unknown option, and agentName, callId and toolName
   const span = await spanNamed('execute_tool place_order');
   assert.equal(span.attributes['gen_ai.agent.name'], 'Agent A');
   assert.equal(span.attributes['gen_ai.tool.call.id'], 'call_9');
-  assert.deepEqual(namesOf(outcome.stub), ['provared.trace-id']);
+  assert.deepEqual(namesOf(outcome.stub), ['provared.trace-id', 'provared.tool-call-id']);
 });
 
 test('a tool not said to send the trace: the receipt names no trace, and the span still names the receipt', async () => {

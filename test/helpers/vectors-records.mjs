@@ -1099,6 +1099,8 @@ function denialContents() {
     ['reserved document names: the arguments and the platform\'s identifier', { ...DENIAL, details: [{ name: 'provared.arguments', sha256: FP2 }, { name: 'provared.event-id', sha256: FP }] }],
     ['a reserved document name not on the list', { ...DENIAL, details: [{ name: 'provared.secret', sha256: FP2 }] }],
     ['the arguments named twice', { ...DENIAL, details: [{ name: 'provared.arguments', sha256: FP2 }, { name: 'provared.arguments', sha256: FP }] }],
+    ['reserved document names: the tool\'s name and the model\'s identifier for the call', { ...DENIAL, details: [{ name: 'provared.tool-name', sha256: FP2 }, { name: 'provared.tool-call-id', sha256: FP }] }],
+    ['the tool\'s result named twice', { ...DENIAL, details: [{ name: 'provared.tool-result', sha256: FP2 }, { name: 'provared.tool-result', sha256: FP }] }],
     ['a faulty id, slip and pass: the id is reported', { ...DENIAL, id: 'x', slip: 'x', pass: 'x' }],
     ['a faulty pass and action: the pass is reported', { ...DENIAL, pass: 'x', action: 'A' }],
     ['a faulty action, amount and source: the action is reported', { ...DENIAL, action: 'A', amount: {}, source: 'x' }],

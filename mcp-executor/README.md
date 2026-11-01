@@ -52,7 +52,11 @@ npm pack
 npm install -g ./provared-mcp-executor-0.1.0.tgz
 ```
 
-It needs Node.js 24.7 or later, and depends only on the `provared` library.
+It needs Node.js 24.7 or later, and depends only on the `provared` library,
+at a version after 0.6.0 and before 0.8.0: its receipts name
+`provared.tool-name` and `provared.tool-result`, which the format reserved
+after 0.6.0 and which a checker of 0.5.0 or 0.6.0 refuses (0.4.0 and
+earlier read them as labels).
 
 ## Set it up
 
@@ -242,10 +246,10 @@ It needs Node.js 24.7 or later, and depends only on the `provared` library.
 6. **Sending.** The call goes to the server as the client wrote it, with
    the executor's identifier added to `params._meta`. The stub names
    `provared.arguments` (the arguments in the one form of RFC 8785; `{}`
-   where there are none), `mcp.tool` (the tool's name), `executor.call`
+   where there are none), `provared.tool-name` (the tool's name), `executor.call`
    and `provared.request-id` (the executor's identifier), and
    `provared.trace-id` where the call's `_meta` carried a well-formed
-   `traceparent`. After the answer it names `mcp.result` (the server's
+   `traceparent`. After the answer it names `provared.tool-result` (the server's
    whole `result`, in the one form of RFC 8785) or, where there was no
    result, `provared.error` (the text of the error the client is given, or
    the server's JSON-RPC error as JSON). A result that cannot be written in

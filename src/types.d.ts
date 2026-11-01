@@ -928,7 +928,7 @@ export const DOCUMENT_NAMES: Readonly<Record<string, string>>;
 export function httpRequestFingerprint(r: { method: string; url: string; body?: Uint8Array }): Promise<Fingerprint>;
 /** For "provared.http-response": the status code, and the body's bytes where there is a body. */
 export function httpResponseFingerprint(r: { status: number; body?: Uint8Array }): Promise<Fingerprint>;
-/** For "provared.trace-id", "provared.request-id", "provared.event-id" and "provared.error": SHA-256 of the text's UTF-8 bytes, exactly as given. */
+/** For "provared.trace-id", "provared.request-id", "provared.event-id", "provared.error", "provared.tool-name" and "provared.tool-call-id": SHA-256 of the text's UTF-8 bytes, exactly as given. A tool's result ("provared.tool-result") is fingerprinted with argumentsFingerprint. */
 export function identifierFingerprint(id: string): Promise<Fingerprint>;
 export const ACTION_KINDS: Record<string, string>;
 export const SHARED_ACTIONS: Record<string, [kind: string, meaning: string]>;

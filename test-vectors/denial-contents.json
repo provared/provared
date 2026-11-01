@@ -3915,6 +3915,63 @@
    }
   },
   {
+   "name": "reserved document names: the tool's name and the model's identifier for the call",
+   "content": {
+    "type": "provared.denial.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "source": "check",
+    "codes": [
+     "over-limit"
+    ],
+    "when": "2026-10-05T09:00:00Z",
+    "details": [
+     {
+      "name": "provared.tool-name",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "provared.tool-call-id",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     }
+    ]
+   },
+   "expected": {
+    "ok": true
+   }
+  },
+  {
+   "name": "the tool's result named twice",
+   "content": {
+    "type": "provared.denial.v0",
+    "id": "AgICAgICAgICAgICAgICAg",
+    "slip": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "action": "supplies.order",
+    "source": "check",
+    "codes": [
+     "over-limit"
+    ],
+    "when": "2026-10-05T09:00:00Z",
+    "details": [
+     {
+      "name": "provared.tool-result",
+      "sha256": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"
+     },
+     {
+      "name": "provared.tool-result",
+      "sha256": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+     }
+    ]
+   },
+   "expected": {
+    "refused": {
+     "code": "bad-field",
+     "message": "details[1].name: this reserved name is named twice. Only provared.trace-id, provared.request-id and provared.event-id may be named more than once."
+    }
+   }
+  },
+  {
    "name": "a faulty id, slip and pass: the id is reported",
    "content": {
     "type": "provared.denial.v0",

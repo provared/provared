@@ -1250,6 +1250,7 @@ async function detailsAfterScenarios() {
     act('a', order(16), later({ gives: [doc('provared.event-id')], clockAdd: 200 * 1000 }), { gives: 'slow' }),
     act('a', order(17), { detailsAfter: { gives: [doc('provared.event-id')] }, countersign: SIGN }, { gives: 'countersigned' }),
     act('a', order(18), later({ gives: [doc('provared.event-id')], meddle: true }), { gives: 'changed afterwards' }),
+    act('a', order(19), later({ gives: [doc('provared.tool-result', await argumentsFingerprint({ ok: true, id: 'evt-19' }))] }), { gives: { ok: true, id: 'evt-19' } }),
     check('a'),
     book('a'),
   );
@@ -1272,6 +1273,7 @@ async function detailsAfterScenarios() {
     act('a', order(12), later({ gives: [doc('provared.arguments'), doc('provared.arguments', fp)] }), { gives: 12 }),
     act('a', { ...order(13), details: [doc('provared.error')] }, later({ gives: [doc('provared.error', fp)] }), { gives: 13 }),
     act('a', { ...order(14), details: [doc('provared.event-id')] }, later({ gives: [doc('provared.event-id', fp), doc('provared.trace-id'), doc('provared.trace-id', fp)] }), { gives: 14 }),
+    act('a', { ...order(15), details: [doc('provared.tool-result', fp)] }, later({ gives: [doc('provared.tool-result')] }), { gives: 15 }),
     check('a'),
   );
   cases.push(f.done());

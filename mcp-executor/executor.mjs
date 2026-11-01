@@ -34,10 +34,10 @@ import { CODES, MAX_LINE_BYTES, idKey, isId, notificationLine, readLines, readMe
 
 /** The document, in each stub and denial, whose fingerprint is that of the executor's own identifier for the call (a label, not a reserved name). */
 export const CALL_DOCUMENT = 'executor.call';
-/** The document whose fingerprint is that of the tool's name (a label). */
-export const TOOL_DOCUMENT = 'mcp.tool';
-/** The document whose fingerprint is that of the server's result, written in the one form of RFC 8785 (a label). */
-export const RESULT_DOCUMENT = 'mcp.result';
+/** The document whose fingerprint is that of the tool's name, as the client called it (reserved; format description, section 27). */
+export const TOOL_DOCUMENT = 'provared.tool-name';
+/** The document whose fingerprint is that of the server's result, written in the one form of RFC 8785 (reserved; section 27). */
+export const RESULT_DOCUMENT = 'provared.tool-result';
 /** The member of a call's params._meta in which the executor sends its identifier for the call to the server. */
 export const CALL_META = 'red.prova/call-id';
 /** The action name a denial carries for a call to a tool that no rule names. */

@@ -19,6 +19,7 @@ import {
   thumbprint,
   writeStub,
 } from '../src/index.js';
+import { REPEATABLE_DOCUMENT_NAMES } from '../src/documents.js';
 import { httpRequestBase, httpResponseBase } from '../src/documents.js';
 import { MAX_LINE_BYTES } from '../src/book.js';
 import { lineBound } from '../src/guard.js';
@@ -34,7 +35,7 @@ async function opened(w, more = {}) {
   return openWriter({ book: w.book(), slip: w.slipFingerprint, privateKeys: w.agent.privateKeys, issuerKeys: [await thumbprint(w.passkey.key)], ...more });
 }
 
-test('seven document names are reserved, each beginning "provared.", and the list cannot be changed', () => {
+test('ten document names are reserved, each beginning "provared.", and the list cannot be changed', () => {
   assert.equal(RESERVED_DOCUMENT_PREFIX, 'provared.');
   assert.deepEqual(Object.keys(DOCUMENT_NAMES).sort(), [
     'provared.arguments',
@@ -43,8 +44,13 @@ test('seven document names are reserved, each beginning "provared.", and the lis
     'provared.http-request',
     'provared.http-response',
     'provared.request-id',
+    'provared.tool-call-id',
+    'provared.tool-name',
+    'provared.tool-result',
     'provared.trace-id',
   ]);
+  // The three names added after version 0.6.0 may each appear once only.
+  for (const name of ['provared.tool-name', 'provared.tool-call-id', 'provared.tool-result']) assert.ok(!REPEATABLE_DOCUMENT_NAMES.includes(name));
   assert.ok(Object.isFrozen(DOCUMENT_NAMES));
 });
 

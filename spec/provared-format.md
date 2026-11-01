@@ -2139,8 +2139,9 @@ can then work out the fingerprint again and match the two records,
 without either side's help. Only an identifier is meant to pick out one
 call. A stub may also name fingerprints of some of what was sent and
 received (the arguments; an HTTP request's method, address and body; an
-answer's status and body); those show that the content matches, not
-that it was the same call.
+answer's status and body; the name of the tool that was called, and its
+result); those show that the content matches, not that it was the same
+call.
 
 So document names (section 5.1) that begin `provared.` are reserved. A
 document name that begins `provared.` and is not in this list MUST be
@@ -2163,9 +2164,33 @@ exactly this text, in UTF-8:
 | `provared.request-id` | An identifier that the agent's side chose and sent with the call, exactly as sent |
 | `provared.event-id` | An identifier that the platform gave for the call, exactly as it gave it |
 | `provared.error` | The error text that the agent's software was given, exactly as given |
+| `provared.tool-name` | The name of the tool, exactly as the agent's software called it: the name the tool server, the framework or the model knows it by, which is not the action name of the slip (several tools may be one action) |
+| `provared.tool-call-id` | The identifier that the model gave the tool call, exactly as the agent's software received it (such as the `id` of a tool call in the model's answer) |
+| `provared.tool-result` | The tool's result, written in the one form of RFC 8785, as the arguments are: the whole value the tool gave back to the agent's software. Never the result itself |
 
-An identifier or an error text MUST be one character or more, and
-well-formed Unicode.
+An identifier, an error text or a tool's name MUST be one character or
+more, and well-formed Unicode. A result that cannot be written in the
+one form of RFC 8785 (a value that is not JSON, text that is not
+well-formed Unicode, a whole number that form cannot write exactly) has
+no fingerprint,
+and the stub then names no result; whoever writes the stub MAY say so
+under `provared.error`.
+
+**The tool's name, the model's identifier and the result.** These three
+names were added after version 0.6.0 of the libraries. A stub's `action`
+is a name from the slip's own vocabulary; `provared.tool-name` binds the
+stub to the tool that was called under it, which is the name that the
+tool server's or the framework's own log shows. `provared.tool-call-id`
+binds the stub to the model's request for the call: the identifier that
+the model's provider wrote into its answer, and so into the record of
+the conversation that the provider or the agent's software keeps. It is
+the model's identifier, not the platform's (`provared.event-id`) and not
+one the agent's side chose and sent (`provared.request-id`): where the
+agent's software calls the tool twice for one request of the model (a
+retry), two stubs name one identifier. `provared.tool-result` binds the
+stub to what came back, as `provared.arguments` binds it to what was
+asked; an investigator who holds the result can work the fingerprint out
+again. Each of the three MUST appear at most once in a record.
 
 **How a request or an answer is written.** As the signature base of RFC
 9421 (HTTP Message Signatures), section 2.5, with no signature
@@ -2220,21 +2245,33 @@ with the body `{"hello": "world"}` is written as these four lines:
   identifier shows that the two records speak of one call, not that the
   call did what either says.
 - Only `provared.trace-id`, `provared.request-id` and `provared.event-id`
-  are meant to pick out one call. `provared.arguments`,
-  `provared.http-request`, `provared.http-response` and `provared.error`
-  show only that the content matches: identical requests, and identical
-  answers (many a `200` with the body `{}`), share one fingerprint, so a
-  match with one of them does not show that it was the same call.
-- A fingerprint of an identifier, or of arguments, that is short or easy
-  to guess can be guessed: it hides nothing from someone who can try
-  the likely values.
+  are meant to pick out one call; `provared.tool-call-id` picks out one
+  request of the model, which may be carried out more than once.
+  `provared.arguments`, `provared.http-request`,
+  `provared.http-response`, `provared.error`, `provared.tool-name` and
+  `provared.tool-result` show only that the content matches: identical
+  requests, and identical answers (many a `200` with the body `{}`, many
+  a result `"ok"`), share one fingerprint, and every call of one tool
+  shares its name's fingerprint, so a match with one of them does not
+  show that it was the same call.
+- A fingerprint of an identifier, of arguments, of a tool's name or of a
+  result that is short or easy to guess can be guessed: it hides nothing
+  from someone who can try the likely values. A tool's name is the most
+  guessable (a reader tries the names of the framework's or the server's
+  tools), and a short result (`"ok"`, `{}`, `true`) is little better; so
+  "never the result itself" keeps the result out of the record, and does
+  not hide it.
 - A checker cannot see whether a fingerprint was made from the text this
   section names: only someone who holds that text can work it out again.
 - Records written before this section was added may use names that
-  begin `provared.` that are not in the list, or name one of the four
+  begin `provared.` that are not in the list, or name one of the
   once-only names twice; such records are refused, so a book that holds
   one no longer passes its check. A checker that does not know this
-  section reads a reserved name as a label.
+  section reads a reserved name as a label. A checker that knows the
+  first seven names only (versions 0.5.0 and 0.6.0 of the libraries)
+  refuses a record that names `provared.tool-name`,
+  `provared.tool-call-id` or `provared.tool-result`, as it refuses any
+  name it does not know.
 
 ## 28. The denial
 
