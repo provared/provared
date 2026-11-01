@@ -181,9 +181,9 @@ test('the README\'s commands work from a copy of the repository as written, and 
   const args = ['judge', '--slip', slip, '--keys', ownKeys, '--receipts', receipts, '--service', 'amw', '--credits', 'credits:2', '--issuer-key', made.issuerKeys[0]];
   const judged = await command(['integrations/agent-middleware/bin.mjs', ...args], { cwd: ROOT, env: plainEnv(), node: ['--import', './integrations/agent-middleware/test/local-library.mjs'] });
   assert.equal(judged.code, 0, judged.stdout + judged.stderr);
-  // The package names the library only as a peer, at a version after 0.6.0, and pins no other.
+  // The package names the library only as a peer, 0.7.0 or later, and pins no other.
   const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
-  assert.equal(pkg.peerDependencies.provared, '>0.6.0 <0.8.0');
+  assert.equal(pkg.peerDependencies.provared, '^0.7.0');
   assert.equal(pkg.devDependencies?.provared, undefined);
 });
 

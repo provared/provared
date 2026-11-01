@@ -49,10 +49,10 @@ node integrations/agent-middleware/bin.mjs verify --keys keys.json --receipt rec
 node --import ./integrations/agent-middleware/test/local-library.mjs integrations/agent-middleware/bin.mjs judge --slip slip.json --keys keys.json --receipts receipts.json --service amw --issuer-key <thumbprint> --credits credits:2
 ```
 
-`verify` needs Node.js alone. `judge` needs the library `provared` at a
-version after 0.6.0 (`peerDependencies`: `>0.6.0 <0.8.0`), which is not
-yet on npm; until it is, the `--import` above points the name `provared`
-at the copy of the repository you are in, as the tests do. The package
+`verify` needs Node.js alone. `judge` needs the library `provared` 0.7.0
+or later (`peerDependencies`: `^0.7.0`). From a copy of the repository,
+where the library is not installed by that name, the `--import` above
+points the name `provared` at the copy you are in, as the tests do. The package
 pins no other version of the library.
 
 The command ends with code 0 only where every receipt verified, every
