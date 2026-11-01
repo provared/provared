@@ -37,10 +37,10 @@ export function tempFolder() {
 export const ACTIONS = ['provared.data.read', 'supplies.order', 'slow.work', 'tool.run'];
 
 /** A slip for the agent's keys that names the executor in "with" with its keys, signed with the development stand-in for a passkey. */
-export async function signSlip({ passkey, agentKeys, executorKeys, service = 'executor', actions = ACTIONS, limits = [], never = [], requires = [{ need: 'countersignature' }], with: services, from = Date.now() - 60000, until = Date.now() + 3600000 }) {
+export async function signSlip({ passkey, agentKeys, executorKeys, service = 'executor', actions = ACTIONS, limits = [], never = [], requires = [{ need: 'countersignature' }], with: services, software, from = Date.now() - 60000, until = Date.now() + 3600000 }) {
   const prepared = await prepareSlip({
     issuer: { name: 'Sam (development)', key: passkey.key, rpId: passkey.rpId, origin: passkey.origin },
-    agent: { name: 'An agent, through the MCP executor', keys: agentKeys },
+    agent: { name: 'An agent, through the MCP executor', keys: agentKeys, ...(software ? { software } : {}) },
     actions,
     limits,
     requires,

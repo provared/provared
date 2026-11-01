@@ -112,7 +112,9 @@ check and receipt `tools/call`; filter `tools/list`; countersign; keep the
 copy; refuse calls the executor cannot record; write the receipt of a call
 cut off by a stop at the next start; the comparison of the copy with the
 book (`compare`). Not in stage 1: the HTTP transport, several agents on one
-executor, sealing, the acknowledgement command, content rules (F-157).
+executor, sealing, the acknowledgement command. The rules on the content of
+a change (F-157, F-158; section 11) were built next, as the first piece of
+stage 2.
 
 ## 5. The flow of one `tools/call`
 
@@ -121,6 +123,9 @@ executor, sealing, the acknowledgement command, content rules (F-157).
 2. The tool's name picks the rule (X7). No rule: refused as unlisted, with
    a denial (X15), unless the settings say to forward unlisted tools.
 3. The amount, as the rule says (X8). Unreadable: refused, with a denial.
+3a. The rules on content, where the settings name a rules file (section
+   11, X56 to X70): a call that a rule refuses, or whose content a rule
+   cannot read exactly, is refused with a denial that names the rule.
 4. The request for the stub writer: the rule's action, the amount, `with`
    = the executor's id, and the documents (X12).
 5. The stub writer's `act` (format description, section 20): the check
@@ -154,6 +159,7 @@ gives one; `with` the executor's id; `details`:
 | `executor.call` | the executor's own identifier for the call | no, a label |
 | `provared.request-id` | the same identifier, as sent to the server in `_meta` (absent with `callIdInMeta: false`) | yes |
 | `provared.trace-id` | the trace-id of a well-formed `traceparent` in the call's `_meta` | yes |
+| `executor.rules` | the rules file on content in force (its parsed content in the one form of RFC 8785); only where the settings name one | no, a label |
 | `provared.tool-result` | the server's `result`, in the one form of RFC 8785 (added after the call) | yes (added after 0.6.0) |
 | `provared.error` | the error text (added after the call where there was no result, or where the result could not be fingerprinted or the answer not read) | yes |
 | `executor.written-late` | a fixed text; only in a receipt written at a restart, from the copy | no, a label |
@@ -177,9 +183,13 @@ call (an `isError` result is still "what came back").
 
 **The denial** (section 28): source `check` with the codes where the check
 before acting refused; source `rule` where no rule names the tool
-(`executor.unlisted`) or the amount cannot be read. It names what was
-asked for (`provared.arguments`, `provared.tool-name`, `provared.trace-id`) and
-never `executor.call` or `provared.request-id`, which were never sent.
+(`executor.unlisted`), the amount cannot be read, or a rule on content
+refused. It names what was asked for (`provared.arguments`,
+`provared.tool-name`, `provared.trace-id`, `executor.rules`) and never
+`executor.call` or `provared.request-id`, which were never sent. A denial
+by a rule on content also names `executor.rule`, the fingerprint of the
+refusing rule's name (a label), so that whoever holds the rules file can
+tell which rule said no.
 
 **The permission** must name the agent's keys as the executor holds them,
 and the executor in `with` with its keys. It should require a
@@ -337,17 +347,65 @@ The rest is the same: the rules, the check, the documents, the
 countersignature, the copy. The gateway's HTTP code (headers never
 forwarded, the body limit, the journal) is the starting point.
 
-## 11. F-157: rules on the content of a change (design only)
+## 11. F-157: rules on the content of a change
 
 The question: a call changes a label in a settings file, and the same edit
 switches on a `scan` setting. A rule "the `scan` setting in this file stays
-false" should stop it before the call is let through.
+false" should stop it before the call is let through. A permission allows
+kinds of action; being allowed to change a file is not being allowed to
+change everything the file controls.
 
-**Decided (the founder, F-158).** Content rules live in the executor's own
-settings, fingerprinted into each receipt, and the person places the same
-fingerprint in the permission's `agent.software`. This is design only for
-now: nothing of it is built in stage 1. The three places that were weighed,
-and the reasoning, stand below.
+**Decided (the founder, F-158), and built (1 November 2026; choices X56
+to X70).** The rules live in a file of the executor's own, named by the
+setting `contentRules`; the file's fingerprint goes into every receipt
+and denial as the label document `executor.rules`; the person puts the
+same fingerprint into the permission's `agent.software`, so the format
+does not change. The code is `rules.mjs`.
+
+**How it is used.**
+
+```json
+{
+  "version": 1,
+  "rules": [
+    {
+      "name": "the scan setting in settings.json stays off",
+      "tool": "write_file",
+      "when": { "pointer": "/path", "matches": "**settings.json" },
+      "content": { "pointer": "/content", "as": "json" },
+      "test": { "pointer": "/scan", "equals": false, "orAbsent": true }
+    },
+    {
+      "name": "settings.json is written whole, never edited in part",
+      "tool": ["edit_file", "apply_patch"],
+      "when": { "pointer": "/path", "matches": "**settings.json" }
+    }
+  ]
+}
+```
+
+A rule names a tool (or several); says which calls it applies to
+(`when`: conditions on the arguments, all of which must hold; none means
+every call); where the proposed content is in the arguments and how to
+read it (`content`: a JSON Pointer, and `json` for an argument that is
+text holding JSON, or `value` for one that is the content itself as plain
+data; none means the tests are on the arguments themselves); and what
+must hold (`test`: conditions, all of which must hold). A condition is a
+JSON Pointer (RFC 6901) and exactly one of `equals` (the same JSON value),
+`oneOf` (one of a list), `absent` (not present) or `matches` (a pattern
+over text: `*` within one path part, `**` across parts, `?` one
+character); `orAbsent: true` lets a missing value pass. **A rule with no
+`test` refuses every call it applies to.** That is how a person closes a
+route the executor cannot judge, such as a tool that carries only a
+partial edit.
+
+Before the check before acting, the executor tests the call against every
+rule that names its tool, in the file's order. The first rule that refuses
+gives the denial: `content-rule` where a test did not hold or a rule with
+no test applied; `content-unreadable` where the rule could not read what
+it tests exactly. The model is told which rule and what it asked for,
+never a value from the arguments. The executor reads no file and keeps no
+content: it tests only what the call carries.
 
 **Where such rules live.** Three places were weighed:
 
@@ -356,16 +414,19 @@ and the reasoning, stand below.
   format: a slip member that every checker must read, and a new kind of
   finding. The plan has a stop on new kinds of record in the core, and a
   change to the slip needs the founder's decision. Not proposed for now.
-- *The executor's own settings, named by fingerprint* (recommended). The
+- *The executor's own settings, named by fingerprint* (chosen, F-158). The
   rules are a file of the executor's (`contentRules`), checked before the
   stub writer is asked. Each stub names a label document `executor.rules`
   whose fingerprint is the SHA-256 of the rules file in the one form of
   RFC 8785, so that a reader knows which rules were in force for each call.
-  And, with no change to the format, the person can put that same
+  And, with no change to the format, the person puts that same
   fingerprint into the permission's `agent.software` (format description,
   section 4.1: "the agent's program and settings as the person approved
   them"; a statement, shown as such). A checker then shows that the rules
-  in force were the ones the person approved, without judging them.
+  in force were the ones the person approved, without judging them. The
+  executor itself holds the two together at start (X62): where the
+  permission states software and these rules are not among it, it does
+  not start.
 - *A rule in the permission's `never` list.* The list holds names from a
   short shared list of rules of conduct, which a checker cannot test; a
   content rule is not one of them.
@@ -374,27 +435,29 @@ and the reasoning, stand below.
 tool's name and its `arguments`; it does not see the file, the database or
 the service behind the tool. So:
 
-- A rule over the arguments: a JSON Pointer into `arguments`, and a test
-  (`equals`, `matches` a pattern, `oneOf`, `notPresent`), for calls to a
-  named tool, optionally only where another pointer has a given value
-  (`"when": {"pointer": "/path", "equals": "settings.json"}`).
-- A rule over content carried whole: where a tool's argument holds the
-  whole new content of a file (`write_file` with `content`), the executor
-  can parse it (`"parse": "json"`, or a line-based `key = value` form) and
-  test a pointer in it: `{"tool": "write_file", "when": {"pointer":
-  "/path", "equals": "settings.json"}, "parse": {"pointer": "/content",
-  "as": "json"}, "test": {"pointer": "/scan", "equals": false}}`.
+- A rule over the arguments (no `content`): the tests read the arguments
+  themselves.
+- A rule over content carried whole (`content`): where a tool's argument
+  holds the whole new content of a file (`write_file` with `content`), the
+  executor reads it as JSON text, or takes it as plain data, and tests
+  pointers in it.
 - A rule over a partial edit (an `old_string`/`new_string` pair) cannot
-  know the file that results without reading the file. The executor could
-  read it through the server's own read tool before the write (one more
-  call, under the same permission, recorded as a read) and apply the edit
-  itself to test the result; between its read and the server's write the
-  file may change. This is the one place a content rule needs the
-  executor to act, and it is stated as such.
+  know the file that results without reading the file. Two ways were
+  weighed and not built: reading the file through the server's own read
+  tool before the write (one more call under the same permission; the
+  executor's own view, not the server's; a file on another machine out of
+  reach; the file may change between the read and the write), and
+  comparing with the last content the executor let through (another route
+  may have changed the file since, and the executor would then hold
+  content, which nothing of its own holds today). Instead a rule with no
+  `test` refuses such calls, and the person makes the agent write the
+  file whole (X58).
 
-Each refusal by a content rule is a denial with source `rule`, and the
-rule's name goes into the executor's log and copy, never into the record
-(the record holds the fingerprint of the rules file).
+Each refusal by a content rule is a denial with source `rule` that names
+the rules file (`executor.rules`) and the rule (`executor.rule`, the
+fingerprint of its name); the rule's name in clear goes into the
+executor's log, its copy and the tool error the model is given, never
+into the record.
 
 **What such checks can never promise.**
 
@@ -402,22 +465,38 @@ rule's name goes into the executor's log and copy, never into the record
   server does the work.
 - That the setting stays false by every path. A rule on `write_file` does
   not see a shell tool that edits the same file, a second tool with
-  another name, a change split over two calls each of which passes, or a
-  file written under another name and moved.
-- That the content was read as the server reads it. A JSON file with a
-  repeated member, a comment, a byte-order mark or an encoding the
-  executor's parser does not share can read one way here and another
-  there (the gateway refuses repeated and folded names for the same
-  reason; a content rule must refuse what it cannot read exactly).
-- That a pattern over text catches a meaning. `scan: false` can be written
-  `scan:false`, `"scan": !0`, or set by a line that the pattern does not
-  match.
+  another name, the same file named under another argument the rule's
+  `when` does not read, a path written another way than the pattern
+  expects, a change split over two calls each of which passes, or a file
+  written under another name and moved. An edit by any route that does not
+  go through the executor is not seen at all.
+- That the content was read as the server reads it. The executor refuses
+  what it cannot read exactly (not JSON, a member named twice or twice
+  once folded, a number beyond 2^53 - 1, a byte-order mark, a comment);
+  but a server that reads the same text more loosely, or in another
+  encoding, may still act on something the executor did not see. A file
+  type the executor cannot read (YAML, TOML, a line-based form) cannot be
+  tested at all: only a rule with no `test` can refuse such a write.
+- That a tool's arguments show the resulting file. A tool that takes a
+  partial edit, a template, a reference to content elsewhere, or a command
+  gives the executor nothing to test; only a refusal outright closes it.
+- That a pattern over text catches a meaning. `*` and `**` match
+  characters, not files: `**settings.json` also matches
+  `my-settings.json`, and a path with a trailing space, a different case
+  or a symbolic link is another text.
 - Anything about a call to a tool the rule does not name, or a tool whose
   arguments are not plain data.
+- That the rules were right, or were applied. The record holds the
+  fingerprint of the rules file in force and, in a denial, of the rule
+  that refused; it does not hold the rules, and nothing in a receipt shows
+  that a rule was tested, beyond that the executor that wrote it was
+  running those rules.
 
 A content rule is a help to the person who runs the agent, like the check
 before acting: nothing in a record shows that it was made, beyond the
-fingerprint of the rules file that the stub names.
+fingerprint of the rules file that the stub names. The rule writer has to
+know the tool: which argument carries the whole new content, under which
+name the path is given, and which other tools reach the same file.
 
 ## 12. Stage 2 and later
 
@@ -428,7 +507,8 @@ fingerprint of the rules file that the stub names.
   keys; seals held elsewhere and witnesses (library 0.6.0).
 - The copy shipped line by line to a place the executor's operator cannot
   change (a sealer, a witness, an append-only store).
-- Content rules (section 11), once the founder has chosen where they live.
+- Content read in other forms than JSON (YAML, TOML, `key = value`
+  lines), as further values of a rule's `content.as` (section 11).
 - Keys held in a key service, through the library's signer interface.
 - Listing in the MCP registry, once a published version exists.
 
@@ -804,6 +884,129 @@ twice, so the line is handed on as it is and the call ends by the timeout.
 Why: two readers could take either `id`, and splicing one of them could
 show the client the executor's id (the final check's F1). A batch, or any
 line that is not one object, is handled the same way (F2).
+
+**X56. The rules on content are a JSON file of the executor's own
+(`contentRules`), not part of the settings file and not a member of the
+permission.** A file of its own has a fingerprint of its own, which the
+person can work out independently (the `keys` command prints it) and
+which does not change when another setting does. Why not the permission:
+F-158, and section 11. The other way: the rules inline in `executor.json`,
+fingerprinting a part of the settings.
+
+**X57. The fingerprint is of the rules file's parsed content in the one
+form of RFC 8785 (`argumentsFingerprint`), not of its bytes.** So
+spacing, the order of members and a byte-order mark do not change it, and
+a person who re-saves the file does not have to sign again; a change to
+any rule does. The other way: the file's bytes, which the person could
+check with any SHA-256 tool, at the cost of a new signature for every
+re-save.
+
+**X58. A rule with no `test` refuses every call it applies to; the
+executor reads no file and keeps no content.** A rule can only test what
+the call carries whole. For a tool whose arguments carry a partial edit,
+the person writes a rule with no test and has the agent write the file
+whole through a tool the rules can read. Why not reading the file: the
+executor's view is not the server's (a file on another machine; a change
+between the read and the write), and it would need read access and a
+recorded read for every write. Why not comparing with the last content
+let through: another route may have changed the file since, and the
+executor would hold content, which none of its records do today.
+
+**X59. Content the rule cannot read exactly refuses the call
+(`content-unreadable`): not JSON, a member named twice in one object or
+twice once folded (as the gateway folds names: capitals, the long s, the
+Kelvin sign), a whole number beyond 2^53 - 1, nothing at the content
+pointer, something other than text where JSON text is expected, or a text
+over 4,096 characters where a pattern would match it.** The same folding
+rule is applied to the arguments themselves where any rule names the
+tool. Why: a rule that let through what it could not read would be a rule
+that any comment in a file evades, and two readers that read one text two
+ways is the gateway's reason too. The other way: let such a call through
+with a finding in the log; rejected, since nothing in the record would
+show it.
+
+**X60. A pattern is a plain glob: `*` matches any run of characters other
+than `/` and `\`, `**` any run of any characters, `?` one character other
+than `/` and `\`; nothing else is special and nothing can be escaped.**
+Both separators count, so one pattern covers paths written either way. It
+is matched by a table over the pattern's tokens and the text's code
+points, with no regular expression, so no pattern can make the match slow;
+a text over 4,096 characters is not matched (X59). The other way: regular
+expressions, which can be slow on chosen input and which ESLint's security
+rules flag when built from data.
+
+**X61. Conditions: `equals` (the same JSON value, deeply), `oneOf` (1 to
+64 values), `absent` (true), `matches` (a pattern of 1 to 1,000
+characters), each at a JSON Pointer (RFC 6901; `""` is the whole value);
+`orAbsent: true` lets a missing value pass `equals`, `oneOf` or
+`matches`.** A missing value fails `equals`, `oneOf` and `matches` unless
+`orAbsent` says otherwise: the content must say so, since the executor
+cannot know what the program defaults to. "May not change" was asked for
+and cannot be tested without reading the file; it is written as "stays
+equal to" the approved value. The other way: a `notPresent` name (the
+design note had it); `absent` reads as the other conditions do.
+
+**X62. The permission must state the rules in force, or nothing.** At
+start, where the slip's `agent.software` is present and no entry has the
+rules file's fingerprint, the executor does not start: the person approved
+other rules than these. Where the slip states no software, it starts with
+a warning that gives the entry to add. `check` reports `contentRules`
+(path, fingerprint, the rules' names, `statedInSlip`); `keys` prints the
+`agent.software` entry beside the agent's keys. Why a stop and not a
+warning: the slip is the person's signed word on what the agent's software
+is, and an executor running other rules would write receipts under a
+permission that contradicts them. The other way: a warning only.
+
+**X63. Every receipt and every denial names `executor.rules`, the
+fingerprint of the rules file in force, where the settings name one; a
+denial by a rule also names `executor.rule`, the fingerprint of the
+refusing rule's name.** Both are labels, so every checker reads them. A
+reader with the rules file can tell which rule said no; without it, the
+fingerprint of a short name can be guessed from a list of likely names,
+which is stated. The other way: name no rule in the record, as the design
+note first had it; then a denial by a rule could not be told from another.
+
+**X64. The rules are tested after the amount and before the check before
+acting.** An amount that cannot be read is refused first (the denial then
+names no rule); a call the rules let through is still held to the
+permission. Why: the amount belongs to what was asked for, and the denial
+by a rule names it; the check before acting is the last word.
+
+**X65. The first refusing rule, in the file's order, is the one named.**
+Every rule that names the tool and whose `when` holds is tested until one
+refuses. The other way: test all and name all; one is enough for the
+model to act on and keeps the denial small.
+
+**X66. The rules file is read strictly: UTF-8, JSON, no member named
+twice, no whole number beyond 2^53 - 1, `version` 1, no member that is not
+part of a rules file, a rule or a condition, rule names unique, at most
+1,000 rules, the file at most 1 MiB.** A misspelt member (`tets`) would
+otherwise make a rule that refuses everything or nothing silently.
+Unknown settings in `executor.json` only warn; here they stop the start,
+because a rule is a security control.
+
+**X67. `content` without `test` is a problem, not a rule that refuses:**
+a rule that reads content and tests nothing is a mistake the person should
+see.
+
+**X68. A rule may name a tool that no rule in `tools` names; the executor
+warns.** Such a call is refused as unlisted before any content rule is
+reached, so the content rule is never tested.
+
+**X69. `compare` reports, for each `executor.rules` fingerprint the
+records name, how many receipts and denials name it and whether a slip in
+the book states it (`contentRules`); it does not change whether the copy
+and the book agree.** A statement, not proof: it shows which rules the
+executor held and which the person approved, not what the rules did.
+
+**X70. The words to the model name the rule and what it asked for
+("the value at "/scan" in the content at "/content" must equal false, or
+be absent"), never the value found.** The value found is from the
+arguments, which do not go into the executor's log or copy; the rule's
+own values are the person's, from the rules file, and are shown cut to
+120 characters. The copy and the log carry the rule's name
+(`rule`) beside the reason; `_meta` of the tool error carries
+`red.prova/rule`.
 
 **X36. The tests use a made-up MCP server written for them
 (`test/fake-server.mjs`), started as a real process, with tools that

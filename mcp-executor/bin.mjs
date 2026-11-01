@@ -5,8 +5,9 @@
 //                                                          start the real server, check and receipt each call
 //   provared-mcp-executor check   --config executor.json   say what each rule maps to, and what is wrong
 //   provared-mcp-executor keys    --config executor.json   make the key files, if there are none, and print
-//                                                          what goes into the permission: agent.keys, and the
-//                                                          executor's entry for "with"
+//                                                          what goes into the permission: agent.keys, the
+//                                                          executor's entry for "with", and the agent.software
+//                                                          entry for the rules on content, where there are any
 //   provared-mcp-executor compare --config executor.json [--book <file>]
 //                                                          hold the executor's copy against a book
 //
@@ -17,7 +18,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, isAbsolute, resolve } from 'node:path';
 import { loadCopyKey } from './copy.mjs';
 import { compareCopyWithBook } from './compare.mjs';
-import { checkConfig, openExecutor, readSettings } from './executor.mjs';
+import { checkConfig, loadRules, openExecutor, readSettings, softwareEntry } from './executor.mjs';
 import { makeKeyFile, readIfThere } from './files.mjs';
 
 const USAGE = `provared-mcp-executor: an executor for MCP tool servers. It holds the server's credentials, checks each tool call against a permission a person signed, sends on the calls the permission allows, and writes a signed, countersigned receipt for each. Evidence, not a verdict.
@@ -76,7 +77,9 @@ async function main(args) {
     if (problems.length) throw new Error(`The settings have problems:\n- ${problems.join('\n- ')}`);
     const agent = await makeKeyFile(settings.agent.keys, 'agent');
     const executor = await makeKeyFile(settings.executor.keys, 'agent');
-    process.stdout.write(`${JSON.stringify({ agent: { name: `An agent, through ${settings.name}`, keys: agent }, with: { id: settings.service, name: settings.name, keys: executor }, requires: [{ need: 'countersignature' }] }, null, 2)}\n`);
+    // The agent.software entry for the rules on content, where the settings name a rules file.
+    const software = settings.contentRules ? [softwareEntry(settings.name, (await loadRules(settings.contentRules)).fingerprint)] : undefined;
+    process.stdout.write(`${JSON.stringify({ agent: { name: `An agent, through ${settings.name}`, keys: agent, ...(software ? { software } : {}) }, with: { id: settings.service, name: settings.name, keys: executor }, requires: [{ need: 'countersignature' }] }, null, 2)}\n`);
     return 0;
   }
   if (command === 'compare') {

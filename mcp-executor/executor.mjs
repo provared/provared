@@ -31,6 +31,7 @@ import { argumentsFingerprint, checkBook, countersign, denialCodes, entryLine, f
 import { loadCopyKey, openCopy, readCopy, unfinished } from './copy.mjs';
 import { aboutSlip, bookFile, loadKeyFile, readIfThere, slipFrom, untilFree } from './files.mjs';
 import { CODES, MAX_LINE_BYTES, idKey, isId, notificationLine, readLines, readMessage, repeatedName, responseLine, spliceId, topLevelId, unsafeInteger } from './jsonrpc.mjs';
+import { RULES_DOCUMENT, RULE_DOCUMENT, TOOL_NAME, lookUp, readPointer, readRules, rulesFingerprint, testCall } from './rules.mjs';
 
 /** The document, in each stub and denial, whose fingerprint is that of the executor's own identifier for the call (a label, not a reserved name). */
 export const CALL_DOCUMENT = 'executor.call';
@@ -58,7 +59,6 @@ export const MAX_MAPPED = 1000;
 export const MAX_LISTS = 256;
 
 const DEFAULT_PASS_ENV = ['PATH', 'PATHEXT', 'SYSTEMROOT', 'SystemRoot', 'COMSPEC', 'ComSpec', 'WINDIR', 'TEMP', 'TMP', 'HOME', 'USERPROFILE', 'LANG', 'LC_ALL', 'TZ'];
-const TOOL_NAME = /^[A-Za-z0-9_.-]{1,128}$/;
 const SHORT_NAME = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 const UNIT = /^[A-Za-z0-9][A-Za-z0-9._-]{0,15}$/;
 const TRACEPARENT = /^[0-9a-f]{2}-([0-9a-f]{32})-[0-9a-f]{16}-[0-9a-f]{2}$/;
@@ -223,35 +223,18 @@ export function readSettings(config, root) {
   if (typeof s.callIdInMeta !== 'boolean') at('callIdInMeta', 'must be true or false.');
   s.shutdownWait = config.shutdownWait ?? 5000;
   if (!Number.isInteger(s.shutdownWait) || s.shutdownWait < 100 || s.shutdownWait > 600000) at('shutdownWait', 'must be a whole number of milliseconds from 100 to 600,000.');
+  s.contentRules = null;
+  if (config.contentRules !== undefined) {
+    if (typeof config.contentRules !== 'string' || config.contentRules === '') at('contentRules', 'must be the path of the rules file (rules on the content of a change).');
+    else s.contentRules = pathFrom(root, config.contentRules);
+  }
   s.maxWaiting = config.maxWaiting ?? 16;
   if (!Number.isInteger(s.maxWaiting) || s.maxWaiting < 1 || s.maxWaiting > 1000) at('maxWaiting', 'must be a whole number from 1 to 1,000: the most tool calls in progress or waiting their turn at once.');
   for (const k of Object.keys(config)) {
-    if (!['name', 'service', 'server', 'agent', 'executor', 'tools', 'unlisted', 'hideUnlisted', 'timeout', 'denialsPerHour', 'callIdInMeta', 'shutdownWait', 'maxWaiting'].includes(k)) warnings.push(`${k}: not a setting; set aside.`);
+    if (!['name', 'service', 'server', 'agent', 'executor', 'tools', 'unlisted', 'hideUnlisted', 'timeout', 'denialsPerHour', 'callIdInMeta', 'shutdownWait', 'maxWaiting', 'contentRules'].includes(k)) warnings.push(`${k}: not a setting; set aside.`);
   }
   if (s.unlisted === 'forward') warnings.push('unlisted is "forward": a call to a tool that no rule names is sent on with no receipt and no denial. The record then leaves those calls out.');
   return { settings: problems.length ? null : s, problems, warnings };
-}
-
-/** The tokens of a JSON Pointer (RFC 6901), or null where the text is not one. */
-function readPointer(pointer) {
-  if (typeof pointer !== 'string' || (pointer !== '' && !pointer.startsWith('/'))) return null;
-  if (pointer === '') return [];
-  return pointer.slice(1).split('/').map((t) => t.replaceAll('~1', '/').replaceAll('~0', '~'));
-}
-
-function lookUp(value, tokens) {
-  let v = value;
-  for (const t of tokens) {
-    if (Array.isArray(v)) {
-      if (!/^(0|[1-9][0-9]*)$/.test(t)) return { found: false };
-      v = v[Number(t)];
-    } else if (isObject(v)) {
-      if (!Object.hasOwn(v, t)) return { found: false };
-      v = v[t];
-    } else return { found: false };
-    if (v === undefined) return { found: false };
-  }
-  return { found: true, value: v };
 }
 
 /**
@@ -340,6 +323,20 @@ function credentialValue(name, from) {
   return text.replace(/\r?\n$/, '');
 }
 
+/** The entry for the permission's agent.software that states a rules file. */
+export function softwareEntry(name, sha256) {
+  return { name: `Content rules of ${name}`, sha256 };
+}
+
+/** Read the rules file strictly and fingerprint it: {rules, fingerprint, names}. Throws where it is missing or has problems. */
+export async function loadRules(path) {
+  const text = readIfThere(path);
+  if (text === '') throw new Error(`The rules file ${path} (contentRules) is missing or empty.`);
+  const { rules, parsed, problems } = readRules(text);
+  if (problems.length) throw new Error(`The rules file ${path} has problems:\n- ${problems.join('\n- ')}`);
+  return { rules, fingerprint: await rulesFingerprint(parsed), names: rules.map((r) => r.name) };
+}
+
 /**
  * Open everything the executor needs but the server: the keys, the slip,
  * the book, the copy, and the stub writer. Says what is wrong in one error.
@@ -373,6 +370,23 @@ async function prepare(config, root, { now = Date.now, log = () => {}, readOnly 
   const actions = new Set(Array.isArray(c.actions) ? c.actions : []);
   for (const rule of settings.tools.values()) {
     if (!actions.has(rule.action)) warnings.push(`tools.${rule.tool}: its action "${rule.action}" is not among the slip's actions, so every call to it will be refused (action-not-allowed).`);
+  }
+  // The rules on content: read strictly and fingerprinted, then held
+  // against what the slip states of the agent's software: nothing where it
+  // states nothing (a warning says how to add it); a stop where it states
+  // software and not these rules, since the person approved other rules.
+  let content = null;
+  if (settings.contentRules) {
+    content = await loadRules(settings.contentRules);
+    for (const rule of content.rules) {
+      for (const tool of rule.tools) if (!settings.tools.has(tool)) warnings.push(`contentRules: the rule ${JSON.stringify(rule.name)} names the tool "${tool}", which no rule in "tools" names, so the executor never sends a call to it and the content rule is never tested.`);
+    }
+    const software = Array.isArray(c.agent?.software) ? c.agent.software : null;
+    const entry = JSON.stringify(softwareEntry(settings.name, content.fingerprint));
+    if (software && !software.some((x) => x?.sha256 === content.fingerprint)) {
+      throw new Error(`The slip ${settings.agent.slip} states the agent's software (agent.software), and the rules on content in force (${settings.contentRules}, fingerprint ${content.fingerprint}) are not among what it states: the person approved other rules than these. Put the approved rules file back, or sign a permission whose agent.software holds ${entry}.`);
+    }
+    if (!software) warnings.push(`The slip states nothing of the agent's software (agent.software), so a reader cannot see that the rules on content in force are the ones the person approved. Add ${entry} to the permission's agent.software and sign it again (provared-mcp-executor keys prints the entry).`);
   }
   // The credentials: read now, so that a missing one stops the start, and
   // kept in memory for the server's environment alone.
@@ -417,7 +431,7 @@ async function prepare(config, root, { now = Date.now, log = () => {}, readOnly 
   if (read.lines.length > 0 && read.checked === 0) throw new Error(`No line of the copy ${settings.executor.copy} checks under the copy key ${settings.executor.copyKey}: the key is not the one the copy was written with. Put back the key the copy was written with.`);
   if (!read.sequence.ok) throw new Error(`The copy ${settings.executor.copy} is not whole: ${read.sequence.problem} The executor does not start on a copy with a line missing, moved or put twice; look at it, and keep what it shows.`);
   const copy = copyKey ? openCopy(settings.executor.copy, copyKey, settings.name, read.next) : null;
-  return { settings, warnings, agentKeys, executorKeys, about, env, credentialNames, file, writer, copy, read };
+  return { settings, warnings, agentKeys, executorKeys, about, env, credentialNames, file, writer, copy, read, content };
 }
 
 /**
@@ -442,7 +456,9 @@ export async function checkConfig(config, root) {
   if (problems.length) return { problems, warnings, tools };
   try {
     const p = await prepare(config, root, { readOnly: true });
-    return { problems: [], warnings: p.warnings, tools, program: p.settings.server.resolved, slip: { fingerprint: p.about.fingerprint, issuerKey: p.about.issuerKey, agent: p.about.content.agent?.name, validUntil: p.about.content.validUntil }, credentials: p.credentialNames, unfinished: unfinished(p.read).length };
+    const software = Array.isArray(p.about.content.agent?.software) ? p.about.content.agent.software : null;
+    const contentRules = p.content ? { path: p.settings.contentRules, fingerprint: p.content.fingerprint, rules: p.content.names, statedInSlip: software ? software.some((x) => x?.sha256 === p.content.fingerprint) : null } : null;
+    return { problems: [], warnings: p.warnings, tools, program: p.settings.server.resolved, slip: { fingerprint: p.about.fingerprint, issuerKey: p.about.issuerKey, agent: p.about.content.agent?.name, validUntil: p.about.content.validUntil }, credentials: p.credentialNames, contentRules, unfinished: unfinished(p.read).length };
   } catch (e) {
     return { problems: [e.message], warnings, tools };
   }
@@ -467,7 +483,9 @@ export async function openExecutor(config, more = {}) {
   const now = more.now ?? Date.now;
   const log = more.log ?? ((event) => process.stderr.write(`${JSON.stringify({ provared: 'mcp-executor', ...event })}\n`));
   const p = await prepare(config, root, { now, log });
-  const { settings, about, file, writer, copy } = p;
+  const { settings, about, file, writer, copy, content } = p;
+  // The rules file in force, named in every receipt and denial by its fingerprint.
+  const rulesDocument = content ? { name: RULES_DOCUMENT, sha256: content.fingerprint } : null;
   for (const w of p.warnings) log({ event: 'warning', message: w });
   for (const l of p.read.lines) if (!l.valid) log({ event: 'copy-line-refused', line: l.raw.slice(0, 80) });
 
@@ -667,12 +685,13 @@ export async function openExecutor(config, more = {}) {
           { name: 'provared.arguments', sha256: await argumentsFingerprint(args ?? {}) },
           { name: TOOL_DOCUMENT, sha256: await identifierFingerprint(name) },
           { name: CALL_DOCUMENT, sha256: await identifierFingerprint(callId) },
+          ...(rulesDocument ? [rulesDocument] : []),
         ];
         const trace = typeof params._meta?.traceparent === 'string' ? TRACEPARENT.exec(params._meta.traceparent) : null;
         if (trace) details.push({ name: 'provared.trace-id', sha256: await identifierFingerprint(trace[1]) });
         // What a denial names: what was asked for, without the identifier that was never sent.
         const asked = details.filter((d) => d.name !== CALL_DOCUMENT);
-        const refuse = async (reason, request, source, codes) => {
+        const refuse = async (reason, request, source, codes, ruleName) => {
           let denial = null;
           try {
             const d = await inTurn(() => writer.deny(request, { source, ...(codes ? { codes } : {}) }));
@@ -681,10 +700,10 @@ export async function openExecutor(config, more = {}) {
           } catch (e) {
             log({ event: 'denial-not-written', call: callId, error: e.message });
           }
-          copy.note({ kind: 'refused', call: callId, when: new Date(now()).toISOString(), slip: about.fingerprint, tool: name, action: request.action, ...(request.amount ? { amount: request.amount } : {}), reason: reason.code, ...(codes ? { codes } : {}), ...(denial ? { denial } : {}) });
-          log({ event: 'refused', call: callId, tool: name, code: reason.code, ...(codes ? { codes } : {}) });
+          copy.note({ kind: 'refused', call: callId, when: new Date(now()).toISOString(), slip: about.fingerprint, tool: name, action: request.action, ...(request.amount ? { amount: request.amount } : {}), reason: reason.code, ...(codes ? { codes } : {}), ...(ruleName ? { rule: ruleName } : {}), ...(denial ? { denial } : {}) });
+          log({ event: 'refused', call: callId, tool: name, code: reason.code, ...(codes ? { codes } : {}), ...(ruleName ? { rule: ruleName } : {}) });
           // A tool execution error, so that the model is told and can choose another call.
-          toClient(responseLine(id, { result: { content: [{ type: 'text', text: `Not taken by the Provared executor: ${reason.message}` }], isError: true, _meta: { 'red.prova/refused': reason.code, ...(codes ? { 'red.prova/codes': codes } : {}), ...(denial ? { 'red.prova/denial': denial } : {}) } } }));
+          toClient(responseLine(id, { result: { content: [{ type: 'text', text: `Not taken by the Provared executor: ${reason.message}` }], isError: true, _meta: { 'red.prova/refused': reason.code, ...(codes ? { 'red.prova/codes': codes } : {}), ...(ruleName ? { 'red.prova/rule': ruleName } : {}), ...(denial ? { 'red.prova/denial': denial } : {}) } } }));
         };
         if (!rule) return refuse({ code: 'unlisted', message: `No rule of the executor names the tool "${name}", so the call was not sent.` }, { action: UNLISTED_ACTION, with: settings.service, details: asked }, 'rule');
         if (stopped) {
@@ -693,6 +712,13 @@ export async function openExecutor(config, more = {}) {
         }
         const got = amountOf(rule, args, argsText);
         if (got.problem) return refuse(got.problem, { action: rule.action, with: settings.service, details: asked }, 'rule');
+        if (content) {
+          // The rules on content: a call a rule refuses, or whose content a rule cannot read exactly, is not sent.
+          const refused = testCall(content.rules, name, args, argsText);
+          if (refused) {
+            return refuse(refused.reason, { action: rule.action, ...(got.amount ? { amount: got.amount } : {}), with: settings.service, details: [...asked, { name: RULE_DOCUMENT, sha256: await identifierFingerprint(refused.rule) }] }, 'rule', undefined, refused.rule);
+          }
+        }
         const request = { action: rule.action, ...(got.amount ? { amount: got.amount } : {}), with: settings.service, details };
         if (settings.callIdInMeta) details.push({ name: 'provared.request-id', sha256: details.find((d) => d.name === CALL_DOCUMENT).sha256 });
 
@@ -1063,4 +1089,4 @@ export async function openExecutor(config, more = {}) {
   };
 }
 
-export { untilFree };
+export { untilFree, RULES_DOCUMENT, RULE_DOCUMENT };

@@ -2,6 +2,40 @@
 
 ## Unreleased
 
+- **The MCP executor tests rules on the content of a change before a
+  call is let through** (F-157, F-158; `mcp-executor/rules.mjs`; choices
+  X56 to X70 in `mcp-executor/DESIGN.md`). A permission allows kinds of
+  action; being allowed to change a file is not being allowed to change
+  everything the file controls. The new setting `contentRules` names a
+  JSON file of rules: each names a tool, says which calls it applies to
+  (`when`: conditions on the arguments), where the proposed content is
+  and how to read it (`content`: a JSON Pointer, as JSON text or as plain
+  data) and what must hold in it (`test`: `equals`, `oneOf`, `absent`,
+  `matches` a plain glob, each at a JSON Pointer, with `orAbsent`). A rule
+  with no `test` refuses every call it applies to, which is how a tool
+  that carries only a partial edit is closed: the executor reads no file
+  and keeps no content. A call a rule refuses (`content-rule`), or whose
+  content the rule cannot read exactly (`content-unreadable`: not JSON, a
+  member named twice or twice once folded, a number beyond 2^53 - 1,
+  nothing at the pointer, not text, a text too long to match), is not
+  sent; the model is told which rule and what it asked for, never a value
+  from the arguments, and a denial is written. Every receipt and denial
+  names `executor.rules`, the SHA-256 of the rules file's parsed content
+  in the one form of RFC 8785; a denial by a rule also names
+  `executor.rule`, the fingerprint of the rule's name; both are labels.
+  The person puts the same fingerprint into the permission's
+  `agent.software` (`keys` prints the entry); where the permission states
+  software and the rules in force are not among it, the executor does not
+  start; where it states nothing, it warns. `check` reports the rules and
+  whether the permission states them; `compare` reports which rules
+  fingerprints the records name and whether a slip states each. The
+  README says plainly what the rules can never promise: an edit by
+  another route, a tool whose arguments do not show the resulting file, a
+  file type the executor cannot read, a pattern that matches characters
+  rather than files. Content in YAML, TOML or line-based forms is later
+  work. No record and no rule of the format changes. 12 new tests, among
+  them a label change let through and the same edit with a hidden setting
+  switched on refused.
 - **Three more reserved document names** (format description, section
   27), in both languages: `provared.tool-name` (the fingerprint of the
   tool's name, exactly as the agent's software called it, which is not the
