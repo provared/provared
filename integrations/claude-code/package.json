@@ -47,6 +47,6 @@
     "test": "node --disable-warning=ExperimentalWarning --test test/*.test.mjs"
   },
   "dependencies": {
-    "provared": "^0.6.0"
+    "provared": ">=0.6.0 <0.8.0"
   }
 }
