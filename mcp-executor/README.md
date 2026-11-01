@@ -49,7 +49,7 @@ npm install -g provared-mcp-executor
 ```
 
 Or from a copy of the repository: in `mcp-executor`, `npm pack`, then
-`npm install -g ./provared-mcp-executor-0.1.0.tgz`.
+`npm install -g ./provared-mcp-executor-0.2.0.tgz`.
 
 It needs Node.js 24.7 or later, and depends only on the `provared` library,
 at version 0.7.0 or a later 0.7 version (`^0.7.0`): its receipts name
@@ -562,6 +562,13 @@ process and speak to the executor over its streams; nothing is sent over
 the network. The name `provared` is taken to mean the repository's own
 library (`test/local-library.mjs`), so the tests run against the library
 as it is in the same commit.
+
+`demo/` holds a demonstration: the executor in front of a made-up tool
+server, set up on its first start with a permission signed by the
+library's development stand-in for a passkey, so that it can be started
+with no settings and no secret. Its records prove nothing about anyone;
+see `demo/README.md`. `server.json` describes the package for the
+official MCP Registry; it is not in the npm package.
 
 ## Licences
 

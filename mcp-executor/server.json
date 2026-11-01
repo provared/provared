@@ -1,0 +1,51 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.provared/mcp-executor",
+  "title": "Provared MCP executor",
+  "description": "Checks each tool call against a passkey-signed permission, then writes a countersigned receipt.",
+  "websiteUrl": "https://prova.red",
+  "repository": {
+    "url": "https://github.com/provared/provared",
+    "source": "github",
+    "id": "1406447963",
+    "subfolder": "mcp-executor"
+  },
+  "icons": [
+    {
+      "src": "https://prova.red/favicon.svg",
+      "mimeType": "image/svg+xml",
+      "sizes": ["any"]
+    }
+  ],
+  "version": "0.2.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "provared-mcp-executor",
+      "version": "0.2.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "packageArguments": [
+        {
+          "type": "positional",
+          "value": "stdio",
+          "description": "Run as the tool server that the agent's MCP client starts."
+        },
+        {
+          "type": "positional",
+          "value": "--config",
+          "description": "The next argument names the executor's settings file."
+        },
+        {
+          "type": "positional",
+          "valueHint": "settings_file",
+          "format": "filepath",
+          "isRequired": true,
+          "description": "Path of the executor's settings file (executor.json): the real tool server to start and its credentials, the agent's keys, permission and book, the executor's keys and copy, and the rule for each tool. See the README."
+        }
+      ]
+    }
+  ]
+}

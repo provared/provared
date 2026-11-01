@@ -1107,3 +1107,107 @@ Nothing is sent over the network; nothing of anyone else's is run. A test
 that starts the executor as a process ends it, and so the server, on
 every path (success, failure, time limit), and the test script gives each
 test 60 seconds: a child left alive would keep the test process alive.
+
+*Choices made for version 0.2.0 and the demonstration (1 November 2026).*
+
+**X78. `package.json` names the server for the official MCP Registry:
+`"mcpName": "io.github.provared/mcp-executor"`.** The registry takes an npm
+package only where this field equals the name in `server.json`, which is
+how it knows that the publisher holds the package. The name is under the
+GitHub organisation `provared`, so whoever publishes must sign in to the
+registry as a member of that organisation. The other way: a name under
+the domain `red.prova`, proved by a DNS record; not taken, since GitHub
+sign-in needs nothing new on the domain.
+
+**X79. `server.json` lives in `mcp-executor/`, beside `package.json`, and
+is not in the npm package.** The registry's publishing tool reads it from
+the folder it is run in and sends it to the registry; nothing reads it
+from npm. `package.json` lists the files it ships, so `server.json` and
+`demo/` stay out of the package without a rule of their own. The other
+way: ship it too; not taken, since a copy in the package could differ from
+the one published and would say nothing new.
+
+**X80. In `server.json` the command line is given as three positional
+arguments, `stdio`, `--config` and the settings file's path, not as a
+named argument `--config`.** The registry's schema describes a named
+argument as `--flag={value}`, written as one word; the executor reads
+`--config` and its value as two words and does not read
+`--config=<path>`. Positional arguments are inserted as they are, so a
+client builds exactly `provared-mcp-executor stdio --config <path>`. The
+other way: teach the executor `--config=<path>` as well and use a named
+argument; not taken, because how a client writes a named argument is not
+settled between clients, and the positional form leaves no doubt.
+
+**X81. `server.json` names no environment variable and no secret.**
+The executor takes everything from its settings file, and the server's
+credentials are best read from files the settings name, not from the
+client's environment (the README's "The settings": an `env` source is
+warned against). So the one thing a client must supply is the settings file's
+path, marked `isRequired` and of format `filepath`.
+
+**X82. A demonstration in `demo/`, apart from the package**: a made-up
+tool server with two harmless tools (`echo`, `add`), one content rule,
+and a start that sets everything up on its first run and then runs the
+executor in front of the server. It exists so that a directory of MCP
+servers, which starts a server and asks it what it offers, can start the
+executor with no settings and no secret. It is not in the npm package and
+is never the way to use the executor for real work.
+
+**X83. The demonstration's permission is signed by the library's
+development stand-in for a passkey (`provared/dev`), made for one set-up
+and then forgotten.** The issuer's name ends with "(development)", which
+the checker prints, and the purpose and the README say that its records
+prove nothing about anyone. The stand-in is forgotten, so the demonstration
+cannot sign a second permission or a cancellation with it: when the
+permission comes within an hour of its end, the folder is renamed aside
+(nothing is thrown away) and a new set-up is made. The other way: a
+permission kept in the repository, signed once; not taken, because it
+would end, and because its agent's keys would have to be in the
+repository too.
+
+**X84. The demonstration sets itself up through the executor's own
+commands.** `keys` makes the key files and prints what goes into the
+permission; `check` reads the settings before the first call; then
+`stdio` runs. So it follows the README's "Set it up" step for step, with
+the stand-in in place of the person, and uses no file of the package that
+the package does not export. The stand-in is made first, because `keys`
+refuses settings that trust no passkey.
+
+**X85. The demonstration's permission is valid for 30 days, allows
+`demo.echo` and `demo.add`, holds at most 1,000 `add` calls in any 24
+hours, needs the executor's countersignature on every action, and states
+the content rules' fingerprint in `agent.software`.** So it shows each
+part of a permission the executor uses, and the executor starts without
+a warning.
+
+**X86. The made-up server will not start without `DEMO_TOKEN`, a made-up
+credential that the start writes into the demonstration's folder and the
+settings name as a file.** It shows, in miniature, what the executor is
+for: only the executor holds what the server needs.
+
+**X87. The demonstration installs `provared` 0.7.0 and
+`provared-mcp-executor` 0.2.0 from npm at exact versions, named in
+`demo/package.json`, with no install scripts run.** Neither has any other
+dependency, so two exact versions fix everything installed. There is no
+lock file: one can be made only once 0.2.0 is published. The `Dockerfile`
+takes a build argument, `EXECUTOR`, that replaces the executor's version,
+so that a packed file can be tried before it is published.
+
+**X88. The `Dockerfile` starts from the official `node` image, version
+24.22.2 on Debian 12 (bookworm), slim, pinned by its version and by the
+digest of its multi-platform index, read from Docker Hub on 1 November
+2026; it is built from the top of the repository, and runs as the image's
+own unprivileged user `node`.** Built from the top, because a directory
+that builds from the repository clones it whole and works from its top
+folder; the README gives the same steps for a service that takes a build
+step and a command rather than a `Dockerfile`. A newer Node.js 24 means a
+new digest, read again by hand.
+
+**X89. A test (`test/demo.test.mjs`) starts the demonstration as a real
+process against this folder's own files** (`test/local-executor.mjs`
+maps the name `provared-mcp-executor` to this folder, as
+`test/local-library.mjs` maps `provared` to the repository's library). It
+holds the set-up, `initialize`, `tools/list`, a call with a countersigned
+receipt, a call refused by the content rule with a denial, and a second
+start that uses what the first made. So a change to the executor that
+breaks the demonstration fails the tests, not a directory's listing.
