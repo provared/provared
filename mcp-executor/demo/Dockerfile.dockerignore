@@ -1,0 +1,8 @@
+# The build of mcp-executor/demo/Dockerfile reads the top of the repository,
+# and needs only these four files from it. Nothing else is sent to the
+# builder: no .env, no node_modules, no packed file left in demo/.
+*
+!mcp-executor/demo/package.json
+!mcp-executor/demo/start.mjs
+!mcp-executor/demo/server.mjs
+!mcp-executor/demo/content-rules.json

@@ -1211,3 +1211,121 @@ holds the set-up, `initialize`, `tools/list`, a call with a countersigned
 receipt, a call refused by the content rule with a denial, and a second
 start that uses what the first made. So a change to the executor that
 breaks the demonstration fails the tests, not a directory's listing.
+
+*Choices made after an independent review of version 0.2.0 and the
+demonstration (1 November 2026).*
+
+**X90. Who may publish to the registry, and in what order (corrects
+X78).** X78 said that a member of the organisation may publish. The
+registry's own page on signing in (read on 1 November 2026) says that only
+an **Owner** of the organisation may publish under `io.github.<org>/`,
+and that `mcp-publisher login github` without a token cannot publish to an
+organisation's names today: it grants only the person's own names. The
+ways that work are a personal access token that can read the
+organisation's members (a classic token with `read:org`, or a fine-grained
+one with Organization permissions, Members, Read-only), given with
+`mcp-publisher login github --token`, or GitHub Actions. The order is
+fixed: the npm version first, since the registry reads
+`registry.npmjs.org/provared-mcp-executor/0.2.0` and compares its
+`mcpName` with the name in `server.json`. The README says both.
+
+**X91. The demonstration uses its folder only if the folder is empty or
+holds the demonstration's own mark, `provared-demo.json`; each set-up is a
+folder of its own inside it, and the mark names the one in use (replaces
+the renaming of the whole folder in X83).** As first built, a start renamed
+aside any folder that `PROVARED_DEMO_DIR` named and that held something,
+whoever made it. Now a folder with anything in it and no mark is refused,
+with a message, and nothing in it is touched. A set-up that cannot be used
+is kept where it is and a new one is made beside it, so nothing is thrown
+away and the folder itself is never renamed (it may be a volume mounted in
+a container, which cannot be renamed). The start says the true reason: the
+permission has ended, ends within the hour, cannot be read, or the
+settings no longer pass the executor's check. The other way: rename aside
+only a folder that holds the mark; not taken, because a mounted folder
+cannot be renamed.
+
+**X92. On every start the paths to Node.js, to `server.mjs` and to the
+rules file are written into the set-up's settings afresh, and the settings
+are checked again with the executor's `check` (adds to X84).** As first
+built, the settings kept the paths of the first start, so a demonstration
+moved to another folder, a second copy of the repository, or a new
+Node.js stopped it ("The rules file … is missing or empty"). None of these
+paths is signed, and the rules file's fingerprint is taken over its parsed
+content, not its path, so the permission's `agent.software` still matches;
+where the rules file itself has changed, `check` fails and a new set-up is
+made, with that reason. The check costs about half a second: a start that
+reuses a set-up answered `initialize` in about 0.7 seconds on this
+computer, a fresh set-up in about 1 second. The other way: keep a set-up
+for each copy of the demonstration; not taken, since one copy moved would
+still break.
+
+**X93. Two starts at once on an empty folder each make a set-up of their
+own (the review's L1).** The mark is first written with exclusive creation,
+so of two starts on an empty folder one writes it and both accept it; each
+then sets up in a folder of its own with a random part in its name, and
+replaces the mark in one step (a temporary file renamed over it). The last
+to finish is named in the mark; neither touches the other's folder. Two
+starts at once on a folder already set up share its book, and once the
+first has written to it the second takes no more calls (the executor's own
+"the book file is not as the executor left it"); the README says to run one
+start at a time on one folder. The other way: a lock file held while an
+executor runs; not taken, because a lock left by a process that ended
+without removing it cannot be told reliably from a live one inside a
+container, where process numbers repeat.
+
+**X94. A folder that cannot be written stops the start, with a message
+that says how to give it one; there is no fallback to the system's
+temporary folder (the review's L2).** In a container started with
+`--read-only`, the temporary folder is read-only as well, and a silent move
+elsewhere would hide where the records went. The message and the README
+name `PROVARED_DEMO_DIR`, `--tmpfs /home/node/provared-demo`, or a volume
+there.
+
+**X95. The made-up server compares `DEMO_TOKEN` with the credential in the
+file `demo-token` of the folder it is started in, in constant time
+(replaces X86's check of presence only).** The executor starts the server
+in the set-up's folder (the settings file's folder, as `server.cwd` is not
+given), so the server finds the file there. The words now say what this
+shows: where a credential lives, and that the agent's client is never
+handed it; not that only the executor can reach the server, since anything
+that can read the set-up's folder can read the file.
+
+**X96. The content rule refuses only the lower-case word `password`, and
+says so in its name.** A `matches` pattern compares characters exactly
+(X77), and the rules have no way to ignore capitals; `PASSWORD` passes, and
+the README says so. The other way: three rules, for `password`,
+`Password` and `PASSWORD`; not taken, as it would still miss other
+mixtures and suggest more than it does.
+
+**X97. The start runs the executor's command by the path of `bin.mjs` in
+the installed package (corrects X84).** X84 said the start uses no file
+that the package does not export. `bin.mjs` is the file that npm's `bin`
+names, and it is not in `exports`; the start finds the package's folder
+through `provared-mcp-executor/package.json`, which is exported, and runs
+`bin.mjs` there. Running the command by name would go through npm's
+`.cmd` shim on Windows, which cannot be started without a shell.
+
+**X98. The container is built from exactly four files, and a packed
+executor is handed to the builder as a context of its own and never
+copied into the image (replaces the build argument's form in X87 and the
+`COPY` of X88).** `Dockerfile.dockerignore`, beside the `Dockerfile`, lets
+only `package.json`, `start.mjs`, `server.mjs` and `content-rules.json` of
+the demonstration reach the builder, so nothing else of the repository (a
+`.env`, a Python environment, a `node_modules` or a packed file left in
+`demo/`) is sent to it or copied; it needs BuildKit, the builder of every
+current Docker. The `COPY` names the four files. For a test before
+publishing, `--build-context executor-file=<folder>` hands over the folder
+that holds the `.tgz`, which the install step reads through a mount that
+is not kept in the image, and `EXECUTOR=file:/tmp/executor/<name>.tgz`
+names it. Without them the stage `executor-file` is empty. The README says
+that installing from `demo/package.json`, the `Dockerfile` without
+`EXECUTOR`, and the build step for a directory all fail until 0.2.0 is on
+npm.
+
+**X99. The demonstration's tests hold the changes above** (adds to X89):
+a folder holding a file of someone else's is refused and left as it was;
+settings whose paths point elsewhere are rewritten and the same set-up is
+used; a permission that cannot be read leaves its set-up in place and a
+new one is made, with that reason; two starts at once on an empty folder
+both answer and leave two set-ups; the made-up server refuses a
+credential other than the one in its folder.

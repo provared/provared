@@ -568,7 +568,16 @@ server, set up on its first start with a permission signed by the
 library's development stand-in for a passkey, so that it can be started
 with no settings and no secret. Its records prove nothing about anyone;
 see `demo/README.md`. `server.json` describes the package for the
-official MCP Registry; it is not in the npm package.
+official MCP Registry; it is not in the npm package. A version can be
+published to the registry only after the same version is on npm, because
+the registry reads that version's `package.json` from npm and compares its
+`mcpName` with the name in `server.json`. Publishing under
+`io.github.provared/` needs an Owner of the GitHub organisation
+`provared`, signed in with a personal access token that can read the
+organisation's members (a classic token with `read:org`, or a
+fine-grained one with Organization permissions, Members, Read-only) or
+from GitHub Actions; `mcp-publisher login github` without a token cannot
+publish to an organisation's names today.
 
 ## Licences
 

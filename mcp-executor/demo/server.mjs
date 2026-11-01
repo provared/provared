@@ -1,18 +1,34 @@
 // A made-up MCP tool server, for the demonstration only. It speaks the
 // Model Context Protocol over the stdio transport (one JSON-RPC message to
-// a line), uses nothing but Node.js itself, reaches no network and touches
-// no file. It has two harmless tools: "echo" hands back the text it is
-// given, and "add" adds two whole numbers.
+// a line), uses nothing but Node.js itself and reaches no network. It has
+// two harmless tools: "echo" hands back the text it is given, and "add"
+// adds two whole numbers. The one file it reads is "demo-token", below.
 //
-// It will not start without DEMO_TOKEN in its environment: a made-up
-// credential that only the executor holds (start.mjs writes it into the
-// demonstration's folder, and the executor's settings name that file). So
-// the agent's client cannot reach this server except through the executor.
+// It will not start unless DEMO_TOKEN in its environment equals the
+// made-up credential in the file "demo-token" of the folder it is started
+// in. start.mjs writes that file into each set-up's folder; the executor's
+// settings name it, and the executor starts the server in that folder with
+// the value. The agent's client is never handed the value. This shows
+// where a credential lives; it is not a protection: anything that can read
+// the set-up's folder can read the file.
 
+import { timingSafeEqual } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 
-if (!process.env.DEMO_TOKEN) {
-  process.stderr.write('demo server: DEMO_TOKEN is not set. Start the executor, which holds it, not this server.\n');
+function tokenMatches() {
+  let expected;
+  try {
+    expected = Buffer.from(readFileSync('demo-token', 'utf8').trim(), 'utf8');
+  } catch {
+    return false;
+  }
+  const given = Buffer.from(process.env.DEMO_TOKEN ?? '', 'utf8');
+  return expected.length > 0 && given.length === expected.length && timingSafeEqual(given, expected);
+}
+
+if (!tokenMatches()) {
+  process.stderr.write('demo server: DEMO_TOKEN is missing or is not the credential in this folder. Start the executor, which holds it, not this server.\n');
   process.exit(1);
 }
 
