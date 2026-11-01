@@ -35,7 +35,7 @@ test('receipts within the slip: judged, compared, within it, with what cannot be
   assert.equal(r.judged, true);
   assert.equal(r.service, 'amw');
   assert.equal(r.slip.fingerprint, made.slipFingerprint);
-  assert.deepEqual(r.summary, { handed: 3, byStatus: { verified: 3 }, compared: 3, denied: 0, notCompared: 0, withinSlip: true, withinPermits: null, trusted: true });
+  assert.deepEqual(r.summary, { handed: 3, byStatus: { verified: 3 }, compared: 3, denied: 0, duplicates: 0, notCompared: 0, notJudged: 0, withinSlip: true, withinPermits: null, trusted: true });
   for (const item of r.receipts) {
     assert.equal(item.status, 'verified');
     assert.equal(item.compared, true);
@@ -49,7 +49,7 @@ test('receipts within the slip: judged, compared, within it, with what cannot be
   assert.equal(r.receipts[1].when, '2026-09-14T17:05:00.000Z');
   assert.deepEqual(r.notJudged, []);
   assert.deepEqual(r.cannotShow, [...CANNOT_SHOW]);
-  assert.equal(CANNOT_SHOW.length, 7);
+  assert.equal(CANNOT_SHOW.length, 10);
   assert.ok(Object.isFrozen(CANNOT_SHOW));
   assert.ok(CANNOT_SHOW.some((s) => /No chain/.test(s)) && CANNOT_SHOW.some((s) => /No countersignature/.test(s)));
   assert.ok(CANNOT_SHOW.some((s) => /No signature of the person/.test(s)) && CANNOT_SHOW.some((s) => /Approvals by identifier/.test(s)));
@@ -237,7 +237,7 @@ test('a denied receipt, an unknown outcome and a receipt that did not verify are
   const unknownKey = receipt(makeGateway('sk_test_0009'));
   const r = await judge(made, gw, [receipt(gw), denied, receipt(gw, { outcome: 'pending' }), forged, unknownKey]);
   assert.equal(r.judged, true);
-  assert.deepEqual(r.summary, { handed: 5, byStatus: { verified: 3, invalid: 1, unknown_key: 1 }, compared: 1, denied: 1, notCompared: 4, withinSlip: true, withinPermits: null, trusted: true });
+  assert.deepEqual(r.summary, { handed: 5, byStatus: { verified: 3, invalid: 1, unknown_key: 1 }, compared: 1, denied: 1, duplicates: 0, notCompared: 4, notJudged: 0, withinSlip: true, withinPermits: null, trusted: true });
   assert.equal(r.receipts[1].kind, 'denied');
   assert.equal(r.receipts[1].compared, false);
   assert.equal(r.receipts[1].tool, 'echo');
@@ -373,7 +373,10 @@ test('the published AMW vectors, judged against a slip that names the gateway', 
   assert.deepEqual(r.problems, []);
   assert.equal(r.summary.handed, 8);
   assert.equal(r.summary.denied, 1);
-  assert.equal(r.summary.compared, 7);
+  // Three of them are forms of one receipt, rcpt_golden_0001: it is counted once.
+  assert.equal(r.summary.compared, 5);
+  assert.equal(r.summary.duplicates, 2);
+  assert.ok(r.receipts.filter((i) => i.kind === 'duplicate').every((i) => /same identifier as number/.test(i.notes[0])));
   assert.equal(r.summary.withinSlip, true);
   assert.deepEqual(r.permits.map((p) => p.id), ['pmt_golden_0002', 'pmt_golden_0001', 'pmt_golden_0004', 'pmt_golden_0003', 'pmt_golden_0005']);
   // The receipts are dated 14 September, before the permits' hour on 16 September, and name another wallet than the permits' subject.

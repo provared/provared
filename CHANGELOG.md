@@ -31,6 +31,26 @@
   checker's exit codes. Written from AMW's published data and the
   standards alone; no AMW program was read or run. Its tests run in the
   test workflow beside the other packages.
+- **The AMW reader after an independent review**, each fix held by a
+  test (`test/review.test.mjs`): a slip's countersignature condition, or
+  an approval named by identifier only, is listed on the receipt it
+  applies to (`notJudged`), and such a receipt is never said to be within
+  the slip (`withinSlip` is `null`, not known) nor gives exit code 0
+  (before, both gave "within" and 0); a P-256 key over content that says
+  "Ed25519" reads `unsupported` (before, `verified`); signed text that is
+  not well-formed Unicode, names a member twice in one object, or gives a
+  `kid` that is not text is `malformed`; times are compared to the
+  nanosecond (before, cut to milliseconds, so two receipts 3,599.9996
+  seconds apart fell in different hours); a receipt handed over twice is
+  counted once and listed as a duplicate; a receipt that fails its check
+  shows no identifier (the envelope's is not signed), only its place; the
+  command shows control and invisible characters as a mark, and escapes
+  them in `--json`; `verify` loads no library, and the README's `judge`
+  command works from a copy of the repository; `cannotShow` also states
+  that cancellations cannot be handed over, that outcomes other than
+  success are left out of totals, and that retired keys check receipts
+  of any date. The package no longer pins a development copy of
+  `provared` 0.6.0, which its peer range excludes.
 - **Three more reserved document names** (format description, section
   27), in both languages: `provared.tool-name` (the fingerprint of the
   tool's name, exactly as the agent's software called it, which is not the

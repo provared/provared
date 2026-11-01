@@ -6,13 +6,36 @@
 //
 // Exit codes, as the Provared checker's: 0 where every receipt verified,
 // every one was compared and found within the slip (and within the AMW
-// permits where handed over), and the judgement rests on a passkey you
+// permits where handed over), no condition of the slip that applies to a
+// receipt was left unjudged, and the judgement rests on a passkey you
 // named; 1 where it is intact as far as it goes but not that; 2 where
 // nothing could be judged, or the command was not understood.
+//
+// "verify" needs Node.js alone; "judge" needs the library "provared", and
+// loads it only when it is asked for.
 
 import { readFileSync } from 'node:fs';
-import { judgeReceipts } from './judge.mjs';
 import { verifyRecord } from './verify.mjs';
+
+// Anything from a record or a key list is untrusted text. As the Provared
+// checker shows it (bin/provared-check.mjs): control characters, characters
+// that cannot be seen, characters that change the direction of text and
+// the blank Braille pattern are shown as a visible mark; more than three
+// marks drawn on one character are shown as three and one mark; every run
+// of spaces as one space.
+const UNSAFE = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Co}\p{Cs}\p{DI}\u2800]/gu;
+const STACKED = /(?<=\p{M}{3})\p{M}+/gu;
+const safe = (text) => String(text).replace(UNSAFE, '\ufffd').replace(STACKED, '\ufffd').replace(/\p{Zs}+/gu, ' ');
+
+// In JSON the same characters are written as escapes, which keeps the JSON
+// exact and the terminal safe.
+const UNSAFE_IN_JSON = /(?![\n])[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Co}\p{DI}\u2800]|(?<=\p{M}{3})\p{M}/gu;
+function escaped(character) {
+  let out = '';
+  for (let i = 0; i < character.length; i++) out += '\\u' + character.charCodeAt(i).toString(16).padStart(4, '0');
+  return out;
+}
+const safeJson = (value) => JSON.stringify(value, null, 2).replace(UNSAFE_IN_JSON, escaped);
 
 const USAGE = `provared-agent-middleware: reads the records of Agent Middleware (AMW) and judges them against a Provared slip.
 
@@ -91,10 +114,11 @@ function verifyCommand(o) {
   const record = readJson(o[`--${which}`], which);
   const answer = verifyRecord(record, keys, which);
   if (o.json) {
-    process.stdout.write(`${JSON.stringify(answer, null, 2)}\n`);
+    process.stdout.write(`${safeJson(answer)}\n`);
   } else {
-    process.stdout.write(`AMW ${which} ${answer.id ?? '(no id)'}: ${answer.status}. ${answer.reason}\n`);
-    if (answer.key) process.stdout.write(`Key: ${answer.key.kid} (${answer.key.alg ?? 'method not stated'}, ${answer.key.status ?? 'status not stated'})\n`);
+    // The id is shown only for a record that verified (verifyRecord gives no other).
+    process.stdout.write(`AMW ${which} ${answer.id === null ? '(identifier not shown: the record did not verify)' : safe(answer.id)}: ${answer.status}. ${answer.reason}\n`);
+    if (answer.key) process.stdout.write(`Key: ${safe(answer.key.kid)} (${answer.key.alg === null ? 'method not stated' : safe(answer.key.alg)}, ${answer.key.status === null ? 'status not stated' : safe(answer.key.status)})\n`);
     process.stdout.write('This shows only that the key named signed this text. Evidence, not a verdict.\n');
   }
   return answer.status === 'verified' ? 0 : answer.status === 'malformed' ? 2 : 1;
@@ -125,16 +149,29 @@ async function judgeCommand(o) {
     options.credits = { unit: m[1], decimals: Number(m[2]) };
   }
 
+  let judgeReceipts;
+  try {
+    ({ judgeReceipts } = await import('./judge.mjs'));
+  } catch {
+    throw new Error('judge needs the library "provared" (a version after 0.6.0), which could not be loaded. From a copy of the repository, run the command as its README shows.');
+  }
   const r = await judgeReceipts(options);
   if (o.json) {
-    process.stdout.write(`${JSON.stringify(r, null, 2)}\n`);
+    process.stdout.write(`${safeJson(r)}\n`);
   } else {
     print(r);
   }
+  return exitCode(r);
+}
+
+// 0 only where every receipt verified and was compared, none falls under a
+// condition of the slip that was not judged, all are within the slip (and
+// the AMW permits, where handed over), and the slip rests on a passkey you named.
+function exitCode(r) {
   if (!r.judged) return 2;
   const s = r.summary;
   const allVerified = s.byStatus.verified === s.handed;
-  const ok = s.withinSlip === true && s.withinPermits !== false && allVerified && s.notCompared === 0 && s.trusted;
+  const ok = s.withinSlip === true && s.notJudged === 0 && s.withinPermits !== false && allVerified && s.notCompared === 0 && s.trusted;
   return ok ? 0 : 1;
 }
 
@@ -154,14 +191,14 @@ function print(r) {
   out();
   out(`AMW receipts handed over: ${r.summary.handed} (${Object.entries(r.summary.byStatus).map(([k, v]) => `${v} ${k}`).join(', ') || 'none'})`);
   r.receipts.forEach((item, i) => {
-    const head = [`${i + 1}. ${item.id ?? '(no id)'}: ${item.status}`];
+    const head = [`${i + 1}. ${item.id === null ? '(identifier not shown)' : safe(item.id)}: ${item.status}`];
     if (item.status !== 'verified') head.push(item.reason);
-    else if (item.kind === 'denied') head.push(`${item.tool ?? '(no tool)'}, refused by the gateway`);
+    else if (item.kind === 'denied') head.push(`${item.tool === null ? '(no tool)' : safe(item.tool)}, refused by the gateway`);
     else if (item.compared) {
       head.push(`${item.action ?? '(not an action name)'} at ${item.when}`);
       if (item.amount) head.push(`${item.amount.value} ${item.amount.unit}`);
-      if (item.permit) head.push(`permit ${item.permit}`);
-      head.push(item.findings.length === 0 ? 'within the slip' : 'OUTSIDE the slip');
+      if (item.permit) head.push(`permit ${safe(item.permit)}`);
+      head.push(item.findings.length > 0 ? 'OUTSIDE the slip' : item.notJudged.length > 0 ? `NOT KNOWN whether within the slip: ${item.notJudged.join(' and ')} not judged` : 'within the slip');
     }
     out(`  ${head.join('; ')}`);
     for (const f of item.findings) out(`     - ${f.code}: ${f.message}`);
@@ -172,8 +209,8 @@ function print(r) {
     out();
     out(`AMW permits handed over: ${r.permits.length}`);
     r.permits.forEach((p, i) => {
-      const bits = [`${i + 1}. ${p.id ?? '(no id)'}: ${p.status}`];
-      if (p.status === 'verified') bits.push(p.active ? 'active' : 'NOT active', `tools ${p.allowedTools.join(', ') || '(none)'}`);
+      const bits = [`${i + 1}. ${p.id === null ? '(identifier not shown)' : safe(p.id)}: ${p.status}`];
+      if (p.status === 'verified') bits.push(p.active ? 'active' : 'NOT active', `tools ${p.allowedTools.map(safe).join(', ') || '(none)'}`);
       else bits.push(p.reason);
       out(`  ${bits.join('; ')}`);
       for (const n of p.notes ?? []) out(`     note: ${n}`);
@@ -181,7 +218,7 @@ function print(r) {
   }
   if (r.notJudged.length > 0) {
     out();
-    out(`Conditions of the slip not judged: ${r.notJudged.join(', ')} (see below).`);
+    out(`Conditions of the slip this reader cannot judge: ${r.notJudged.join(', ')}. A receipt they apply to is never said to be within the slip (see below).`);
   }
   out();
   out('What this judgement cannot show:');
@@ -189,8 +226,8 @@ function print(r) {
   out();
   const s = r.summary;
   out(`Every AMW receipt verified? ${yes(s.byStatus.verified === s.handed)}`);
-  out(`Every AMW receipt compared with the slip? ${s.notCompared === 0 ? 'yes' : `NO: ${s.notCompared} not compared (${s.denied} refused by the gateway)`}`);
-  out(`Within the slip, as far as these receipts show? ${s.withinSlip === null ? 'nothing was compared' : yes(s.withinSlip)}`);
+  out(`Every AMW receipt compared with the slip? ${s.notCompared === 0 ? 'yes' : `NO: ${s.notCompared} not compared (${s.denied} refused by the gateway, ${s.duplicates} handed over more than once)`}`);
+  out(`Within the slip, as far as these receipts show? ${s.withinSlip === false ? 'NO' : s.withinSlip === true ? 'yes' : s.compared === 0 ? 'nothing was compared' : `NOT KNOWN: ${s.notJudged} compared receipt(s) fall under a condition of the slip this reader cannot judge`}`);
   if (s.withinPermits !== null) out(`Within the AMW permits handed over? ${yes(s.withinPermits)}`);
   out(`Rests on a passkey you named? ${s.trusted ? 'yes' : 'NO: name one with --issuer-key'}`);
   out('Evidence, not a verdict.');

@@ -53,8 +53,44 @@ function fromBase64url(text) {
   return bytes.toString('base64url') === text ? bytes : null;
 }
 
+// The id is given back only for a record that verified: the envelope's id
+// is not signed, and the signed content's is shown only once the signature
+// fits. A record that failed is known by its place in what was handed over.
 function answer(kind, status, reason, more = {}) {
-  return { kind, status, reason, id: null, key: null, content: null, ...more };
+  const out = { kind, status, reason, id: null, key: null, content: null, ...more };
+  if (status !== 'verified') out.id = null;
+  return out;
+}
+
+// True where some object in the JSON text names one member twice. JSON.parse
+// keeps the last of them silently, so two readers could take two meanings
+// from one signed text. The text has already been read by JSON.parse, so it
+// is well-formed JSON here; member names are compared as JSON.parse reads
+// them ("a" and "\u0061" are one name).
+function hasRepeatedName(text) {
+  const stack = [];
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === '{') stack.push({ names: new Set(), expectName: true });
+    else if (ch === '[') stack.push(null);
+    else if (ch === '}' || ch === ']') stack.pop();
+    else if (ch === ',') {
+      const top = stack[stack.length - 1];
+      if (top) top.expectName = true;
+    } else if (ch === '"') {
+      let j = i + 1;
+      while (text[j] !== '"') j += text[j] === '\\' ? 2 : 1;
+      const top = stack[stack.length - 1];
+      if (top && top.expectName) {
+        const name = JSON.parse(text.slice(i, j + 1));
+        if (top.names.has(name)) return true;
+        top.names.add(name);
+        top.expectName = false;
+      }
+      i = j;
+    }
+  }
+  return false;
 }
 
 /**
@@ -111,25 +147,29 @@ function keyMaterial(entry) {
  * (the first that applies):
  *
  * - "malformed": not an envelope: no id, "kid", "signing_input" or
- *   "signature" as text; "signing_input" not a JSON object; "signature"
- *   not strict base64, or not of the length the key's method needs;
+ *   "signature" as text; "signing_input" not well-formed Unicode text, not
+ *   a JSON object, or naming one member twice in one object; the content's
+ *   "kid" present and not text; "signature" not strict base64, or not of
+ *   the length the key's method needs;
  * - "unknown_key": the key named is not in the list, or its status allows
  *   no use (anything but "active" or "retired"), or its public key cannot
  *   be read;
  * - "unsupported": the key's method is one this reader cannot check;
  * - "invalid": the signature does not fit the key over the exact bytes of
  *   "signing_input";
- * - "unsupported": the signature fits, but the content names a signing
- *   method other than Ed25519, or a canonical form other than
- *   awi-canonical-json/1, so the record is outside the contract;
+ * - "unsupported": the signature fits, but the key's own method is not
+ *   Ed25519 (a P-256 key), or the content names a signing method other than
+ *   Ed25519, or a canonical form other than awi-canonical-json/1, so the
+ *   record is outside the contract;
  * - "mismatch": the signature fits, but the envelope's id, "kid", "alg" or
  *   "canonicalization" differs from what the content says;
  * - "verified".
  *
  * The key is found by the "kid" in the signed content where it has one,
  * else by the envelope's; an envelope "kid" that differs from the content's
- * is a mismatch. The content is given back only when the record is
- * verified: what a record that failed says is not shown as fact.
+ * is a mismatch. The content and the id are given back only when the
+ * record is verified: what a record that failed says is not shown as fact,
+ * and its envelope id is not signed.
  *
  * @param {unknown} bundle the AMW envelope: {receipt_id or permit_id, kid, alg, canonicalization?, signing_input, signature}
  * @param {unknown} keys the published key list (see readKeys)
@@ -149,6 +189,9 @@ export function verifyRecord(bundle, keys, kind = 'receipt') {
   if (!isText(bundle.signature)) return answer(kind, 'malformed', 'The envelope has no "signature" text.', { id });
   if (Object.hasOwn(bundle, 'alg') && !isText(bundle.alg)) return answer(kind, 'malformed', 'The envelope\'s "alg" is not text.', { id });
   if (Object.hasOwn(bundle, 'canonicalization') && !isText(bundle.canonicalization)) return answer(kind, 'malformed', 'The envelope\'s "canonicalization" is not text.', { id });
+  // A text with a lone surrogate is not Unicode text: it has no one UTF-8
+  // form, and two texts that differ only there are signed as the same bytes.
+  if (!bundle.signing_input.isWellFormed()) return answer(kind, 'malformed', 'The "signing_input" is not well-formed Unicode text.', { id });
 
   let content;
   try {
@@ -157,11 +200,13 @@ export function verifyRecord(bundle, keys, kind = 'receipt') {
     return answer(kind, 'malformed', 'The "signing_input" is not JSON.', { id });
   }
   if (!isObject(content)) return answer(kind, 'malformed', 'The "signing_input" is not a JSON object.', { id });
+  if (hasRepeatedName(bundle.signing_input)) return answer(kind, 'malformed', 'The "signing_input" names one member twice in one object.', { id });
+  if (Object.hasOwn(content, 'kid') && !isText(content.kid)) return answer(kind, 'malformed', 'The signed content\'s "kid" is not text.', { id });
 
   const signature = fromBase64(bundle.signature);
   if (!signature) return answer(kind, 'malformed', 'The "signature" is not strict base64.', { id });
 
-  const kid = isText(content.kid) ? content.kid : bundle.kid;
+  const kid = Object.hasOwn(content, 'kid') ? content.kid : bundle.kid;
   const entry = list.find((k) => k.kid === kid);
   if (!entry) return answer(kind, 'unknown_key', 'The key the record names is not in the key list.', { id });
   const key = { kid: entry.kid, alg: isText(entry.alg) ? entry.alg : null, status: isText(entry.status) ? entry.status : null };
@@ -189,6 +234,10 @@ export function verifyRecord(bundle, keys, kind = 'receipt') {
   if (!fits) return answer(kind, 'invalid', 'The signature does not fit the key over the signed text.', { id, key });
 
   // The signature fits. Is the record within the contract this reader knows?
+  // The key's own method comes first: a P-256 key is outside the contract
+  // whatever method the content or the envelope names, so a P-256 signature
+  // over content that says "Ed25519" is not verified.
+  if (material.method !== SIGNING_METHOD) return answer(kind, 'unsupported', 'The key named signs with a method other than Ed25519, the one method of the contract.', { id, key });
   if (content.alg !== SIGNING_METHOD) return answer(kind, 'unsupported', 'The content names a signing method other than Ed25519.', { id, key });
   const contentForm = Object.hasOwn(content, 'canonicalization') ? content.canonicalization : CANONICAL_FORM;
   if (contentForm !== CANONICAL_FORM) return answer(kind, 'unsupported', 'The content names a canonical form other than awi-canonical-json/1.', { id, key });

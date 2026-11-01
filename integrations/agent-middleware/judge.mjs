@@ -28,12 +28,15 @@ export const DOCUMENT_NAME = 'agent-middleware.receipt';
 /** What a judgement of AMW receipts cannot show, stated in every answer. */
 export const CANNOT_SHOW = Object.freeze([
   'No chain. An AMW receipt names no earlier receipt and no place in a sequence, so a receipt left out of the middle, a set cut short at either end, or a receipt never written does not show. Totals, counts and periods are counted over the receipts handed over, which may not be all of them.',
-  'No countersignature. An AMW receipt is signed by the gateway alone, not by the agent and then by the other side. Where the slip asks for the service\'s countersignature, that condition is not judged.',
+  'No countersignature. An AMW receipt is signed by the gateway alone, not by the agent and then by the other side. Where the slip asks for the service\'s countersignature, that condition is not judged, and a receipt it applies to is never said to be within the slip.',
   'No signature of the person on the AMW permit. The permit is signed by the gateway\'s key. What the person allowed rests on the Provared slip alone; the AMW permit is compared only where it is handed over, as the gateway\'s own statement.',
-  'Approvals by identifier only. An AMW receipt names an approval by an identifier, and no signed approval can be checked. Where the slip asks for the person\'s approval, only whether an identifier is present is judged.',
+  'Approvals by identifier only. An AMW receipt names an approval by an identifier, and no signed approval can be checked. Where the slip asks for the person\'s approval, a receipt that names none is a finding; one that names an identifier is not judged, and is never said to be within the slip.',
   'Which agent. An AMW receipt names the agent by a wallet identifier; the slip names the agent by its keys. Nothing ties the two, and the agent signed nothing.',
   'With whom. An AMW receipt names no party beyond the gateway. The slip\'s service is taken to be the gateway, and the other side of each action is not shown.',
   'The gateway\'s word. The outcome, the tool, the amount and the time are what the gateway wrote. The signature shows that its key signed them, not that they are true.',
+  'No cancellation. A cancellation of the slip cannot be handed to this reader, so a receipt dated after the person cancelled the slip is not shown as such; it is judged as if the slip were still in force.',
+  'Only successes are counted. A receipt whose outcome is not "success" (a refusal, an error, or an outcome this reader does not know) is left out of every total, count and period, even where the gateway charged credits for it.',
+  'Retired keys. A key the key list marks "retired" still checks a receipt of any date: this reader does not know when the key was retired, so a receipt signed with it after that time is not told apart.',
 ]);
 
 const NAME = /^[a-z0-9][a-z0-9._-]{0,63}$/;
@@ -77,34 +80,48 @@ export async function receiptDocument(bundle) {
  * @returns {number}
  */
 export function parseAmwTime(text) {
-  if (!isText(text)) return NaN;
+  const ns = amwTimeNs(text);
+  if (ns === null) return NaN;
+  // Whole milliseconds, rounded down (towards the past), as a Date holds them.
+  const ms = ns / NS_PER_MS - (ns % NS_PER_MS < 0n ? 1n : 0n);
+  return Number(ms);
+}
+
+const NS_PER_MS = 1000000n;
+
+// A time as AMW writes it, as nanoseconds since 1970 (a BigInt), or null.
+// Every digit of the fraction is kept (up to nine), so that two receipts
+// less than a millisecond either side of a period's edge are told apart:
+// times are compared in this form, never as milliseconds.
+function amwTimeNs(text) {
+  if (!isText(text)) return null;
   const m = AMW_TIME.exec(text);
-  if (!m) return NaN;
+  if (!m) return null;
   const [y, mo, d, h, mi, s] = m.slice(1, 7).map(Number);
   // What follows the seconds: "Z" or an offset, with an optional fraction before it.
   let rest = m[7];
   let fraction = null;
   if (rest.startsWith('.')) {
     const end = rest.search(/[Z+-]/);
-    if (end < 0) return NaN;
+    if (end < 0) return null;
     fraction = AMW_FRACTION.exec(rest.slice(0, end));
-    if (!fraction) return NaN;
+    if (!fraction) return null;
     rest = rest.slice(end);
   }
-  if (rest !== 'Z' && !AMW_OFFSET.test(rest)) return NaN;
+  if (rest !== 'Z' && !AMW_OFFSET.test(rest)) return null;
   const base = Date.UTC(y, mo - 1, d, h, mi, s);
   const check = new Date(base);
   // A date that does not exist (30 February, 25:00) does not come back as it went in.
-  if (check.getUTCFullYear() !== y || check.getUTCMonth() !== mo - 1 || check.getUTCDate() !== d || check.getUTCHours() !== h || check.getUTCMinutes() !== mi || check.getUTCSeconds() !== s) return NaN;
-  const ms = fraction ? Number(fraction[1].padEnd(3, '0').slice(0, 3)) : 0;
-  let offset = 0;
+  if (Number.isNaN(base) || check.getUTCFullYear() !== y || check.getUTCMonth() !== mo - 1 || check.getUTCDate() !== d || check.getUTCHours() !== h || check.getUTCMinutes() !== mi || check.getUTCSeconds() !== s) return null;
+  const fractionNs = fraction ? BigInt(fraction[1].padEnd(9, '0')) : 0n;
+  let offset = 0n;
   if (rest !== 'Z') {
     const oh = Number(rest.slice(1, 3));
     const om = Number(rest.slice(4, 6));
-    if (oh > 23 || om > 59) return NaN;
-    offset = (rest[0] === '-' ? -1 : 1) * (oh * 60 + om) * 60000;
+    if (oh > 23 || om > 59) return null;
+    offset = BigInt((rest[0] === '-' ? -1 : 1) * (oh * 60 + om) * 60000);
   }
-  return base + ms - offset;
+  return (BigInt(base) - offset) * NS_PER_MS + fractionNs;
 }
 
 /**
@@ -140,14 +157,17 @@ function periodWords(seconds) {
 // times the items state: the same rule as the Provared checker's (format
 // description, section 4.1). Items are put in order of time; those with
 // the same time keep the order in which they were handed over.
-function periodTotals(items, periodMs) {
-  const sorted = items.map((item, place) => ({ item, place })).sort((a, b) => a.item.when - b.item.when || a.place - b.place);
+// Times are nanoseconds (BigInt), so a period's edge is exact.
+const byTime = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+
+function periodTotals(items, periodNs) {
+  const sorted = items.map((item, place) => ({ item, place })).sort((a, b) => byTime(a.item.when, b.item.when) || a.place - b.place);
   const totals = [];
   let head = 0;
   let sum = 0n;
   for (const { item } of sorted) {
     sum += item.value;
-    while (sorted[head].item.when <= item.when - periodMs) {
+    while (sorted[head].item.when <= item.when - periodNs) {
       sum -= sorted[head].item.value;
       head++;
     }
@@ -161,7 +181,7 @@ function periodTotals(items, periodMs) {
 // copied into the words of a finding.
 function shown(value) {
   if (!isText(value)) return null;
-  return [...value].slice(0, 128).map((ch) => (ch >= ' ' && ch <= '~' ? ch : '�')).join('');
+  return [...value].slice(0, 128).map((ch) => (ch >= ' ' && ch <= '~' ? ch : '\ufffd')).join('');
 }
 
 function readOptions(options) {
@@ -209,8 +229,9 @@ function readPermits(permits, keyList) {
       item.until = parseAmwTime(c.expires_at);
       item.subject = isText(c.subject_wallet_id) ? c.subject_wallet_id : null;
       // Two verified permits with one id: the first handed over counts, and the other is noted.
+      // Its times are kept to the nanosecond for the comparison, apart from the answer.
       if (byId.has(c.permit_id)) item.notes = ['Another verified permit handed over earlier has the same identifier; that one is used.'];
-      else byId.set(c.permit_id, item);
+      else byId.set(c.permit_id, { item, fromNs: amwTimeNs(c.issued_at), untilNs: amwTimeNs(c.expires_at) });
     }
     items.push(item);
   });
@@ -280,8 +301,12 @@ export async function judgeReceipts(options) {
     const permits = readPermits(o.permits, o.keyList);
     result.permits = permits.items;
 
-    // Each receipt: checked, then read.
+    // Each receipt: checked, then read. A receipt handed over twice (the
+    // same receipt_id in the signed content) is counted once: the first
+    // copy handed over is compared, and each later one is listed, not
+    // compared, naming the place of the first.
     const compared = [];
+    const firstById = new Map();
     o.receipts.forEach((bundle, place) => {
       const v = verifyRecord(bundle, o.keyList, 'receipt');
       const item = {
@@ -298,16 +323,28 @@ export async function judgeReceipts(options) {
         amount: null,
         permit: null,
         approval: null,
+        duplicateOf: null,
         findings: [],
         permitFindings: [],
+        notJudged: [],
         notes: [],
       };
       result.receipts.push(item);
       if (v.status !== 'verified') {
-        item.notes.push('Not compared: the receipt did not verify, and what it says is not shown.');
+        item.notes.push('Not compared: the receipt did not verify, and what it says is not shown, its identifier included.');
         return;
       }
       const c = v.content;
+      if (firstById.has(c.receipt_id)) {
+        const first = firstById.get(c.receipt_id);
+        item.kind = 'duplicate';
+        item.duplicateOf = first.place;
+        item.notes.push(first.text === bundle.signing_input
+          ? `Not compared: the same receipt as number ${first.place + 1} handed over, which is counted once.`
+          : `Not compared: another receipt the gateway signed with the same identifier as number ${first.place + 1} handed over. Only the first is counted.`);
+        return;
+      }
+      firstById.set(c.receipt_id, { place, text: bundle.signing_input });
       item.permit = shown(c.permit_id);
       item.approval = Object.hasOwn(c, 'approval_id') && isText(c.approval_id) && c.approval_id.length > 0;
       item.tool = shown(c.tool);
@@ -322,12 +359,12 @@ export async function judgeReceipts(options) {
         return;
       }
       item.kind = 'action';
-      const when = parseAmwTime(c.created_at);
-      if (Number.isNaN(when)) {
+      const when = amwTimeNs(c.created_at);
+      if (when === null) {
         item.notes.push('Not compared: the receipt\'s time cannot be read.');
         return;
       }
-      item.when = new Date(when).toISOString();
+      item.when = new Date(parseAmwTime(c.created_at)).toISOString();
       if (!isText(c.tool)) {
         item.notes.push('Not compared: the receipt names no tool.');
         return;
@@ -345,12 +382,13 @@ export async function judgeReceipts(options) {
 
     // The comparison, in order of time; receipts with the same time keep
     // the order in which they were handed over.
-    compared.sort((a, b) => a.when - b.when || a.item.place - b.item.place);
+    compared.sort((a, b) => byTime(a.when, b.when) || a.item.place - b.item.place);
     const sums = new Map();
     const counts = new Map();
     const periods = new Map();
-    const validFrom = Date.parse(s.validFrom);
-    const validUntil = Date.parse(s.validUntil);
+    // The slip's times are whole seconds; the receipts' are compared to the nanosecond.
+    const validFrom = BigInt(Date.parse(s.validFrom)) * NS_PER_MS;
+    const validUntil = BigInt(Date.parse(s.validUntil)) * NS_PER_MS;
     for (const r of compared) {
       const { item, c, when, action } = r;
       const findings = item.findings;
@@ -379,9 +417,9 @@ export async function judgeReceipts(options) {
 
       s.limits.forEach((limit, i) => {
         if (limit.action !== action) return;
-        const periodMs = Object.hasOwn(limit, 'per') ? limit.per * 1000 : null;
+        const hasPeriod = Object.hasOwn(limit, 'per');
         if (Object.hasOwn(limit, 'count')) {
-          if (periodMs === null) {
+          if (!hasPeriod) {
             const n = (counts.get(i) ?? 0) + 1;
             counts.set(i, n);
             if (n > limit.count) findings.push({ code: 'over-count-limit', message: `This is action number ${n} of this kind among the AMW receipts. The slip allows ${limit.count}.` });
@@ -395,7 +433,7 @@ export async function judgeReceipts(options) {
         const value = r.value;
         if (Object.hasOwn(limit, 'each')) {
           if (value > BigInt(limit.each)) findings.push({ code: 'over-each-limit', message: `This AMW receipt is ${value} ${limit.unit}. The slip allows no single action above ${limit.each} ${limit.unit}.` });
-        } else if (periodMs === null) {
+        } else if (!hasPeriod) {
           const total = (sums.get(i) ?? 0n) + value;
           sums.set(i, total);
           if (total > BigInt(limit.max)) {
@@ -414,23 +452,31 @@ export async function judgeReceipts(options) {
           if (!amountIn(cond.unit)) continue;
           if (!(r.value > BigInt(cond.above))) continue;
         }
+        // A condition that applies and cannot be judged is listed on the
+        // receipt (notJudged), and the receipt is never said to be within the slip.
         if (cond.need === 'approval') {
-          if (item.approval) item.notes.push('The slip asks for the person\'s approval of this action. The AMW receipt names an approval by identifier only, and no signed approval can be checked.');
-          else findings.push({ code: 'approval-missing', message: 'The slip asks for the person\'s approval of this action, and the AMW receipt names none.' });
+          if (item.approval) {
+            if (!item.notJudged.includes('approval')) item.notJudged.push('approval');
+            item.notes.push('Not judged: the slip asks for the person\'s approval of this action. The AMW receipt names an approval by identifier only, and no signed approval can be checked.');
+          } else {
+            findings.push({ code: 'approval-missing', message: 'The slip asks for the person\'s approval of this action, and the AMW receipt names none.' });
+          }
         } else if (cond.need === 'countersignature') {
-          item.notes.push('The slip asks for the service\'s countersignature of this action. An AMW receipt carries none; it is the gateway\'s own signed statement, which is not a countersignature of a Provared receipt.');
+          if (!item.notJudged.includes('countersignature')) item.notJudged.push('countersignature');
+          item.notes.push('Not judged: the slip asks for the service\'s countersignature of this action. An AMW receipt carries none; it is the gateway\'s own signed statement, which is not a countersignature of a Provared receipt.');
         }
       }
 
       // The AMW permit the receipt names, where it was handed over: the gateway's own statement of what it allowed.
       if (o.permits !== undefined) {
-        const permit = isText(c.permit_id) ? permits.byId.get(c.permit_id) : undefined;
+        const held = isText(c.permit_id) ? permits.byId.get(c.permit_id) : undefined;
+        const permit = held?.item;
         if (!permit) {
           item.permitFindings.push({ code: 'amw-permit-not-handed-over', message: 'The AMW receipt names a permit that was not handed over, or that did not verify.' });
         } else {
           if (!permit.active) item.permitFindings.push({ code: 'amw-permit-not-active', message: 'The AMW permit it names does not say that it is active.' });
           if (!permit.allowedTools.includes(c.tool)) item.permitFindings.push({ code: 'amw-permit-tool-not-allowed', message: 'The AMW permit it names does not list this tool among the tools it allows.' });
-          if (Number.isNaN(permit.from) || Number.isNaN(permit.until) || when < permit.from || when >= permit.until) {
+          if (held.fromNs === null || held.untilNs === null || when < held.fromNs || when >= held.untilNs) {
             item.permitFindings.push({ code: 'amw-permit-not-in-force', message: 'The AMW receipt is dated outside the time its AMW permit says it was in force, or that time cannot be read.' });
           }
           if (permit.subject !== null && c.wallet_id !== permit.subject) {
@@ -444,7 +490,7 @@ export async function judgeReceipts(options) {
     for (const [i, items] of periods) {
       const limit = s.limits[i];
       const allowed = BigInt(Object.hasOwn(limit, 'count') ? limit.count : limit.max);
-      for (const { item, total } of periodTotals(items, limit.per * 1000)) {
+      for (const { item, total } of periodTotals(items, BigInt(limit.per) * 1000n * NS_PER_MS)) {
         if (!(total > allowed)) continue;
         const message = Object.hasOwn(limit, 'count')
           ? `With this AMW receipt there are ${total} such actions in ${periodWords(limit.per)}. The slip allows ${limit.count}.`
@@ -457,13 +503,23 @@ export async function judgeReceipts(options) {
     for (const r of result.receipts) byStatus[r.status] = (byStatus[r.status] ?? 0) + 1;
     const comparedItems = result.receipts.filter((r) => r.compared);
     const withPermits = o.permits === undefined ? null : comparedItems.every((r) => r.permitFindings.length === 0);
+    // Within the slip: false where any compared receipt has a finding; else
+    // not known (null) where a condition of the slip applies to a compared
+    // receipt and could not be judged; else true. Null also where nothing
+    // was compared.
+    const notJudged = comparedItems.filter((r) => r.notJudged.length > 0).length;
+    let withinSlip = null;
+    if (comparedItems.some((r) => r.findings.length > 0)) withinSlip = false;
+    else if (comparedItems.length > 0 && notJudged === 0) withinSlip = true;
     result.summary = {
       handed: result.receipts.length,
       byStatus,
       compared: comparedItems.length,
       denied: result.receipts.filter((r) => r.kind === 'denied').length,
+      duplicates: result.receipts.filter((r) => r.kind === 'duplicate').length,
       notCompared: result.receipts.length - comparedItems.length,
-      withinSlip: comparedItems.length === 0 ? null : comparedItems.every((r) => r.findings.length === 0),
+      notJudged,
+      withinSlip,
       withinPermits: comparedItems.length === 0 ? null : withPermits,
       trusted: Array.isArray(o.issuerKeys),
     };
