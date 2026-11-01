@@ -15,8 +15,9 @@
 //     the earlier signed permission where there is one, the public key of
 //     the passkey expected to sign, and the address to hand the result back
 //     to. The result goes back to that page by postMessage, to its exact
-//     address; where this page was not opened as a window, by a link back
-//     to that address with the result after "#"; last, as a file.
+//     address, and the window closes once that page answers that it kept
+//     it; where this page was not opened as a window, by a link back to
+//     that address with the result after "#"; last, as a file.
 //
 // What signs is exactly what was read and shown: the permission and the
 // name as they stood when "Read the permission" was pressed. Any change
@@ -34,7 +35,8 @@
 //
 // The parts that need no page are plain functions, so that they can be
 // tested on their own: readStartingPermission, readRequest, returnAddress,
-// whatChanged, agentKeySet, serviceWords, shownByItself, signedMessage. The
+// whatChanged, agentKeySet, serviceWords, shownByItself, signedMessage,
+// receivedReply. The
 // rest runs only in a browser. A page shown inside another page offers
 // nothing to sign or cancel.
 
@@ -224,6 +226,30 @@ export function signedMessage(kind, record, state) {
   return message;
 }
 
+/** How long the window waits for the page that opened it to say it kept the record, in milliseconds. */
+export const RECEIPT_WAIT = 10000;
+
+/**
+ * The answer of the page that opened the window, once it has the signed
+ * record: { provared: 'received', kind, state?, kept }, where "kept" says
+ * whether its checker passed the record and it kept it. Gives 'kept' or
+ * 'not-kept' for an answer to this record's request, and null for anything
+ * else (which the window sets aside). The caller has already confirmed
+ * that the message came from the window that opened this one, at the
+ * return address.
+ * @param {any} data the message's data
+ * @param {string} kind what was signed
+ * @param {string} [state] the request's "state"
+ * @returns {'kept'|'not-kept'|null}
+ */
+export function receivedReply(data, kind, state) {
+  if (!data || typeof data !== 'object' || Array.isArray(data) || data.provared !== 'received') return null;
+  if (data.kind !== kind) return null;
+  if ((typeof state === 'string' ? state : undefined) !== (typeof data.state === 'string' ? data.state : undefined)) return null;
+  if (typeof data.kept !== 'boolean') return null;
+  return data.kept ? 'kept' : 'not-kept';
+}
+
 /** The link that carries a signed message back: the return address with the message after "#signed=". */
 export function signedLink(address, message) {
   return `${address}#signed=${toBase64url(utf8(JSON.stringify(message)))}`;
@@ -355,6 +381,8 @@ function page() {
   let request = null;
   let earlier = null;
   let expected = null;
+  // Said beside the request's own words where the earlier passkey belongs to another website.
+  let elsewhereNote = '';
   // The warnings shown before signing are confirmed by pressing the button
   // a second time.
   let confirmed = false;
@@ -502,6 +530,7 @@ function page() {
     request = null;
     earlier = null;
     expected = null;
+    elsewhereNote = '';
     $('steps').hidden = false;
     $('cancel-details').open = false;
     $('cancel-of').value = '';
@@ -555,9 +584,9 @@ function page() {
     }
     $('fields').value = JSON.stringify(request.fields, null, 2);
     $('issuer-name').value = request.name ?? (earlier ? String(earlier.content.issuer.name) : '');
-    say('read-status', request.kind === 'renewal'
+    say('read-status', (request.kind === 'renewal'
       ? 'The page that opened this window asks you to renew a permission: the new permission below starts as that page filled it in. Read it, change it if you wish, and press "Read the permission" to see it in words and what it changes.'
-      : 'The page that opened this window asks you to sign a new permission, filled in below. Read it, change it if you wish, write your name, and press "Read the permission".');
+      : 'The page that opened this window asks you to sign a new permission, filled in below. Read it, change it if you wish, write your name, and press "Read the permission".') + elsewhereNote);
   }
 
   // What a request settles before anything is shown: the earlier
@@ -584,7 +613,7 @@ function page() {
       if (rpId !== location.hostname) {
         // The passkey belongs to another website: a browser will not let it sign here.
         expected = null;
-        say('read-status', `The passkey that signed the earlier permission (${thumb}) belongs to the website ${rpId}, and a browser lets it sign only there, not at ${location.hostname}. The new permission is signed with a passkey for this website instead; the agent's software takes a permission from a passkey it does not yet trust only when it is told to.`);
+        elsewhereNote = ` The passkey that signed the earlier permission (${thumb}) belongs to the website ${rpId}, and a browser lets it sign only there, not at ${location.hostname}. The new permission is signed with a passkey for this website instead; the agent's software takes a permission from a passkey it does not yet trust only when it is told to.`;
       }
     }
   }
@@ -806,9 +835,32 @@ function page() {
       }
     }
     if (handed) {
-      say(statusId, `Signed, and handed back to ${to.address}. This window closes itself; if it stays open, close it.`);
-      say(saveStatusId, 'If the page that opened this window did not receive the signed record, save it as a file instead.');
-      setTimeout(() => window.close(), 1500);
+      // The window closes once the page that opened it says it kept the
+      // record; until then, and if it never says so, the file stays offered.
+      say(statusId, `Signed, and handed to ${to.address}. Waiting for it to confirm that it kept the signed ${kind === 'cancellation' ? 'cancellation' : 'permission'}.`);
+      say(saveStatusId, '');
+      let timer = null;
+      const reply = (event) => {
+        if (event.source !== opener || event.origin !== to.origin) return;
+        const answer = receivedReply(event.data, kind, request.state);
+        if (!answer) return;
+        window.removeEventListener('message', reply);
+        clearTimeout(timer);
+        if (answer === 'kept') {
+          say(statusId, `Signed, and kept by ${to.address}. This window closes itself; if it stays open, close it.`);
+          setTimeout(() => window.close(), 1000);
+        } else {
+          say(statusId, `Signed, but ${to.address} did not keep it: it says why on its own page. Nothing more is sent from this window.`);
+          say(saveStatusId, 'You can still save it as a file.');
+        }
+      };
+      window.addEventListener('message', reply);
+      timer = setTimeout(() => {
+        window.removeEventListener('message', reply);
+        say(statusId, `Signed and handed to ${to.address}, but it has not confirmed that it kept the signed record. The page that opened this window may have been closed or moved on.`);
+        say(saveStatusId, 'Save it as a file instead, so that it is not lost.');
+        $(saveId).focus();
+      }, RECEIPT_WAIT);
       return;
     }
     say(statusId, `Signed. This page was not opened as a window by ${to.address}, so the signed record is not handed back by itself: press the button below to go back there with it.`);
