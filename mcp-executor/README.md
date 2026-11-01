@@ -353,7 +353,11 @@ sent on with no content rule tested.
   files: `**settings.json` also matches `my-settings.json`; a path with
   other capitals, a trailing space, a trailing full stop
   (`settings.json.`, which Windows opens as `settings.json`) or a symbolic
-  link is another text.
+  link is another text. A `/` or `\` in a pattern matches either
+  separator, so that one pattern covers paths written either way; on a
+  server on Linux or macOS, where `\` is an ordinary character in a
+  file name, a `test` used as an allow-list (`matches: "safe/**"`)
+  also accepts `safe\x`, a file in the current folder.
 - That a `when` reads a value of another kind. A `when` with `matches` is
   met only by text: a path given as a list (`["settings.json"]`) or any
   other value that is not text does not match, so the rule does not apply
