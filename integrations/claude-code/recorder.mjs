@@ -42,9 +42,10 @@
 //   recorder-keys.jwk        the recorder's three private keys, for seals (never share)
 //   slip.json                the signed slip the service acts under, from the signing page
 //   slip-<fingerprint>.json  each slip that stood in its place before, kept by its fingerprint
-//   trusted-passkeys.json    the thumbprints of the passkeys whose slips are in the record ("passkeys": written
-//                            at the first "use", added to only by "renew --new-passkey"), and among them those
-//                            that may sign no new slip ("retired": written by "retire-passkey" and "admit-passkey")
+//   trusted-passkeys.json    the thumbprints of the passkeys this recorder trusts ("passkeys": written at the
+//                            first "use", added to only by "renew --new-passkey" and "admit-passkey"), and among
+//                            them those that may sign no new slip ("retired": written by "retire-passkey" and
+//                            "admit-passkey")
 //   book.jsonl               the book: the slips, a stub for each tool call, and seals
 //   book-<n>.jsonl           each book kept before it, sealed, numbered from 1 in the order kept
 //   feed-token               the token a reader gives to read the books through the feed (feed.mjs):
@@ -63,7 +64,12 @@
 //
 // The feed (GET /books and /lines, feed.mjs) gives the books' lines to a
 // reader on this computer that holds the token, such as the application's
-// uploader, so that no other program need open a book file.
+// uploader, so that no other program need open a book file. The same reader
+// may hand over a record the person signed elsewhere (POST /hand-over): a
+// renewal, taken as "renew" takes one but never from a passkey this
+// computer does not already trust, or a cancellation of the permission in
+// force, which stops every call under it and which the agent's side
+// acknowledges in the book. The recorder checks each record itself.
 //
 // It listens on 127.0.0.1 only. Any program on this computer could ask it
 // to write a stub, or to take a new slip, and could change the files in its
@@ -637,7 +643,7 @@ export function writeTrusted(folder, add = [], change = null, { beforeRead } = {
   if (change?.retire) retired = [...new Set([...retired, change.retire])];
   if (change?.admit) retired = retired.filter((k) => k !== change.admit);
   retired = retired.filter((k) => passkeys.includes(k));
-  const about = 'The thumbprints of the passkeys whose permissions are in this recorder\'s record ("passkeys": written by "use", added to by "renew --new-passkey"), and among them those that may sign no new permission ("retired": written by "retire-passkey" and "admit-passkey").';
+  const about = 'The thumbprints of the passkeys this recorder trusts ("passkeys": written by "use", added to by "renew --new-passkey" and "admit-passkey"), and among them those that may sign no new permission ("retired": written by "retire-passkey" and "admit-passkey").';
   const path = files(folder).trusted;
   const temporary = `${path}.${process.pid}.${nodeCrypto.randomBytes(6).toString('hex')}.tmp`;
   replaceFile(path, JSON.stringify({ about, passkeys, retired }, null, 2) + '\n', { temporary });
@@ -645,11 +651,13 @@ export function writeTrusted(folder, add = [], change = null, { beforeRead } = {
 }
 
 /**
- * Retire a passkey, or admit a retired one again (the commands
- * "retire-passkey" and "admit-passkey"). A retired passkey stays trusted
- * for the slips it signed already; a new slip from it is refused. Only a
- * passkey on the list can be retired, so that the list says which passkeys
- * are in the record and nothing else.
+ * Retire a passkey, or admit one (the commands "retire-passkey" and
+ * "admit-passkey"). A retired passkey stays trusted for the slips it signed
+ * already; a new slip from it is refused. Only a passkey on the list can be
+ * retired. "admit-passkey" takes a retired passkey back, or adds a passkey
+ * the recorder has not trusted before, so that a new permission it signs is
+ * taken: run on this computer, by the person, never on the word of a record
+ * handed over (handOver, in startService).
  * @param {string} folder
  * @param {string} thumbprint
  * @param {boolean} retire true to retire, false to admit
@@ -661,7 +669,10 @@ export function retirePasskey(folder, thumbprint, retire, { beforeRead } = {}) {
   const held = readTrustedFile(folder);
   if (held === null) throw new Error(`The folder has no list of passkeys yet (${files(folder).trusted}): none has signed a permission for this recorder. The first "use" writes it.`);
   if (!held.passkeys.includes(thumbprint)) {
-    throw new Error(`The passkey ${thumbprint} is not on the list of passkeys whose permissions this recorder has taken (${held.passkeys.join(', ')}), so there is nothing to ${retire ? 'retire' : 'admit'}. A new passkey is taken with "renew <file> --new-passkey".`);
+    if (retire) throw new Error(`The passkey ${thumbprint} is not on the list of passkeys this recorder trusts (${held.passkeys.join(', ')}), so there is nothing to retire.`);
+    // A passkey the recorder has not trusted before: added, and not retired.
+    const lists = writeTrusted(folder, [thumbprint], null, { beforeRead });
+    return { ...lists, changed: true, added: true };
   }
   const already = held.retired.includes(thumbprint);
   if (retire === already) return { ...held, changed: false };
@@ -719,16 +730,18 @@ export async function trustFor(folder, text, placed) {
  *   withoutMethods: signing methods to take as not built in, as the checker takes them (for tests)
  */
 export async function checkNewSlip(slip, { agentKeys, previous = null, trusted = previous ? [previous.issuerKey] : [], retired = [], newPasskey = false, now = Date.now(), withoutMethods = [] }) {
+  // Each refusal carries a code, which the application turns into its own words (handOver, in startService).
+  const refuse = (code, words, more = {}) => Object.assign(new Error(words), { code, ...more });
   const check = await checkSlip(slip, { withoutMethods });
   if (check.problems.length > 0) {
-    throw new Error(`The permission does not pass its check, so it is not used: ${check.problems.map((p) => `[${p.code}] ${p.message}`).join(' ')}`);
+    throw refuse('not-sound', `The permission does not pass its check, so it is not used: ${check.problems.map((p) => `[${p.code}] ${p.message}`).join(' ')}`);
   }
-  if (check.signature.state !== 'valid') throw new Error(`This device could not check the passkey's signature on the permission (${check.signature.method}), so it is not used.`);
+  if (check.signature.state !== 'valid') throw refuse('not-checked', `This device could not check the passkey's signature on the permission (${check.signature.method}), so it is not used.`);
   const { content } = check;
   if (JSON.stringify(content.agent.keys) !== JSON.stringify(agentKeys)) {
-    throw new Error(`The permission names other keys than the agent's keys in this folder, so it is not used. Sign one with the keys that "${RUN} keys" prints.`);
+    throw refuse('other-agent', `The permission names other keys than the agent's keys in this folder, so it is not used. Sign one with the keys that "${RUN} keys" prints.`);
   }
-  if (Date.parse(content.validUntil) <= now) throw new Error(`The permission ended at ${content.validUntil}, so it is not used. Sign a new one.`);
+  if (Date.parse(content.validUntil) <= now) throw refuse('ended', `The permission ended at ${content.validUntil}, so it is not used. Sign a new one.`);
   const warnings = [];
   if (Date.parse(content.validFrom) > now) warnings.push(`The permission is in force only from ${content.validFrom}: until then every tool call is refused.`);
   // A passkey that signed no permission before is refused, so that no
@@ -739,11 +752,11 @@ export async function checkNewSlip(slip, { agentKeys, previous = null, trusted =
   // "admit-passkey" takes it back. --new-passkey does not: it is for a
   // passkey the recorder has never seen.
   if (retired.includes(check.issuerKey)) {
-    throw new Error(`This permission is signed by a passkey (${check.issuerKey}) that was retired with "${RUN} retire-passkey", so it is not used, with or without --new-passkey. The permissions it signed before stand in the record. If the passkey is yours and you mean to sign with it again, run "${RUN} admit-passkey ${check.issuerKey}" first.`);
+    throw refuse('passkey-retired', `This permission is signed by a passkey (${check.issuerKey}) that was retired with "${RUN} retire-passkey", so it is not used, with or without --new-passkey. The permissions it signed before stand in the record. If the passkey is yours and you mean to sign with it again, run "${RUN} admit-passkey ${check.issuerKey}" first.`, { thumbprint: check.issuerKey });
   }
   if (trusted.length > 0 && !trusted.includes(check.issuerKey)) {
     if (!newPasskey) {
-      throw new Error(`This permission is signed by a passkey (${check.issuerKey}) that signed none of the permissions before it (${trusted.join(', ')}), so it is not used. If you made a new passkey yourself, run the command again with --new-passkey.`);
+      throw refuse('passkey-not-trusted', `This permission is signed by a passkey (${check.issuerKey}) that signed none of the permissions before it (${trusted.join(', ')}) and that this recorder does not trust, so it is not used. If you made a new passkey yourself, run the command again with --new-passkey, or run "${RUN} admit-passkey ${check.issuerKey}" on this computer.`, { thumbprint: check.issuerKey });
     }
     warnings.push(`This permission is signed by a new passkey (${check.issuerKey}), taken because --new-passkey was given. Whoever checks the book must now name both passkeys (--issuer, once for each).`);
   }
@@ -879,6 +892,8 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
   const feed = createFeed({
     folder,
     token: feedToken(folder),
+    // A record handed over (POST /hand-over) is taken in its turn, between two calls.
+    handOver: (given) => inTurn(() => handOver(given)),
     memory: () => [current, ...keptOpen.values()].map((b) => ({ key: b.id, path: b.path, text: () => b.writer.book(), saved: () => b.written ?? 0, inForce: b === current })),
   });
   const watched = (b, save) => (text) => {
@@ -955,6 +970,9 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
   }
   /** The book in force, at book.jsonl. */
   let current = bookAt(f.book, await open(text, placed.fingerprint, trusted), placed);
+  // Every permission this recorder has held, in the book in force and the books kept: a renewal handed over is
+  // never one of these but the permission in force (a record held back and handed over again is not taken).
+  const everSlips = await slipsIn(text);
   current.save(current.writer.book());
   syncBook(current);
   const started = new Date().toISOString();
@@ -1368,6 +1386,12 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
   // kept; a call allowed under the old one is still recorded in it.
   async function newBook() {
     const old = current;
+    // A new book begins with the permission in force alone: one that is
+    // cancelled would act again there. No call is taken under it, so the
+    // book does not grow; renewing it starts new books again.
+    if (await cancelledInForce()) {
+      throw Object.assign(new Error('The permission in force is cancelled, so no new book is started: the new book would begin with that permission and not its cancellation. No call is taken under it, so the book does not grow. A new permission (renew) starts new books again.'), { code: 'cancelled' });
+    }
     // Before anything is changed: a kept book must be numbered by a name the rule reads again.
     const highest = keptBooks(folder).at(-1)?.number ?? 0;
     if (highest >= KEPT_BOOK_HIGHEST) {
@@ -1430,7 +1454,8 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
   // goes on, and no passkey is added to the list. A slip from a passkey not on the list is
   // taken only with "newPasskey", which adds it to the list.
   async function renew(given, newPasskey = false) {
-    // The retired list is read from the file each time, so that "retire-passkey", run while the service runs, counts at once.
+    // The lists are read from the file each time, so that "retire-passkey" and "admit-passkey", run while the service runs, count at once.
+    trusted = trustedNow();
     const next = await checkNewSlip(given, { agentKeys: agent.keys, previous: current, trusted, retired: readRetired(folder), newPasskey });
     const before = current.fingerprint;
     if (next.fingerprint === before) return { slip: before, previous: before, issuer: current.issuerKey, entries: entries(), unchanged: true, warnings: [] };
@@ -1458,6 +1483,7 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
       throw e;
     }
     trusted = issuerKeys;
+    everSlips.add(next.fingerprint);
     // The writer before is kept while a call allowed under its slip may still come back for its stub.
     if (pending(current.id, before)) current.before.set(before, current.writer);
     Object.assign(current, { writer, slip: next.slip, fingerprint: next.fingerprint, issuerKey: next.issuerKey, content: next.content });
@@ -1474,6 +1500,7 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
   for (const k of kept) {
     const keptText = readFileSync(k.path, 'utf8');
     readFigures(keptText, 0, keptFigures, { entries: 0, bytes: 0 });
+    for (const held of await slipsIn(keptText)) everSlips.add(held);
     if (keptText.startsWith('{"seal":', keptText.lastIndexOf('\n', keptText.length - 2) + 1)) continue;
     try {
       const under = [...(await slipsIn(keptText))].at(-1);
@@ -1486,6 +1513,129 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
   }
   // A book already full when the service starts is kept, and a new one begun, before any call.
   await whenFull();
+
+  // The passkeys trusted: those in memory, and those the file lists now
+  // ("admit-passkey" or "renew --new-passkey" run while the service runs).
+  function trustedNow() {
+    let onDisk = [];
+    try {
+      onDisk = readTrusted(folder) ?? [];
+    } catch {
+      // A list that cannot be read: the one in memory.
+    }
+    return [...new Set([...trusted, ...onDisk])];
+  }
+
+  // Whether the permission in force is cancelled: its cancellation is in the
+  // book, or held beside it by the writer (dated ahead of the clock).
+  async function cancelledInForce() {
+    const answer = await current.writer.check();
+    if (answer.entries.some((e) => e.kind === 'cancellation' && e.slip === current.fingerprint && e.problems.length === 0)) return true;
+    return current.writer.cancellations().some((c) => slipOfCancellation(c.cancellation) === current.fingerprint);
+  }
+
+  // A RECORD HANDED OVER (POST /hand-over, by a reader that holds the feed's
+  // token: the application's uploader). The person signed it elsewhere (on
+  // the signing page, opened from the application), and the application
+  // kept it sealed with the book; the uploader hands it over. Nothing about
+  // it is taken on the word of whoever handed it over: the recorder checks
+  // it itself. The answer says what was done, with a code a program can read
+  // and words for the person:
+  //   { kind, fingerprint, outcome, code?, thumbprint?, message, acknowledgement? }
+  // outcome: "taken" (the book holds it now), "already" (it held it
+  // before), "held" (a cancellation dated ahead of this computer's clock:
+  // the writer stops, and writes it into the book once the clock reaches its
+  // date) or "refused" (nothing changed; code says why).
+  //
+  // A RENEWAL is taken as "renew" takes one without --new-passkey: from a
+  // passkey this recorder already trusts and has not retired, naming this
+  // folder's agent keys, not ended. It is never a permission this recorder
+  // held before (one held back and handed over again would take the agent
+  // back to it), and starts no earlier than the permission in force. A
+  // passkey this computer does not trust is refused, never added: the
+  // person adds it here, with "admit-passkey".
+  //
+  // A CANCELLATION is taken only for the permission in force: the writer
+  // stops, writes the cancellation into the book and signs the agent's
+  // acknowledgement, which follows it into the book (the library's "add").
+  // One handed over again gives back the same acknowledgement.
+  async function handOver(given) {
+    const refused = (kind, fingerprint, code, message, more = {}) => ({ kind, fingerprint, outcome: 'refused', code, message, ...more });
+    if (!given || typeof given !== 'object' || Array.isArray(given)) return refused(null, null, 'not-understood', 'What was handed over is not a renewal or a cancellation.');
+    const names = Object.keys(given);
+    if (given.kind === 'renewal' && names.length === 2 && names.includes('slip')) return handOverRenewal(given.slip, refused);
+    if (given.kind === 'cancellation' && names.length === 2 && names.includes('cancellation')) return handOverCancellation(given.cancellation, refused);
+    return refused(null, null, 'not-understood', 'What was handed over is not a renewal ({kind: "renewal", slip}) or a cancellation ({kind: "cancellation", cancellation}).');
+  }
+
+  async function handOverRenewal(slip, refused) {
+    const kind = 'renewal';
+    let fp;
+    try {
+      fp = await fingerprint(fromBase64url(slip.payload));
+    } catch {
+      return refused(kind, null, 'not-sound', 'What was handed over is not a signed permission.');
+    }
+    if (fp === current.fingerprint) return { kind, fingerprint: fp, outcome: 'already', message: 'This permission is the one in force: the book holds it already.' };
+    if (everSlips.has(fp)) return refused(kind, fp, 'not-again', 'This permission was in force before, and a later one replaced it: the recorder does not go back to it. Sign a new permission.');
+    trusted = trustedNow();
+    let next;
+    try {
+      next = await checkNewSlip(slip, { agentKeys: agent.keys, previous: current, trusted, retired: readRetired(folder), newPasskey: false });
+    } catch (e) {
+      return refused(kind, fp, e.code ?? 'not-taken', e.message, e.thumbprint ? { thumbprint: e.thumbprint } : {});
+    }
+    if (Date.parse(next.content.validFrom) < Date.parse(current.content.validFrom)) {
+      return refused(kind, fp, 'older', `This permission starts at ${next.content.validFrom}, before the permission in force (from ${current.content.validFrom}), so it is not taken: a record signed earlier and handed over late would take the agent back. Sign a new permission.`);
+    }
+    try {
+      const renewed = await renew(slip, false);
+      await whenFull();
+      return { kind, fingerprint: fp, outcome: 'taken', entries: renewed.entries, message: `Taken: the agent acts under this permission from now on (in force from ${next.content.validFrom} until ${next.content.validUntil}).` };
+    } catch (e) {
+      return refused(kind, fp, e.code ?? 'failed', e.message);
+    }
+  }
+
+  async function handOverCancellation(record, refused) {
+    const kind = 'cancellation';
+    let fp;
+    let slipFp;
+    try {
+      const bytes = fromBase64url(record.payload);
+      fp = await fingerprint(bytes);
+      slipFp = JSON.parse(new TextDecoder().decode(bytes)).slip;
+    } catch {
+      return refused(kind, null, 'not-sound', 'What was handed over is not a signed cancellation.');
+    }
+    if (typeof slipFp !== 'string') return refused(kind, fp, 'not-sound', 'What was handed over is not a signed cancellation.');
+    if (slipFp !== current.fingerprint) {
+      return everSlips.has(slipFp)
+        ? refused(kind, fp, 'not-in-force', 'This cancellation is of a permission that a later one replaced: the agent takes no action under it any more, so there is nothing to stop. The cancellation stays with the person\'s own copy.')
+        : refused(kind, fp, 'unknown-permission', 'This cancellation is of a permission this recorder has never held.');
+    }
+    // The book's own line for this cancellation, found by its signed content.
+    const mark = `"payload":"${record.payload}"`;
+    const before = current.writer.book().includes(mark);
+    let acknowledgement;
+    let failure = null;
+    try {
+      acknowledgement = (await current.writer.add({ cancellation: record })).acknowledgement;
+    } catch (e) {
+      failure = e;
+      acknowledgement = e.acknowledgement;
+    }
+    try {
+      current.save(current.writer.book());
+    } catch (e) {
+      if (acknowledgement) return { kind, fingerprint: fp, outcome: 'held', acknowledgement, message: `The recorder stopped acting under the permission. The cancellation could not be written to the book file yet (${e.message}): it is written with the next save.` };
+      return refused(kind, fp, 'failed', e.message);
+    }
+    const now = current.writer.book().includes(mark);
+    if (now && acknowledgement) return { kind, fingerprint: fp, outcome: before ? 'already' : 'taken', acknowledgement, message: before ? 'The book holds this cancellation already, with the agent\'s acknowledgement.' : 'Taken: the recorder stopped acting under the permission, and wrote the cancellation and the agent\'s acknowledgement into the book.' };
+    if (!now && acknowledgement) return { kind, fingerprint: fp, outcome: 'held', acknowledgement, message: 'The recorder stopped acting under the permission. The cancellation is dated ahead of this computer\'s clock, so it is written into the book, with the agent\'s acknowledgement, once the clock reaches its date.' };
+    return refused(kind, fp, 'not-sound', failure ? failure.message : 'The cancellation was not taken.');
+  }
 
   // A caller that has gone (it gave up waiting) is not answered. Its
   // question before a call, a seal, a renewal or a new book it asked for,
@@ -1528,6 +1678,7 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
           keptBooks: keptBooks(folder).map((k) => k.file),
           feed: feed.status(),
           ...(bookProblem ? { newBookProblem: bookProblem } : {}),
+          cancelled: await cancelledInForce(),
           witnesses: witnessed.witnesses,
           ...(witnessed.problem ? { witnessesProblem: witnessed.problem } : {}),
           ...(pendingProblem ? { pendingSealProblem: pendingProblem } : {}),
@@ -1642,6 +1793,16 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
       return new Promise((resolve) => server.close(resolve));
     },
   };
+}
+
+/** The fingerprint of the slip a cancellation names, read from its content; null where it cannot be read. */
+function slipOfCancellation(record) {
+  try {
+    const slip = JSON.parse(new TextDecoder().decode(fromBase64url(record.payload))).slip;
+    return typeof slip === 'string' ? slip : null;
+  } catch {
+    return null;
+  }
 }
 
 function requestFrom(given) {
@@ -2011,7 +2172,8 @@ const USAGE = `Usage: ${RUN} <command>
                 take no new permission from that passkey, with or without --new-passkey; what it
                 signed before stands, and limits are still counted across the books it signed
   admit-passkey <thumbprint>
-                take new permissions from a retired passkey again
+                take new permissions from a retired passkey again, or from a passkey this recorder
+                has not trusted before (a renewal handed over from the application is then taken)
   start         run the recorder in this terminal
   ensure        start the recorder in the background, if it is not running
   status        what the recorder holds
@@ -2127,6 +2289,8 @@ export async function main(argv) {
         // A slip.json that cannot be read is the start-up checks' business.
       }
       if (placed && placed.issuerKey === rest[0]) console.log(`It signed the permission in force (${placed.fingerprint}), which stays in force until it ends; the next permission must come from another passkey.`);
+    } else if (lists.added) {
+      console.log(`The passkey ${rest[0]} is admitted: the recorder takes new permissions from it, among them a renewal handed over from the application.`);
     } else {
       console.log(`The passkey ${rest[0]} is admitted again: the recorder takes new permissions from it.`);
     }
