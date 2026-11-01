@@ -17,4 +17,6 @@ export function signSlipWithPasskey(fields: Omit<SlipFields, 'issuer'>, passkey:
 export function approveWithPasskey(request: Request & { slip: Fingerprint; when?: number | Date }, passkey: StoredPasskey): Promise<SignedRecord>;
 export function cancelWithPasskey(request: { slip: Fingerprint; when?: number | Date; id?: Base64url }, passkey: StoredPasskey): Promise<SignedRecord>;
 /** Sign the challenge of anything prepared for a passkey; hand the result to the matching assemble function. */
-export function signChallengeWithPasskey(challenge: Uint8Array, passkey: StoredPasskey): Promise<Assertion>;
+export function signChallengeWithPasskey(challenge: Uint8Array, passkey: StoredPasskey): Promise<Assertion & { credentialId: string }>;
+/** Sign a challenge with a passkey the person chooses from those the device holds for the website; check the answer against the key you expect before relying on it. */
+export function signChallengeWithChosenPasskey(challenge: Uint8Array, rpId: string): Promise<Assertion & { credentialId: string }>;

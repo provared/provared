@@ -104,7 +104,7 @@ test('the type declarations name exactly what the library exports', async () => 
   for (const name of Object.keys(checker)) assert.ok(checkerDeclared.split(/[^A-Za-z0-9_]+/).includes(name), name);
   assert.ok(!/writeStub|prepareSlip|generateKeySet/.test(checkerDeclared.split('export type')[0]), 'the checker declares nothing that signs');
   const browser = declared(join('src', 'passkey-browser.d.ts'));
-  assert.deepEqual([...browser].sort(), ['PasskeyError', 'approveWithPasskey', 'cancelWithPasskey', 'createPasskey', 'signChallengeWithPasskey', 'signSlipWithPasskey']);
+  assert.deepEqual([...browser].sort(), ['PasskeyError', 'approveWithPasskey', 'cancelWithPasskey', 'createPasskey', 'signChallengeWithChosenPasskey', 'signChallengeWithPasskey', 'signSlipWithPasskey']);
   const pkg = JSON.parse(read('package.json'));
   for (const entry of Object.values(pkg.exports)) {
     if (typeof entry === 'object') for (const file of Object.values(entry)) assert.ok(statSync(join(root, file)).isFile(), file);

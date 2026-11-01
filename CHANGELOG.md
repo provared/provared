@@ -2,6 +2,74 @@
 
 ## Unreleased
 
+- **The signing page opened as a small window by another page** (the
+  Provared application, which signs nothing itself). `page/sign.html` and
+  `page/sign-page.js` take a request after `#request=` in the address: a
+  new permission, a renewal or a cancellation, with the fields to fill,
+  the earlier signed permission, the passkey's public key, the address to
+  hand the result back to, and a short text handed back unchanged. The
+  page trusts the earlier permission only once the library's checker has
+  confirmed its passkey signature, then shows what the new permission
+  changes against it, part by part. It shows the return address before
+  signing, and warns, asking for a second press, before a new passkey is
+  made, before an agent's key set is signed for the first time on that
+  device, before a passkey other than the earlier one signs, and where the
+  return address is not one of the application's own two addresses,
+  exactly (`https://app.prova.red:8443` and `https://app.prova.red`;
+  `http://localhost` is taken and always warned of). The warnings are
+  worked out again at every press, and a press signs only where every
+  warning that stands then was shown and confirmed; a passkey prompt that
+  fails, or a passkey this browser forgets, takes the confirmation back. A
+  passkey is made only where the warning that one will be made was among
+  those confirmed. Where the browser has forgotten which passkey signed
+  before, the device is asked to offer the passkeys it holds for the
+  website, and what it signs is kept only if the checker passes it with
+  the expected public key. A cancellation is signed only by the passkey
+  that signed the permission, at this page's own website name and
+  address: a request to cancel one signed elsewhere, or with a passkey for
+  another website name (a parent name included), is refused, and a
+  cancellation never makes a passkey. A cancellation for an address that
+  is not the application's asks for a second press too. The signed record
+  is sent by `postMessage` to the exact return address, and the page says
+  it was handed over only once that page answers; it closes once that page
+  answers, from the window that opened it and from the return address
+  exactly, that it kept the record (`{ provared: 'received', kind, state,
+  kept }`), and stays open with the file offered where it says it did not,
+  or says nothing within ten seconds. With no window that opened it, the
+  page offers the file first, then a button that goes back with the record
+  after `#signed=`. A signature that arrives after the permission was
+  changed is not kept. A page shown inside another page still offers
+  nothing.
+- `src/passkey-browser.js`: `signChallengeWithChosenPasskey(challenge,
+  rpId)` asks the device to offer the passkeys it holds for the website,
+  for a caller that checks the answer against the key it expects; the
+  answer of every signing function now names the passkey's identifier
+  (`credentialId`). Every other function still refuses a passkey with no
+  identifier, so that no caller is offered a choice it did not ask for.
+- Tests: `test/sign-request.test.mjs` (the request, the return address,
+  what changed, the messages each way) and `test/sign-window.test.mjs`
+  (the window driven in a browser with a virtual passkey, at phone and
+  desktop width: a new permission, a renewal and a cancellation handed
+  back; the wrong passkey refused; the answer that the record was not
+  kept, and no answer; the way back by a link for all three kinds; a
+  request that cannot be read; a framed page),
+  `test/sign-window-review.test.mjs` (the cases an independent review
+  found, at made-up https addresses: a failed passkey prompt, a passkey
+  forgotten between two presses, a cancellation for a parent website name
+  or another address, a cancellation for an unknown address, a record
+  sent to a page at another address, an answer from another window, a
+  change while the passkey is asked, a cancellation by another passkey)
+  and `test/passkey-browser-guard.test.mjs` (a passkey with no identifier
+  is refused before the device is asked).
+- **After an independent re-check of the signing window, 1 November
+  2026:** once a cancellation asked for by a request has been signed and
+  handed back (or offered to take back by a link), the "sign the
+  cancellation" button stays off: while the page that asked waits, after
+  it says it did not keep it, and after no answer. Before, it was switched
+  on again, and a second press signed a second cancellation with no new
+  warning. The file stays offered; a new request starts the page afresh.
+  Held by `test/sign-window.test.mjs`.
+
 - **`provared-mcp-executor` 0.2.0** (published on npm on 1 November 2026
   and listed in the official MCP Registry as
   `io.github.provared/mcp-executor`; the library stays at 0.7.0, and the
