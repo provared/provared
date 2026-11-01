@@ -2,6 +2,44 @@
 
 ## Unreleased
 
+- **The signing page opened as a small window by another page** (the
+  Provared application, which signs nothing itself). `page/sign.html` and
+  `page/sign-page.js` take a request after `#request=` in the address: a
+  new permission, a renewal or a cancellation, with the fields to fill,
+  the earlier signed permission, the passkey's public key, the address to
+  hand the result back to, and a short text handed back unchanged. The
+  page trusts the earlier permission only once the library's checker has
+  confirmed its passkey signature, then shows what the new permission
+  changes against it, part by part. It shows the return address before
+  signing, and warns, asking for a second press, before a new passkey is
+  made, before an agent's key set is signed for the first time on that
+  device, before a passkey other than the earlier one signs, and where the
+  return address is not the application's own (`app.prova.red`, over
+  https, any port). Where the browser has forgotten which passkey signed
+  before, the device is asked to offer the passkeys it holds for the
+  website, and what it signs is kept only if the checker passes it with
+  the expected public key; no passkey is made silently. The signed record
+  goes back by `postMessage` to the exact return address; the window
+  closes once that page answers that it kept the record
+  (`{ provared: 'received', kind, state, kept }`), and stays open with the
+  file offered where it says it did not, or says nothing within ten
+  seconds. With no window that opened it, the page offers a button that
+  goes back with the record after `#signed=`; last, a file. A page shown
+  inside another page still offers nothing.
+- `src/passkey-browser.js`: `signChallengeWithChosenPasskey(challenge,
+  rpId)` asks the device to offer the passkeys it holds for the website,
+  for a caller that checks the answer against the key it expects; the
+  answer of every signing function now names the passkey's identifier
+  (`credentialId`). Every other function still refuses a passkey with no
+  identifier, so that no caller is offered a choice it did not ask for.
+- Tests: `test/sign-request.test.mjs` (the request, the return address,
+  what changed, the messages each way) and `test/sign-window.test.mjs`
+  (the window driven in a browser with a virtual passkey, at phone and
+  desktop width: a new permission, a renewal and a cancellation handed
+  back; the wrong passkey refused; the answer that the record was not
+  kept, and no answer; the way back by a link for all three kinds; a
+  request that cannot be read; a framed page).
+
 - **`provared-mcp-executor` 0.2.0** (published on npm on 1 November 2026
   and listed in the official MCP Registry as
   `io.github.provared/mcp-executor`; the library stays at 0.7.0, and the

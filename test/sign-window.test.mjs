@@ -24,7 +24,7 @@ import { createServer } from 'node:http';
 import { extname, join, normalize } from 'node:path';
 import { after, before, test } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { entryLine, fromBase64url, generateKeySet, keySetFingerprint, thumbprint, toBase64url, utf8 } from '../src/index.js';
+import { assembleSlip, entryLine, fromBase64url, generateKeySet, keySetFingerprint, prepareSlip, thumbprint, toBase64url, utf8 } from '../src/index.js';
 import { checkBook, checkSlip } from '../src/check.js';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -32,13 +32,17 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; ch
 
 // The page that opens the window, as the application does: it keeps every
 // message it receives, with the sender's origin and whether the sender is
-// the window it opened.
+// the window it opened, and answers that it kept the record (window.answer:
+// true, false, or null for no answer at all).
 const OPENER = `<!doctype html><html><head><meta charset="utf-8"><title>opener</title></head><body><p>the opener</p><script>
-window.result = null; window.events = [];
+window.result = null; window.events = []; window.answer = true;
 window.openSign = (url) => { window.popup = window.open(url, 'provared-sign', 'popup,width=520,height=760'); return Boolean(window.popup); };
 window.addEventListener('message', (e) => {
   window.events.push({ origin: e.origin, fromPopup: e.source === window.popup, data: e.data });
-  if (e.data && e.data.provared === 'signed') window.result = e.data;
+  if (e.data && e.data.provared === 'signed') {
+    window.result = e.data;
+    if (window.answer !== null) e.source.postMessage({ provared: 'received', kind: e.data.kind, ...(typeof e.data.state === 'string' ? { state: e.data.state } : {}), kept: window.answer }, e.origin);
+  }
 });
 </script></body></html>`;
 const BACK = '<!doctype html><html><head><meta charset="utf-8"><title>back</title></head><body><p>back</p></body></html>';
@@ -116,8 +120,8 @@ function permission(agentKeys) {
 
 // A context at phone width, with the problems a page reports and the
 // requests that leave the two servers.
-async function newContext() {
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+async function newContext(viewport = { width: 390, height: 844 }) {
+  const context = await browser.newContext({ viewport });
   const problems = [];
   const outside = [];
   context.on('page', (page) => {
@@ -366,5 +370,118 @@ test('a request that cannot be read offers nothing to sign, and a framed page of
   assert.match(await frame.textContent('#read-status'), /shown inside another page, so it offers nothing to sign or cancel/);
   await frame.click('#read');
   assert.equal(await frame.isDisabled('#sign'), true);
+  await context.close();
+});
+
+const DESKTOP = { width: 1280, height: 800 };
+
+test('a renewal of a permission whose passkey belongs to another website: the page says so, warns before a new passkey is made, and signs with one for this website', async (t) => {
+  if (skip(t)) return;
+  const { makePasskey } = await import('./helpers/passkey.mjs');
+  const old = await makePasskey('ES256', { rpId: 'old.example.org', origin: 'https://old.example.org' });
+  const agent = await generateKeySet();
+  const prepared = await prepareSlip({ ...permission(agent.keys), issuer: { name: 'The person', key: old.key, rpId: old.rpId, origin: old.origin } });
+  const earlier = assembleSlip(prepared, await old.sign(prepared.challenge));
+  const { context, problems } = await newContext(DESKTOP);
+  const page = await context.newPage();
+  await page.goto(`${opener.origin}/opener.html`);
+  const { popup, holder } = await openWindow(context, page, requestLink({ kind: 'renewal', fields: permission(agent.keys), earlier, returnTo: `${opener.origin}/opener.html`, state: 'w' }));
+  assert.match(await text(popup, '#read-status'), /asks you to renew a permission.*belongs to the website old\.example\.org, and a browser lets it sign only there/);
+  await popup.click('#read');
+  await popup.waitForFunction(() => !document.getElementById('sign').disabled, null, { timeout: 20000 });
+  await popup.click('#sign');
+  await popup.waitForFunction(() => !document.getElementById('warnings').hidden, null, { timeout: 20000 });
+  const warnings = await popup.$$eval('#warnings li', (items) => items.map((li) => li.textContent));
+  assert.ok(warnings.some((w) => /signed with a passkey other than the one that signed the earlier permission/.test(w)), warnings.join('\n'));
+  assert.ok(warnings.some((w) => /A new passkey will be made for this website/.test(w)), warnings.join('\n'));
+  assert.equal((await holder.credentials()).length, 0, 'nothing made before the second press');
+  await popup.click('#sign');
+  const { result } = await waitForResult(page);
+  assert.equal(result.kind, 'renewal');
+  assert.equal((await holder.credentials()).length, 1);
+  const checked = await checkSlip(result.record, { issuerOrigins: [sign.origin] });
+  assert.deepEqual(checked.problems, []);
+  assert.notEqual(checked.issuerKey, await thumbprint(old.key));
+  await popup.waitForEvent('close', { timeout: 20000 });
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('at desktop width, the window stays open with the file offered when the page that opened it says it did not keep the record, or says nothing at all', async (t) => {
+  if (skip(t)) return;
+  assert.ok(first && first.renewed, 'the earlier tests signed');
+  const { context, problems, outside } = await newContext(DESKTOP);
+  const page = await context.newPage();
+  await page.goto(`${opener.origin}/opener.html`);
+  await page.evaluate(() => { window.answer = false; });
+  const { popup } = await openWindow(context, page, requestLink({ kind: 'cancellation', earlier: first.renewed.record, returnTo: `${opener.origin}/opener.html`, state: 'c1' }), [first.credential]);
+  assert.ok(await popup.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'nothing scrolls sideways');
+  await popup.click('#cancel');
+  await waitForResult(page);
+  await popup.waitForFunction(() => /did not keep it/.test(document.getElementById('cancel-status').textContent), null, { timeout: 20000 });
+  assert.equal(await popup.isHidden('#cancel-save-line'), false, 'the file stays offered');
+  await new Promise((r) => setTimeout(r, 1500));
+  assert.equal(popup.isClosed(), false, 'the window stays open');
+
+  // No answer at all: after the wait, the window says so and offers the file.
+  const page2 = await context.newPage();
+  await page2.goto(`${opener.origin}/opener.html`);
+  await page2.evaluate(() => { window.answer = null; });
+  const second = await openWindow(context, page2, requestLink({ kind: 'cancellation', earlier: first.renewed.record, returnTo: `${opener.origin}/opener.html`, state: 'c2' }), [first.credential]);
+  await second.popup.click('#cancel');
+  await waitForResult(page2);
+  assert.match(await text(second.popup, '#cancel-status'), /Waiting for it to confirm that it kept the signed cancellation/);
+  await second.popup.waitForFunction(() => /has not confirmed that it kept/.test(document.getElementById('cancel-status').textContent), null, { timeout: 20000 });
+  assert.match(await text(second.popup, '#cancel-save-status'), /Save it as a file instead/);
+  assert.equal(second.popup.isClosed(), false);
+  assert.deepEqual(problems, []);
+  assert.deepEqual(outside, []);
+  await context.close();
+});
+
+test('at desktop width, a renewal and a cancellation with no window go back by a link, with the signed record after "#signed="', async (t) => {
+  if (skip(t)) return;
+  assert.ok(first && first.renewed, 'the earlier tests signed');
+  const { context, problems, outside } = await newContext(DESKTOP);
+  const page = await context.newPage();
+  const fields = { ...permission(first.agent.keys), purpose: 'Renewed with no window.' };
+  await page.goto(requestLink({ kind: 'renewal', fields, earlier: first.renewed.record, returnTo: `${opener.origin}/back.html`, state: 'r' }));
+  const holder = await authenticator(context, page, [first.credential]);
+  await page.waitForFunction(() => document.getElementById('read-status').textContent !== '', null, { timeout: 20000 });
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'nothing scrolls sideways');
+  await page.click('#read');
+  await page.waitForFunction(() => !document.getElementById('sign').disabled, null, { timeout: 20000 });
+  assert.match(await text(page, '#changed-heading'), /What changes against the permission being renewed/);
+  await page.click('#sign');
+  await page.waitForFunction(() => !document.getElementById('warnings').hidden, null, { timeout: 20000 });
+  await page.click('#sign');
+  await page.waitForFunction(() => !document.getElementById('back-line').hidden, null, { timeout: 20000 });
+  assert.equal(await text(page, '#back'), `Go back to ${opener.origin}/back.html with the signed permission`);
+  await Promise.all([page.waitForURL((u) => u.href.startsWith(`${opener.origin}/back.html#signed=`), { timeout: 20000 }), page.click('#back')]);
+  const renewal = JSON.parse(new TextDecoder().decode(fromBase64url(new URLSearchParams(new URL(page.url()).hash.slice(1)).get('signed'))));
+  assert.equal(renewal.kind, 'renewal');
+  assert.equal(renewal.state, 'r');
+  const checked = await checkSlip(renewal.record, { issuerKeys: [first.thumbprint], issuerOrigins: [sign.origin] });
+  assert.deepEqual(checked.problems, []);
+  assert.equal(checked.content.purpose, 'Renewed with no window.');
+  assert.equal((await holder.credentials()).length, 1, 'no new passkey was made');
+
+  // The cancellation, in a new tab of the same browser: the passkey found above is remembered and asked directly.
+  const tab = await context.newPage();
+  await tab.goto(requestLink({ kind: 'cancellation', earlier: renewal.record, returnTo: `${opener.origin}/back.html`, state: 'x' }));
+  await authenticator(context, tab, [first.credential]);
+  await tab.waitForFunction(() => document.getElementById('cancel-status').textContent !== '', null, { timeout: 20000 });
+  await tab.click('#cancel');
+  await tab.waitForFunction(() => !document.getElementById('cancel-back-line').hidden, null, { timeout: 20000 });
+  assert.equal(await text(tab, '#cancel-back'), `Go back to ${opener.origin}/back.html with the signed cancellation`);
+  await Promise.all([tab.waitForURL((u) => u.href.startsWith(`${opener.origin}/back.html#signed=`), { timeout: 20000 }), tab.click('#cancel-back')]);
+  const cancelled = JSON.parse(new TextDecoder().decode(fromBase64url(new URLSearchParams(new URL(tab.url()).hash.slice(1)).get('signed'))));
+  assert.equal(cancelled.kind, 'cancellation');
+  assert.equal(cancelled.state, 'x');
+  const book = await checkBook(`${entryLine({ slip: renewal.record })}\n`, { issuerKeys: [first.thumbprint], issuerOrigins: [sign.origin], cancellations: [{ cancellation: cancelled.record }] });
+  assert.equal(book.summary.problemFound, false);
+  assert.equal(book.held[0].used, true);
+  assert.deepEqual(problems, []);
+  assert.deepEqual(outside, []);
   await context.close();
 });

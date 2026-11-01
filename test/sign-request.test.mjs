@@ -12,7 +12,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { assembleSlip, entryLine, fromBase64url, generateKeySet, keySetFingerprint, prepareSlip, thumbprint, toBase64url, utf8 } from '../src/index.js';
 import { checkSlip } from '../src/check.js';
-import { KNOWN_RETURN_HOSTS, REQUEST_KINDS, readRequest, returnAddress, signedLink, signedMessage, whatChanged } from '../page/sign-page.js';
+import { KNOWN_RETURN_HOSTS, REQUEST_KINDS, readRequest, receivedReply, returnAddress, signedLink, signedMessage, whatChanged } from '../page/sign-page.js';
 import { makePasskey } from './helpers/passkey.mjs';
 
 const requestLink = (request) => `#request=${toBase64url(utf8(JSON.stringify(request)))}`;
@@ -131,6 +131,20 @@ test('the message handed back carries the signed record, its kind and the reques
   const result = await checkSlip(back.record, { issuerKeys: [await thumbprint(passkey.key)], issuerOrigins: ['https://sign.example.org'] });
   assert.deepEqual(result.problems, []);
   assert.ok(entryLine({ slip: back.record }).length > 100);
+});
+
+test('the answer of the page that opened the window is read for this record\'s request only', () => {
+  assert.equal(receivedReply({ provared: 'received', kind: 'renewal', state: 's', kept: true }, 'renewal', 's'), 'kept');
+  assert.equal(receivedReply({ provared: 'received', kind: 'renewal', state: 's', kept: false }, 'renewal', 's'), 'not-kept');
+  assert.equal(receivedReply({ provared: 'received', kind: 'permission', kept: true }, 'permission', undefined), 'kept');
+  // Another request's answer, another kind, a missing or other state, or no clear "kept": set aside.
+  assert.equal(receivedReply({ provared: 'received', kind: 'renewal', state: 'other', kept: true }, 'renewal', 's'), null);
+  assert.equal(receivedReply({ provared: 'received', kind: 'renewal', kept: true }, 'renewal', 's'), null);
+  assert.equal(receivedReply({ provared: 'received', kind: 'renewal', state: 's', kept: true }, 'renewal', undefined), null);
+  assert.equal(receivedReply({ provared: 'received', kind: 'cancellation', state: 's', kept: true }, 'renewal', 's'), null);
+  assert.equal(receivedReply({ provared: 'received', kind: 'renewal', state: 's', kept: 'yes' }, 'renewal', 's'), null);
+  assert.equal(receivedReply({ provared: 'signed', kind: 'renewal', state: 's', kept: true }, 'renewal', 's'), null);
+  for (const data of [null, 'received', [], 7]) assert.equal(receivedReply(data, 'renewal', 's'), null);
 });
 
 test('the page names its return address, its warnings and its way back in the HTML the script expects', () => {
