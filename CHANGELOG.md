@@ -6,6 +6,11 @@ Version 0.7.0 makes three more document names part of the format (section 27 of 
 
 - **Versions.** The library is 0.7.0, in `package.json` and `python/pyproject.toml`. Ranges on the library: `provared-mcp-executor` and the OpenTelemetry bridge (not published) now ask for `^0.7.0`, where they asked for `>0.6.0 <0.8.0`; the recorder beside Claude Code, the gateway and the sealer (neither of the last two published) ask for `>=0.6.0 <0.8.0`, where they asked for `^0.6.0`, which left 0.7.0 out (the recorder's `package-lock.json`, which a Claude Code plugin installs from, still holds 0.6.0, which the new range accepts, and the plugin's test of that lockfile now takes a range of that form as well as a caret range); the Hermes plugin (not published) asks for `>=0.4.0,<0.8`, where it asked for `<0.7`. The README and the guide name the two packages now on npm, with their install lines.
 
+- The gateway's test "M3: an agent may have only so many calls waiting"
+  no longer depends on how busy the computer is: each wait has 120
+  seconds, not 20, and the status is shown to answer without waiting for a
+  call by the upstream still holding that call, not by a time under one
+  second. It checks the same limit.
 - **Three more reserved document names** (format description, section
   27), in both languages: `provared.tool-name` (the fingerprint of the
   tool's name, exactly as the agent's software called it, which is not the
