@@ -106,22 +106,28 @@ test('M3: an agent may have only so many calls waiting, holding only so many byt
   const release = [];
   const w = await world({ patchAnswer: (c, res) => release.push(() => json(res, 200, {})), config: { waitingCalls: 2, waitingBytes: 150 } });
   // Every wait is bounded, so that a gateway that does not answer fails the test rather than holding it.
-  const soon = (p, what) => Promise.race([p, new Promise((_, no) => setTimeout(() => no(new Error(`${what}: no answer in 20 seconds`)), 20000).unref())]);
+  // The bound is generous: each answered call signs a receipt, which can take many seconds on a busy
+  // computer. What the test checks rests on the order of events, never on how fast they come.
+  const LIMIT = 120000;
+  const soon = (p, what) => Promise.race([p, new Promise((_, no) => setTimeout(() => no(new Error(`${what}: no answer in ${LIMIT / 1000} seconds`)), LIMIT).unref())]);
   const until = async (ready, what) => {
-    const deadline = Date.now() + 20000;
+    const deadline = Date.now() + LIMIT;
     while (!(await ready())) {
-      if (Date.now() > deadline) throw new Error(`${what}: not in 20 seconds`);
+      if (Date.now() > deadline) throw new Error(`${what}: not in ${LIMIT / 1000} seconds`);
       await new Promise((d) => setTimeout(d, 10));
     }
   };
   try {
+    let firstDone = false;
     const first = w.call('POST', '/patch/v1/hosts/a/reboot', { headers: JSONTYPE, body: { pad: 'x'.repeat(40) } });
+    first.then(() => (firstDone = true), () => (firstDone = true));
     const second = w.call('POST', '/patch/v1/hosts/b/reboot', { headers: JSONTYPE, body: { pad: 'x'.repeat(40) } });
     const waiting = async () => (await soon(call(w.port, 'GET', '/provared/status', { secret: ADMIN_SECRET }), 'the status')).json.agents.patching.waiting;
     await until(async () => (await waiting()) >= 2 && release.length >= 1, 'two calls waiting');
-    const asked = Date.now();
     const busy = (await soon(call(w.port, 'GET', '/provared/status', { secret: ADMIN_SECRET }), 'the status')).json.agents.patching;
-    assert.ok(Date.now() - asked < 1000, 'at once, without waiting for the call');
+    // The upstream holds the first call until it is released below, so a status that waited for the call would never come.
+    assert.equal(firstDone, false, 'the status answers without waiting for the call, which the upstream still holds');
+    assert.equal(release.length >= 1, true, 'the upstream has not been told to answer');
     assert.equal(busy.checkedNow, false, 'the status answers while a call is with the upstream, from the last check');
     const third = await soon(w.call('POST', '/patch/v1/hosts/c/reboot', { headers: JSONTYPE, body: {} }), 'the third call');
     assert.equal(third.status, 503);

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- The gateway's test "M3: an agent may have only so many calls waiting"
+  no longer depends on how busy the computer is: each wait has 120
+  seconds, not 20, and the status is shown to answer without waiting for a
+  call by the upstream still holding that call, not by a time under one
+  second. It checks the same limit.
 - **An executor for MCP tool servers**, `mcp-executor/`
   (`provared-mcp-executor` 0.1.0, not published), stage 1: the stdio
   transport. An executor, in the words of the Internet-Draft
