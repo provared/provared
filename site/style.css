@@ -57,6 +57,40 @@ a { color: var(--slip); }
 
 nav a { margin-right: 1rem; }
 
+/* The home page's navigation as buttons: pages first, then places on the page. */
+nav.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1rem 0 0;
+}
+nav.buttons a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  margin: 0;
+  padding: 0.45rem 0.95rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--card);
+  color: var(--text);
+  font-weight: 600;
+  text-decoration: none;
+}
+nav.buttons a:hover { border-color: var(--slip); color: var(--slip); }
+nav.buttons a:focus-visible { outline: 2px solid var(--slip); outline-offset: 2px; }
+nav.buttons a.primary { background: var(--slip); border-color: var(--slip); color: var(--page); }
+nav.buttons a.primary:hover { color: var(--page); text-decoration: underline; }
+nav.buttons.jumps { margin-top: 0.5rem; }
+nav.buttons.jumps a {
+  min-height: 2.25rem;
+  padding: 0.3rem 0.75rem;
+  border-radius: 1.2rem;
+  background: transparent;
+  font-size: 0.9rem;
+  font-weight: 400;
+}
+
 .button {
   display: inline-block;
   min-height: 2.75rem;
