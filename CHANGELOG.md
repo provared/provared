@@ -61,6 +61,14 @@
   change while the passkey is asked, a cancellation by another passkey)
   and `test/passkey-browser-guard.test.mjs` (a passkey with no identifier
   is refused before the device is asked).
+- **After an independent re-check of the signing window, 1 November
+  2026:** once a cancellation asked for by a request has been signed and
+  handed back (or offered to take back by a link), the "sign the
+  cancellation" button stays off: while the page that asked waits, after
+  it says it did not keep it, and after no answer. Before, it was switched
+  on again, and a second press signed a second cancellation with no new
+  warning. The file stays offered; a new request starts the page afresh.
+  Held by `test/sign-window.test.mjs`.
 
 - **`provared-mcp-executor` 0.2.0** (published on npm on 1 November 2026
   and listed in the official MCP Registry as

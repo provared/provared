@@ -1013,6 +1013,12 @@ function page() {
         cancellation = record;
         say('cancel-status', `Signed, dated ${held.content.when}.`);
         handBack('cancellation', record, 'cancel-status', 'cancel-save-status', 'cancel-save-line', 'cancel-back-line', 'cancel-back', 'cancel-save');
+        // Handed back, or offered to take back: the button stays off, so that
+        // a second press does not sign a second cancellation without a new
+        // warning, while the page that asked waits or after it says it did
+        // not keep it. The file stays offered; a new request starts the page
+        // afresh (fill).
+        return;
       } else {
         const list = rememberedPasskeys();
         if (!list.length) throw new Error('No passkey is remembered in this browser. Sign a permission here first with the passkey that signed the one to cancel.');

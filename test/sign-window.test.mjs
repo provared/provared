@@ -436,6 +436,9 @@ test('at desktop width, the window stays open with the file offered when the pag
   assert.equal(await popup.isHidden('#cancel-save-line'), false, 'the file stays offered');
   await new Promise((r) => setTimeout(r, 1500));
   assert.equal(popup.isClosed(), false, 'the window stays open');
+  // Handed back once: no second cancellation can be signed from this window, warned or not.
+  assert.equal(await popup.isDisabled('#cancel'), true, 'the button stays off after the page said it did not keep it');
+  assert.equal(await popup.isHidden('#cancel-save-line'), false, 'the file is still offered');
 
   // No answer at all: after the wait, the window says so and offers the file.
   const page2 = await context.newPage();
@@ -445,9 +448,11 @@ test('at desktop width, the window stays open with the file offered when the pag
   await cancelTwice(second.popup);
   await waitForResult(page2);
   assert.match(await text(second.popup, '#cancel-status'), /Waiting for it to confirm that it kept the signed cancellation/);
+  assert.equal(await second.popup.isDisabled('#cancel'), true, 'the button stays off while the page waits');
   await second.popup.waitForFunction(() => /has not confirmed that it kept/.test(document.getElementById('cancel-status').textContent), null, { timeout: 20000 });
   assert.match(await text(second.popup, '#cancel-save-status'), /Save it as a file instead/);
   assert.equal(second.popup.isClosed(), false);
+  assert.equal(await second.popup.isDisabled('#cancel'), true, 'and after the wait');
   assert.deepEqual(problems, []);
   assert.deepEqual(outside, []);
   await context.close();
@@ -487,6 +492,7 @@ test('at desktop width, a renewal and a cancellation with no window go back by a
   await tab.waitForFunction(() => document.getElementById('cancel-status').textContent !== '', null, { timeout: 20000 });
   await cancelTwice(tab);
   await tab.waitForFunction(() => !document.getElementById('cancel-back-line').hidden, null, { timeout: 20000 });
+  assert.equal(await tab.isDisabled('#cancel'), true, 'signed and offered to take back: no second cancellation from here');
   assert.equal(await text(tab, '#cancel-back'), `Then go back to ${opener.origin}/back.html with the signed cancellation`);
   await Promise.all([tab.waitForURL((u) => u.href.startsWith(`${opener.origin}/back.html#signed=`), { timeout: 20000 }), tab.click('#cancel-back')]);
   const cancelled = JSON.parse(new TextDecoder().decode(fromBase64url(new URLSearchParams(new URL(tab.url()).hash.slice(1)).get('signed'))));
