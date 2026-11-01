@@ -87,6 +87,10 @@ export async function createPasskey({ name, site }) {
 }
 
 // Ask the passkey to sign a challenge: the device asks the person first.
+// With no identifier (a passkey this browser has forgotten), the device
+// offers every passkey it holds for the website and the person chooses;
+// the answer then says which was chosen, and the caller must check it
+// against the key it expects before it relies on it.
 async function signedBy(passkey, challenge, refused) {
   const container = credentials();
   let assertion;
@@ -95,7 +99,7 @@ async function signedBy(passkey, challenge, refused) {
       publicKey: {
         challenge,
         rpId: passkey.rpId,
-        allowCredentials: [{ type: 'public-key', id: fromBase64url(passkey.credentialId) }],
+        ...(passkey.credentialId ? { allowCredentials: [{ type: 'public-key', id: fromBase64url(passkey.credentialId) }] } : {}),
         userVerification: 'required',
       },
     });
@@ -107,6 +111,7 @@ async function signedBy(passkey, challenge, refused) {
     authenticatorData: new Uint8Array(r.authenticatorData),
     clientDataJSON: new Uint8Array(r.clientDataJSON),
     signature: new Uint8Array(r.signature),
+    credentialId: toBase64url(new Uint8Array(assertion.rawId)),
   };
 }
 
@@ -167,5 +172,25 @@ export async function cancelWithPasskey(request, passkey) {
  */
 export async function signChallengeWithPasskey(challenge, passkey) {
   credentials();
+  if (!passkey || typeof passkey.credentialId !== 'string') throw new PasskeyError('cancelled', 'No passkey was named, so nothing was signed.');
   return signedBy(passkey, challenge, 'Nothing was signed. The request was cancelled or the device refused it.');
+}
+
+/**
+ * Sign a challenge with a passkey the person chooses, where this browser
+ * has forgotten which passkey it should ask (a passkey made on another
+ * device, or this browser's storage cleared). The device offers every
+ * passkey it holds for the website, and the person chooses one; nothing
+ * new is made. What comes back names the passkey chosen by its identifier,
+ * but not its public key: the caller must put the answer into the record
+ * and check it with the library's checker against the key it expects, and
+ * only then remember the identifier beside that key.
+ *
+ * @param {Uint8Array} challenge the "challenge" of what was prepared
+ * @param {string} rpId the website the passkey belongs to (this page's hostname)
+ * @returns {Promise<{authenticatorData: Uint8Array, clientDataJSON: Uint8Array, signature: Uint8Array, credentialId: string}>}
+ */
+export async function signChallengeWithChosenPasskey(challenge, rpId) {
+  credentials();
+  return signedBy({ rpId }, challenge, 'Nothing was signed. The request was cancelled, or this device holds no passkey for this website.');
 }
