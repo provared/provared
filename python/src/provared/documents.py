@@ -6,8 +6,8 @@
 # are reserved: each one on the list below says exactly which text its
 # fingerprint is made from, so that an investigator who holds that text
 # (the call's arguments, the HTTP request, the identifier a platform's own
-# log shows for the call) can work the fingerprint out again and match
-# the stub to it, without either side's help.
+# log shows for the call, the tool's name and result) can work the
+# fingerprint out again and match the stub to it, without either side's help.
 
 import base64
 import re
@@ -26,6 +26,9 @@ DOCUMENT_NAMES = types.MappingProxyType({
     'provared.request-id': "An identifier that the agent's side chose and sent with the call, exactly as sent.",
     'provared.event-id': 'An identifier that the platform gave for the call, exactly as it gave it.',
     'provared.error': "The error text that the agent's software was given, exactly as given.",
+    'provared.tool-name': "The name of the tool, exactly as the agent's software called it.",
+    'provared.tool-call-id': "The identifier that the model gave the tool call, exactly as the agent's software received it.",
+    'provared.tool-result': "The tool's result, written in the one form of RFC 8785.",
 })
 """The reserved document names, and the exact text whose SHA-256 each one gives."""
 
@@ -149,8 +152,11 @@ def http_response_fingerprint(r):
 def identifier_fingerprint(identifier):
     """The fingerprint of an identifier or of an error text, exactly as given:
     SHA-256 of its UTF-8 bytes. For "provared.trace-id", "provared.request-id",
-    "provared.event-id" and "provared.error". Raises a Refusal, "bad-field", if
-    it is not text, is empty, or is not well-formed Unicode."""
+    "provared.event-id", "provared.error", "provared.tool-name" and
+    "provared.tool-call-id"; a tool's result ("provared.tool-result") is
+    fingerprinted as the arguments are, with arguments_fingerprint. Raises a
+    Refusal, "bad-field", if it is not text, is empty, or is not well-formed
+    Unicode."""
     if not isinstance(identifier, str) or len(identifier) == 0:
         raise Refusal('bad-field', 'The identifier must be text of one character or more.')
     identifier = str.__str__(identifier)  # the text itself, never a subclass's own methods

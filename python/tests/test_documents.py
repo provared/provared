@@ -26,6 +26,7 @@ from provared import (
     prepare_approval,
     write_stub,
 )
+from provared.documents import REPEATABLE_DOCUMENT_NAMES
 
 
 def _sha(text):
@@ -44,7 +45,10 @@ EVENT = {'name': 'provared.event-id', 'sha256': FP}
 class Fingerprints(unittest.TestCase):
     def test_the_list_is_fixed(self):
         self.assertEqual(RESERVED_DOCUMENT_PREFIX, 'provared.')
-        self.assertEqual(len(DOCUMENT_NAMES), 7)
+        self.assertEqual(len(DOCUMENT_NAMES), 10)
+        for name in ('provared.tool-name', 'provared.tool-call-id', 'provared.tool-result'):
+            self.assertIn(name, DOCUMENT_NAMES)
+            self.assertNotIn(name, REPEATABLE_DOCUMENT_NAMES)
         with self.assertRaises(TypeError):
             DOCUMENT_NAMES['provared.invoice'] = 'x'
 

@@ -42,6 +42,7 @@ const GEN_AI = Object.freeze({
 });
 const ERROR_TYPE = 'error.type';
 const TRACE_ID = 'provared.trace-id';
+const TOOL_CALL_ID = 'provared.tool-call-id';
 
 // A class name, written as code writes it: low in variety, as error.type
 // asks, and never a message. It is put on the span as the code named it.
@@ -107,19 +108,34 @@ function withSpan(settings, toolName, callId, work) {
   });
 }
 
-// The document that binds the receipt to the span's trace, for a tool
-// that sends the trace out with the call: the fingerprint of the trace id,
-// never the trace id. Section 27 of the format description defines
-// "provared.trace-id" as the trace-id of the "traceparent" header the
-// agent's side sent, so nothing is written for a tool that sends none.
-// The trace id a propagator puts into that header is that of the span
-// active while the tool runs: this span. The model's identifier for the
-// call is not the platform's identifier ("provared.event-id"), so it goes
-// on the span only, never into the receipt.
-async function bindings(sends, span) {
+// The documents that bind the receipt to the two records the agent's side
+// already keeps, each as a fingerprint, never the value itself:
+//   - the span's trace, for a tool that sends the trace out with the call.
+//     Section 27 of the format description defines "provared.trace-id" as
+//     the trace-id of the "traceparent" header the agent's side sent, so
+//     nothing is written for a tool that sends none. The trace id a
+//     propagator puts into that header is that of the span active while
+//     the tool runs: this span;
+//   - the model's identifier for the call, where the caller gives it, as
+//     "provared.tool-call-id", which section 27 defines as the identifier
+//     the model gave the tool call. It is the model's identifier, not the
+//     platform's ("provared.event-id"), which the bridge never writes.
+async function bindings(sends, span, callId) {
+  const out = [];
   const context = span && typeof span.spanContext === 'function' ? span.spanContext() : null;
-  if (!sends || !context || !isSpanContextValid(context)) return [];
-  return [{ name: TRACE_ID, sha256: await identifierFingerprint(context.traceId) }];
+  if (sends && context && isSpanContextValid(context)) out.push({ name: TRACE_ID, sha256: await identifierFingerprint(context.traceId) });
+  if (callId) out.push({ name: TOOL_CALL_ID, sha256: await identifierFingerprint(callId) });
+  return out;
+}
+
+// The binding documents to add after the documents the caller named. The
+// model's identifier may be named once only (section 27), so where the
+// caller's own list already names "provared.tool-call-id" it is not added
+// again: the caller's stands. A trace id may be named more than once, so
+// it is always added.
+function addedTo(named, binding) {
+  const names = new Set(named.map((d) => (d !== null && typeof d === 'object' ? d.name : undefined)));
+  return binding.filter((b) => b.name !== TOOL_CALL_ID || !names.has(TOOL_CALL_ID));
 }
 
 function markNotTaken(span, own, action, answer, denial, settings) {
@@ -155,8 +171,9 @@ function markError(span, own, action, e) {
  *   - "callId" (optional): a function of the second argument the tool is
  *     called with (the options an agent framework hands a tool, say) that
  *     gives the identifier the model gave the call, or nothing. It goes on
- *     the span as gen_ai.tool.call.id, and never into the receipt. Anything
- *     that is not text of 1 to 256 characters is set aside.
+ *     the span as gen_ai.tool.call.id, and into the receipt as the
+ *     fingerprint "provared.tool-call-id". Anything that is not text of 1
+ *     to 256 characters is set aside, and then neither is written.
  *
  * @param {object} recorder the stub writer (openRecorder)
  * @param {Record<string, object>} tools by name; the name, as given, is the span's gen_ai.tool.name
@@ -199,7 +216,7 @@ export function traceTools(recorder, tools, options = {}) {
           }
         }
         return withSpan(settings, name, callId, async (span, own) => {
-          const binding = await bindings(sends, span);
+          const binding = await bindings(sends, span, callId);
           const traceBound = binding.some((d) => d.name === TRACE_ID);
           // What the caller's own functions throw is the caller's: an error
           // that one of them threw (a NotTaken from another stub writer,
@@ -231,7 +248,7 @@ export function traceTools(recorder, tools, options = {}) {
                   let named = [];
                   if (typeof rest.details === 'function') named = (await later(rest.details)(a)) ?? [];
                   else if (rest.details !== false && a !== undefined) named = [{ name: 'provared.arguments', sha256: await argumentsFingerprint(a) }];
-                  return Array.isArray(named) ? [...named, ...binding] : named;
+                  return Array.isArray(named) ? [...named, ...addedTo(named, binding)] : named;
                 };
           let stub = null;
           const onStub = async (written, tool) => {
@@ -282,7 +299,8 @@ export function traceTools(recorder, tools, options = {}) {
  * of "act"; "more.detailsAfter" is passed on.
  *
  * The receipt names the span's trace only where "options.sendsTrace" is
- * true, as for a tool in traceTools. Even then nothing is added where
+ * true, as for a tool in traceTools, and the model's identifier for the
+ * call where "options.callId" is given. Nothing is added where
  * "more.approval" is given (the person approved the request as it stands,
  * and an approval covers exactly the documents the person saw), or where
  * "request.details" is given and is not a list (the request is passed on
@@ -295,7 +313,7 @@ export function traceTools(recorder, tools, options = {}) {
  * @param {object} [options] as for traceTools, and:
  * @param {string} [options.toolName] gen_ai.tool.name and the span's name, 1 to 64 visible ASCII characters;
  *   by default the action name where it has that form, or else "action"
- * @param {string} [options.callId] the identifier the model gave the call; on the span only
+ * @param {string} [options.callId] the identifier the model gave the call; on the span, and in the receipt as "provared.tool-call-id"
  * @param {boolean} [options.sendsTrace] true where "perform" sends the trace out with the call; false by default
  * @returns {Promise<object>} what "act" gives; a call not taken is not thrown, as with "act"
  */
@@ -308,10 +326,11 @@ export async function traceAct(recorder, request, perform, more = {}, options = 
   const approved = more !== null && typeof more === 'object' && more.approval !== undefined && more.approval !== null;
   const listed = request.details === undefined || Array.isArray(request.details);
   return withSpan(settings, toolName, callId, async (span, own) => {
-    const binding = approved || !listed ? [] : await bindings(settings.sendsTrace, span);
+    const binding = approved || !listed ? [] : await bindings(settings.sendsTrace, span, callId);
     const traceBound = binding.some((d) => d.name === TRACE_ID);
     const given = Array.isArray(request.details) ? request.details : [];
-    const asked = binding.length === 0 ? request : { ...request, details: [...given, ...binding] };
+    const added = binding.length === 0 ? [] : addedTo(given, binding);
+    const asked = added.length === 0 ? request : { ...request, details: [...given, ...added] };
     let outcome;
     try {
       outcome = await recorder.act(asked, perform, more);

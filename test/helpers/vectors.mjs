@@ -681,7 +681,7 @@ function stubContents() {
     ['a time with an offset', { ...base, when: '2026-10-05T09:00:00+01:00' }],
     ['a list', [base]],
     // The reserved document names (format description, section 27).
-    ...['provared.arguments', 'provared.http-request', 'provared.http-response', 'provared.trace-id', 'provared.request-id', 'provared.event-id', 'provared.error'].map((name) => [
+    ...['provared.arguments', 'provared.http-request', 'provared.http-response', 'provared.trace-id', 'provared.request-id', 'provared.event-id', 'provared.error', 'provared.tool-name', 'provared.tool-call-id', 'provared.tool-result'].map((name) => [
       `the reserved document name ${name}`,
       { ...base, details: [{ name, sha256: fp }] },
     ]),
@@ -694,11 +694,17 @@ function stubContents() {
     ['a reserved document name twice', { ...base, details: [{ name: 'provared.event-id', sha256: fp }, { name: 'provared.event-id', sha256: id + 'AAAAAAAAAAAAAAAAAAAAA' }] }],
     // Only the three identifiers may be named more than once.
     ...['provared.trace-id', 'provared.request-id', 'provared.event-id'].map((name) => [`${name} three times`, { ...base, details: [{ name, sha256: fp }, { name, sha256: fp }, { name, sha256: fp }] }]),
-    ...['provared.arguments', 'provared.http-request', 'provared.http-response', 'provared.error'].map((name) => [
+    ...['provared.arguments', 'provared.http-request', 'provared.http-response', 'provared.error', 'provared.tool-name', 'provared.tool-call-id', 'provared.tool-result'].map((name) => [
       `${name} twice`,
       { ...base, details: [{ name, sha256: fp }, { name: 'order.pdf', sha256: fp }, { name, sha256: fp }] },
     ]),
-    ['every reserved name once, and the identifiers twice', { ...base, details: ['provared.arguments', 'provared.http-request', 'provared.http-response', 'provared.error', 'provared.trace-id', 'provared.request-id', 'provared.event-id', 'provared.trace-id', 'provared.request-id', 'provared.event-id'].map((name) => ({ name, sha256: fp })) }],
+    ['every reserved name once, and the identifiers twice', { ...base, details: ['provared.arguments', 'provared.http-request', 'provared.http-response', 'provared.error', 'provared.tool-name', 'provared.tool-call-id', 'provared.tool-result', 'provared.trace-id', 'provared.request-id', 'provared.event-id', 'provared.trace-id', 'provared.request-id', 'provared.event-id'].map((name) => ({ name, sha256: fp })) }],
+    // The three names added after version 0.6.0 (format description, section 27).
+    ['the tool\'s name, the model\'s identifier for the call and the tool\'s result, with the arguments', { ...base, details: ['provared.tool-name', 'provared.arguments', 'provared.tool-call-id', 'provared.tool-result'].map((name) => ({ name, sha256: fp })) }],
+    ['a name close to a reserved one: "provared.tool-result" with a capital', { ...base, details: [{ name: 'provared.Tool-result', sha256: fp }] }],
+    ['a name close to a reserved one: "provared.tool_result"', { ...base, details: [{ name: 'provared.tool_result', sha256: fp }] }],
+    ['a name close to a reserved one: "provared.tool-call"', { ...base, details: [{ name: 'provared.tool-call', sha256: fp }] }],
+    ['the tool\'s name as a label, "tool", beside the reserved one', { ...base, details: [{ name: 'tool', sha256: fp }, { name: 'provared.tool-name', sha256: fp }] }],
     ['a label named twice', { ...base, details: [{ name: 'order.pdf', sha256: fp }, { name: 'order.pdf', sha256: fp }] }],
     ['the old name "arguments" beside the reserved one', { ...base, details: [{ name: 'arguments', sha256: fp }, { name: 'provared.arguments', sha256: fp }] }],
     ['an unknown reserved document name with a bad fingerprint', { ...base, details: [{ name: 'provared.x', sha256: 'short' }] }],
