@@ -1,0 +1,52 @@
+{
+  "name": "provared-agent-middleware",
+  "version": "0.1.0",
+  "description": "Reads the signed receipts of the project Agent Middleware (AMW), checks each by the gateway's published key, and judges them against a Provared permission a person signed with a passkey: the actions and the limits. States what such a judgement cannot show. Evidence, not a verdict.",
+  "author": "Pavel Izmaylov",
+  "license": "Apache-2.0 AND CC-BY-4.0",
+  "homepage": "https://prova.red",
+  "bugs": "https://github.com/provared/provared/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/provared/provared.git",
+    "directory": "integrations/agent-middleware"
+  },
+  "keywords": [
+    "agent-middleware",
+    "ai-agent",
+    "agent",
+    "audit-trail",
+    "permission",
+    "receipt",
+    "ed25519",
+    "evidence"
+  ],
+  "type": "module",
+  "main": "./judge.mjs",
+  "exports": {
+    ".": "./judge.mjs",
+    "./verify": "./verify.mjs",
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "provared-agent-middleware": "bin.mjs"
+  },
+  "files": [
+    "judge.mjs",
+    "verify.mjs",
+    "bin.mjs",
+    "LICENSE-CC-BY-4.0.txt"
+  ],
+  "engines": {
+    "node": ">=24.7"
+  },
+  "scripts": {
+    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.mjs"
+  },
+  "peerDependencies": {
+    "provared": ">0.6.0 <0.8.0"
+  },
+  "devDependencies": {
+    "provared": "0.6.0"
+  }
+}

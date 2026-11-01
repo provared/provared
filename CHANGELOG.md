@@ -2,6 +2,35 @@
 
 ## Unreleased
 
+- **A reader of another project's receipts: Agent Middleware (AMW)**,
+  `integrations/agent-middleware/` (`provared-agent-middleware` 0.1.0, not
+  published): the first of the plan's readers of the closest other
+  projects' receipts. It checks an AMW permit or receipt by the gateway's
+  published Ed25519 key (the key found by `kid`, its status read; an
+  envelope compared with the signed content; AMW's own six answers,
+  reproduced for every one of its 96 published test cases, which are
+  copied into `test/vectors/` under their Apache License 2.0 with a notice
+  of where they came from), maps each verified receipt onto the fields
+  the checker compares (the tool as the action, `credits_charged` as the
+  amount in a unit and scale the reader states, `created_at` as the time,
+  `permit_id` as the permit it names), and judges a set of receipts
+  against a Provared slip that names the AMW gateway in `with`: the
+  checker's own codes where they apply (`action-not-allowed`,
+  `prohibited`, `outside-valid-time`, `over-limit`, `over-each-limit`,
+  `over-count-limit`, `over-period-limit`, `amount-missing`,
+  `approval-missing`), with words that say "AMW receipt"; codes of its
+  own (`amw-permit-…`) where only the AMW permit can be compared; and a
+  stated list of what cannot be judged (no chain, so omission and cut
+  ends do not show; no countersignature; no signature of the person on
+  the AMW permit; approvals by identifier only; which agent; with whom).
+  A denied AMW receipt is shown as the gateway's refusal and never
+  counted against the agent; a receipt that does not verify is not shown.
+  `receiptDocument` carries an AMW receipt by its fingerprint in a
+  Provared receipt's `details` under the name `agent-middleware.receipt`.
+  A command, `provared-agent-middleware verify | judge`, with the
+  checker's exit codes. Written from AMW's published data and the
+  standards alone; no AMW program was read or run. Its tests run in the
+  test workflow beside the other packages.
 - **Three more reserved document names** (format description, section
   27), in both languages: `provared.tool-name` (the fingerprint of the
   tool's name, exactly as the agent's software called it, which is not the
