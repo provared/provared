@@ -156,6 +156,14 @@ async function openWindow(context, page, link, credentials) {
   return { popup, holder };
 }
 
+// A cancellation for an address that is not the application's: the first
+// press shows the warning and signs nothing, the second signs.
+async function cancelTwice(p) {
+  await p.click('#cancel');
+  await p.waitForFunction(() => !document.getElementById('cancel-warnings').hidden && !document.getElementById('cancel').disabled, null, { timeout: 20000 });
+  await p.click('#cancel');
+}
+
 const waitForResult = (page) => page.waitForFunction(() => window.result !== null, null, { timeout: 20000 }).then(() => page.evaluate(() => ({ result: window.result, events: window.events })));
 
 // What the first test signs, for the ones after it.
@@ -181,7 +189,7 @@ test('a new permission: the warnings shown first, a passkey made on the second p
   // The return address, with the warning: a page on this computer is not the application.
   assert.equal(await popup.isHidden('#return-line'), false);
   assert.equal(await text(popup, '#return-address'), `${opener.origin}/opener.html`);
-  assert.match(await text(popup, '#return-warning'), /not a known address of the Provared application \(app\.prova\.red\)/);
+  assert.match(await text(popup, '#return-warning'), /not a known address of the Provared application \(app\.prova\.red:8443 or app\.prova\.red, over https\)/);
   assert.equal(await popup.isHidden('#changed-box'), true, 'nothing to compare with');
 
   // The first press shows the warnings and signs nothing.
@@ -269,7 +277,8 @@ test('a renewal with a passkey this browser has forgotten: what changed is shown
   assert.match(await second.popup.textContent('#cancel-status'), new RegExp(`asks you to cancel the permission below, signed by "The person" \\(a label\\).*passkey ${first.thumbprint}`));
   assert.match(await text(second.popup, '#cancel-words'), /Building the software, more carefully/);
   assert.equal(await text(second.popup, '#cancel-return-address'), `${opener.origin}/opener.html`);
-  await second.popup.click('#cancel');
+  assert.match(await text(second.popup, '#cancel-return-warning'), /not a known address/);
+  await cancelTwice(second.popup);
   const cancelled = await waitForResult(page2);
   assert.equal(cancelled.result.kind, 'cancellation');
   assert.equal(cancelled.result.state, 'cancel 7');
@@ -306,7 +315,7 @@ test('the wrong passkey is refused: nothing goes back, and no new passkey is mad
   await popup.waitForFunction(() => !document.getElementById('warnings').hidden, null, { timeout: 20000 });
   await popup.click('#sign');
   await popup.waitForFunction(() => /not the one that signed the earlier permission/.test(document.getElementById('sign-status').textContent), null, { timeout: 20000 });
-  assert.match(await text(popup, '#sign-status'), new RegExp(`The passkey you chose is not the one that signed the earlier permission \\(${first.thumbprint}\\), so nothing is offered\\. Try again and choose the other one\\. You can try again\\.`));
+  assert.match(await text(popup, '#sign-status'), new RegExp(`The passkey you chose is not the one that signed the earlier permission \\(${first.thumbprint}\\), so nothing is offered\\. Press the button again and choose that one\\. You can try again\\.`));
   assert.equal((await holder.credentials()).length, 1, 'nothing new was made');
   assert.equal(await page.evaluate(() => window.events.length), 0, 'nothing was handed back');
   assert.equal(popup.isClosed(), false);
@@ -329,8 +338,11 @@ test('a page not opened as a window goes back by a link with the signed record a
   await page.waitForFunction(() => !document.getElementById('warnings').hidden, null, { timeout: 20000 });
   await page.click('#sign');
   await page.waitForFunction(() => !document.getElementById('back-line').hidden, null, { timeout: 20000 });
-  assert.match(await text(page, '#sign-status'), /not opened as a window by .*back\.html, so the signed record is not handed back by itself: press the button below/);
-  assert.equal(await text(page, '#back'), `Go back to ${opener.origin}/back.html with the signed permission`);
+  assert.match(await text(page, '#sign-status'), /not opened as a window by .*back\.html, so the signed permission is not handed back by itself\. Save it first as a file, then go back there with it\./);
+  assert.equal(await text(page, '#back'), `Then go back to ${opener.origin}/back.html with the signed permission`);
+  // The file is offered first: it comes before the way back on the page, and has the focus.
+  assert.equal(await page.evaluate(() => document.getElementById('save-line').compareDocumentPosition(document.getElementById('back-line')) & Node.DOCUMENT_POSITION_FOLLOWING), 4);
+  assert.equal(await page.evaluate(() => document.activeElement && document.activeElement.id), 'save');
   assert.equal(await page.isHidden('#save-line'), false, 'the file stays offered');
   await Promise.all([page.waitForURL((u) => u.href.startsWith(`${opener.origin}/back.html#signed=`), { timeout: 20000 }), page.click('#back')]);
   const message = JSON.parse(new TextDecoder().decode(fromBase64url(new URLSearchParams(new URL(page.url()).hash.slice(1)).get('signed'))));
@@ -394,6 +406,8 @@ test('a renewal of a permission whose passkey belongs to another website: the pa
   const warnings = await popup.$$eval('#warnings li', (items) => items.map((li) => li.textContent));
   assert.ok(warnings.some((w) => /signed with a passkey other than the one that signed the earlier permission/.test(w)), warnings.join('\n'));
   assert.ok(warnings.some((w) => /A new passkey will be made for this website/.test(w)), warnings.join('\n'));
+  // The earlier permission's passkey is not the person's own here, so it vouches for nothing: the agent's key set is warned of.
+  assert.ok(warnings.some((w) => /not signed a permission for this agent's key set on this device before/.test(w)), warnings.join('\n'));
   assert.equal((await holder.credentials()).length, 0, 'nothing made before the second press');
   await popup.click('#sign');
   const { result } = await waitForResult(page);
@@ -416,7 +430,7 @@ test('at desktop width, the window stays open with the file offered when the pag
   await page.evaluate(() => { window.answer = false; });
   const { popup } = await openWindow(context, page, requestLink({ kind: 'cancellation', earlier: first.renewed.record, returnTo: `${opener.origin}/opener.html`, state: 'c1' }), [first.credential]);
   assert.ok(await popup.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'nothing scrolls sideways');
-  await popup.click('#cancel');
+  await cancelTwice(popup);
   await waitForResult(page);
   await popup.waitForFunction(() => /did not keep it/.test(document.getElementById('cancel-status').textContent), null, { timeout: 20000 });
   assert.equal(await popup.isHidden('#cancel-save-line'), false, 'the file stays offered');
@@ -428,7 +442,7 @@ test('at desktop width, the window stays open with the file offered when the pag
   await page2.goto(`${opener.origin}/opener.html`);
   await page2.evaluate(() => { window.answer = null; });
   const second = await openWindow(context, page2, requestLink({ kind: 'cancellation', earlier: first.renewed.record, returnTo: `${opener.origin}/opener.html`, state: 'c2' }), [first.credential]);
-  await second.popup.click('#cancel');
+  await cancelTwice(second.popup);
   await waitForResult(page2);
   assert.match(await text(second.popup, '#cancel-status'), /Waiting for it to confirm that it kept the signed cancellation/);
   await second.popup.waitForFunction(() => /has not confirmed that it kept/.test(document.getElementById('cancel-status').textContent), null, { timeout: 20000 });
@@ -456,7 +470,7 @@ test('at desktop width, a renewal and a cancellation with no window go back by a
   await page.waitForFunction(() => !document.getElementById('warnings').hidden, null, { timeout: 20000 });
   await page.click('#sign');
   await page.waitForFunction(() => !document.getElementById('back-line').hidden, null, { timeout: 20000 });
-  assert.equal(await text(page, '#back'), `Go back to ${opener.origin}/back.html with the signed permission`);
+  assert.equal(await text(page, '#back'), `Then go back to ${opener.origin}/back.html with the signed permission`);
   await Promise.all([page.waitForURL((u) => u.href.startsWith(`${opener.origin}/back.html#signed=`), { timeout: 20000 }), page.click('#back')]);
   const renewal = JSON.parse(new TextDecoder().decode(fromBase64url(new URLSearchParams(new URL(page.url()).hash.slice(1)).get('signed'))));
   assert.equal(renewal.kind, 'renewal');
@@ -471,9 +485,9 @@ test('at desktop width, a renewal and a cancellation with no window go back by a
   await tab.goto(requestLink({ kind: 'cancellation', earlier: renewal.record, returnTo: `${opener.origin}/back.html`, state: 'x' }));
   await authenticator(context, tab, [first.credential]);
   await tab.waitForFunction(() => document.getElementById('cancel-status').textContent !== '', null, { timeout: 20000 });
-  await tab.click('#cancel');
+  await cancelTwice(tab);
   await tab.waitForFunction(() => !document.getElementById('cancel-back-line').hidden, null, { timeout: 20000 });
-  assert.equal(await text(tab, '#cancel-back'), `Go back to ${opener.origin}/back.html with the signed cancellation`);
+  assert.equal(await text(tab, '#cancel-back'), `Then go back to ${opener.origin}/back.html with the signed cancellation`);
   await Promise.all([tab.waitForURL((u) => u.href.startsWith(`${opener.origin}/back.html#signed=`), { timeout: 20000 }), tab.click('#cancel-back')]);
   const cancelled = JSON.parse(new TextDecoder().decode(fromBase64url(new URLSearchParams(new URL(tab.url()).hash.slice(1)).get('signed'))));
   assert.equal(cancelled.kind, 'cancellation');

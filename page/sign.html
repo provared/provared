@@ -42,8 +42,8 @@
     <li id="step3" class="waiting">
       <h2>Keep the signed permission</h2>
       <p id="save-status" role="status"></p>
-      <p id="back-line" hidden><button type="button" id="back"></button></p>
       <p id="save-line" hidden><button type="button" class="second" id="save">Save the signed permission as a file</button> Hand it to the agent's software: it is the first line of the agent's book.</p>
+      <p id="back-line" hidden><button type="button" id="back"></button></p>
       <p class="quiet" id="fingerprint-line" hidden>The permission's fingerprint, which every receipt under it names: <span class="mono" id="fingerprint"></span></p>
     </li>
   </ol>
@@ -54,11 +54,12 @@
     <p><label for="cancel-of">The fingerprint of the permission to cancel</label><br><input id="cancel-of" type="text" size="48" spellcheck="false"></p>
     <dl id="cancel-words" hidden></dl>
     <p id="cancel-return-line" hidden>Where the signed cancellation goes: <span class="mono" id="cancel-return-address"></span>. <span id="cancel-return-warning"></span></p>
+    <ul id="cancel-warnings" class="warnings" hidden></ul>
     <p><button type="button" id="cancel">Sign the cancellation with the passkey</button></p>
     <p id="cancel-status" role="status"></p>
     <p id="cancel-save-status" role="status"></p>
-    <p id="cancel-back-line" hidden><button type="button" id="cancel-back"></button></p>
     <p id="cancel-save-line" hidden><button type="button" class="second" id="cancel-save">Save the cancellation as a file</button></p>
+    <p id="cancel-back-line" hidden><button type="button" id="cancel-back"></button></p>
   </details>
 
   <p class="quiet">What this page does not do: it does not check that the permission is wise, and it does not make the agent keep to it. The agent's software asks the check before acting and writes the receipts; a checker holds them against this permission. This page needs JavaScript and a device that can use passkeys on this website.</p>

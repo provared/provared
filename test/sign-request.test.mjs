@@ -12,7 +12,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { assembleSlip, entryLine, fromBase64url, generateKeySet, keySetFingerprint, prepareSlip, thumbprint, toBase64url, utf8 } from '../src/index.js';
 import { checkSlip } from '../src/check.js';
-import { KNOWN_RETURN_HOSTS, REQUEST_KINDS, readRequest, receivedReply, returnAddress, signedLink, signedMessage, whatChanged } from '../page/sign-page.js';
+import { KNOWN_RETURN_ADDRESSES, REQUEST_KINDS, readRequest, receivedReply, replyFrom, returnAddress, signedLink, signedMessage, whatChanged } from '../page/sign-page.js';
 import { makePasskey } from './helpers/passkey.mjs';
 
 const requestLink = (request) => `#request=${toBase64url(utf8(JSON.stringify(request)))}`;
@@ -32,10 +32,15 @@ function permission(agentKeys) {
   };
 }
 
-test('the return address is read strictly, and only the application\'s own name over https is known', () => {
-  assert.deepEqual(KNOWN_RETURN_HOSTS, ['app.prova.red']);
+test('the return address is read strictly, and only the application\'s own exact addresses are known', () => {
+  assert.deepEqual(KNOWN_RETURN_ADDRESSES, ['app.prova.red:8443', 'app.prova.red']);
   assert.deepEqual(returnAddress('https://app.prova.red/'), { origin: 'https://app.prova.red', address: 'https://app.prova.red/', host: 'app.prova.red', known: true });
   assert.deepEqual(returnAddress('https://app.prova.red:8443'), { origin: 'https://app.prova.red:8443', address: 'https://app.prova.red:8443/', host: 'app.prova.red', known: true });
+  assert.equal(returnAddress('https://app.prova.red:443/x').known, true, 'the ordinary port is the same address');
+  // The same name on any other port is another address: taken, and warned of.
+  for (const other of ['https://app.prova.red:9443/', 'https://app.prova.red:8080/', 'https://sub.app.prova.red/', 'https://app.prova.red.example/']) {
+    assert.equal(returnAddress(other).known, false, other);
+  }
   assert.equal(returnAddress('http://localhost:8088/').known, false, 'a page tried on this computer is not a known address');
   assert.equal(returnAddress('http://localhost:8088/').origin, 'http://localhost:8088');
   assert.equal(returnAddress('https://sign.example.org/app').known, false);
@@ -147,9 +152,26 @@ test('the answer of the page that opened the window is read for this record\'s r
   for (const data of [null, 'received', [], 7]) assert.equal(receivedReply(data, 'renewal', 's'), null);
 });
 
+test('the window takes an answer only from the window that opened it, and only from the return address exactly', () => {
+  const opener = { name: 'the opener' };
+  const expected = { opener, origin: 'https://app.prova.red:8443', kind: 'renewal', state: 's' };
+  const data = { provared: 'received', kind: 'renewal', state: 's', kept: true };
+  assert.equal(replyFrom({ source: opener, origin: 'https://app.prova.red:8443', data }, expected), 'kept');
+  assert.equal(replyFrom({ source: opener, origin: 'https://app.prova.red:8443', data: { ...data, kept: false } }, expected), 'not-kept');
+  // Another window at the same address, the same window at another address, or the same name on another port: set aside.
+  assert.equal(replyFrom({ source: { name: 'another' }, origin: 'https://app.prova.red:8443', data }, expected), null);
+  assert.equal(replyFrom({ source: opener, origin: 'https://elsewhere.example', data }, expected), null);
+  assert.equal(replyFrom({ source: opener, origin: 'https://app.prova.red', data }, expected), null);
+  // No opener at all: nothing is taken, not even from a message with no sender.
+  assert.equal(replyFrom({ source: null, origin: 'https://app.prova.red:8443', data }, { ...expected, opener: null }), null);
+  assert.equal(replyFrom(null, expected), null);
+  // The answer must still be to this request.
+  assert.equal(replyFrom({ source: opener, origin: 'https://app.prova.red:8443', data: { ...data, state: 'other' } }, expected), null);
+});
+
 test('the page names its return address, its warnings and its way back in the HTML the script expects', () => {
   const html = readFileSync(new URL('../page/sign.html', import.meta.url), 'utf8');
-  for (const id of ['return-address', 'return-warning', 'warnings', 'changed', 'changed-heading', 'back', 'back-line', 'cancel-words', 'cancel-return-address', 'cancel-back', 'cancel-save-status']) {
+  for (const id of ['return-address', 'return-warning', 'warnings', 'changed', 'changed-heading', 'back', 'back-line', 'cancel-words', 'cancel-return-address', 'cancel-back', 'cancel-save-status', 'cancel-warnings']) {
     assert.ok(html.includes(`id="${id}"`), id);
   }
   assert.doesNotMatch(html, /https?:\/\//, 'the page names no address with a scheme');

@@ -31,14 +31,17 @@
 // offer the passkeys it holds and checking the answer, never by making a
 // new one silently. Before a new passkey is made, and before an agent's
 // key set is signed for the first time on this device, the page warns and
-// asks again.
+// asks again; a passkey is made only where the warning that one will be
+// made was among those the person confirmed, and a passkey prompt that
+// fails, or a passkey forgotten, takes the confirmation back. A
+// cancellation never makes a passkey: it is signed by the passkey that
+// signed the permission, or not at all.
 //
 // The parts that need no page are plain functions, so that they can be
 // tested on their own: readStartingPermission, readRequest, returnAddress,
 // whatChanged, agentKeySet, serviceWords, shownByItself, signedMessage,
-// receivedReply. The
-// rest runs only in a browser. A page shown inside another page offers
-// nothing to sign or cancel.
+// receivedReply, replyFrom. The rest runs only in a browser. A page shown
+// inside another page offers nothing to sign or cancel.
 
 import { checkBook, checkSlip, conditionWords, keySetFingerprint, limitWords, neverWords } from '../src/check.js';
 import { cancelWithPasskey, createPasskey, signChallengeWithChosenPasskey, signChallengeWithPasskey } from '../src/passkey-browser.js';
@@ -53,8 +56,14 @@ const STORE = 'provared-signing-passkey';
 const STORE_LIST = 'provared-signing-passkeys';
 const STORE_AGENTS = 'provared-signed-agents';
 const FINGERPRINT = /^[A-Za-z0-9_-]{43}$/;
-/** The website names of the Provared application, where a signed record is expected to go back to (over https, any port). */
-export const KNOWN_RETURN_HOSTS = ['app.prova.red'];
+/**
+ * The exact addresses of the Provared application, where a signed record is
+ * expected to go back to: each a website name with its port where it has
+ * one, always over https. Any other address, the same name on another port
+ * included, is warned of. (Written without "https://", as this page names
+ * no address it could load from.)
+ */
+export const KNOWN_RETURN_ADDRESSES = ['app.prova.red:8443', 'app.prova.red'];
 /** The kinds of request another page may make. */
 export const REQUEST_KINDS = ['permission', 'renewal', 'cancellation'];
 const SLIP_MEMBERS = ['agent', 'actions', 'limits', 'requires', 'never', 'with', 'validFrom', 'validUntil', 'purpose'];
@@ -132,8 +141,9 @@ export function readStartingPermission(hash, example = EXAMPLE) {
  * (or http://localhost, for a page tried on this computer), a website
  * name, a port where one is needed, and a path; no sign-in details, no
  * query and nothing after "#". The result says whether the address is one
- * of the application's known names, so that the page can warn where it is
- * not.
+ * of the application's known addresses, exactly (KNOWN_RETURN_ADDRESSES,
+ * over https), so that the page can warn where it is not; http://localhost
+ * is taken, and always warned of.
  * @param {any} text
  * @returns {{origin: string, address: string, host: string, known: boolean}|null} null where the text is not such an address
  */
@@ -149,7 +159,7 @@ export function returnAddress(text) {
   if (!(url.protocol === 'https:' || local)) return null;
   if (url.username || url.password || url.search || url.hash || text.endsWith('#') || text.endsWith('?')) return null;
   if (!/^[a-z0-9.-]+$/.test(url.hostname)) return null;
-  return { origin: url.origin, address: url.origin + url.pathname, host: url.hostname, known: url.protocol === 'https:' && KNOWN_RETURN_HOSTS.includes(url.hostname) };
+  return { origin: url.origin, address: url.origin + url.pathname, host: url.hostname, known: url.protocol === 'https:' && KNOWN_RETURN_ADDRESSES.includes(url.host) };
 }
 
 /**
@@ -248,6 +258,20 @@ export function receivedReply(data, kind, state) {
   if ((typeof state === 'string' ? state : undefined) !== (typeof data.state === 'string' ? data.state : undefined)) return null;
   if (typeof data.kept !== 'boolean') return null;
   return data.kept ? 'kept' : 'not-kept';
+}
+
+/**
+ * The answer to this window, read from a message event: taken only where it
+ * comes from the window that opened this one and from the return address
+ * exactly, and only where it answers this record's request (receivedReply).
+ * @param {{source: any, origin: string, data: any}} event
+ * @param {{opener: any, origin: string, kind: string, state?: string}} expected
+ * @returns {'kept'|'not-kept'|null}
+ */
+export function replyFrom(event, expected) {
+  if (!event || !expected.opener || event.source !== expected.opener) return null;
+  if (event.origin !== expected.origin) return null;
+  return receivedReply(event.data, expected.kind, expected.state);
 }
 
 /** The link that carries a signed message back: the return address with the message after "#signed=". */
@@ -384,8 +408,12 @@ function page() {
   // Said beside the request's own words where the earlier passkey belongs to another website.
   let elsewhereNote = '';
   // The warnings shown before signing are confirmed by pressing the button
-  // a second time.
-  let confirmed = false;
+  // a second time: the texts the person was shown. A press signs only where
+  // every warning that stands then was among them; a failed passkey prompt,
+  // or a passkey forgotten, empties it, so the warnings are worked out and
+  // shown again.
+  let confirmed = new Set();
+  let cancelConfirmed = new Set();
   // Counts every going back to the first step, so that a signature that
   // arrives after one is not kept.
   let generation = 0;
@@ -472,7 +500,7 @@ function page() {
     dl.replaceChildren();
     const parts = await whatChanged(earlier.content, f);
     const changed = parts.filter((p) => p.changed);
-    say('changed-heading', changed.length ? `What changes against the permission being renewed (${changed.length} of ${parts.length} parts)` : 'Nothing changes against the permission being renewed but what is listed below as the same');
+    say('changed-heading', changed.length ? `What changes against the permission being renewed (${changed.length} of ${parts.length} parts)` : 'Nothing changes against the permission being renewed: every part below is the same');
     for (const p of parts) {
       dl.append(el('dt', p.changed ? 'changed' : '', `${p.term}: ${p.changed ? 'changed' : 'the same'}`));
       dl.append(el('dd', '', p.changed ? `Was: ${p.was}` : p.now));
@@ -487,7 +515,7 @@ function page() {
     $(lineId).hidden = !to;
     if (!to) return;
     $(addressId).textContent = to.address;
-    say(warningId, to.known ? '' : `This is not a known address of the Provared application (${KNOWN_RETURN_HOSTS.join(', ')}). Go on only if you opened this window from that address yourself; otherwise close it and sign nothing.`);
+    say(warningId, to.known ? '' : `This is not a known address of the Provared application (${KNOWN_RETURN_ADDRESSES.join(' or ')}, over https). Go on only if you opened this window from that address yourself; otherwise close it and sign nothing.`);
   }
 
   // How the passkey that signs is described, before it is asked.
@@ -503,16 +531,26 @@ function page() {
 
   // --- going back to the first step ---
 
+  // The warnings confirmed are taken back: they are worked out and shown
+  // again at the next press.
+  function unconfirm() {
+    confirmed = new Set();
+    $('sign').textContent = 'Sign this permission with a passkey';
+  }
+  function unconfirmCancel() {
+    cancelConfirmed = new Set();
+    $('cancel').textContent = 'Sign the cancellation with the passkey';
+  }
+
   function unread() {
     generation++;
     fields = null;
     readName = null;
     slip = null;
-    confirmed = false;
+    unconfirm();
     $('step2').classList.add('waiting');
     $('step3').classList.add('waiting');
     $('sign').disabled = true;
-    $('sign').textContent = 'Sign this permission with a passkey';
     $('save-line').hidden = true;
     $('back-line').hidden = true;
     $('fingerprint-line').hidden = true;
@@ -537,6 +575,9 @@ function page() {
     $('cancel-of').readOnly = false;
     $('cancel-words').hidden = true;
     $('cancel-return-line').hidden = true;
+    $('cancel-warnings').hidden = true;
+    $('cancel-warnings').replaceChildren();
+    unconfirmCancel();
     say('cancel-status', '');
     $('cancel').disabled = false;
     if (!byItself) {
@@ -564,7 +605,13 @@ function page() {
       await settleRequest();
     } catch (e) {
       if (at !== generation) return;
-      say('read-status', `${e && e.message ? e.message : 'The request could not be used.'} Nothing is offered to sign. Close this window and try again from the page that opened it.`);
+      // Nothing of a request that could not be used stays to sign with.
+      request = null;
+      earlier = null;
+      expected = null;
+      const words = `${e && e.message ? e.message : 'The request could not be used.'} Nothing is offered to sign. Close this window and try again from the page that opened it.`;
+      say('read-status', words);
+      if (asked.request.kind === 'cancellation') say('cancel-status', words);
       $('fields').value = '';
       $('read').disabled = true;
       $('cancel').disabled = true;
@@ -607,6 +654,12 @@ function page() {
       const rpId = earlier ? earlier.content.issuer.rpId : location.hostname;
       const origin = earlier ? earlier.content.issuer.origin : location.origin;
       expected = { key, thumbprint: thumb, rpId, origin, name: earlier ? `"${shown(String(earlier.content.issuer.name))}" (a label)` : 'the passkey the request names' };
+      if (request.kind === 'cancellation' && rpId !== location.hostname) {
+        // A cancellation is signed by the passkey that signed the
+        // permission, here, or not at all: a passkey for another website
+        // name is not asked, and none is made in its place.
+        throw new Error(`This permission was signed with a passkey for the website name ${rpId}, not ${location.hostname}, so it cannot be cancelled on this page.`);
+      }
       if (request.kind === 'cancellation' && origin !== location.origin) {
         throw new Error(`This permission was signed at ${origin}, and a checker holds a cancellation to that same address, so it cannot be cancelled here, at ${location.origin}.`);
       }
@@ -616,6 +669,7 @@ function page() {
         elsewhereNote = ` The passkey that signed the earlier permission (${thumb}) belongs to the website ${rpId}, and a browser lets it sign only there, not at ${location.hostname}. The new permission is signed with a passkey for this website instead; the agent's software takes a permission from a passkey it does not yet trust only when it is told to.`;
       }
     }
+    if (request.kind === 'cancellation' && !expected) throw new Error('The request names no permission to cancel.');
   }
 
   fill();
@@ -693,37 +747,53 @@ function page() {
   // set signed for the first time on this device, a passkey other than the
   // one that signed the earlier permission, a return address that is not
   // known. They are shown on the first press, and the second press signs.
+  // Each warning has a code (what it is about) and its words.
   async function warningsBefore(f) {
     const list = [];
+    const add = (code, text) => list.push({ code, text });
     const agentFp = await keySetFingerprint(f.agent.keys);
-    const sameAsEarlier = earlier && (await keySetFingerprint(earlier.content.agent.keys).catch(() => null)) === agentFp;
+    // The earlier permission vouches for the agent's keys only where its
+    // passkey is the person's own here (expected is set).
+    const sameAsEarlier = Boolean(expected) && earlier && (await keySetFingerprint(earlier.content.agent.keys).catch(() => null)) === agentFp;
     if (!agentKnown(agentFp) && !sameAsEarlier) {
-      list.push(`You have not signed a permission for this agent's key set on this device before: ${agentFp}. Compare it with the fingerprint the agent's software printed when it made its keys. A permission for someone else's keys lets their agent act in your name.`);
+      add('new-agent', `You have not signed a permission for this agent's key set on this device before: ${agentFp}. Compare it with the fingerprint the agent's software printed when it made its keys. A permission for someone else's keys lets their agent act in your name.`);
     }
     if (expected) {
-      if (!(await rememberedFor(expected.thumbprint))) list.push(`This browser does not remember the passkey that signed the earlier permission. Your device will offer the passkeys it holds for this website; choose the one you signed with before. The page checks that the passkey you chose is the one expected (${expected.thumbprint}), and signs with no other.`);
+      if (!(await rememberedFor(expected.thumbprint))) add('not-remembered', `This browser does not remember the passkey that ${earlier ? 'signed the earlier permission' : 'the request names'}. Your device will offer the passkeys it holds for this website; choose the one you signed with before. The page checks that the passkey you chose is the one expected (${expected.thumbprint}), and signs with no other.`);
     } else {
-      if (earlier) list.push(`The new permission is signed with a passkey other than the one that signed the earlier permission (${await thumbprint(earlier.content.issuer.key)}). The agent's software takes a permission from a passkey it does not yet trust only when it is told to.`);
-      if (!rememberedPasskeys().length) list.push('A new passkey will be made for this website, on this device. Make one only if you have not signed here before on this device, or your earlier passkey is gone. The agent\'s software takes a permission from a passkey it does not yet trust only when it is told to.');
+      if (earlier) add('other-passkey', `The new permission is signed with a passkey other than the one that signed the earlier permission (${await thumbprint(earlier.content.issuer.key)}). The agent's software takes a permission from a passkey it does not yet trust only when it is told to.`);
+      if (!rememberedPasskeys().length) add('new-passkey', 'A new passkey will be made for this website, on this device. Make one only if you have not signed here before on this device, or your earlier passkey is gone. The agent\'s software takes a permission from a passkey it does not yet trust only when it is told to.');
     }
-    if (request && request.returnTo && !request.returnTo.known) list.push(`The signed permission will be handed to ${request.returnTo.address}, which is not a known address of the Provared application. Go on only if you opened this window from that address yourself.`);
+    if (request && request.returnTo && !request.returnTo.known) add('unknown-return', `The signed permission will be handed to ${request.returnTo.address}, which is not a known address of the Provared application. Go on only if you opened this window from that address yourself.`);
     return list;
   }
 
-  function showWarnings(list) {
-    const ul = $('warnings');
+  // The warnings before a cancellation is signed: a return address that is
+  // not known.
+  function cancelWarningsBefore() {
+    const list = [];
+    if (request && request.returnTo && !request.returnTo.known) list.push({ code: 'unknown-return', text: `The signed cancellation will be handed to ${request.returnTo.address}, which is not a known address of the Provared application. Go on only if you opened this window from that address yourself.` });
+    return list;
+  }
+
+  function showWarnings(id, list) {
+    const ul = $(id);
     ul.replaceChildren();
-    for (const w of list) ul.append(el('li', '', w));
+    for (const w of list) ul.append(el('li', '', w.text));
     ul.hidden = false;
   }
+
+  // Whether every warning in the list was among those the person confirmed.
+  const allConfirmed = (list, set) => list.every((w) => set.has(w.text));
 
   // The passkey that signs, found as the request and this browser allow:
   // the expected passkey where this browser remembers it; otherwise the
   // person's choice among the passkeys the device holds, which is checked
   // against the expected key once it has signed; otherwise the passkey this
-  // browser remembers; otherwise a new one, after the warning. "chosen"
-  // means the key is the expected one and the identifier is not yet known.
-  async function findPasskey(name) {
+  // browser remembers; otherwise a new one, only where the person confirmed
+  // the warning that one will be made (mayMake). "chosen" means the key is
+  // the expected one and the identifier is not yet known.
+  async function findPasskey(name, { mayMake = false } = {}) {
     if (expected) {
       const known = await rememberedFor(expected.thumbprint);
       if (known) return { passkey: known, chosen: false };
@@ -731,6 +801,7 @@ function page() {
     }
     const list = rememberedPasskeys();
     if (list.length) return { passkey: list[list.length - 1], chosen: false };
+    if (!mayMake) throw new Error('This browser remembers no passkey for this website, and a new one is made only after you have read the warning that says so.');
     say('sign-status', 'Your device is asking you to make a passkey for this website.');
     const made = await createPasskey({ name, site: 'Provared' });
     rememberPasskey(made);
@@ -757,9 +828,16 @@ function page() {
   }
 
   // What the checker's refusal of a record just signed means for the person.
+  // A refusal that means the signature does not fit the passkey expected.
+  const PASSKEY_REFUSALS = ['signature-invalid', 'issuer-not-expected', 'passkey-rpid-mismatch', 'cancellation-invalid'];
   function refusedWords(found, problem, thumb) {
-    if (found.chosen) return `The passkey you chose is not the one that signed the earlier permission (${thumb}), so nothing is offered. Try again and choose the other one.`;
-    forgetPasskey(found.passkey);
+    const byPasskey = problem && PASSKEY_REFUSALS.includes(problem.code);
+    if (found.chosen && byPasskey) {
+      const whose = earlier ? 'the one that signed the earlier permission' : 'the one the request names';
+      return `The passkey you chose is not ${whose} (${thumb}), so nothing is offered. Press the button again and choose that one.`;
+    }
+    // A passkey this browser remembers whose signature does not fit: asked afresh next time.
+    if (!found.chosen && byPasskey) forgetPasskey(found.passkey);
     return `The checker refused what was signed: ${problem ? problem.message : 'the signature could not be checked on this device'}`;
   }
 
@@ -769,19 +847,19 @@ function page() {
     const [what, name] = [fields, readName];
     $('sign').disabled = true;
     try {
-      if (!confirmed) {
-        const list = await warningsBefore(what);
-        if (at !== generation) return;
-        if (list.length) {
-          showWarnings(list);
-          confirmed = true;
-          $('sign').textContent = 'I have read the warnings: sign this permission';
-          say('sign-status', 'Read the warnings above, then press the button again to sign.');
-          $('sign').disabled = false;
-          return;
-        }
+      // The warnings are worked out at every press: a press signs only
+      // where every warning that stands now was shown and confirmed.
+      const list = await warningsBefore(what);
+      if (at !== generation) return;
+      if (!allConfirmed(list, confirmed)) {
+        showWarnings('warnings', list);
+        confirmed = new Set(list.map((w) => w.text));
+        $('sign').textContent = 'I have read the warnings: sign this permission';
+        say('sign-status', 'Read the warnings above, then press the button again to sign.');
+        $('sign').disabled = false;
+        return;
       }
-      const found = await findPasskey(name);
+      const found = await findPasskey(name, { mayMake: list.some((w) => w.code === 'new-passkey') });
       const prepared = await prepareSlip({ ...what, issuer: { name, key: found.passkey.key, rpId: location.hostname, origin: location.origin } });
       const signed = assembleSlip(prepared, await askToSign('sign-status', prepared.challenge, found));
       const thumb = await thumbprint(found.passkey.key);
@@ -805,6 +883,9 @@ function page() {
       $('step3').classList.remove('waiting');
       handBack(request ? request.kind : 'permission', slip, 'sign-status', 'save-status', 'save-line', 'back-line', 'back', 'save');
     } catch (e) {
+      // A prompt that failed, or a passkey forgotten, takes the warnings
+      // confirmed back: they are worked out and shown again at the next press.
+      if (at === generation) unconfirm();
       say('sign-status', `${e && e.message ? e.message : 'The permission was not signed.'} You can try again.`);
       if (at === generation) $('sign').disabled = false;
     }
@@ -834,41 +915,46 @@ function page() {
         handed = false;
       }
     }
+    const what = kind === 'cancellation' ? 'cancellation' : 'permission';
     if (handed) {
-      // The window closes once the page that opened it says it kept the
-      // record; until then, and if it never says so, the file stays offered.
-      say(statusId, `Signed, and handed to ${to.address}. Waiting for it to confirm that it kept the signed ${kind === 'cancellation' ? 'cancellation' : 'permission'}.`);
+      // Sent, not yet handed over: a browser delivers it only where the
+      // page that opened this window is at the return address, and says
+      // nothing where it is not. It counts as handed over once that page
+      // answers. The window closes once that page says it kept the record;
+      // until then, and if it never says so, the file stays offered.
+      say(statusId, `Signed, and sent to the page that opened this window, for ${to.address}. Waiting for it to confirm that it kept the signed ${what}.`);
       say(saveStatusId, '');
       let timer = null;
       const reply = (event) => {
-        if (event.source !== opener || event.origin !== to.origin) return;
-        const answer = receivedReply(event.data, kind, request.state);
+        const answer = replyFrom(event, { opener, origin: to.origin, kind, state: request.state });
         if (!answer) return;
         window.removeEventListener('message', reply);
         clearTimeout(timer);
         if (answer === 'kept') {
-          say(statusId, `Signed, and kept by ${to.address}. This window closes itself; if it stays open, close it.`);
+          say(statusId, `Signed, handed to ${to.address}, and kept there. This window closes itself; if it stays open, close it.`);
           setTimeout(() => window.close(), 1000);
         } else {
-          say(statusId, `Signed, but ${to.address} did not keep it: it says why on its own page. Nothing more is sent from this window.`);
+          say(statusId, `Signed and handed to ${to.address}, but it did not keep it: it says why on its own page. Nothing more is sent from this window.`);
           say(saveStatusId, 'You can still save it as a file.');
         }
       };
       window.addEventListener('message', reply);
       timer = setTimeout(() => {
         window.removeEventListener('message', reply);
-        say(statusId, `Signed and handed to ${to.address}, but it has not confirmed that it kept the signed record. The page that opened this window may have been closed or moved on.`);
+        say(statusId, `Signed and sent, but ${to.address} has not confirmed that it kept the signed ${what}. The page that opened this window may be at another address, or it may have been closed or moved on.`);
         say(saveStatusId, 'Save it as a file instead, so that it is not lost.');
         $(saveId).focus();
       }, RECEIPT_WAIT);
       return;
     }
-    say(statusId, `Signed. This page was not opened as a window by ${to.address}, so the signed record is not handed back by itself: press the button below to go back there with it.`);
-    say(saveStatusId, 'Or save it as a file.');
+    // Going back by a link can lose the record (a page that does not load,
+    // a tab closed on the way): the file is offered first.
+    say(statusId, `Signed. This page was not opened as a window by ${to.address}, so the signed ${what} is not handed back by itself. Save it first as a file, then go back there with it.`);
+    say(saveStatusId, 'Save it first: the file is your copy if going back does not work.');
     $(backLineId).hidden = false;
-    $(backId).textContent = `Go back to ${to.address} with the signed ${kind === 'cancellation' ? 'cancellation' : 'permission'}`;
+    $(backId).textContent = `Then go back to ${to.address} with the signed ${what}`;
     $(backId).onclick = () => location.assign(signedLink(to.address, message));
-    $(backId).focus();
+    $(saveId).focus();
   }
 
   function download(name, text) {
@@ -900,11 +986,23 @@ function page() {
     $('cancel-back-line').hidden = true;
     try {
       if (request && request.kind === 'cancellation') {
+        // Only ever the passkey that signed the permission (settleRequest
+        // refuses any other request): never a new one.
+        if (!expected || !earlier) throw new Error('There is no permission to cancel here.');
+        const list = cancelWarningsBefore();
+        if (!allConfirmed(list, cancelConfirmed)) {
+          showWarnings('cancel-warnings', list);
+          cancelConfirmed = new Set(list.map((w) => w.text));
+          $('cancel').textContent = 'I have read the warning: sign the cancellation';
+          say('cancel-status', 'Read the warning above, then press the button again to sign the cancellation.');
+          $('cancel').disabled = false;
+          return;
+        }
         // The passkey that signed the permission, found by its key; the
         // checker holds the cancellation against the permission before it
         // is offered, as a checker given both would.
         const prepared = await prepareCancellation({ slip: of });
-        const found = await findPasskey(null);
+        const found = await findPasskey(null, { mayMake: false });
         const record = assembleCancellation(prepared, await askToSign('cancel-status', prepared.challenge, found));
         const result = await checkBook(`${entryLine({ slip: earlier.record })}\n`, { issuerKeys: [expected.thumbprint], cancellations: [{ cancellation: record }] });
         const held = result.held[0];
@@ -926,6 +1024,7 @@ function page() {
         $('cancel-save-line').hidden = false;
       }
     } catch (e) {
+      if (at === generation) unconfirmCancel();
       say('cancel-status', `${e && e.message ? e.message : 'The cancellation was not signed.'} You can try again.`);
     }
     $('cancel').disabled = false;
