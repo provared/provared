@@ -1329,3 +1329,19 @@ used; a permission that cannot be read leaves its set-up in place and a
 new one is made, with that reason; two starts at once on an empty folder
 both answer and leave two set-ups; the made-up server refuses a
 credential other than the one in its folder.
+
+**X100. Four small points of a second, narrow review.** (1) The mark is
+made, then written, so a start stopped in between left an empty mark, and
+the folder was refused for good as not the demonstration's; an empty mark
+alone in the folder (with at most a mark being written beside it) is now
+taken as the demonstration's own and written again, whole. Two starts at
+once can both do this; both write the same text. (2) A set-up that is not
+used was said to be "kept as it is", but its paths may already have been
+written afresh before the executor's check; the words now say it is left
+where it is, with at most its paths written afresh. (3) A file error
+inside the folder after it was opened (a set-up mounted read-only, a full
+disk) now gives the words of X94, not the system's own message. (4) The
+message of X94 named the system's code as the cause, though Node.js reports
+`ENOENT` for a folder it cannot make on a read-only disk; it now says the
+folder "cannot be made or written" and gives the code as what the system
+reported, and a name that is a file gets words of its own. Two more tests.

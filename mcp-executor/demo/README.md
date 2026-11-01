@@ -40,8 +40,8 @@ of MCP servers that starts each server and asks it what it offers.
   so the demonstration still starts after it is moved, or after Node.js is
   upgraded, and the settings are checked again. A set-up whose permission
   has ended, ends within the hour, cannot be read, or no longer passes the
-  check is kept as it is, and a new one is made beside it; the start says
-  why. Then it starts `provared-mcp-executor stdio` on its own input and
+  check is not used: it is left where it is (with at most its paths
+  written afresh), and a new one is made beside it; the start says why. Then it starts `provared-mcp-executor stdio` on its own input and
   output. What it says goes to its standard error.
 - `package.json`: the two packages from npm, at exact versions:
   `provared` 0.7.0 and `provared-mcp-executor` 0.2.0. Neither has any

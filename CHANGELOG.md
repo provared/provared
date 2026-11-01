@@ -28,7 +28,11 @@
   empty folder each set up, says plainly when a folder cannot be written,
   and its server compares the made-up credential's value; the container
   is built from four named files, with a packed executor handed over as
-  a context of its own and never copied in. Four more tests.
+  a context of its own and never copied in. Four more tests. After a
+  second, narrow review (choice X100): an empty mark left by a start that
+  was stopped no longer refuses the folder for good, a file error inside
+  the folder gets the same plain words, and a name that is a file is said
+  to be one. Two more tests.
 - **The MCP executor tests rules on the content of a change before a
   call is let through** (F-157, F-158; `mcp-executor/rules.mjs`; choices
   X56 to X70 in `mcp-executor/DESIGN.md`). A permission allows kinds of

@@ -104,12 +104,12 @@ test('the demonstration sets itself up, answers introspection, takes a call with
   assert.deepEqual(setUps(folder), [mark(folder).current], 'no new set-up');
   assert.equal(readFileSync(join(setUp, 'book.jsonl'), 'utf8').trim().split('\n').length, 5);
 
-  // A permission that cannot be read: the set-up is kept as it is, and a new one is made beside it.
+  // A permission that cannot be read: the set-up is left where it is, and a new one is made beside it.
   writeFileSync(join(setUp, 'slip.json'), 'not a permission');
   const third = demo(folder);
   assert.equal((await third.ask('tools/call', { name: 'add', arguments: { a: 2, b: 2 } })).result.content[0].text, '4');
   assert.equal(await third.end(), 0);
-  assert.match(third.said(), /kept as it is and not used: its permission cannot be read/);
+  assert.match(third.said(), /left where it is and not used: its permission cannot be read/);
   assert.equal(setUps(folder).length, 2);
   assert.ok(existsSync(join(setUp, 'book.jsonl')), 'the old set-up is kept');
   assert.notEqual(join(folder, mark(folder).current), setUp);
@@ -122,6 +122,24 @@ test('a folder the demonstration did not make is refused, and nothing in it is t
   assert.equal(await d.exited, 2);
   assert.match(d.said(), /not empty and was not made by this demonstration/);
   assert.deepEqual(readdirSync(folder), ['notes.txt']);
+});
+
+test('an empty mark alone in the folder, left by a start stopped after making it, is written again and used', async () => {
+  const folder = tempFolder();
+  writeFileSync(join(folder, 'provared-demo.json'), '');
+  const d = demo(folder);
+  assert.equal((await d.ask('tools/call', { name: 'add', arguments: { a: 5, b: 6 } })).result.content[0].text, '11');
+  assert.equal(await d.end(), 0);
+  assert.deepEqual(setUps(folder), [mark(folder).current]);
+});
+
+test('a name that is a file, not a folder, is refused with words that say so', async () => {
+  const file = join(tempFolder(), 'a-file');
+  writeFileSync(file, 'mine');
+  const d = demo(file);
+  assert.equal(await d.exited, 2);
+  assert.match(d.said(), /is a file, not a folder/);
+  assert.equal(readFileSync(file, 'utf8'), 'mine');
 });
 
 test('two starts at once on an empty folder each make a set-up of their own and both answer', async () => {

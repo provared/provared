@@ -25,7 +25,8 @@
 // the rules file's fingerprint does not depend on its path), and the
 // settings are checked again. A set-up whose permission has ended, ends
 // within the hour, cannot be read, or whose settings no longer pass the
-// check is kept as it is, and a new set-up is made beside it.
+// check is not used: it is left where it is (with at most its paths
+// written afresh), and a new set-up is made beside it.
 //
 // Then it starts "provared-mcp-executor stdio" with this process's own
 // input and output. Everything this file says goes to its standard error:
@@ -33,9 +34,9 @@
 
 import { spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assembleSlip, formatTime, prepareSlip, thumbprint } from 'provared';
 import { developmentPasskey } from 'provared/dev';
@@ -45,8 +46,10 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 // is the file npm's "bin" names, though the package does not export it.
 const BIN = join(dirname(fileURLToPath(import.meta.resolve('provared-mcp-executor/package.json'))), 'bin.mjs');
 const STATE = resolve(process.env.PROVARED_DEMO_DIR || join(homedir(), '.provared-mcp-demo'));
-const MARK = join(STATE, 'provared-demo.json');
+const MARK_NAME = 'provared-demo.json';
+const MARK = join(STATE, MARK_NAME);
 const MARK_TEXT = 'provared-mcp-executor demonstration';
+const EMPTY_MARK = `${JSON.stringify({ demonstration: MARK_TEXT, current: null })}\n`;
 const DAYS = 30;
 const NODE_FLAGS = ['--disable-warning=ExperimentalWarning'];
 
@@ -90,22 +93,58 @@ function writeWhole(path, text) {
   }
 }
 
+/** Why the demonstration's folder cannot be used: it is a file, or it cannot be made or written. */
+function folderProblem(e) {
+  let file = false;
+  try {
+    file = !statSync(STATE).isDirectory();
+  } catch {
+    // Missing, or not to be looked at: the second message covers both.
+  }
+  if (file) return new Error(`${STATE} is a file, not a folder. Name a folder with PROVARED_DEMO_DIR.`);
+  return new Error(`The demonstration's folder ${STATE} cannot be made or written (the system reported ${e.code ?? e.message}). It needs a folder it can write: name one with PROVARED_DEMO_DIR or, in a container started read-only, give it a writable volume or a tmpfs at that path.`);
+}
+
+/** Whether a file error is about a path inside the demonstration's folder. */
+function inFolder(e) {
+  if (typeof e?.path !== 'string') return false;
+  const r = relative(STATE, resolve(e.path));
+  return r === '' || (!r.startsWith('..') && !isAbsolute(r));
+}
+
+/** The folder holds only an empty mark (and at most a mark being written): a start began the mark and did not finish it. */
+function markUnfinished() {
+  try {
+    return statSync(MARK).size === 0 && readdirSync(STATE).every((n) => n === MARK_NAME || /^provared-demo\.json\.[0-9a-f]{12}\.tmp$/.test(n));
+  } catch {
+    return false;
+  }
+}
+
 /** The demonstration's folder: made if missing; refused unless empty or marked as the demonstration's. */
 function openFolder() {
+  let mark;
   try {
     mkdirSync(STATE, { recursive: true });
     if (!readdirSync(STATE).length) {
       try {
         // Exclusive: of two starts on an empty folder, one writes the mark and both use it.
-        writeFileSync(MARK, `${JSON.stringify({ demonstration: MARK_TEXT, current: null })}\n`, { flag: 'wx' });
+        writeFileSync(MARK, EMPTY_MARK, { flag: 'wx' });
       } catch (e) {
         if (e.code !== 'EEXIST') throw e;
       }
     }
+    mark = readJson(MARK);
+    // The mark is made, then written: a start that was stopped in between,
+    // or another start at this moment, leaves it empty. Alone in the
+    // folder, it is the demonstration's own, and is written again, whole.
+    if (mark === null && markUnfinished()) {
+      writeWhole(MARK, EMPTY_MARK);
+      mark = readJson(MARK);
+    }
   } catch (e) {
-    throw new Error(`The demonstration's folder ${STATE} cannot be written (${e.code ?? e.message}). It needs a folder it can write: name one with PROVARED_DEMO_DIR or, in a container started read-only, give it a writable volume or a tmpfs at that path.`);
+    throw folderProblem(e);
   }
-  const mark = readJson(MARK);
   if (mark?.demonstration !== MARK_TEXT) {
     throw new Error(`The folder ${STATE} is not empty and was not made by this demonstration (it holds no provared-demo.json that says so). Nothing in it was touched. Name another folder with PROVARED_DEMO_DIR.`);
   }
@@ -196,7 +235,7 @@ async function main() {
   let folder = null;
   if (current && existsSync(current)) {
     const reason = whyNot(current);
-    if (reason) say(`the set-up ${current} is kept as it is and not used: ${reason}. A new one is made.`);
+    if (reason) say(`the set-up ${current} is left where it is and not used: ${reason}. A new one is made.`);
     else {
       folder = current;
       say(`using the demonstration set up in ${folder}.`);
@@ -212,6 +251,8 @@ async function main() {
 }
 
 main().catch((e) => {
-  say(e.message);
+  // A file error inside the folder (a set-up's folder mounted read-only, a
+  // full disk) gets the same words as a folder that cannot be written.
+  say(inFolder(e) ? folderProblem(e).message : e.message);
   process.exitCode = 2;
 });
