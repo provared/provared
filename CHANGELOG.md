@@ -25,8 +25,7 @@ Version 0.7.0 makes three more document names part of the format (section 27 of 
   writes `provared.tool-call-id` where a tool gives `callId`, which before
   went on the span only, and still never writes `provared.event-id`, the
   platform's identifier, which only the caller can name. Both packages now
-  need a library later than 0.6.0 (`>0.6.0 <0.8.0`, which becomes
-  `^0.7.0` when that version is cut). Shared test files:
+  need 0.7.0 or later (`^0.7.0`). Shared test files:
   `stub-contents.json`, `http-fingerprints.json` and `denial-contents.json`
   remade, with the three names accepted once, refused twice, and names
   close to them (`provared.Tool-result`, `provared.tool_result`,
@@ -40,7 +39,7 @@ Version 0.7.0 makes three more document names part of the format (section 27 of 
   later version. The guide, the Python README, the list of threats and the
   type declarations say so.
 - **An executor for MCP tool servers**, `mcp-executor/`
-  (`provared-mcp-executor` 0.1.0, not published), stage 1: the stdio
+  (`provared-mcp-executor` 0.1.0), stage 1: the stdio
   transport. An executor, in the words of the Internet-Draft
   `draft-izmaylov-agent-permission-receipts-02`, is software other than
   the agent that holds what its actions need and refuses an action the
@@ -477,7 +476,7 @@ Version 0.7.0 makes three more document names part of the format (section 27 of 
   examples now give their full addresses on GitHub, since `examples/` and
   `python/` are not in the npm package.
 
-- **A "try it" page** at prova.red/try/ (`site/try/`, not yet published).
+- **A "try it" page** at prova.red/try/ (`site/try/`, live since 25 October 2026).
   One button. Where the browser has Ed25519 and ML-DSA-87 built in (Chrome,
   Edge and Brave 155, tried on 13 October 2026), the page makes a new
   record with the development stand-in for a passkey, under a limit on
