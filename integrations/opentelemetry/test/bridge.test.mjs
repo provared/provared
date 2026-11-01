@@ -491,6 +491,25 @@ test('traceAct passes a "details" that is not a list on as it is, for "act" to r
   assert.notEqual(alone.done, true);
 });
 
+test('a receipt names "provared.tool-call-id" once: where the caller\'s own documents name it, the bridge adds nothing', async () => {
+  const { recorder } = await shop({ count: 5 });
+  const own = { name: 'provared.tool-call-id', sha256: await identifierFingerprint('call_own') };
+  const written = [];
+  const tools = traceTools(recorder, { order: { action: ORDER, run: async () => 1, details: async () => [own], callId: () => 'call_model_3', sendsTrace: true } }, { onStub: (s) => written.push(s) });
+  assert.equal(await tools.order({}), 1);
+  assert.deepEqual(namesOf(written[0]), ['provared.tool-call-id', 'provared.trace-id']);
+  assert.deepEqual(documentsOf(written[0])[0], own, 'the caller\'s fingerprint stands');
+  assert.equal((await spanNamed('execute_tool order')).attributes['gen_ai.tool.call.id'], 'call_model_3');
+
+  const outcome = await traceAct(recorder, { action: ORDER, details: [own] }, async () => 'ok', {}, { callId: 'call_model_4', sendsTrace: true });
+  assert.equal(outcome.done, true, JSON.stringify(outcome.answer));
+  assert.deepEqual(namesOf(outcome.stub), ['provared.tool-call-id', 'provared.trace-id']);
+  assert.deepEqual(documentsOf(outcome.stub)[0], own);
+  // With nothing to add, the request is handed to "act" as it was given.
+  const same = await traceAct(recorder, { action: ORDER, details: [own] }, async () => 'ok', {}, { callId: 'call_model_5' });
+  assert.deepEqual(namesOf(same.stub), ['provared.tool-call-id']);
+});
+
 test('the only "provared.event-id" in a receipt is the one the caller names: the model\'s identifier goes in as "provared.tool-call-id"', async () => {
   const { recorder } = await shop({ count: 5 });
   const outcome = await traceAct(

@@ -218,8 +218,9 @@ and a tool's result (`provared.tool-result`) with `arguments_fingerprint`,
 in the same one form as the arguments. Only `provared.trace-id`,
 `provared.request-id` and `provared.event-id` may be named more than
 once in a stub. `record_tools` and `record_function` name the arguments
-only; a checker of version 0.6.0 or earlier refuses a stub that names any
-of the three names added after it. An identifier that the platform gives only
+only; a checker of version 0.5.0 or 0.6.0 refuses a stub that names any of
+the three names added after 0.6.0, and one of 0.4.0 or earlier reads them
+as labels. An identifier that the platform gives only
 in its answer goes in through `details_after` (the JavaScript name
 `detailsAfter` is taken too):
 

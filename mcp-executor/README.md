@@ -53,9 +53,10 @@ npm install -g ./provared-mcp-executor-0.1.0.tgz
 ```
 
 It needs Node.js 24.7 or later, and depends only on the `provared` library,
-at a version after 0.6.0: its receipts name `provared.tool-name` and
-`provared.tool-result`, which the format reserved after 0.6.0 and which a
-checker of 0.6.0 refuses.
+at a version after 0.6.0 and before 0.8.0: its receipts name
+`provared.tool-name` and `provared.tool-result`, which the format reserved
+after 0.6.0 and which a checker of 0.5.0 or 0.6.0 refuses (0.4.0 and
+earlier read them as labels).
 
 ## Set it up
 

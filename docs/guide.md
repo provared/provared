@@ -903,8 +903,9 @@ tool's name or its result: a tool's `details` function can add
 `provared.tool-name`, and `provared.tool-result` is added after the
 action, through `detailsAfter` of `act`. The MCP executor
 (`mcp-executor/`) names all three where it has them. Each of the three
-may be named once in a stub, and a checker of version 0.6.0 or earlier
-refuses a stub that names any of them.
+may be named once in a stub; a checker of version 0.5.0 or 0.6.0 refuses
+a stub that names any of them, and one of 0.4.0 or earlier reads them as
+labels.
 
 To show each receipt on the trace span of its call in an observability
 tool, use the OpenTelemetry bridge in `integrations/opentelemetry/` (not

@@ -128,6 +128,16 @@ async function bindings(sends, span, callId) {
   return out;
 }
 
+// The binding documents to add after the documents the caller named. The
+// model's identifier may be named once only (section 27), so where the
+// caller's own list already names "provared.tool-call-id" it is not added
+// again: the caller's stands. A trace id may be named more than once, so
+// it is always added.
+function addedTo(named, binding) {
+  const names = new Set(named.map((d) => (d !== null && typeof d === 'object' ? d.name : undefined)));
+  return binding.filter((b) => b.name !== TOOL_CALL_ID || !names.has(TOOL_CALL_ID));
+}
+
 function markNotTaken(span, own, action, answer, denial, settings) {
   annotate(span, { outcome: 'not_taken', action, answer, denial }, { event: settings.event });
   if (own && span) {
@@ -238,7 +248,7 @@ export function traceTools(recorder, tools, options = {}) {
                   let named = [];
                   if (typeof rest.details === 'function') named = (await later(rest.details)(a)) ?? [];
                   else if (rest.details !== false && a !== undefined) named = [{ name: 'provared.arguments', sha256: await argumentsFingerprint(a) }];
-                  return Array.isArray(named) ? [...named, ...binding] : named;
+                  return Array.isArray(named) ? [...named, ...addedTo(named, binding)] : named;
                 };
           let stub = null;
           const onStub = async (written, tool) => {
@@ -319,7 +329,8 @@ export async function traceAct(recorder, request, perform, more = {}, options = 
     const binding = approved || !listed ? [] : await bindings(settings.sendsTrace, span, callId);
     const traceBound = binding.some((d) => d.name === TRACE_ID);
     const given = Array.isArray(request.details) ? request.details : [];
-    const asked = binding.length === 0 ? request : { ...request, details: [...given, ...binding] };
+    const added = binding.length === 0 ? [] : addedTo(given, binding);
+    const asked = added.length === 0 ? request : { ...request, details: [...given, ...added] };
     let outcome;
     try {
       outcome = await recorder.act(asked, perform, more);

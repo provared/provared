@@ -21,17 +21,20 @@
   writes `provared.tool-call-id` where a tool gives `callId`, which before
   went on the span only, and still never writes `provared.event-id`, the
   platform's identifier, which only the caller can name. Both packages now
-  need a library later than 0.6.0 (`>0.6.0`). Shared test files:
+  need a library later than 0.6.0 (`>0.6.0 <0.8.0`, which becomes
+  `^0.7.0` when that version is cut). Shared test files:
   `stub-contents.json`, `http-fingerprints.json` and `denial-contents.json`
   remade, with the three names accepted once, refused twice, and names
   close to them (`provared.Tool-result`, `provared.tool_result`,
   `provared.tool-call`) refused as unknown. **Compatibility:** no book
   written by version 0.6.0 fails its check because of this change, since
   0.6.0 refused these names and so never wrote them; a checker of version
-  0.6.0 or earlier refuses a book that names any of the three
-  (`bad-field`, as for every `provared.` name it does not know), so a
-  book written with them checks only with a later version. The guide, the
-  Python README, the list of threats and the type declarations say so.
+  0.5.0 or 0.6.0 refuses a book that names any of the three
+  (`bad-field`, as for every `provared.` name it does not know), and a
+  checker of 0.4.0 or earlier, from before the names were reserved, reads
+  them as labels; so a book written with them checks in full only with a
+  later version. The guide, the Python README, the list of threats and the
+  type declarations say so.
 - **An executor for MCP tool servers**, `mcp-executor/`
   (`provared-mcp-executor` 0.1.0, not published), stage 1: the stdio
   transport. An executor, in the words of the Internet-Draft

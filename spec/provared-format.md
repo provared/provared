@@ -2254,9 +2254,13 @@ with the body `{"hello": "world"}` is written as these four lines:
   a result `"ok"`), share one fingerprint, and every call of one tool
   shares its name's fingerprint, so a match with one of them does not
   show that it was the same call.
-- A fingerprint of an identifier, or of arguments, that is short or easy
-  to guess can be guessed: it hides nothing from someone who can try
-  the likely values.
+- A fingerprint of an identifier, of arguments, of a tool's name or of a
+  result that is short or easy to guess can be guessed: it hides nothing
+  from someone who can try the likely values. A tool's name is the most
+  guessable (a reader tries the names of the framework's or the server's
+  tools), and a short result (`"ok"`, `{}`, `true`) is little better; so
+  "never the result itself" keeps the result out of the record, and does
+  not hide it.
 - A checker cannot see whether a fingerprint was made from the text this
   section names: only someone who holds that text can work it out again.
 - Records written before this section was added may use names that
@@ -2264,9 +2268,10 @@ with the body `{"hello": "world"}` is written as these four lines:
   once-only names twice; such records are refused, so a book that holds
   one no longer passes its check. A checker that does not know this
   section reads a reserved name as a label. A checker that knows the
-  first seven names only (version 0.6.0 of the libraries) refuses a
-  record that names `provared.tool-name`, `provared.tool-call-id` or
-  `provared.tool-result`, as it refuses any name it does not know.
+  first seven names only (versions 0.5.0 and 0.6.0 of the libraries)
+  refuses a record that names `provared.tool-name`,
+  `provared.tool-call-id` or `provared.tool-result`, as it refuses any
+  name it does not know.
 
 ## 28. The denial
 

@@ -162,7 +162,8 @@ gives one; `with` the executor's id; `details`:
 and the tool's result were labels (`mcp.tool`, `mcp.result`) until the
 format reserved `provared.tool-name` and `provared.tool-result` (F-158;
 section 27), which the executor now writes; so the executor needs a
-library later than 0.6.0, and a checker of 0.6.0 refuses its receipts.
+library later than 0.6.0, and a checker of 0.5.0 or 0.6.0 refuses its
+receipts (0.4.0 and earlier read the names as labels).
 
 **The countersignature.** Signed with the executor's own key set (Ed25519
 and ML-DSA-87), which the permission names in `with` under the executor's
@@ -438,8 +439,9 @@ the format: the executor writes ordinary stubs, countersignatures and
 denials.
 
 **X1. A package of its own, `mcp-executor/`, named `provared-mcp-executor`,
-depending on `provared` at a version after 0.6.0 (`>0.6.0`; it was `^0.6.0`
-until the reserved names of X12 came).** Two files are copies of the gateway's
+depending on `provared` at a version after 0.6.0 and before 0.8.0
+(`>0.6.0 <0.8.0`, to become `^0.7.0` when that version is cut; it was
+`^0.6.0` until the reserved names of X12 came).** Two files are copies of the gateway's
 (`files.mjs`; `test/local-library.mjs`), held identical by a test. Why: the
 package works by name once installed; copying keeps the two executors from
 depending on each other. The other way: an export from the gateway

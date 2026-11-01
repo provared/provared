@@ -90,7 +90,10 @@ the fingerprint of the identifier (section 27). It is the model's
 identifier, not the platform's: `provared.event-id` stands for the
 platform's, and the bridge never writes that one. What `callId` gives is
 used only where it is text of 1 to 256 characters; anything else is set
-aside, and then neither the span nor the receipt names it.
+aside, and then neither the span nor the receipt names it. A receipt may
+name `provared.tool-call-id` once only: where a tool's own `details` (or,
+for `traceAct`, `request.details`) already names it, the bridge adds
+nothing and the caller's stands.
 
 A tool says that it sends the trace out with `sendsTrace: true`:
 
@@ -252,7 +255,7 @@ on any object with `setAttribute`, and does not import OpenTelemetry:
 
 ## Versions
 
-`@opentelemetry/api` (`^1.9.0`) and `provared` (`>0.6.0`: a version after 0.6.0, the first that knows `provared.tool-call-id`; tested with the library on the main branch) are peer
+`@opentelemetry/api` (`^1.9.0`) and `provared` (`>0.6.0 <0.8.0`: a version after 0.6.0, the first that knows `provared.tool-call-id`, and before the next major version, as the other packages are bounded; tested with the library on the main branch) are peer
 dependencies: the application chooses the one copy of each. OpenTelemetry
 asks this of libraries, so that every part of an application uses the one
 tracer provider; and the bridge must use the same copy of `provared` as

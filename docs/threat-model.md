@@ -206,8 +206,13 @@ in the one form of RFC 8785, as the arguments are).
   at all: which one a platform writes into its log differs from one
   platform to another, and is for whoever relies on it to find out. That
   the fingerprint was made from the text the name says: a checker cannot
-  tell; only someone who holds that text can. An identifier that is
-  short or easy to guess gives no privacy through its fingerprint.
+  tell; only someone who holds that text can. An identifier, a tool's
+  name or a result that is short or easy to guess gives no privacy
+  through its fingerprint: a tool's name is found by trying the
+  framework's or the server's tool names, and a short result (`"ok"`,
+  `{}`) by trying the likely values. The record holds fingerprints and
+  not the result itself so that the record stays small and fixed, not to
+  hide the result.
 - *Against A1 and A3* (the agent's own side). The binding is written by
   the agent's side, so a dishonest one can leave it out, or name a
   wrong identifier; only the match with the platform's log, made later,
@@ -225,8 +230,9 @@ in the one form of RFC 8785, as the arguments are).
   book written before this rule that holds such a name no longer passes
   its check. The three names added after version 0.6.0 (`provared.tool-name`,
   `provared.tool-call-id`, `provared.tool-result`) are refused by a
-  checker of version 0.6.0, which knows the first seven only: a book
-  that names them checks only with a later checker.
+  checker of version 0.5.0 or 0.6.0, which knows the first seven only,
+  and read as labels by one of 0.4.0 or earlier: a book that names them
+  checks in full only with a later checker.
 
 ## 4a. Limits, conditions, approvals and the other side's records
 
