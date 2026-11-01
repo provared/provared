@@ -275,12 +275,15 @@ It needs Node.js 24.7 or later, and depends only on the `provared` library.
    none,
    the client gets a JSON-RPC error of the executor's own: code 1002 (no
    answer: the time ran out, the agent cancelled, or the server ended) with
-   the stub's fingerprint in `data`. Code 1001 means the call was not
-   taken: the executor could not record it, is stopped, or has too many
-   calls waiting. A line from the server that the executor cannot read as
-   a message (not UTF-8, not JSON) is handed to the client as it is, and a
-   server line over 16 MiB is dropped; a call waiting for either ends by
-   the timeout. A request other than a tool call that the server never
+   the stub's fingerprint in `data`. A line from the server that is not one
+   JSON object (a batch, a bare value), or that names `id` twice at its
+   top level, is not a message: it is handed on to the client as it is,
+   matched with no call, and the call ends by the timeout with a "no
+   answer" receipt. Code 1001 means the call was not taken: the executor
+   could not record it, is stopped, or has too many calls waiting. The
+   same holds for a line the executor cannot read as a message for another
+   reason (not UTF-8, not JSON) whose top-level `id` it cannot find; a
+   server line over 16 MiB is dropped. A request other than a tool call that the server never
    answers is forgotten after 1,000 such requests have piled up, the
    oldest first; its answer, if it ever comes, is handed on under the
    executor's id, which the client does not know and ignores.

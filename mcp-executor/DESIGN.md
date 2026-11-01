@@ -293,9 +293,11 @@ itself has a problem.
 - The clocks: times in receipts are the executor's; a countersignature is
   by the same clock. Seals and outside time-stamps are stage 2.
 - One tool call at a time: a long call delays the next.
-- A response from the server that is not a message (not JSON, not UTF-8)
-  is handed on to the client as it is; a server line over 16 MiB is
-  dropped. The call then ends by the timeout.
+- A response from the server that is not a message (not JSON, not UTF-8,
+  a batch or any line that is not one object, or `id` twice at the top
+  level) is handed on to the client as it is, matched with no call; a
+  server line over 16 MiB is dropped. The call then ends by the timeout,
+  with a "no answer" receipt.
 - `tools/list` is filtered page by page: a page may come back empty with a
   cursor to the next.
 - The copy is only as safe as the folder it is in.
@@ -791,6 +793,13 @@ reserved document name, which is the founder's to add to the format.
 notification whose method does not begin `notifications/`) are dropped
 and logged, as X39 says.** Stated here because such notifications exist
 in extensions; a later version may allow a list of prefixes.
+
+**X55. A server line with `id` twice at its top level matches no call.**
+`topLevelId` scans the whole object and gives nothing where `id` appears
+twice, so the line is handed on as it is and the call ends by the timeout.
+Why: two readers could take either `id`, and splicing one of them could
+show the client the executor's id (the final check's F1). A batch, or any
+line that is not one object, is handled the same way (F2).
 
 **X36. The tests use a made-up MCP server written for them
 (`test/fake-server.mjs`), started as a real process, with tools that

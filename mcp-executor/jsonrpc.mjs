@@ -228,8 +228,9 @@ export function readMessage(line, { strictNumbers = true } = {}) {
  * {start, end, value} (value as JSON.parse reads it), or null where the text
  * does not begin with an object or has no top-level "id". It walks the text
  * once, skipping strings and nested values, so it works on a line that
- * JSON.parse would refuse elsewhere (a repeated name deeper in). The first
- * top-level "id" counts.
+ * JSON.parse would refuse elsewhere (a repeated name deeper in). A text
+ * with "id" more than once at the top level gives null: two readers could
+ * take either, so the executor matches it with nothing.
  */
 export function topLevelId(text) {
   let i = 0;
@@ -268,9 +269,10 @@ export function topLevelId(text) {
     while (j < text.length && !',}] \t\r\n'.includes(text[j])) j++;
     return j;
   };
+  let found = null;
   for (;;) {
     skipSpace();
-    if (text[i] === '}' || i >= text.length) return null;
+    if (text[i] === '}' || i >= text.length) return found;
     if (text[i] !== '"') return null;
     const keyEnd = stringEnd(i);
     let key;
@@ -287,18 +289,19 @@ export function topLevelId(text) {
     const start = i;
     const end = valueEnd(start);
     if (key === 'id') {
+      if (found) return null;
       let value;
       try {
         value = JSON.parse(text.slice(start, end));
       } catch {
         return null;
       }
-      return { start, end, value };
+      found = { start, end, value };
     }
     i = end;
     skipSpace();
     if (text[i] === ',') i++;
-    else if (text[i] === '}') return null;
+    else if (text[i] === '}') return found;
     else return null;
   }
 }

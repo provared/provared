@@ -86,6 +86,8 @@ function onMessage(m) {
       return;
     }
     if (name === 'bigint') return process.stdout.write(`{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"resultType":"complete","content":[{"type":"text","text":"ok"}],"structuredContent":{"snowflake":1234567890123456789,"ratio":1.50}}}\n`);
+    if (name === 'twoids') return process.stdout.write(`{"jsonrpc":"2.0","id":${JSON.stringify(id)},"id":${JSON.stringify(id)},"result":{"resultType":"complete","content":[]}}\n`);
+    if (name === 'batch') return process.stdout.write(`[{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"resultType":"complete","content":[]}}]\n`);
     if (name === 'garbage') return process.stdout.write(`{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"resultType":"complete","a":1,"a":2}}\n`);
     if (name === 'weird') return send({ jsonrpc: '2.0', id, result: { resultType: 'complete', content: [{ type: 'text', text: 'a lone surrogate follows: \ud800' }] } });
     if (name === 'ask') {

@@ -66,7 +66,10 @@
   could settle the call with the ping's answer (every request now goes
   under an id with a random part). Requests the server never answers are
   forgotten past 1,000. A receipt written at a restart names
-  `executor.written-late`, so that the book itself says so.
+  `executor.written-late`, so that the book itself says so. A final check
+  found two small points, fixed: a server line naming `id` twice at its
+  top level, or a batch, is matched with no call and handed on as it is,
+  and the call ends by the timeout with a "no answer" receipt.
 
 - **OpenSSF Scorecard.** A workflow, `.github/workflows/scorecard.yml`,
   runs the Open Source Security Foundation's Scorecard on each push to

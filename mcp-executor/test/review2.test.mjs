@@ -159,7 +159,41 @@ test('X37: a receipt written at a restart names executor.written-late, keeps the
   }
 });
 
+test('F1: a server line with "id" twice at the top level matches no call: it is handed on as it is, and the call ends by the timeout with a "no answer" receipt', async () => {
+  const w = await world({ config: { timeout: 1000, tools: { twoids: { action: 'tool.run' } } } });
+  try {
+    const r = await w.client.request('tools/call', { name: 'twoids' }, { id: 't1' });
+    assert.equal(r.error.code, 1002, 'the call ended by the timeout');
+    const raw = rawLines(w).find((l) => l.includes('"id":"provared-'));
+    assert.ok(raw, 'the line was handed on unmatched, under the executor\'s id');
+    assert.ok(!rawLines(w).some((l) => l.includes('"id":"t1","id"')), 'nothing was spliced into it');
+    const [stub] = stubsOf(await bookOf(w));
+    assert.match(Buffer.from(JSON.stringify(docs(stub))).toString(), /provared\.error/);
+    assert.equal(docs(stub)['provared.error'], await identifierFingerprint(`The tool server gave no answer within 1000 ms, so the executor cancelled the call (call ${w.logs.find((e) => e.event === 'taken').call}). Its outcome is not known.`));
+    assert.ok(w.logs.some((e) => e.event === 'server-line-not-read' && e.matched === undefined));
+  } finally {
+    await w.close();
+  }
+});
+
+test('F2: a batch (a line that is not one object) from the server is not a message: handed on unmatched, and the call ends by the timeout with a "no answer" receipt', async () => {
+  const w = await world({ config: { timeout: 1000, tools: { batch: { action: 'tool.run' } } } });
+  try {
+    const r = await w.client.request('tools/call', { name: 'batch' }, { id: 'b1' });
+    assert.equal(r.error.code, 1002);
+    assert.ok(rawLines(w).some((l) => l.startsWith('[')), 'the batch was handed on as it was');
+    const [stub] = stubsOf(await bookOf(w));
+    assert.ok(docs(stub)['provared.error']);
+    assert.equal(docs(stub)[RESULT_DOCUMENT], undefined);
+  } finally {
+    await w.close();
+  }
+});
+
 test('spliceId and topLevelId: the id and nothing else', () => {
+  assert.equal(topLevelId('{"id":1,"result":{},"id":2}'), null, '"id" twice at the top level matches nothing');
+  assert.equal(spliceId('{"id":1,"id":1}', 'c'), null);
+  assert.deepEqual(topLevelId('{"id":1,"result":{"id":2}}').value, 1, 'a nested "id" does not count as a second');
   assert.equal(spliceId('{"jsonrpc":"2.0","id":"provared-1-x","result":{"id":5,"n":1.50}}', 'c'), '{"jsonrpc":"2.0","id":"c","result":{"id":5,"n":1.50}}');
   assert.equal(spliceId('{ "id" : 12345678901234567890 , "a":"\\"id\\":7"}', 1), '{ "id" : 1 , "a":"\\"id\\":7"}');
   assert.equal(spliceId('{"result":{"id":1}}', 'c'), null, 'a nested id is not the top-level one');
