@@ -53,6 +53,55 @@
   not match; a member in other capitals in the content passes an
   `absent` or `orAbsent` test; a path with a trailing full stop is another
   text; JSON text inside a JSON string is not read. 7 new tests.
+- **A reader of another project's receipts: Agent Middleware (AMW)**,
+  `integrations/agent-middleware/` (`provared-agent-middleware` 0.1.0, not
+  published): the first of the plan's readers of the closest other
+  projects' receipts. It checks an AMW permit or receipt by the gateway's
+  published Ed25519 key (the key found by `kid`, its status read; an
+  envelope compared with the signed content; AMW's own six answers,
+  reproduced for every one of its 96 published test cases, which are
+  copied into `test/vectors/` under their Apache License 2.0 with a notice
+  of where they came from), maps each verified receipt onto the fields
+  the checker compares (the tool as the action, `credits_charged` as the
+  amount in a unit and scale the reader states, `created_at` as the time,
+  `permit_id` as the permit it names), and judges a set of receipts
+  against a Provared slip that names the AMW gateway in `with`: the
+  checker's own codes where they apply (`action-not-allowed`,
+  `prohibited`, `outside-valid-time`, `over-limit`, `over-each-limit`,
+  `over-count-limit`, `over-period-limit`, `amount-missing`,
+  `approval-missing`), with words that say "AMW receipt"; codes of its
+  own (`amw-permit-…`) where only the AMW permit can be compared; and a
+  stated list of what cannot be judged (no chain, so omission and cut
+  ends do not show; no countersignature; no signature of the person on
+  the AMW permit; approvals by identifier only; which agent; with whom).
+  A denied AMW receipt is shown as the gateway's refusal and never
+  counted against the agent; a receipt that does not verify is not shown.
+  `receiptDocument` carries an AMW receipt by its fingerprint in a
+  Provared receipt's `details` under the name `agent-middleware.receipt`.
+  A command, `provared-agent-middleware verify | judge`, with the
+  checker's exit codes. Written from AMW's published data and the
+  standards alone; no AMW program was read or run. Its tests run in the
+  test workflow beside the other packages.
+- **The AMW reader after an independent review**, each fix held by a
+  test (`test/review.test.mjs`): a slip's countersignature condition, or
+  an approval named by identifier only, is listed on the receipt it
+  applies to (`notJudged`), and such a receipt is never said to be within
+  the slip (`withinSlip` is `null`, not known) nor gives exit code 0
+  (before, both gave "within" and 0); a P-256 key over content that says
+  "Ed25519" reads `unsupported` (before, `verified`); signed text that is
+  not well-formed Unicode, names a member twice in one object, or gives a
+  `kid` that is not text is `malformed`; times are compared to the
+  nanosecond (before, cut to milliseconds, so two receipts 3,599.9996
+  seconds apart fell in different hours); a receipt handed over twice is
+  counted once and listed as a duplicate; a receipt that fails its check
+  shows no identifier (the envelope's is not signed), only its place; the
+  command shows control and invisible characters as a mark, and escapes
+  them in `--json`; `verify` loads no library, and the README's `judge`
+  command works from a copy of the repository; `cannotShow` also states
+  that cancellations cannot be handed over, that outcomes other than
+  success are left out of totals, and that retired keys check receipts
+  of any date. The package no longer pins a development copy of
+  `provared` 0.6.0, which its peer range excludes.
 
 ## 0.7.0 (1 November 2026)
 
