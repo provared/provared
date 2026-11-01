@@ -186,9 +186,12 @@ test('a cancellation of a permission that is not in force, or that the recorder 
 
 test('a cancellation in the book stops the permission after a restart', async () => {
   const w = await running();
-  const c = await cancel(w.passkey, (await status(w.port)).slip);
-  assert.equal((await w.hand({ kind: 'cancellation', cancellation: c })).outcome, 'taken');
-  await w.service.close();
+  try {
+    const c = await cancel(w.passkey, (await status(w.port)).slip);
+    assert.equal((await w.hand({ kind: 'cancellation', cancellation: c })).outcome, 'taken');
+  } finally {
+    await w.service.close();
+  }
   const again = await startService({ folder: w.folder, port: 0 });
   try {
     assert.equal((await pre(again.port, 'after-restart')).decision.permissionDecision, 'deny');
@@ -216,6 +219,9 @@ test('the hand-over is proved like every question of the feed: over the body, wi
     const headers = (body) => ({ 'Provared-Feed-Session': hello.session, 'Provared-Feed-Hello': mine, 'Provared-Feed-Nonce': nonce, 'Provared-Feed-Proof': feedHmac(key, FEED_LABELS.questionWithBody, hello.session, nonce, 'POST /hand-over', body).toString('base64url') });
     const r = await fetch(`http://127.0.0.1:${w.port}/hand-over`, { method: 'POST', body: sent, headers: headers(other) });
     assert.equal(r.status, 401);
+    // A proof that leaves the body out does not do.
+    const noBody = { ...headers(sent), 'Provared-Feed-Proof': feedHmac(key, FEED_LABELS.questionWithBody, hello.session, nonce, 'POST /hand-over').toString('base64url') };
+    assert.equal((await fetch(`http://127.0.0.1:${w.port}/hand-over`, { method: 'POST', body: sent, headers: noBody })).status, 401);
     // A GET question's proof (no body) is not one for a question with a body.
     const asGet = { ...headers(sent), 'Provared-Feed-Proof': feedHmac(key, FEED_LABELS.question, hello.session, nonce, 'POST /hand-over').toString('base64url') };
     assert.equal((await fetch(`http://127.0.0.1:${w.port}/hand-over`, { method: 'POST', body: sent, headers: asGet })).status, 401);
