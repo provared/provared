@@ -568,7 +568,8 @@ server, set up on its first start with a permission signed by the
 library's development stand-in for a passkey, so that it can be started
 with no settings and no secret. Its records prove nothing about anyone;
 see `demo/README.md`. `server.json` describes the package for the
-official MCP Registry; it is not in the npm package. A version can be
+official MCP Registry, where version 0.2.0 is listed as
+`io.github.provared/mcp-executor`; it is not in the npm package. A version can be
 published to the registry only after the same version is on npm, because
 the registry reads that version's `package.json` from npm and compares its
 `mcpName` with the name in `server.json`. Publishing under
