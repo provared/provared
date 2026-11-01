@@ -167,8 +167,19 @@ test('the lockfile pins the library exactly, and the npm package holds every fil
     assert.match(entry.integrity, /^sha512-/);
   }
   const library = lock.packages['node_modules/provared'];
-  const [, major, minor] = pkg.dependencies.provared.match(/^\^(\d+)\.(\d+)\.\d+$/);
-  assert.equal(library.version.split('.').slice(0, 2).join('.'), `${major}.${minor}`, 'the version pinned is within the range package.json asks for');
+  // The range is a caret range below 1.0.0 (^0.6.0), or one from a version
+  // to below another (>=0.6.0 <0.8.0), which a release uses where the
+  // lockfile keeps an earlier version than the newest the range accepts.
+  const range = pkg.dependencies.provared;
+  const caret = range.match(/^\^(0\.\d+\.\d+)$/);
+  const span = range.match(/^>=(\d+\.\d+\.\d+) <(\d+\.\d+\.\d+)$/);
+  assert.ok(caret || span, `the range ${range} is of one of the two forms`);
+  const parts = (version) => version.split('.').map(Number);
+  const below = (a, b) => (a[0] !== b[0] ? a[0] < b[0] : a[1] !== b[1] ? a[1] < b[1] : a[2] < b[2]);
+  const low = parts(caret ? caret[1] : span[1]);
+  const high = caret ? [0, low[1] + 1, 0] : parts(span[2]);
+  const pinned = parts(library.version);
+  assert.ok(!below(pinned, low) && below(pinned, high), 'the version pinned is within the range package.json asks for');
   // Every file of this folder that the npm package's own files load is in the npm package as well.
   for (const file of pkg.files.filter((f) => f.endsWith('.mjs'))) {
     for (const m of readFileSync(join(pluginRoot, file), 'utf8').matchAll(/(?:from |import\()'\.\/([^']+)'/g)) assert.ok(pkg.files.includes(m[1]), `${m[1]}, loaded by ${file}, is in the npm package`);

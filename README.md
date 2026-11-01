@@ -143,6 +143,14 @@ each part protects against, is in
 - **[The Python version](python/README.md)**, which gives the same
   answers, with examples for three agent frameworks and packages for
   two of them.
+- **Two programs beside an agent, each on npm with its own README:**
+  [the recorder beside Claude Code](integrations/claude-code/README.md)
+  (`npm install -g provared-claude-code`, also installable as a Claude
+  Code plugin), which checks and receipts every tool call Claude Code
+  makes; and [the executor for MCP tool servers](mcp-executor/README.md)
+  (`npm install -g provared-mcp-executor`), which stands between an
+  agent and its tool servers, holds their credentials, and countersigns
+  each receipt with keys of its own.
 - **[The pages at prova.red](https://prova.red/)**: the checker's answer
   for the sample record, a worked example for developers, and the same
   in plain words for a reader who does not write code.
@@ -163,7 +171,7 @@ each part protects against, is in
 
 ## Status
 
-**Version 0.6.0, a draft.** Published as it is, by one author in their
+**Version 0.7.0, a draft.** Published as it is, by one author in their
 own time, built with AI tools since 3 October 2026; fixes as time
 allows. The code has been through more than 80 rounds of review by AI reviewers,
 each reviewer a fresh session given the code, the documents and a brief

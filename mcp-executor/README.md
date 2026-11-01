@@ -44,18 +44,17 @@ the npm package `provared`.
 
 ## Install
 
-It is not yet published. From a copy of the repository:
+```
+npm install -g provared-mcp-executor
+```
 
-```
-cd mcp-executor
-npm pack
-npm install -g ./provared-mcp-executor-0.1.0.tgz
-```
+Or from a copy of the repository: in `mcp-executor`, `npm pack`, then
+`npm install -g ./provared-mcp-executor-0.1.0.tgz`.
 
 It needs Node.js 24.7 or later, and depends only on the `provared` library,
-at a version after 0.6.0 and before 0.8.0: its receipts name
+at version 0.7.0 or a later 0.7 version (`^0.7.0`): its receipts name
 `provared.tool-name` and `provared.tool-result`, which the format reserved
-after 0.6.0 and which a checker of 0.5.0 or 0.6.0 refuses (0.4.0 and
+in 0.7.0 and which a checker of 0.5.0 or 0.6.0 refuses (0.4.0 and
 earlier read them as labels).
 
 ## Set it up
