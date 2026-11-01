@@ -45,10 +45,8 @@ of MCP servers that starts each server and asks it what it offers.
   output. What it says goes to its standard error.
 - `package.json`: the two packages from npm, at exact versions:
   `provared` 0.7.0 and `provared-mcp-executor` 0.2.0. Neither has any
-  other dependency. **Until `provared-mcp-executor` 0.2.0 is on npm,
-  installing from this file fails** (and so do the `Dockerfile` without
-  `EXECUTOR` and the build step below); try a packed copy as the
-  `Dockerfile` says.
+  other dependency. To try a copy of the executor that is not published,
+  build the `Dockerfile` with a packed copy, as it says.
 - `Dockerfile`: the same, in a container; `Dockerfile.dockerignore` sends
   the builder only the four files it needs.
 
@@ -95,7 +93,7 @@ The checker shows the issuer's name with "(development)" in it.
 ## For a directory that builds from the repository
 
 A service that clones the repository, installs, and starts a command from
-the top folder can use (once 0.2.0 is on npm):
+the top folder can use:
 
 - Node.js: 24
 - build step: `npm install --prefix mcp-executor/demo --omit=dev --ignore-scripts --no-audit --no-fund`

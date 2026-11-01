@@ -2,8 +2,10 @@
 
 ## Unreleased
 
-- **`provared-mcp-executor` 0.2.0** (not yet published; the library stays
-  at 0.7.0, and the executor still asks for `^0.7.0`). It carries the rules
+- **`provared-mcp-executor` 0.2.0** (published on npm on 1 November 2026
+  and listed in the official MCP Registry as
+  `io.github.provared/mcp-executor`; the library stays at 0.7.0, and the
+  executor still asks for `^0.7.0`). It carries the rules
   on the content of a change, below (choices X56 to X77), and names itself
   for the official MCP Registry: `package.json` gains
   `"mcpName": "io.github.provared/mcp-executor"`, and
