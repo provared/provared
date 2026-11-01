@@ -302,7 +302,8 @@ the book. The permission before is kept beside it, as
 
 The recorder takes a permission only from a passkey on its list,
 `trusted-passkeys.json` in its folder: the first `use` writes it, with
-that permission's passkey, and only `renew --new-passkey` adds to it.
+that permission's passkey, and only `renew --new-passkey` and
+`admit-passkey <thumbprint>` add to it, both run on this computer.
 A permission signed by any other passkey is refused, whether it is
 handed to `renew` or put in place by hand, and the recorder does not
 start while its book, or `slip.json`, holds one. If you made a new
@@ -619,6 +620,60 @@ still listens on 127.0.0.1 only; give its address as `127.0.0.1`, not
 `localhost`, which may lead to another program on the computer's other
 address.
 
+### Records handed over from the application
+
+The Provared application keeps the renewals and cancellations a person
+signs (in its signing window, at https://sign.prova.red) with the book,
+sealed; its uploader, beside this recorder, hands each one to the
+recorder on the same port, so that no file is carried by hand:
+
+```
+POST http://127.0.0.1:8794/hand-over      {"kind": "renewal", "slip": …} or {"kind": "cancellation", "cancellation": …}
+```
+
+- **Proved as every question of the feed is**, and over every byte of
+  the body as well, under a label of its own ("a question with a body");
+  the answer carries the recorder's proof. At most 256 KiB, and at most
+  four at once.
+- **The recorder checks each record itself**, and takes nothing on the
+  word of whoever handed it over. It answers what it did, with a code a
+  program can read: `taken` (the book holds it now), `already` (it held
+  it before; nothing changes), `held` (below) or `refused` with a code.
+- **A renewal** is taken as `renew` takes one without `--new-passkey`:
+  from a passkey already on the list and not retired, for this folder's
+  agent keys, not ended. Two more rules, because a record kept on a server
+  can be held back and handed over late: it is never a permission this
+  recorder held before (`not-again`), and it starts no earlier than the
+  permission in force (`older`). **A passkey not on the list is refused
+  (`passkey-not-trusted`), never added**: the person adds it here, on this
+  computer, with `admit-passkey <thumbprint>`, and the uploader hands the
+  renewal over again within a minute. A retired one is refused
+  (`passkey-retired`) until `admit-passkey` admits it again. A
+  permission that does not pass its check (`not-sound`), or that names
+  other agent keys (`other-agent`), or has ended (`ended`), is refused.
+- **A cancellation** is taken only for the permission in force: the
+  recorder stops every call under it at once, writes the cancellation into
+  the book, and signs the agent's acknowledgement, which follows it into
+  the book (the library's stub writer, `add`). Handed over again, the
+  book is not changed and the same acknowledgement is handed back. One of a
+  permission a later one replaced is refused (`not-in-force`: nothing acts
+  under it any more), and so is one of a permission this recorder never
+  held (`unknown-permission`), or one not signed with the permission's
+  passkey (`not-sound`). One dated more than 300 seconds ahead of this
+  computer's clock stops the calls at once and is written into the book,
+  with the acknowledgement, once the clock reaches its date (`held`).
+- **No new book while the permission in force is cancelled**: the new
+  book would begin with that permission and not its cancellation. No call
+  is taken under it, so the book does not grow; a renewal starts new books
+  again. `status` says whether the permission in force is cancelled
+  (`cancelled`).
+- **Limits.** A cancellation held (dated ahead) is kept in the recorder's
+  memory only: a restart before its date forgets it until the uploader
+  hands it over again, within a minute. A renewal the person set aside in
+  the application, but which an older copy of the book's content still
+  held, can still be handed over by a server that hands back that older
+  copy, if it is newer than the permission in force: cancel it if so.
+
 ## Witnesses for the seals
 
 A seal fixes everything before it, but whoever keeps a book can show a
@@ -918,10 +973,10 @@ version too (`npx provared-check` takes the latest).
 | `use <file>` | Put a signed permission in place and start the recorder; where a book exists already, the same as `renew` |
 | `renew <file>` | Take a new signed permission into the book, while the recorder runs or not; `--new-passkey` where you signed it with a passkey of yours that signed none before |
 | `retire-passkey <thumbprint>` | Take no new permission from that passkey, with or without `--new-passkey`; what it signed stands, and limits are still counted across the books it signed |
-| `admit-passkey <thumbprint>` | Take new permissions from a retired passkey again |
+| `admit-passkey <thumbprint>` | Take new permissions from a retired passkey again, or from a passkey this recorder has not trusted before (a renewal handed over from the application is then taken) |
 | `start` | Run the recorder in this terminal, and see what it says |
 | `ensure` | Start the recorder in the background if it is not running (the hooks run this when a session starts) |
-| `status` | What the recorder holds: the permission, until when, the number of entries, the passkeys whose permissions are in the record and those retired (`trusted`, `retired`), the calls allowed and not yet recorded (`callsNotYetRecorded`), the books kept (`keptBooks`), when a new one is started (`newBookAt`), the feed's token file and how many questions wait (`feed`), and for each witness what it holds and why it is behind (`witnesses`) |
+| `status` | What the recorder holds: the permission, until when, the number of entries, the passkeys whose permissions are in the record and those retired (`trusted`, `retired`), the calls allowed and not yet recorded (`callsNotYetRecorded`), the books kept (`keptBooks`), when a new one is started (`newBookAt`), the feed's token file and how many questions wait (`feed`), and for each witness what it holds and why it is behind (`witnesses`), and whether the permission in force is cancelled (`cancelled`) |
 | `seal` | Seal the book now, with the recorder's three keys, and ask the witnesses named, waiting up to five seconds while no other request waits |
 | `new-book` | Seal the book, keep it as `book-<n>.jsonl`, and start a new one that begins with the permission in force (done by itself at 90,000 entries, or at 100 MB of text) |
 | `check [file]` | The checker's answer for the book, or, given a name such as `book-1.jsonl`, for a book kept before it. Name your passkey with `--issuer <its thumbprint>`, once for each passkey of yours; without it, `check` lists the passkeys the book's permissions name, as read from the book, and the checker takes none of them as one you trust. It names the witnesses in `witnesses.json` (`--witness`) and hands over the statements kept beside the book (`--seal`), unless you give your own |

@@ -1,5 +1,37 @@
 # Changelog
 
+## Unreleased
+
+- **The recorder beside Claude Code takes records handed over from the
+  application** (`integrations/claude-code`, not published; the library
+  is unchanged). A renewal or a cancellation the person signed in the
+  application's signing window, and the application kept with the book,
+  sealed, is handed to the recorder by the application's uploader through
+  the feed, with no file carried by hand: `POST /hand-over`, proved as
+  every question of the feed is, and over every byte of the body as well,
+  under a label of its own; at most 256 KiB, and four at once. The
+  recorder checks each record itself and answers with a code
+  (`taken`, `already`, `held` or `refused`, with a reason). A renewal is
+  taken as `renew` takes one without `--new-passkey`, and is never one
+  the recorder held before, nor one that starts before the permission in
+  force, so that a record held back and handed over late cannot take the
+  agent back. A renewal from a passkey the recorder does not trust is
+  refused, never added; `admit-passkey <thumbprint>` now also adds a
+  passkey the recorder has not trusted before, run on that computer only.
+  A cancellation is taken only for the permission in force: every call
+  under it is refused at once, and the cancellation and the agent's
+  acknowledgement are written into the book (the library's `add`); handed
+  over again, it changes nothing and gives back the same acknowledgement.
+  While the permission in force is cancelled, no new book is started,
+  since a new book would begin with that permission and not its
+  cancellation; `status` says `cancelled`. A permission refused with a
+  passkey not on the list now carries a code (`passkey-not-trusted` and
+  the others, on the error), and its words name `admit-passkey` as well
+  as `--new-passkey`. What changes for a user: `admit-passkey` on a
+  thumbprint not on the list adds it where it used to refuse, and
+  `retire-passkey` on one not on the list says "not on the list of
+  passkeys this recorder trusts". Tests: `test/handover.test.mjs`.
+
 ## 0.8.0 (1 November 2026)
 
 Version 0.8.0 changes the library's browser part, `src/passkey-browser.js`, which a web page uses to have a person sign with a passkey. A new function, `signChallengeWithChosenPasskey`, lets a page whose browser has forgotten which passkey signed before ask the device to offer the passkeys it holds for the website; the page must then check what comes back against the key it expects. Every signing function now also says which passkey signed (`credentialId`). What changes for a user: every other signing function now refuses, before the device is asked, a passkey that does not name its identifier as text of at least one character, with a `PasskeyError` of code `cancelled` and the words "No passkey was named, so nothing was signed." A missing or non-text identifier already failed with that code, with other words; a passkey whose identifier was empty text was handed to the device, and now throws instead. The signing page uses all this to open as a small window for another page (the Provared application), sign a new permission, a renewal or a cancellation there, and hand the record back; the signing page is served at sign.prova.red and is not in the npm package. Nothing else in the library changes: no record's bytes, no rule of the checker, nothing in the Python version but its version number, so a book checks with 0.8.0 exactly as with 0.7.0. Beside the library, in this repository, with entries in the list below: `provared-mcp-executor` 0.2.0, with rules on the content of a tool call, already published on npm on 1 November 2026; and a reader of Agent Middleware's receipts, `provared-agent-middleware`, not published. The framework packages `provared-langchain` and `pydantic-ai-provared` stay at 0.2.0, unchanged.
