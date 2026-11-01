@@ -1,0 +1,12 @@
+{
+  "name": "provared-mcp-executor-demo",
+  "version": "0.2.0",
+  "private": true,
+  "description": "A demonstration of the Provared MCP executor in front of a made-up tool server. Its permission is signed by a development stand-in for a passkey; its records prove nothing about any person.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "dependencies": {
+    "provared": "0.7.0",
+    "provared-mcp-executor": "0.2.0"
+  }
+}

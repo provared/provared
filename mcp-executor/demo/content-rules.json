@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "name": "echo never repeats a text with the lower-case word password",
+      "tool": "echo",
+      "when": { "pointer": "/text", "matches": "**password**" }
+    }
+  ]
+}

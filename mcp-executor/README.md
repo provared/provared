@@ -49,7 +49,7 @@ npm install -g provared-mcp-executor
 ```
 
 Or from a copy of the repository: in `mcp-executor`, `npm pack`, then
-`npm install -g ./provared-mcp-executor-0.1.0.tgz`.
+`npm install -g ./provared-mcp-executor-0.2.0.tgz`.
 
 It needs Node.js 24.7 or later, and depends only on the `provared` library,
 at version 0.7.0 or a later 0.7 version (`^0.7.0`): its receipts name
@@ -562,6 +562,22 @@ process and speak to the executor over its streams; nothing is sent over
 the network. The name `provared` is taken to mean the repository's own
 library (`test/local-library.mjs`), so the tests run against the library
 as it is in the same commit.
+
+`demo/` holds a demonstration: the executor in front of a made-up tool
+server, set up on its first start with a permission signed by the
+library's development stand-in for a passkey, so that it can be started
+with no settings and no secret. Its records prove nothing about anyone;
+see `demo/README.md`. `server.json` describes the package for the
+official MCP Registry; it is not in the npm package. A version can be
+published to the registry only after the same version is on npm, because
+the registry reads that version's `package.json` from npm and compares its
+`mcpName` with the name in `server.json`. Publishing under
+`io.github.provared/` needs an Owner of the GitHub organisation
+`provared`, signed in with a personal access token that can read the
+organisation's members (a classic token with `read:org`, or a
+fine-grained one with Organization permissions, Members, Read-only) or
+from GitHub Actions; `mcp-publisher login github` without a token cannot
+publish to an organisation's names today.
 
 ## Licences
 

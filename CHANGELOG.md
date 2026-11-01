@@ -2,6 +2,37 @@
 
 ## Unreleased
 
+- **`provared-mcp-executor` 0.2.0** (not yet published; the library stays
+  at 0.7.0, and the executor still asks for `^0.7.0`). It carries the rules
+  on the content of a change, below (choices X56 to X77), and names itself
+  for the official MCP Registry: `package.json` gains
+  `"mcpName": "io.github.provared/mcp-executor"`, and
+  `mcp-executor/server.json` describes the package for the registry, with
+  the command line `stdio --config <settings file>` (choices X78 to X81 in
+  `mcp-executor/DESIGN.md`). `server.json` is not in the npm package; the
+  registry's publishing tool reads it from the folder. Beside it,
+  `mcp-executor/demo/` (not in the package): the executor in front of a
+  made-up tool server with two harmless tools, set up on its first start
+  with a permission signed by the library's development stand-in for a
+  passkey, so that a directory of MCP servers can start it with no
+  settings and no secret; a `Dockerfile` on the official `node` image,
+  pinned by digest; its records prove nothing about anyone, as its README
+  says (choices X82 to X89). One new test starts it as a real process.
+  After an independent review (choices X90 to X99): the README and the
+  design say that only an Owner of the organisation may publish to the
+  registry, with a token that can read its members, and only after the
+  npm version is out; the demonstration uses only an empty folder or one
+  it marked as its own, keeps each set-up in a folder of its own and never
+  renames or empties a folder, writes its paths afresh on every start (so
+  it survives a move or a new Node.js), lets two starts at once on an
+  empty folder each set up, says plainly when a folder cannot be written,
+  and its server compares the made-up credential's value; the container
+  is built from four named files, with a packed executor handed over as
+  a context of its own and never copied in. Four more tests. After a
+  second, narrow review (choice X100): an empty mark left by a start that
+  was stopped no longer refuses the folder for good, a file error inside
+  the folder gets the same plain words, and a name that is a file is said
+  to be one. Two more tests.
 - **The MCP executor tests rules on the content of a change before a
   call is let through** (F-157, F-158; `mcp-executor/rules.mjs`; choices
   X56 to X70 in `mcp-executor/DESIGN.md`). A permission allows kinds of
