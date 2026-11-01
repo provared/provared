@@ -10,10 +10,10 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-const { checkBook, identifierFingerprint, argumentsFingerprint } = await import('provared');
+const { checkBook, identifierFingerprint, argumentsFingerprint, countersign } = await import('provared');
 const { world, openWorld, TOOLS, ACTIONS } = await import('./world.mjs');
 const { CALL_DOCUMENT, TOOL_DOCUMENT, RULES_DOCUMENT, RULE_DOCUMENT, checkConfig, readSettings, softwareEntry } = await import('../executor.mjs');
-const { readRules, rulesFingerprint, globMatch, testCall, MAX_MATCH_TEXT } = await import('../rules.mjs');
+const { readRules, rulesFingerprint, globMatch, testCall, readPointer, sameJson, MAX_MATCH_TEXT, MAX_PATTERN_TOKENS } = await import('../rules.mjs');
 const { readCopy, loadCopyKey } = await import('../copy.mjs');
 const { compareCopyWithBook } = await import('../compare.mjs');
 
@@ -297,7 +297,7 @@ test('the permission must state the rules in force, or nothing: other software s
     await silent.close();
   }
   // Other software stated, not these rules: the executor does not start.
-  await assert.rejects(ruledWorld({ software: 'other' }), /states the agent's software \(agent\.software\), and the rules on content in force .* are not among what it states: the person approved other rules than these/);
+  await startRefused(ruledWorld({ software: 'other' }), /states the agent's software \(agent\.software\), and the rules on content in force .* are not among what it states: the person approved other rules than these/);
   // The rules changed after signing: the same.
   const w = await ruledWorld();
   try {
@@ -438,4 +438,162 @@ test('without a rules file nothing changes: no executor.rules document, no warni
   } finally {
     await w.close();
   }
+});
+
+// --- after the independent review of the content rules ---
+
+/** Await a start that must be refused; a start that is not refused is closed at once, so that its server is not left running. */
+async function startRefused(starting, words) {
+  let started;
+  try {
+    started = await starting;
+  } catch (e) {
+    assert.match(e.message, words);
+    return;
+  }
+  await started.close();
+  assert.fail('the executor started, and should not have');
+}
+
+test('M1: with "unlisted": "forward", a content rule for a tool that no rule in "tools" names stops the start; with "refuse" it only warns', async () => {
+  const spare = { ...SCAN_RULES, rules: [...SCAN_RULES.rules, { name: 'nothing written by the spare tool', tool: 'nowhere' }] };
+  await startRefused(ruledWorld({ rules: spare, config: { unlisted: 'forward' } }), /the rule "nothing written by the spare tool" names the tool "nowhere", which no rule in "tools" names, and "unlisted" is "forward": a call to that tool would be sent on with no content rule tested/);
+  // The same rules with every tool named in "tools": the executor starts and tests the rules.
+  const w = await ruledWorld({ config: { unlisted: 'forward' } });
+  try {
+    const hidden = await w.client.call('write_file', { path: 'settings.json', content: '{"scan": true}' });
+    assert.equal(hidden.result._meta['red.prova/refused'], 'content-rule');
+  } finally {
+    await w.close();
+  }
+  // "refuse" (the default): a warning, and the start goes on.
+  const r = await ruledWorld({ rules: spare });
+  try {
+    assert.ok(r.logs.some((e) => e.event === 'warning' && e.message.includes('names the tool "nowhere"')));
+  } finally {
+    await r.close();
+  }
+});
+
+test('M2: a permission that states rules on content, with no rules file in the settings, stops the start; compare reports the executor\'s records under such a slip that name no rules file', async () => {
+  const fingerprint = await rulesFingerprint(SCAN_RULES);
+  const bare = await world({ open: false, slip: { actions: WRITE_ACTIONS, software: [softwareEntry('The test executor', fingerprint)] }, config: { tools: WRITE_TOOLS } });
+  await startRefused(openWorld(bare), /states rules on content in the agent's software \(agent\.software holds an entry whose name begins "Content rules of "\), and the settings name no rules file \(contentRules\): the executor would run without the rules the person approved/);
+  const report = await checkConfig(bare.settings, bare.folder);
+  assert.equal(report.problems.length, 1);
+  assert.match(report.problems[0], /would run without the rules the person approved/);
+  // Another executor's rules entry counts too: any entry named as rules on content.
+  const renamed = await world({ open: false, slip: { actions: WRITE_ACTIONS, software: [softwareEntry('An executor of another name', fingerprint)] }, config: { tools: WRITE_TOOLS } });
+  await startRefused(openWorld(renamed), /would run without the rules the person approved/);
+  // Software stated that is not rules on content: the executor starts with no rules file, as before.
+  const other = await world({ slip: { actions: WRITE_ACTIONS, software: [{ name: 'Some other program', sha256: await identifierFingerprint('other') }] }, config: { tools: WRITE_TOOLS } });
+  await other.close();
+  // compare: a receipt and a denial under the slip that name no rules file are reported; the executor's own, which name it, are not.
+  const w = await ruledWorld();
+  try {
+    await w.client.call('write_file', { path: 'settings.json', content: '{"scan": false}' });
+    const details = [{ name: 'provared.arguments', sha256: await argumentsFingerprint({ path: 'settings.json' }) }];
+    const keys = await w.executorPrivateKeys();
+    const stub = await w.executor.writer.record({ action: 'provared.data.change', with: 'executor', details }, { countersign: (s) => countersign(s, keys, Date.now()) });
+    const denial = await w.executor.writer.deny({ action: 'provared.data.change', with: 'executor', details }, { source: 'rule' });
+    const compared = await compareCopyWithBook({ copyPath: join(w.folder, 'copy.jsonl'), copyKey: loadCopyKey(join(w.folder, 'copy.jsonl.key')), name: w.settings.name, service: 'executor', book: w.executor.writer.book(), options: { issuerKeys: w.settings.agent.issuerKeys } });
+    const slip = (await bookOf(w)).entries.find((e) => e.kind === 'slip');
+    assert.deepEqual(compared.withoutRules, [
+      { kind: 'receipt', entry: 2, fingerprint: stub.fingerprint, slip: slip.fingerprint },
+      { kind: 'denial', entry: 3, fingerprint: denial.fingerprint, slip: slip.fingerprint },
+    ]);
+    assert.equal(compared.summary.withoutRules, 2);
+  } finally {
+    await w.close();
+  }
+  // A slip that states no rules on content: nothing is reported.
+  const plain = await world();
+  try {
+    await plain.client.call('echo', { a: 1 });
+    const compared = await compareCopyWithBook({ copyPath: join(plain.folder, 'copy.jsonl'), copyKey: loadCopyKey(join(plain.folder, 'copy.jsonl.key')), name: plain.settings.name, service: 'executor', book: plain.executor.writer.book(), options: { issuerKeys: plain.settings.agent.issuerKeys } });
+    assert.deepEqual(compared.withoutRules, []);
+    assert.equal(compared.summary.withoutRules, 0);
+  } finally {
+    await plain.close();
+  }
+});
+
+test('M3: a "/" or a "\\" in a pattern matches either separator in the text', () => {
+  const yes = (p, t) => assert.equal(globMatch(p, t), true, `${p} should match ${t}`);
+  const no = (p, t) => assert.equal(globMatch(p, t), false, `${p} should not match ${t}`);
+  yes('**/settings.json', 'C:\\proj\\settings.json');
+  yes('**/.github/**', 'repo\\.github\\workflows\\x.yml');
+  yes('**/.github/**', 'repo/.github\\workflows/x.yml');
+  yes('a\\b', 'a/b');
+  yes('a/b', 'a\\b');
+  no('a/b', 'ab');
+  no('a/b', 'a_b');
+  no('**/settings.json', 'settings.json');
+  // Through a rule, as the reviewer found it.
+  const { rules } = readRules(JSON.stringify({ version: 1, rules: [{ name: 'workflows are not written', tool: 'write_file', when: { pointer: '/path', matches: '**/.github/**' } }] }));
+  assert.equal(testCall(rules, 'write_file', { path: 'repo\\.github\\workflows\\x.yml' })?.reason.code, 'content-rule');
+});
+
+test('M4: "equals" and "oneOf" compare objects in full: a value with a member more is not the same', () => {
+  assert.equal(sameJson({ a: 1 }, { a: 1, b: 2 }), false);
+  assert.equal(sameJson({ a: 1, b: 2 }, { a: 1 }), false);
+  assert.equal(sameJson([1], [1, 2]), false);
+  assert.equal(sameJson({ a: 1 }, { a: 1 }), true);
+  const { rules } = readRules(JSON.stringify({
+    version: 1,
+    rules: [
+      { name: 'equals', tool: 'e', test: { pointer: '/x', equals: { a: 1 } } },
+      { name: 'oneOf', tool: 'o', test: { pointer: '/x', oneOf: [{ a: 1 }, { c: 3 }] } },
+    ],
+  }));
+  assert.equal(testCall(rules, 'e', { x: { a: 1 } }), null);
+  assert.equal(testCall(rules, 'e', { x: { a: 1, b: 2 } })?.reason.code, 'content-rule');
+  assert.equal(testCall(rules, 'o', { x: { c: 3 } }), null);
+  assert.equal(testCall(rules, 'o', { x: { a: 1, b: 2 } })?.reason.code, 'content-rule');
+  assert.equal(testCall(rules, 'o', { x: { c: 3, a: 1 } })?.reason.code, 'content-rule');
+});
+
+test('L1: the patterns of a rules file hold at most MAX_PATTERN_TOKENS parts in all, so that one call is tested quickly', () => {
+  assert.equal(MAX_PATTERN_TOKENS, 20000);
+  // "*a" 499 times and "*" (999 parts): 20 such patterns are within the bound, 21 are not.
+  const pattern = `${'*a'.repeat(499)}*`;
+  const file = (n) => JSON.stringify({ version: 1, rules: Array.from({ length: n }, (_, i) => ({ name: `r${i}`, tool: 'w', test: { pointer: '/x', matches: pattern } })) });
+  const within = readRules(file(20));
+  assert.deepEqual(within.problems, []);
+  const over = readRules(file(21));
+  assert.equal(over.rules, null);
+  assert.ok(over.problems.some((p) => p.startsWith('rules: the patterns hold 20,979 parts in all') && p.includes('more than the 20,000 the executor takes')), JSON.stringify(over.problems));
+  // Patterns in "when" count too, and a run of stars is one part.
+  const when = readRules(JSON.stringify({ version: 1, rules: Array.from({ length: 21 }, (_, i) => ({ name: `w${i}`, tool: 'w', when: { pointer: '/p', matches: pattern } })) }));
+  assert.equal(when.rules, null);
+  assert.equal(readRules(JSON.stringify({ version: 1, rules: [{ name: 's', tool: 'w', test: { pointer: '/x', matches: '*'.repeat(1000) } }] })).rules[0].tests[0].patternTokens, 1);
+  // At the bound, a call over the longest text that is matched is tested.
+  const t0 = performance.now();
+  assert.equal(testCall(within.rules, 'w', { x: 'a'.repeat(MAX_MATCH_TEXT) }), null);
+  assert.ok(performance.now() - t0 < 5000, 'tested in well under the time a client waits');
+});
+
+test('L2: the rules file is read as strict UTF-8: a byte that is not part of a character stops the start', async () => {
+  const bad = Buffer.concat([Buffer.from('{"version": 1, "rules": [{"name": "r'), Buffer.from([0xff]), Buffer.from('", "tool": "w"}]}')]);
+  assert.deepEqual(readRules(bad).problems, ['The rules file is not UTF-8: it holds bytes that are not part of any character.']);
+  const good = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from('{"version": 1, "rules": [{"name": "\u00e9", "tool": "w"}]}')]);
+  assert.deepEqual(readRules(good).problems, []);
+  assert.equal(readRules(good).rules[0].name, '\u00e9');
+  const w = await world({ open: false, config: { contentRules: 'rules.json' } });
+  writeFileSync(join(w.folder, 'rules.json'), bad);
+  const report = await checkConfig(w.settings, w.folder);
+  assert.match(report.problems[0], /has problems:\n- The rules file is not UTF-8/);
+});
+
+test('L3: a JSON Pointer with a "~" not followed by "0" or "1" is not a pointer, and the rules file is refused; "~1" is read before "~0"', () => {
+  assert.equal(readPointer('/a~2b'), null);
+  assert.equal(readPointer('/~'), null);
+  assert.equal(readPointer('/a~'), null);
+  assert.equal(readPointer('/ok/a~x'), null);
+  assert.deepEqual(readPointer('/a~01'), ['a~1'], '"~01" is "~1": "~1" is replaced first, then "~0"');
+  assert.deepEqual(readPointer('/a~10'), ['a/0']);
+  assert.deepEqual(readPointer('/~0~1'), ['~/']);
+  const { rules, problems } = readRules(JSON.stringify({ version: 1, rules: [{ name: 'r', tool: 't', when: { pointer: '/a~2', equals: 1 } }] }));
+  assert.equal(rules, null);
+  assert.ok(problems.some((p) => p.startsWith('rules[0].when.pointer: must be a JSON Pointer')));
 });

@@ -195,7 +195,9 @@ earlier read them as labels).
   denial.
 - `unlisted`: `refuse` (default) refuses a call to a tool no rule names and
   writes a denial named `executor.unlisted`; `forward` sends it on with no
-  receipt and no denial, and the record then leaves those calls out.
+  receipt and no denial, and the record then leaves those calls out. With
+  `forward`, a content rule that names a tool no rule in `tools` names
+  stops the start.
 - `hideUnlisted`: whether `tools/list` comes back without such tools.
   Default true.
 - `timeout`: how long the server is given to answer a call, in
@@ -269,8 +271,9 @@ A condition is `pointer` and exactly one of `equals` (the same JSON value,
 compared in full), `oneOf` (a list of 1 to 64 values), `absent` (`true`:
 nothing may be at the pointer) or `matches` (a pattern over text: `*`
 matches any run of characters other than `/` and `\`, `**` any run of any
-characters, `?` one character other than `/` and `\`; nothing else is
-special). A missing value fails `equals`, `oneOf` and `matches`, because
+characters, `?` one character other than `/` and `\`, and a `/` or a `\`
+in the pattern matches either separator, so `**/settings.json` matches
+`C:\proj\settings.json`; nothing else is special). A missing value fails `equals`, `oneOf` and `matches`, because
 the executor cannot know what the program defaults to; `orAbsent: true`
 lets it pass. "May not change" cannot be tested without reading the file:
 write "stays equal to" the approved value instead.
@@ -304,17 +307,29 @@ the permission's `agent.software` (format description, section 4.1):
 fingerprint>"}`, beside the agent's keys. **The executor does not start
 where the permission states software (`agent.software`) and the rules
 file in force is not among it**: the person approved other rules than
-these. Where the permission states nothing, it starts and warns. `check`
-reports the rules read and whether the permission states them; `compare`
-reports, for each rules fingerprint the records name, how many receipts
-and denials name it and whether a slip in the book states it.
+these. **Nor does it start where the permission states rules on content
+(an `agent.software` entry whose name begins `Content rules of `) and the
+settings name no rules file**: it would run without the rules the person
+approved. Where the permission states nothing, it starts and warns.
+`check` reports the rules read and whether the permission states them;
+`compare` reports, for each rules fingerprint the records name, how many
+receipts and denials name it and whether a slip in the book states it,
+and lists as `withoutRules` the executor's receipts and denials under a
+slip that states rules on content which name no rules file.
 
-The rules file is read strictly: JSON, no member named twice, no whole
-number beyond 9,007,199,254,740,991, `"version": 1`, no member that is not
-part of a rules file, a rule or a condition, up to 1,000 rules, at most
-1 MiB; anything else stops the start and names its place. A rule that
-names a tool no rule in `tools` names gets a warning: such a call is
-refused as unlisted before any content rule is reached.
+The rules file is read strictly: UTF-8 (a byte that is not part of a
+character stops the start), JSON, no member named twice, no whole number
+beyond 9,007,199,254,740,991, `"version": 1`, no member that is not part
+of a rules file, a rule or a condition, JSON Pointers as RFC 6901 writes
+them (a `~` only as `~0` or `~1`), up to 1,000 rules, at most 1 MiB, and
+at most 20,000 pattern parts in all (each character, `?` or run of stars
+in a `matches` counts as one), so that testing one call takes at most
+about a quarter of a second on an ordinary computer; anything else stops
+the start and names its place. A rule that names a tool no rule in `tools`
+names gets a warning where `unlisted` is `refuse`: such a call is refused
+as unlisted before any content rule is reached. **Where `unlisted` is
+`forward`, such a rule stops the start**: a call to that tool would be
+sent on with no content rule tested.
 
 **What the rules can never promise.**
 
@@ -336,7 +351,23 @@ refused as unlisted before any content rule is reached.
   executor nothing to test; only a refusal outright closes it.
 - That a pattern catches a meaning. `*` and `**` match characters, not
   files: `**settings.json` also matches `my-settings.json`; a path with
-  other capitals, a trailing space or a symbolic link is another text.
+  other capitals, a trailing space, a trailing full stop
+  (`settings.json.`, which Windows opens as `settings.json`) or a symbolic
+  link is another text.
+- That a `when` reads a value of another kind. A `when` with `matches` is
+  met only by text: a path given as a list (`["settings.json"]`) or any
+  other value that is not text does not match, so the rule does not apply
+  and the call goes on to the next rule. Where a server could take a path
+  of another kind, close the tool with a rule with no `test`.
+- That a member is named as the program reads it. Names inside the
+  content are compared exactly: `"SCAN": true` is not `scan`, so it passes
+  an `absent` test, or an `orAbsent` one, on `/scan` (two members that
+  differ only in capitals in one object are refused as unreadable, but a
+  lone `SCAN` is not). A program that reads names without regard to
+  capitals acts on what the rule did not see.
+- That content nested in content is read. `as: "json"` reads one layer: a
+  JSON text inside a JSON string (`"{\"scan\": true}"` as the content's
+  text) is a string to the rule, and its tests on `/scan` find nothing.
 - That the rules were right, or were applied. The record holds the
   fingerprint of the rules file and, in a denial, of the rule that
   refused; it does not hold the rules, and a receipt shows only that the
@@ -483,8 +514,10 @@ whoever keeps the book left it out, or the book is older than the copy),
 those whose receipt the executor itself could not write to the book
 (`notWritten`: its own stop, told apart from an omission), those the
 executor sent and never gave a receipt, receipts in the book that name the
-executor and that the copy does not know, and denials the book lacks. It
-ends with code 0 only where everything agrees, every line of the copy
+executor and that the copy does not know, and denials the book lacks.
+Beside these, `withoutRules` lists the executor's receipts and denials
+under a slip that states rules on content and that name no rules file;
+it does not change the code. It ends with code 0 only where everything agrees, every line of the copy
 checks under the key and runs in sequence, and the book itself has no
 problem. The copy key must exist (`compare` makes none), and a book named
 with `--book` must exist.

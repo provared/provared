@@ -36,6 +36,23 @@
   work. No record and no rule of the format changes. 12 new tests, among
   them a label change let through and the same edit with a hidden setting
   switched on refused.
+  After an independent review (choices X71 to X77): with `unlisted`
+  `forward`, a content rule for a tool that `tools` does not name stops
+  the start, since such a call was sent on before any content rule was
+  tested and the warning said the opposite; a permission whose
+  `agent.software` states rules on content (an entry named `Content rules
+  of …`) stops the start where the settings name no rules file, and
+  `compare` lists the executor's receipts and denials under such a slip
+  that name no rules file (`withoutRules`); a `/` or a `\` in a pattern
+  matches either separator, as promised, so `**/settings.json` matches
+  `C:\proj\settings.json`; a rules file holds at most 20,000 pattern parts
+  in all, which keeps one call to about a quarter of a second where a
+  chosen file took 9.6 seconds; the file is decoded as strict UTF-8; a
+  JSON Pointer with a `~` not followed by `0` or `1` is refused. Four more
+  limits are stated in the README: a `when` value that is not text does
+  not match; a member in other capitals in the content passes an
+  `absent` or `orAbsent` test; a path with a trailing full stop is another
+  text; JSON text inside a JSON string is not read. 7 new tests.
 - **Three more reserved document names** (format description, section
   27), in both languages: `provared.tool-name` (the fingerprint of the
   tool's name, exactly as the agent's software called it, which is not the

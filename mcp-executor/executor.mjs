@@ -31,7 +31,7 @@ import { argumentsFingerprint, checkBook, countersign, denialCodes, entryLine, f
 import { loadCopyKey, openCopy, readCopy, unfinished } from './copy.mjs';
 import { aboutSlip, bookFile, loadKeyFile, readIfThere, slipFrom, untilFree } from './files.mjs';
 import { CODES, MAX_LINE_BYTES, idKey, isId, notificationLine, readLines, readMessage, repeatedName, responseLine, spliceId, topLevelId, unsafeInteger } from './jsonrpc.mjs';
-import { RULES_DOCUMENT, RULE_DOCUMENT, TOOL_NAME, lookUp, readPointer, readRules, rulesFingerprint, testCall } from './rules.mjs';
+import { RULES_DOCUMENT, RULE_DOCUMENT, RULES_ENTRY_PREFIX, TOOL_NAME, lookUp, readPointer, readRules, rulesFingerprint, statesContentRules, testCall } from './rules.mjs';
 
 /** The document, in each stub and denial, whose fingerprint is that of the executor's own identifier for the call (a label, not a reserved name). */
 export const CALL_DOCUMENT = 'executor.call';
@@ -325,14 +325,21 @@ function credentialValue(name, from) {
 
 /** The entry for the permission's agent.software that states a rules file. */
 export function softwareEntry(name, sha256) {
-  return { name: `Content rules of ${name}`, sha256 };
+  return { name: `${RULES_ENTRY_PREFIX}${name}`, sha256 };
 }
 
 /** Read the rules file strictly and fingerprint it: {rules, fingerprint, names}. Throws where it is missing or has problems. */
 export async function loadRules(path) {
-  const text = readIfThere(path);
-  if (text === '') throw new Error(`The rules file ${path} (contentRules) is missing or empty.`);
-  const { rules, parsed, problems } = readRules(text);
+  let bytes;
+  try {
+    bytes = untilFree(() => readFileSync(path));
+  } catch (e) {
+    if (e.code !== 'ENOENT') throw e;
+    bytes = Buffer.alloc(0);
+  }
+  if (bytes.length === 0) throw new Error(`The rules file ${path} (contentRules) is missing or empty.`);
+  // The bytes, not text: readRules decodes them as strict UTF-8.
+  const { rules, parsed, problems } = readRules(bytes);
   if (problems.length) throw new Error(`The rules file ${path} has problems:\n- ${problems.join('\n- ')}`);
   return { rules, fingerprint: await rulesFingerprint(parsed), names: rules.map((r) => r.name) };
 }
@@ -374,12 +381,22 @@ async function prepare(config, root, { now = Date.now, log = () => {}, readOnly 
   // The rules on content: read strictly and fingerprinted, then held
   // against what the slip states of the agent's software: nothing where it
   // states nothing (a warning says how to add it); a stop where it states
-  // software and not these rules, since the person approved other rules.
+  // software and not these rules, since the person approved other rules;
+  // and a stop where the slip states rules on content and the settings name
+  // no rules file, since the person approved rules and none would run.
   let content = null;
+  if (!settings.contentRules && statesContentRules(c.agent?.software)) {
+    throw new Error(`The slip ${settings.agent.slip} states rules on content in the agent's software (agent.software holds an entry whose name begins "${RULES_ENTRY_PREFIX}"), and the settings name no rules file (contentRules): the executor would run without the rules the person approved. Set "contentRules" to the approved rules file, or sign a permission that states no rules on content.`);
+  }
   if (settings.contentRules) {
     content = await loadRules(settings.contentRules);
     for (const rule of content.rules) {
-      for (const tool of rule.tools) if (!settings.tools.has(tool)) warnings.push(`contentRules: the rule ${JSON.stringify(rule.name)} names the tool "${tool}", which no rule in "tools" names, so the executor never sends a call to it and the content rule is never tested.`);
+      for (const tool of rule.tools) {
+        if (settings.tools.has(tool)) continue;
+        // With "forward", a call to a tool that no rule in "tools" names is sent on before any content rule is reached, so the content rule would never be tested.
+        if (settings.unlisted === 'forward') throw new Error(`contentRules: the rule ${JSON.stringify(rule.name)} names the tool "${tool}", which no rule in "tools" names, and "unlisted" is "forward": a call to that tool would be sent on with no content rule tested. Add "${tool}" to "tools", or set "unlisted" to "refuse".`);
+        warnings.push(`contentRules: the rule ${JSON.stringify(rule.name)} names the tool "${tool}", which no rule in "tools" names, so the executor never sends a call to it and the content rule is never tested.`);
+      }
     }
     const software = Array.isArray(c.agent?.software) ? c.agent.software : null;
     const entry = JSON.stringify(softwareEntry(settings.name, content.fingerprint));

@@ -124,7 +124,7 @@ stage 2.
    a denial (X15), unless the settings say to forward unlisted tools.
 3. The amount, as the rule says (X8). Unreadable: refused, with a denial.
 3a. The rules on content, where the settings name a rules file (section
-   11, X56 to X70): a call that a rule refuses, or whose content a rule
+   11, X56 to X77): a call that a rule refuses, or whose content a rule
    cannot read exactly, is refused with a denial that names the rule.
 4. The request for the stub writer: the rule's action, the amount, `with`
    = the executor's id, and the documents (X12).
@@ -356,7 +356,7 @@ kinds of action; being allowed to change a file is not being allowed to
 change everything the file controls.
 
 **Decided (the founder, F-158), and built (1 November 2026; choices X56
-to X70).** The rules live in a file of the executor's own, named by the
+to X77).** The rules live in a file of the executor's own, named by the
 setting `contentRules`; the file's fingerprint goes into every receipt
 and denial as the label document `executor.rules`; the person puts the
 same fingerprint into the permission's `agent.software`, so the format
@@ -482,8 +482,17 @@ into the record.
   gives the executor nothing to test; only a refusal outright closes it.
 - That a pattern over text catches a meaning. `*` and `**` match
   characters, not files: `**settings.json` also matches
-  `my-settings.json`, and a path with a trailing space, a different case
-  or a symbolic link is another text.
+  `my-settings.json`, and a path with a trailing space, a different case,
+  a trailing full stop (`settings.json.`, which Windows opens as
+  `settings.json`) or a symbolic link is another text (X77).
+- That a `when` reads a value of another kind: a `matches` is met only by
+  text, so a path given as a list does not match and the rule does not
+  apply (X77).
+- That a member is named as the program reads it: names in the content
+  are compared exactly, so a lone `SCAN` passes an `absent` or `orAbsent`
+  test on `/scan` (X77).
+- That content nested in content is read: `as: "json"` reads one layer,
+  so JSON text inside a JSON string is a string to the rule (X77).
 - Anything about a call to a tool the rule does not name, or a tool whose
   arguments are not plain data.
 - That the rules were right, or were applied. The record holds the
@@ -928,10 +937,12 @@ show it.
 **X60. A pattern is a plain glob: `*` matches any run of characters other
 than `/` and `\`, `**` any run of any characters, `?` one character other
 than `/` and `\`; nothing else is special and nothing can be escaped.**
-Both separators count, so one pattern covers paths written either way. It
-is matched by a table over the pattern's tokens and the text's code
-points, with no regular expression, so no pattern can make the match slow;
-a text over 4,096 characters is not matched (X59). The other way: regular
+Both separators count, so one pattern covers paths written either way: a
+`/` or a `\` in the pattern matches either in the text (X73). It is
+matched by a table over the pattern's tokens and the text's code points,
+with no regular expression, so the work grows only with the tokens times
+the text's length; a text over 4,096 characters is not matched (X59), and
+a rules file holds at most 20,000 tokens in all (X74). The other way: regular
 expressions, which can be slow on chosen input and which ESLint's security
 rules flag when built from data.
 
@@ -949,8 +960,10 @@ design note had it); `absent` reads as the other conditions do.
 **X62. The permission must state the rules in force, or nothing.** At
 start, where the slip's `agent.software` is present and no entry has the
 rules file's fingerprint, the executor does not start: the person approved
-other rules than these. Where the slip states no software, it starts with
-a warning that gives the entry to add. `check` reports `contentRules`
+other rules than these. Where the slip states rules on content (an entry
+whose name begins `Content rules of `) and the settings name no rules
+file, it does not start either (X72). Where the slip states no software,
+it starts with a warning that gives the entry to add. `check` reports `contentRules`
 (path, fingerprint, the rules' names, `statedInSlip`); `keys` prints the
 `agent.software` entry beside the agent's keys. Why a stop and not a
 warning: the slip is the person's signed word on what the agent's software
@@ -980,7 +993,10 @@ model to act on and keeps the denial small.
 **X66. The rules file is read strictly: UTF-8, JSON, no member named
 twice, no whole number beyond 2^53 - 1, `version` 1, no member that is not
 part of a rules file, a rule or a condition, rule names unique, at most
-1,000 rules, the file at most 1 MiB.** A misspelt member (`tets`) would
+1,000 rules, the file at most 1 MiB, at most 20,000 pattern tokens (X74),
+JSON Pointers with `~` only as `~0` or `~1` (X76).** The bytes are decoded
+with a strict UTF-8 decoder, so a byte that is not part of a character
+stops the start rather than becoming U+FFFD (X75). A misspelt member (`tets`) would
 otherwise make a rule that refuses everything or nothing silently.
 Unknown settings in `executor.json` only warn; here they stop the start,
 because a rule is a security control.
@@ -989,15 +1005,30 @@ because a rule is a security control.
 a rule that reads content and tests nothing is a mistake the person should
 see.
 
-**X68. A rule may name a tool that no rule in `tools` names; the executor
-warns.** Such a call is refused as unlisted before any content rule is
-reached, so the content rule is never tested.
+**X68. A rule may name a tool that no rule in `tools` names; where
+`unlisted` is `refuse`, the executor warns, and where it is `forward`, the
+executor does not start (X71).** With `refuse`, such a call is refused as
+unlisted before any content rule is reached, so the content rule is never
+tested and nothing is sent. With `forward`, such a call would be sent on
+before any content rule is reached, with no receipt and no denial, so the
+rule would be passed by; the start stops and says to add the tool to
+`tools` or set `unlisted` to `refuse`. (As first built the executor warned
+in both cases, and the warning said the call was never sent, which was
+untrue with `forward`; found by the review of the content rules.)
 
 **X69. `compare` reports, for each `executor.rules` fingerprint the
 records name, how many receipts and denials name it and whether a slip in
-the book states it (`contentRules`); it does not change whether the copy
-and the book agree.** A statement, not proof: it shows which rules the
-executor held and which the person approved, not what the rules did.
+the book states it (`contentRules`), and lists as `withoutRules` the
+executor's receipts and denials under a slip that states rules on content
+which name no `executor.rules` (X72); neither changes whether the copy and
+the book agree.** A statement, not proof: it shows which rules the
+executor held and which the person approved, not what the rules did. A
+record in `withoutRules` shows an executor that ran without the rules the
+person approved, which the start now refuses (X72), so it points to an
+executor of another version or a record written by other means. The other
+way: let `withoutRules` make `agree` false; not taken, because `agree`
+answers whether the copy and the book hold the same calls, and this is a
+question of the book against its slip, reported apart (`summary.withoutRules`).
 
 **X70. The words to the model name the rule and what it asked for
 ("the value at "/scan" in the content at "/content" must equal false, or
@@ -1007,6 +1038,68 @@ own values are the person's, from the rules file, and are shown cut to
 120 characters. The copy and the log carry the rule's name
 (`rule`) beside the reason; `_meta` of the tool error carries
 `red.prova/rule`.
+
+*Choices made after the independent review of the content rules
+(1 November 2026).*
+
+**X71. With `unlisted: "forward"`, a content rule that names a tool no
+rule in `tools` names stops the start** (the review's M1). The words say
+which rule and which tool, and the two ways out. The other way: test the
+content rules before forwarding an unlisted call; not taken, because a
+forwarded call has no receipt and no denial, so a refusal by a rule
+would be the only record of it, and a rule for a tool the executor does
+not otherwise know is more likely a slip of the person's than a design.
+
+**X72. A permission that states rules on content, with no rules file in
+the settings, stops the start** (the review's M2). "States rules on
+content" means an `agent.software` entry whose name begins `Content rules
+of `, the form `keys` prints, whatever executor name follows. The other
+way: only the entry for this executor's own name; not taken, because an
+executor renamed in its settings would then start silently with no rules.
+The cost: a permission for two executors, one with rules and one without,
+cannot be used; the settings already warn against naming other services
+in `with`, so one permission serves one executor.
+
+**X73. A `/` or a `\` in a pattern matches either separator in the text**
+(the review's M3): X60 said both separators count, but a literal `/`
+matched only `/`, so `**/settings.json` missed `C:\proj\settings.json`.
+The other way: a literal matches only itself and the person writes both
+forms; not taken, since X60's promise is the one people read.
+
+**X74. A rules file holds at most 20,000 pattern tokens in all** (a
+character, a `?` or a run of stars each; the review's L1). The work of one
+call grows with the tokens times the length of the text (at most 4,096
+characters); as first built, 985 rules of 1,000-character patterns took
+9.6 seconds for one call. Measured on this computer on 1 November 2026, at
+the bound, over a text of 4,096 characters: about 0.2 seconds for patterns
+of `*a` or `**a`, about 0.01 seconds for patterns of plain characters or
+`?`. A file over the bound stops the start, with the count. The other way:
+a bound per call in time; not taken, since a time limit makes the answer
+depend on the computer's load.
+
+**X75. The rules file is decoded as strict UTF-8** (`TextDecoder` with
+`fatal: true`; the review's L2). As first built, it was read as text with
+Node's lenient decoder, which turns a bad byte into U+FFFD, so the file
+X66 called UTF-8 could hold names no editor shows the same way. A
+byte-order mark at the start is still dropped.
+
+**X76. A JSON Pointer with a `~` not followed by `0` or `1` is not a
+pointer** (RFC 6901, section 3; the review's L3), so a rule that holds one
+stops the start, with its place named. The other way: accept it and let
+the call be refused as unreadable; not taken, because a mistake in the
+rules is better found when the executor starts than on the first call.
+The same reading serves the amount's pointer in `tools`. `~1` is read
+before `~0`, as section 4 says, so `~01` is `~1`; a test holds the order.
+
+**X77. Four more limits are stated, not closed** (the review's L4): a
+`when` with `matches` is met only by text, so a path given as a list does
+not match and the rule does not apply; names inside the content are
+compared exactly, so a lone `SCAN` passes an `absent` or `orAbsent` test
+on `/scan`; a path with a trailing full stop is another text; and `as:
+"json"` reads one layer, so JSON text inside a JSON string is a string to
+the rule. Each could be closed by a new kind of condition or reading,
+which is later work; meanwhile a rule with no `test` closes a tool
+outright.
 
 **X36. The tests use a made-up MCP server written for them
 (`test/fake-server.mjs`), started as a real process, with tools that

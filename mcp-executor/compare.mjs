@@ -10,13 +10,18 @@
 // ("differs"); a receipt in the book that names the executor but that the
 // executor's copy does not know ("notInCopy"); a denial the executor wrote
 // that the book lacks; a call the executor sent and never gave a receipt
-// ("unfinished"). What it cannot find: a call that never went through the
+// ("unfinished"). Beside these it reports the executor's receipts and
+// denials under a slip that states rules on content (an agent.software
+// entry named "Content rules of ...") that name no rules file
+// ("withoutRules"): records of an executor that ran without the rules the
+// person approved. What it cannot find: a call that never went through the
 // executor; whether a tool did what its result says; a copy changed by
 // whoever holds the copy key; a copy cut at its end.
 
 import { checkBook, identifierFingerprint } from 'provared';
 import { readCopy } from './copy.mjs';
 import { CALL_DOCUMENT, RULES_DOCUMENT } from './executor.mjs';
+import { statesContentRules } from './rules.mjs';
 
 /**
  * @param {object} o
@@ -37,6 +42,9 @@ export async function compareCopyWithBook({ copyPath, copyKey, name, service, bo
   // The rules on content each record names (executor.rules), and what the book's slips state of the agent's software.
   const rulesSeen = new Map();
   const stated = new Set();
+  // The slips (by fingerprint) whose agent.software holds an entry named as rules on content, and the executor's records under them that name no rules file.
+  const slipsStatingRules = new Set();
+  const withoutRules = [];
   const noteRules = (e, kind) => {
     const doc = Array.isArray(e.content?.details) ? e.content.details.find((d) => d.name === RULES_DOCUMENT) : undefined;
     if (!doc) return;
@@ -46,6 +54,11 @@ export async function compareCopyWithBook({ copyPath, copyKey, name, service, bo
   };
   for (const e of checked.entries) {
     if (e.kind === 'slip' && Array.isArray(e.content?.agent?.software)) for (const x of e.content.agent.software) if (typeof x?.sha256 === 'string') stated.add(x.sha256);
+    if (e.kind === 'slip' && e.fingerprint && statesContentRules(e.content?.agent?.software)) slipsStatingRules.add(e.fingerprint);
+    if ((e.kind === 'stub' || e.kind === 'denial') && e.content?.with === service && slipsStatingRules.has(e.content.slip)) {
+      const named = Array.isArray(e.content.details) && e.content.details.some((d) => d.name === RULES_DOCUMENT);
+      if (!named) withoutRules.push({ kind: e.kind === 'stub' ? 'receipt' : 'denial', entry: e.index, fingerprint: e.fingerprint, slip: e.content.slip });
+    }
     if (e.kind === 'denial' && e.fingerprint) denials.add(e.fingerprint);
     if (e.kind === 'denial' && e.content?.with === service) noteRules(e, 'denials');
     if (e.kind === 'stub' && e.content?.with === service) noteRules(e, 'receipts');
@@ -114,6 +127,8 @@ export async function compareCopyWithBook({ copyPath, copyKey, name, service, bo
   for (const [key, s] of stubsByCall) if (!seen.has(key)) result.notInCopy.push(s);
   // Which rules on content the executor's records name, and whether a slip in the book states them (a statement, not proof).
   result.contentRules = [...rulesSeen.values()].map((r) => ({ ...r, statedInSlip: stated.has(r.sha256) }));
+  // Receipts and denials of the executor under a slip that states rules on content, which name no rules file: the executor ran without rules the person approved.
+  result.withoutRules = withoutRules;
   result.notInCopy.push(...stubsWithoutCall);
   result.summary = {
     sent: result.matched.length + result.differs.length + result.missing.length + result.notWritten.length + result.unfinished.length,
@@ -124,6 +139,7 @@ export async function compareCopyWithBook({ copyPath, copyKey, name, service, bo
     unfinished: result.unfinished.length,
     notInCopy: result.notInCopy.length,
     denialsMissingFromBook: result.denialsMissing.length,
+    withoutRules: result.withoutRules.length,
     bookProblem: checked.summary.problemFound,
     agree:
       result.missing.length === 0 &&

@@ -44,6 +44,20 @@ export const MAX_RULES = 1000;
 export const MAX_RULES_BYTES = 1048576;
 /** The longest text a pattern is matched against; a longer one cannot be read exactly and refuses the call. */
 export const MAX_MATCH_TEXT = 4096;
+/**
+ * The most pattern tokens (a character, "?", or a run of stars) in all the
+ * patterns of a rules file together. The work of testing one call grows
+ * with the tokens times the length of the text matched (at most
+ * MAX_MATCH_TEXT), so this bounds the worst case for each call.
+ */
+export const MAX_PATTERN_TOKENS = 20000;
+/** The start of the name of an agent.software entry that states a rules file ("Content rules of <the executor's name>"). */
+export const RULES_ENTRY_PREFIX = 'Content rules of ';
+
+/** Whether a permission's agent.software (a list, or anything else) holds an entry named as rules on content. */
+export function statesContentRules(software) {
+  return Array.isArray(software) && software.some((x) => typeof x?.name === 'string' && x.name.startsWith(RULES_ENTRY_PREFIX));
+}
 
 /** The form of a tool's name (the MCP specification: 1 to 128 letters, digits, underscores, hyphens and full stops). */
 export const TOOL_NAME = /^[A-Za-z0-9_.-]{1,128}$/;
@@ -52,11 +66,17 @@ function isObject(v) {
   return v !== null && typeof v === 'object' && !Array.isArray(v);
 }
 
-/** The tokens of a JSON Pointer (RFC 6901), or null where the text is not one. */
+/**
+ * The tokens of a JSON Pointer (RFC 6901), or null where the text is not
+ * one. A "~" must be followed by "0" or "1" (RFC 6901, section 3); "~1" is
+ * read as "/" first and "~0" as "~" after (section 4), so "~01" is "~1".
+ */
 export function readPointer(pointer) {
   if (typeof pointer !== 'string' || (pointer !== '' && !pointer.startsWith('/'))) return null;
   if (pointer === '') return [];
-  return pointer.slice(1).split('/').map((t) => t.replaceAll('~1', '/').replaceAll('~0', '~'));
+  const raw = pointer.slice(1).split('/');
+  if (raw.some((t) => /~(?![01])/.test(t))) return null;
+  return raw.map((t) => t.replaceAll('~1', '/').replaceAll('~0', '~'));
 }
 
 /** The value at a pointer's tokens in plain data: {found, value}. */
@@ -87,17 +107,9 @@ export function sameJson(a, b) {
   return a === b;
 }
 
-/**
- * Whether a text matches a pattern. "*" matches any run of characters
- * other than "/" and "\" (possibly none); "**" (any run of two or more
- * stars) matches any run of any characters; "?" matches exactly one
- * character other than "/" and "\"; every other character matches itself.
- * Characters are Unicode code points. Nothing else is special: a pattern
- * cannot escape a star.
- */
-export function globMatch(pattern, text) {
+/** The tokens of a pattern: "**" (a run of two or more stars), "*", "?", or {c} for a character that matches itself. */
+export function patternTokens(pattern) {
   const p = Array.from(pattern);
-  const t = Array.from(text);
   const tokens = [];
   for (let i = 0; i < p.length; i++) {
     if (p[i] === '*') {
@@ -108,6 +120,21 @@ export function globMatch(pattern, text) {
     } else if (p[i] === '?') tokens.push('?');
     else tokens.push({ c: p[i] });
   }
+  return tokens;
+}
+
+/**
+ * Whether a text matches a pattern. "*" matches any run of characters
+ * other than "/" and "\" (possibly none); "**" (any run of two or more
+ * stars) matches any run of any characters; "?" matches exactly one
+ * character other than "/" and "\"; a "/" or a "\" in the pattern matches
+ * either separator, so one pattern covers paths written either way; every
+ * other character matches itself. Characters are Unicode code points.
+ * Nothing else is special: a pattern cannot escape a star.
+ */
+export function globMatch(pattern, text) {
+  const t = Array.from(text);
+  const tokens = patternTokens(pattern);
   const sep = (c) => c === '/' || c === '\\';
   // prev[j]: whether the tokens read so far match the first j characters.
   let prev = new Uint8Array(t.length + 1);
@@ -131,7 +158,8 @@ export function globMatch(pattern, text) {
     } else if (tok === '?') {
       for (let j = 1; j <= t.length; j++) cur[j] = prev[j - 1] && !sep(t[j - 1]) ? 1 : 0;
     } else {
-      for (let j = 1; j <= t.length; j++) cur[j] = prev[j - 1] && t[j - 1] === tok.c ? 1 : 0;
+      const either = sep(tok.c);
+      for (let j = 1; j <= t.length; j++) cur[j] = prev[j - 1] && (t[j - 1] === tok.c || (either && sep(t[j - 1]))) ? 1 : 0;
     }
     prev = cur;
   }
@@ -161,6 +189,7 @@ function readCondition(c, where, at) {
   } else {
     if (typeof c.matches !== 'string' || c.matches.length < 1 || c.matches.length > 1000) return void at(`${where}.matches`, 'must be a pattern of 1 to 1,000 characters ("*" within one path part, "**" across parts, "?" one character).');
     out.pattern = c.matches;
+    out.patternTokens = patternTokens(c.matches).length;
   }
   if (Object.hasOwn(c, 'orAbsent')) {
     if (typeof c.orAbsent !== 'boolean') return void at(`${where}.orAbsent`, 'must be true or false.');
@@ -181,14 +210,25 @@ function readConditions(v, where, most, at) {
 /**
  * Read the rules file's text. Gives {rules, parsed, problems}: "rules" is
  * complete only where there are no problems; "parsed" is the file as plain
- * data, which the fingerprint is of. The text is read strictly: UTF-8 (a
+ * data, which the fingerprint is of. Given the file's bytes, it decodes
+ * them as strict UTF-8 first. The text is read strictly: UTF-8 (a
  * byte-order mark at the start is dropped, as for the settings), JSON, no
  * member name given twice, no whole number beyond 9,007,199,254,740,991,
  * no member that is not part of a rule.
  */
-export function readRules(text) {
+export function readRules(input) {
   const problems = [];
   const at = (what, message) => problems.push(`${what}: ${message}`);
+  let text = input;
+  if (input instanceof Uint8Array) {
+    // The file's bytes: decoded strictly, so that a byte that is not part of a UTF-8 character stops the start rather than becoming U+FFFD.
+    if (input.length > MAX_RULES_BYTES) return { rules: null, parsed: null, problems: [`The rules file is longer than ${MAX_RULES_BYTES} bytes.`] };
+    try {
+      text = new TextDecoder('utf-8', { fatal: true }).decode(input);
+    } catch {
+      return { rules: null, parsed: null, problems: ['The rules file is not UTF-8: it holds bytes that are not part of any character.'] };
+    }
+  }
   if (typeof text !== 'string') return { rules: null, parsed: null, problems: ['The rules file could not be read as text.'] };
   if (Buffer.byteLength(text) > MAX_RULES_BYTES) return { rules: null, parsed: null, problems: [`The rules file is longer than ${MAX_RULES_BYTES} bytes.`] };
   const clean = text.replace(/^﻿/, '');
@@ -237,6 +277,9 @@ export function readRules(text) {
     if (Object.hasOwn(r, 'test')) rule.tests = readConditions(r.test, `${where}.test`, 64, at) ?? [];
     rules.push(rule);
   }
+  // The patterns of the whole file, counted together: the bound on the work for each call.
+  const tokens = rules.flatMap((r) => [...(r.when ?? []), ...(r.tests ?? [])]).reduce((n, c) => n + (c?.patternTokens ?? 0), 0);
+  if (tokens > MAX_PATTERN_TOKENS) at('rules', `the patterns hold ${tokens.toLocaleString('en-GB')} parts in all (a character, "?" or a run of stars each), more than the ${MAX_PATTERN_TOKENS.toLocaleString('en-GB')} the executor takes, so that testing one call stays quick. Use fewer or shorter patterns.`);
   return { rules: problems.length ? null : rules, parsed, problems };
 }
 
