@@ -51,6 +51,19 @@
   success are left out of totals, and that retired keys check receipts
   of any date. The package no longer pins a development copy of
   `provared` 0.6.0, which its peer range excludes.
+
+## 0.7.0 (1 November 2026)
+
+
+Version 0.7.0 makes three more document names part of the format (section 27 of the format description: `provared.tool-name`, `provared.tool-call-id` and `provared.tool-result`), and lets whoever checks a record name the addresses at which a permission must have been signed (`issuerOrigins`, Python `issuer_origins`, `--origin` on the command line, and a box on the checking page), so that a permission that another page under the passkey's website name had the passkey sign, by presenting it as a sign-in, is refused. Beside the library, two programs are published on npm for the first time, each at 0.1.0: `provared-mcp-executor`, an executor for MCP tool servers, which holds the tool servers' credentials, refuses a tool call the permission does not allow, and countersigns each receipt with keys of its own; and `provared-claude-code`, the recorder beside Claude Code, which can now also be installed as a Claude Code plugin. Releases are now published from the author's signed tag by a GitHub workflow, and each npm version waits for the author's approval with a passkey. What a reader must know: no record's bytes change, and a book written by 0.6.0 checks as it did, since 0.6.0 refused the three new names and so never wrote them; but a book that names any of the three new names checks in full only with a checker of 0.7.0 or later, because a checker of 0.5.0 or 0.6.0 refuses it (`bad-field`, as for every `provared.` name it does not know) and one of 0.4.0 or earlier reads the names as labels. The MCP executor writes two of them in every receipt, so its books need 0.7.0. The framework packages `provared-langchain` and `pydantic-ai-provared` stay at 0.2.0, unchanged: they ask for `provared` 0.6.0 or later, and what they write is the same with 0.7.0.
+
+- **Versions.** The library is 0.7.0, in `package.json` and `python/pyproject.toml`. Ranges on the library: `provared-mcp-executor` and the OpenTelemetry bridge (not published) now ask for `^0.7.0`, where they asked for `>0.6.0 <0.8.0`; the recorder beside Claude Code, the gateway and the sealer (neither of the last two published) ask for `>=0.6.0 <0.8.0`, where they asked for `^0.6.0`, which left 0.7.0 out (the recorder's `package-lock.json`, which a Claude Code plugin installs from, still holds 0.6.0, which the new range accepts, and the plugin's test of that lockfile now takes a range of that form as well as a caret range); the Hermes plugin (not published) asks for `>=0.4.0,<0.8`, where it asked for `<0.7`. The README and the guide name the two packages now on npm, with their install lines.
+
+- The gateway's test "M3: an agent may have only so many calls waiting"
+  no longer depends on how busy the computer is: each wait has 120
+  seconds, not 20, and the status is shown to answer without waiting for a
+  call by the upstream still holding that call, not by a time under one
+  second. It checks the same limit.
 - **Three more reserved document names** (format description, section
   27), in both languages: `provared.tool-name` (the fingerprint of the
   tool's name, exactly as the agent's software called it, which is not the
@@ -70,8 +83,7 @@
   writes `provared.tool-call-id` where a tool gives `callId`, which before
   went on the span only, and still never writes `provared.event-id`, the
   platform's identifier, which only the caller can name. Both packages now
-  need a library later than 0.6.0 (`>0.6.0 <0.8.0`, which becomes
-  `^0.7.0` when that version is cut). Shared test files:
+  need 0.7.0 or later (`^0.7.0`). Shared test files:
   `stub-contents.json`, `http-fingerprints.json` and `denial-contents.json`
   remade, with the three names accepted once, refused twice, and names
   close to them (`provared.Tool-result`, `provared.tool_result`,
@@ -85,7 +97,7 @@
   later version. The guide, the Python README, the list of threats and the
   type declarations say so.
 - **An executor for MCP tool servers**, `mcp-executor/`
-  (`provared-mcp-executor` 0.1.0, not published), stage 1: the stdio
+  (`provared-mcp-executor` 0.1.0), stage 1: the stdio
   transport. An executor, in the words of the Internet-Draft
   `draft-izmaylov-agent-permission-receipts-02`, is software other than
   the agent that holds what its actions need and refuses an action the
@@ -522,7 +534,7 @@
   examples now give their full addresses on GitHub, since `examples/` and
   `python/` are not in the npm package.
 
-- **A "try it" page** at prova.red/try/ (`site/try/`, not yet published).
+- **A "try it" page** at prova.red/try/ (`site/try/`, live since 25 October 2026).
   One button. Where the browser has Ed25519 and ML-DSA-87 built in (Chrome,
   Edge and Brave 155, tried on 13 October 2026), the page makes a new
   record with the development stand-in for a passkey, under a limit on
