@@ -87,19 +87,24 @@ export async function createPasskey({ name, site }) {
 }
 
 // Ask the passkey to sign a challenge: the device asks the person first.
-// With no identifier (a passkey this browser has forgotten), the device
-// offers every passkey it holds for the website and the person chooses;
-// the answer then says which was chosen, and the caller must check it
-// against the key it expects before it relies on it.
-async function signedBy(passkey, challenge, refused) {
+// Only where the caller asks for it ("choose"), and names no identifier (a
+// passkey this browser has forgotten), the device offers every passkey it
+// holds for the website and the person chooses; the answer then says which
+// was chosen, and the caller must check it against the key it expects
+// before it relies on it. Everywhere else a passkey with no identifier is
+// refused, so that no caller is offered a choice it did not ask for.
+async function signedBy(passkey, challenge, refused, { choose = false } = {}) {
   const container = credentials();
+  if (!choose && (!passkey || typeof passkey.credentialId !== 'string' || !passkey.credentialId)) {
+    throw new PasskeyError('cancelled', 'No passkey was named, so nothing was signed.');
+  }
   let assertion;
   try {
     assertion = await container.get({
       publicKey: {
         challenge,
         rpId: passkey.rpId,
-        ...(passkey.credentialId ? { allowCredentials: [{ type: 'public-key', id: fromBase64url(passkey.credentialId) }] } : {}),
+        ...(!choose ? { allowCredentials: [{ type: 'public-key', id: fromBase64url(passkey.credentialId) }] } : {}),
         userVerification: 'required',
       },
     });
@@ -172,7 +177,6 @@ export async function cancelWithPasskey(request, passkey) {
  */
 export async function signChallengeWithPasskey(challenge, passkey) {
   credentials();
-  if (!passkey || typeof passkey.credentialId !== 'string') throw new PasskeyError('cancelled', 'No passkey was named, so nothing was signed.');
   return signedBy(passkey, challenge, 'Nothing was signed. The request was cancelled or the device refused it.');
 }
 
@@ -192,5 +196,5 @@ export async function signChallengeWithPasskey(challenge, passkey) {
  */
 export async function signChallengeWithChosenPasskey(challenge, rpId) {
   credentials();
-  return signedBy({ rpId }, challenge, 'Nothing was signed. The request was cancelled, or this device holds no passkey for this website.');
+  return signedBy({ rpId }, challenge, 'Nothing was signed. The request was cancelled, or this device holds no passkey for this website.', { choose: true });
 }
