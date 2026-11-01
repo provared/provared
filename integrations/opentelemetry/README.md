@@ -255,7 +255,7 @@ on any object with `setAttribute`, and does not import OpenTelemetry:
 
 ## Versions
 
-`@opentelemetry/api` (`^1.9.0`) and `provared` (`>0.6.0 <0.8.0`: a version after 0.6.0, the first that knows `provared.tool-call-id`, and before the next major version, as the other packages are bounded; tested with the library on the main branch) are peer
+`@opentelemetry/api` (`^1.9.0`) and `provared` (`^0.7.0`: version 0.7.0, the first that knows `provared.tool-call-id`, or a later 0.7 version; tested with the library on the main branch) are peer
 dependencies: the application chooses the one copy of each. OpenTelemetry
 asks this of libraries, so that every part of an application uses the one
 tracer provider; and the bridge must use the same copy of `provared` as

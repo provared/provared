@@ -6,7 +6,7 @@ Everything about the format, the library, the checker, the stub writer beside an
 
 ## Status
 
-**Version 0.6.0, a draft.** Published as it is, by one author in their
+**Version 0.7.0, a draft.** Published as it is, by one author in their
 own time; fixes as time allows. The format may still change, so do not
 rely on a draft record staying checkable.
 
@@ -39,6 +39,8 @@ An Internet-Draft is a working document, not a standard.
 | `tools/` | Small tools: one wrote the sample record, one writes the checking page as a single file, one writes the shared test files, one writes the record page at prova.red/records/, and one writes the files of the signing page's own site, sign.prova.red |
 | `test/` | The tests |
 | `test-vectors/` | Shared test files: records and values, each with the answer this library gives. Another implementation of the format can be tested against them |
+| `integrations/claude-code/` | The recorder beside Claude Code, `npm install -g provared-claude-code`, also a Claude Code plugin. See its own [README](https://github.com/provared/provared/blob/main/integrations/claude-code/README.md) |
+| `mcp-executor/` | An executor for MCP tool servers, `npm install -g provared-mcp-executor`: it holds the tool servers' credentials, checks each tool call against the permission, and countersigns each receipt with keys of its own. See its own [README](https://github.com/provared/provared/blob/main/mcp-executor/README.md) |
 | `python/` | The Python version, `pip install provared`, which gives the same answers. See its own [README](https://github.com/provared/provared/blob/main/python/README.md), and its examples with three agent frameworks in `python/examples/`, and small packages for two of them in `python/integrations/` |
 | `site/` | The pages at [prova.red](https://prova.red/): what a record proves, with the checker's answer for the sample record, and a worked example. Published with GitHub Pages by `.github/workflows/pages.yml`, which also serves the checking page at `prova.red/check/` and as one file. The signing page is served from a repository of its own at `sign.prova.red`, so that the passkeys made there belong to a name that serves nothing else. The pages load nothing from anywhere and keep nothing about a reader |
 
@@ -151,9 +153,9 @@ be loaded from anywhere. The tool prints the file's SHA-256 fingerprint,
 so that a copy can be compared with it. (Tried on 8 October 2026 in the
 three browser builds this repository is tested with, and on 13 October
 2026 in Chrome 155, Edge 155 and Brave 155.) The file for
-version 0.6.0 is attached to the release on GitHub. Its SHA-256
+version 0.7.0 is attached to the release on GitHub. Its SHA-256
 fingerprint is
-`ae48c425616d70849aa8d43b1d71ef7ee56736da3ba6a00eaa4375c428e60a25`.
+`c7b3d5fe1b9168628fc91308c7f952b970c05b3abeb908a132b8b2b78aaab1b5`.
 
 **Run the demonstration in a browser.**
 
