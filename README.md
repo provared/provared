@@ -171,7 +171,7 @@ each part protects against, is in
 
 ## Status
 
-**Version 0.7.0, a draft.** Published as it is, by one author in their
+**Version 0.8.0, a draft.** Published as it is, by one author in their
 own time, built with AI tools since 3 October 2026; fixes as time
 allows. The code has been through more than 80 rounds of review by AI reviewers,
 each reviewer a fresh session given the code, the documents and a brief
