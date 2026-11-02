@@ -905,8 +905,10 @@ It does not protect:
 Numbered seals and witness statements need version 0.6.0 or later of
 the library: a checker of version 0.5.0 or earlier refuses a seal that
 gives a book number and a seal's line that holds statements. So the
-package depends on `provared` 0.6.0 or later, before 0.8.0
-(`>=0.6.0 <0.8.0`); it is tested with 0.7.0. Anyone who checks a book
+published package 0.1.0 depends on `provared` 0.6.0 or later, before
+0.8.0 (`>=0.6.0 <0.8.0`). In this repository it depends on 0.8.0 or
+later, before 0.9.0 (`^0.8.0`), and the plugin installs 0.8.0 from
+its lockfile. Anyone who checks a book
 that this recorder has numbered, or that holds statements, needs that
 version too (`npx provared-check` takes the latest).
 
