@@ -63,7 +63,8 @@ npx provared-check --sample</pre>
 
 <h2 id="new">What is new</h2>
 
-<p>Version 0.7.0, published on 1 November 2026:</p>
+<p>Version 0.8.0, published on 1 November 2026: <strong>signing in a small window.</strong> The Provared application now signs nothing itself. To make, renew or cancel a permission, it opens <a href="https://sign.prova.red/">sign.prova.red</a> in a small window. That page shows what the new permission changes against the earlier one, and asks for a second press before a new passkey is made or an agent's keys are signed for the first time on that device. It then hands the signed record back. Nothing in a record and no rule of the checker changes: a book checks with 0.8.0 exactly as with 0.7.0.</p>
+<p>Version 0.7.0, published the same day:</p>
 <ul>
   <li><strong>An executor for MCP tool servers</strong>, <a href="https://www.npmjs.com/package/provared-mcp-executor">provared-mcp-executor on npm</a>. It stands between an agent and a tool server that speaks the Model Context Protocol, and is meant to hold the server's credential, so that the agent has no other way through. It checks every tool call against the person's permission before passing it on, writes a receipt and countersigns it with keys of its own, and keeps its own copy of every call, which can be held against the agent's log to find a receipt that was left out. A call the permission does not allow is not sent.</li>
   <li><strong>The recorder beside Claude Code</strong>, <a href="https://www.npmjs.com/package/provared-claude-code">provared-claude-code on npm</a>, also as a Claude Code plugin: <code>/plugin marketplace add provared/provared</code>, then <code>/plugin install provared-recorder@provared</code>. It is the recorder that keeps <a href="records/">the real record</a>.</li>
