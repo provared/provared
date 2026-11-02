@@ -8,15 +8,18 @@
 
 import './local-library.mjs'; // first: "provared" is this repository's own library
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { createHash, randomBytes } from 'node:crypto';
+import { existsSync, readFileSync } from 'node:fs';
+import { request } from 'node:http';
+import { connect } from 'node:net';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { setTimeout as delay } from 'node:timers/promises';
 
 const { assembleCancellation, checkBook, prepareCancellation, thumbprint } = await import('provared');
 const { developmentPasskey } = await import('provared/dev');
-const { FEED_LABELS, FEED_MAX_HAND_OVER_BYTES, feedHmac, feedReader } = await import('../feed.mjs');
-const { readTrusted, retirePasskey, startService } = await import('../recorder.mjs');
+const { FEED_LABELS, FEED_MAX_HANDING, FEED_MAX_HAND_OVER_BYTES, feedHmac, feedReader } = await import('../feed.mjs');
+const { SIGNING_ORIGIN, readTrusted, retirePasskey, signingOriginsFrom, startService } = await import('../recorder.mjs');
 const { runCommand, runHook, signSlip, status, world } = await import('./world.mjs');
 
 const read = (folder, name) => readFileSync(join(folder, name), 'utf8');
@@ -24,9 +27,12 @@ const lines = (text) => text.split('\n').filter(Boolean);
 const kinds = (folder) => lines(read(folder, 'book.jsonl')).map((l) => Object.keys(JSON.parse(l))[0]);
 const tokenOf = (folder) => read(folder, 'feed-token').trim();
 
-async function running() {
+// The development stand-in for a passkey signs at http://localhost: the recorder is told to take records signed there.
+const LOCAL = { signingOrigins: ['http://localhost'] };
+
+async function running(more = LOCAL) {
   const w = await world([]);
-  const service = await startService({ folder: w.folder, port: 0 });
+  const service = await startService({ folder: w.folder, port: 0, ...more });
   const reader = feedReader({ address: `http://127.0.0.1:${service.port}`, token: tokenOf(w.folder) });
   const hand = async (record) => {
     const r = await reader.post('/hand-over', record);
@@ -73,14 +79,32 @@ test('a renewal from a passkey the recorder does not trust is refused and report
     assert.equal(refused.thumbprint, T);
     assert.match(refused.message, new RegExp(`admit-passkey ${T}`));
     assert.equal(readTrusted(w.folder).includes(T), false, 'nothing admitted');
-    assert.equal((await status(w.port)).slip, (await status(w.port)).slip);
+    const first = (await status(w.port)).slip;
     assert.deepEqual(kinds(w.folder), ['slip']);
-    // The person admits it on this computer; handed over again, it is taken.
-    const admitted = await runCommand(['admit-passkey', T], { folder: w.folder, port: w.port });
+    // On this computer, the command shows the permission waiting, and takes nothing unless the person types "yes".
+    const declined = await runCommand(['admit-passkey', T], { folder: w.folder, port: w.port, input: 'no\n' });
+    assert.equal(declined.code, 1);
+    assert.match(declined.out, new RegExp(`Passkey \\(thumbprint\\)\\s+${T}`));
+    assert.match(declined.out, /Signed at\s+http:\/\/localhost/);
+    assert.match(declined.out, /Nothing was changed/);
+    assert.equal(readTrusted(w.folder).includes(T), false);
+    assert.equal((await status(w.port)).slip, first);
+    // Nothing typed at all: nothing is changed either.
+    assert.equal((await runCommand(['admit-passkey', T], { folder: w.folder, port: w.port })).code, 1);
+    assert.equal(readTrusted(w.folder).includes(T), false);
+    const admitted = await runCommand(['admit-passkey', T], { folder: w.folder, port: w.port, input: 'yes\n' });
     assert.equal(admitted.code, 0, admitted.err);
-    assert.match(admitted.out, /is admitted: the recorder takes new permissions from it/);
-    assert.equal((await w.hand({ kind: 'renewal', slip: renewal })).outcome, 'taken');
+    assert.match(admitted.out, /is trusted from now on, with the permission it signed/);
+    assert.equal(readTrusted(w.folder).includes(T), true);
     assert.deepEqual(kinds(w.folder), ['slip', 'slip']);
+    // Handed over again: the book holds it already.
+    assert.equal((await w.hand({ kind: 'renewal', slip: renewal })).outcome, 'already');
+    // A passkey never trusted, with nothing waiting from it: nothing is admitted.
+    const another = await thumbprint((await developmentPasskey()).key);
+    const none = await runCommand(['admit-passkey', another], { folder: w.folder, port: w.port, input: 'yes\n' });
+    assert.equal(none.code, 1);
+    assert.match(none.out, /No permission signed by the passkey/);
+    assert.equal(readTrusted(w.folder).includes(another), false);
   } finally {
     await w.service.close();
   }
@@ -140,7 +164,8 @@ test('a cancellation of the permission in force stops the agent, and the agent\'
   const w = await running();
   try {
     assert.equal((await pre(w.port, 'before')).out, '');
-    const c = await cancel(w.passkey, (await status(w.port)).slip);
+    const cancelledAt = Date.now() - 10000;
+    const c = await cancel(w.passkey, (await status(w.port)).slip, cancelledAt);
     const taken = await w.hand({ kind: 'cancellation', cancellation: c });
     assert.equal(taken.outcome, 'taken', taken.message);
     assert.ok(taken.acknowledgement, 'the acknowledgement is handed back');
@@ -158,8 +183,8 @@ test('a cancellation of the permission in force stops the agent, and the agent\'
     const r = await fetch(`http://127.0.0.1:${w.port}/new-book`, { method: 'POST', body: '{}' });
     assert.equal(r.status, 409);
     assert.match((await r.json()).error, /cancelled, so no new book is started/);
-    // A renewal after it: the agent acts again, under the new permission.
-    assert.equal((await w.hand({ kind: 'renewal', slip: await signSlip({ agentKeys: w.agent.keys, passkey: w.passkey }) })).outcome, 'taken');
+    // A renewal signed after it, starting after it: the agent acts again, under the new permission.
+    assert.equal((await w.hand({ kind: 'renewal', slip: await signSlip({ agentKeys: w.agent.keys, passkey: w.passkey, from: cancelledAt + 5000 }) })).outcome, 'taken');
     assert.equal((await pre(w.port, 'renewed')).out, '');
   } finally {
     await w.service.close();
@@ -228,7 +253,172 @@ test('the hand-over is proved like every question of the feed: over the body, wi
     assert.equal((await fetch(`http://127.0.0.1:${w.port}/hand-over`)).status, 405);
     const big = await fetch(`http://127.0.0.1:${w.port}/hand-over`, { method: 'POST', body: Buffer.alloc(FEED_MAX_HAND_OVER_BYTES + 1, 32) });
     assert.equal(big.status, 413);
+    // Headers that are not a proof's, in a conversation the recorder never began: refused before the body is read.
+    assert.equal((await fetch(`http://127.0.0.1:${w.port}/hand-over`, { method: 'POST', body: '{}' })).status, 401);
+    // A body that does not state its length (sent in pieces): refused before it is read.
+    const pieces = await new Promise((done, fail) => {
+      const req = request({ host: '127.0.0.1', port: w.port, method: 'POST', path: '/hand-over' }, (res) => {
+        res.resume();
+        done(res.statusCode);
+      });
+      req.on('error', fail);
+      req.write('{"kind":');
+      req.end('"renewal"}');
+    });
+    assert.equal(pieces, 411);
     assert.deepEqual(kinds(w.folder), ['slip'], 'nothing was taken');
+  } finally {
+    await w.service.close();
+  }
+});
+
+/** A question's headers, proved over a body, in a conversation begun with the recorder's own token. */
+async function provedHeaders(port, token, body) {
+  const mine = randomBytes(32).toString('base64url');
+  const hello = await (await fetch(`http://127.0.0.1:${port}/hello`, { headers: { 'Provared-Feed-Hello': mine } })).json();
+  const key = feedHmac(Buffer.from(token), FEED_LABELS.key, mine, hello.session);
+  const nonce = randomBytes(32).toString('base64url');
+  return { 'Provared-Feed-Session': hello.session, 'Provared-Feed-Hello': mine, 'Provared-Feed-Nonce': nonce, 'Provared-Feed-Proof': feedHmac(key, FEED_LABELS.questionWithBody, hello.session, nonce, 'POST /hand-over', body).toString('base64url') };
+}
+
+test(`at most ${FEED_MAX_HANDING} records are taken on at once, counted before their bodies are read; one more is told to ask again`, async () => {
+  const w = await running();
+  const slow = [];
+  try {
+    // Records whose bodies do not come: each is taken on, waiting for its body, with headers in the right form.
+    for (let i = 0; i < FEED_MAX_HANDING; i++) {
+      const headers = await provedHeaders(w.port, tokenOf(w.folder), Buffer.from('{}'));
+      const socket = connect(w.port, '127.0.0.1');
+      await new Promise((done) => socket.once('connect', done));
+      socket.write([`POST /hand-over HTTP/1.1`, 'Host: 127.0.0.1', 'Content-Length: 100', ...Object.entries(headers).map(([k, v]) => `${k}: ${v}`), '', '{'].join('\r\n'));
+      slow.push(socket);
+    }
+    await delay(300);
+    const body = Buffer.from(JSON.stringify({ kind: 'renewal', slip: await signSlip({ agentKeys: w.agent.keys, passkey: w.passkey }) }));
+    const busy = await fetch(`http://127.0.0.1:${w.port}/hand-over`, { method: 'POST', body, headers: await provedHeaders(w.port, tokenOf(w.folder), body) });
+    assert.equal(busy.status, 429);
+    assert.deepEqual(kinds(w.folder), ['slip'], 'nothing was taken');
+    // Once those are let go, a record is taken again.
+    for (const s of slow) s.destroy();
+    await delay(300);
+    const taken = await fetch(`http://127.0.0.1:${w.port}/hand-over`, { method: 'POST', body, headers: await provedHeaders(w.port, tokenOf(w.folder), body) });
+    assert.equal(taken.status, 200);
+    assert.equal((await taken.json()).outcome, 'taken');
+  } finally {
+    for (const s of slow) s.destroy();
+    await w.service.close();
+  }
+});
+
+test('a renewal signed before a cancellation, and handed over after it, is refused: the agent stays stopped; one that starts at or after the cancellation is taken', async () => {
+  const w = await running();
+  try {
+    // The person signs a renewal; it is held back (the computer asleep, or the server holding it).
+    const early = await signSlip({ agentKeys: w.agent.keys, passkey: w.passkey, from: Date.now() - 30000, purpose: 'Signed first, then the person cancelled.' });
+    // Then the person cancels the permission in force. The uploader hands the cancellation over first, then the renewal.
+    const cancelledAt = Date.now() - 10000;
+    const c = await cancel(w.passkey, (await status(w.port)).slip, cancelledAt);
+    assert.equal((await w.hand({ kind: 'cancellation', cancellation: c })).outcome, 'taken');
+    const late = await w.hand({ kind: 'renewal', slip: early });
+    assert.equal(late.outcome, 'refused');
+    assert.equal(late.code, 'before-cancellation');
+    assert.equal((await pre(w.port, 'after')).decision.permissionDecision, 'deny', 'the agent stays stopped');
+    assert.deepEqual(kinds(w.folder), ['slip', 'cancellation', 'acknowledgement']);
+    // A renewal signed after the cancellation, starting the second it was dated (as the application moves it): taken.
+    const shown = JSON.parse(Buffer.from(c.payload, 'base64url').toString()).when;
+    const after = await signSlip({ agentKeys: w.agent.keys, passkey: w.passkey, from: Date.parse(shown), purpose: 'Signed after the cancellation.' });
+    assert.equal((await w.hand({ kind: 'renewal', slip: after })).outcome, 'taken');
+    assert.equal((await pre(w.port, 'renewed')).out, '');
+    // The early one, handed over again, is still refused (now as older than the permission in force).
+    assert.equal((await w.hand({ kind: 'renewal', slip: early })).outcome, 'refused');
+  } finally {
+    await w.service.close();
+  }
+});
+
+test('a cancellation dated ahead of the clock is held, kept on the disk, and still stops the agent after a restart', async () => {
+  const w = await running();
+  try {
+    const c = await cancel(w.passkey, (await status(w.port)).slip, Date.now() + 10 * 60000);
+    const held = await w.hand({ kind: 'cancellation', cancellation: c });
+    assert.equal(held.outcome, 'held', held.message);
+    assert.ok(existsSync(join(w.folder, 'held-cancellations.json')));
+    assert.equal((await pre(w.port, 'while-held')).decision.permissionDecision, 'deny');
+  } finally {
+    await w.service.close();
+  }
+  const again = await startService({ folder: w.folder, port: 0, ...LOCAL });
+  try {
+    assert.equal((await pre(again.port, 'after-restart')).decision.permissionDecision, 'deny', 'the held cancellation was not lost');
+    assert.equal((await status(again.port)).cancelled, true);
+    // No new book while it is held: it goes into this book first.
+    const r = await fetch(`http://127.0.0.1:${again.port}/new-book`, { method: 'POST', body: '{}' });
+    assert.equal(r.status, 409);
+  } finally {
+    await again.close();
+  }
+});
+
+test('while a cancellation is held, a renewal that starts before its date is refused; one that starts after it is taken, and the cancellation stays held', async () => {
+  const w = await running();
+  try {
+    const first = (await status(w.port)).slip;
+    const date = Date.now() + 10 * 60000;
+    const c = await cancel(w.passkey, first, date);
+    assert.equal((await w.hand({ kind: 'cancellation', cancellation: c })).outcome, 'held');
+    const before = await w.hand({ kind: 'renewal', slip: await signSlip({ agentKeys: w.agent.keys, passkey: w.passkey, from: Date.now() - 1000 }) });
+    assert.equal(before.code, 'before-cancellation');
+    assert.deepEqual(kinds(w.folder), ['slip']);
+    const after = await w.hand({ kind: 'renewal', slip: await signSlip({ agentKeys: w.agent.keys, passkey: w.passkey, from: date + 60000, until: date + 3600000 }) });
+    assert.equal(after.outcome, 'taken', after.message);
+    // Still held, by the new writer, and still on the disk: it goes into the book when the clock reaches its date.
+    const kept = JSON.parse(read(w.folder, 'held-cancellations.json')).cancellations;
+    assert.equal(kept.length, 1);
+    assert.equal(kept[0].cancellation.payload, c.payload);
+    assert.ok(kept[0].acknowledgements?.length, 'with the acknowledgement signed for it');
+  } finally {
+    await w.service.close();
+  }
+  const again = await startService({ folder: w.folder, port: 0, ...LOCAL });
+  try {
+    assert.equal(JSON.parse(read(w.folder, 'held-cancellations.json')).cancellations.length, 1, 'kept across a restart');
+  } finally {
+    await again.close();
+  }
+});
+
+test('a cancellation dated more than a day ahead is refused, and changes nothing', async () => {
+  const w = await running();
+  try {
+    const c = await cancel(w.passkey, (await status(w.port)).slip, Date.now() + 2 * 86400000);
+    const a = await w.hand({ kind: 'cancellation', cancellation: c });
+    assert.equal(a.outcome, 'refused');
+    assert.equal(a.code, 'too-far-ahead');
+    assert.equal((await pre(w.port, 'still')).out, '', 'the agent still acts');
+    assert.equal(existsSync(join(w.folder, 'held-cancellations.json')), false);
+  } finally {
+    await w.service.close();
+  }
+});
+
+test('a record handed over must have been signed at the signing page (https://sign.prova.red unless the setting names another)', async () => {
+  assert.deepEqual(signingOriginsFrom(undefined), [SIGNING_ORIGIN]);
+  assert.equal(SIGNING_ORIGIN, 'https://sign.prova.red');
+  assert.deepEqual(signingOriginsFrom('http://localhost:5173, https://sign.example.org'), ['http://localhost:5173', 'https://sign.example.org']);
+  for (const wrong of ['http://example.org', 'https://sign.prova.red/', 'https://sign.prova.red/page', 'localhost']) assert.throws(() => signingOriginsFrom(wrong), /not an address such as/);
+  // The default: a permission signed at http://localhost is refused, a cancellation of one too; nothing changes.
+  const w = await running({});
+  try {
+    const renewal = await w.hand({ kind: 'renewal', slip: await signSlip({ agentKeys: w.agent.keys, passkey: w.passkey }) });
+    assert.equal(renewal.code, 'other-signing-address');
+    const cancellation = await w.hand({ kind: 'cancellation', cancellation: await cancel(w.passkey, (await status(w.port)).slip) });
+    assert.equal(cancellation.code, 'other-signing-address');
+    // From a passkey it does not trust, signed elsewhere: refused for its address, and nothing waits for "admit-passkey".
+    const stranger = await w.hand({ kind: 'renewal', slip: await signSlip({ agentKeys: w.agent.keys, passkey: await developmentPasskey() }) });
+    assert.equal(stranger.code, 'other-signing-address');
+    assert.equal(existsSync(join(w.folder, 'waiting-permissions.json')), false);
+    assert.deepEqual(kinds(w.folder), ['slip']);
+    assert.equal((await pre(w.port, 'still')).out, '');
   } finally {
     await w.service.close();
   }

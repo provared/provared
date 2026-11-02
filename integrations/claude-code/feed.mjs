@@ -79,6 +79,8 @@ export const FEED_MAX_BYTES = 4 * 1024 * 1024;
 /** The most bytes a record handed over may have; and at most this many are being taken at once (one more is told to ask again). */
 export const FEED_MAX_HAND_OVER_BYTES = 256 * 1024;
 export const FEED_MAX_HANDING = 4;
+/** A record handed over must arrive whole within this many milliseconds of its headers. */
+export const FEED_HAND_OVER_READ_MS = 10 * 1000;
 /** The longest a request waits for something new, in seconds. */
 export const FEED_MAX_WAIT = 25;
 /** At most this many requests wait at once; one more is answered at once with "429". */
@@ -638,41 +640,80 @@ export function createFeed({ folder, memory, token, handOver = null, now = Date.
    * to the recorder by a reader that holds the token. The proof covers the
    * question and every byte of its body. The recorder checks the record
    * itself (handOver) and answers what it did; the answer carries the
-   * recorder's proof, as every answer does. Nothing is read beyond
-   * FEED_MAX_HAND_OVER_BYTES, and no more than FEED_MAX_HANDING are taken on
-   * at once.
+   * recorder's proof, as every answer does.
+   *
+   * Before any byte of the body is read: the length it states
+   * (Content-Length, at most FEED_MAX_HAND_OVER_BYTES; a body sent without
+   * one is refused), and the form of the four headers of the proof, in a
+   * conversation this recorder holds or began. No more than
+   * FEED_MAX_HANDING are taken on at once, counted from before the body is
+   * read to the answer, proved or not; one more is told to ask again. A
+   * body not read whole within FEED_HAND_OVER_READ_MS is let go.
    */
   async function handOverRequest(req, res) {
     if (req.method !== 'POST') return plain(res, 405, { error: 'a record is handed over with POST' });
     if (token.problem || !token.token) return plain(res, 503, { error: `the feed is off: ${token.problem ?? 'it has no token'}` });
     if (req.url !== '/hand-over') return plain(res, 400, { error: 'POST /hand-over takes nothing after its name' });
-    const chunks = [];
-    let size = 0;
-    for await (const chunk of req) {
-      size += chunk.length;
-      if (size > FEED_MAX_HAND_OVER_BYTES) return plain(res, 413, { error: `a record handed over may have at most ${FEED_MAX_HAND_OVER_BYTES} bytes` });
-      chunks.push(chunk);
-    }
-    const body = Buffer.concat(chunks);
-    const talk = conversation(req, res, body);
-    if (!talk) return true;
-    const send = (code, answer, more) => proved(res, talk, code, answer, more);
-    if (!handOver) return send(404, { error: 'this recorder takes no record handed over' });
-    if (handing >= FEED_MAX_HANDING) return send(429, { error: `${FEED_MAX_HANDING} records are being handed over already; hand this one over again in a moment` }, { 'Retry-After': '5' });
-    let given;
-    try {
-      given = JSON.parse(body.toString('utf8'));
-    } catch {
-      return send(400, { error: 'what was handed over is not JSON' });
-    }
+    const declared = req.headers['content-length'];
+    if (typeof declared !== 'string' || !/^\d{1,7}$/.test(declared)) return plain(res, 411, { error: 'a record handed over states its length (Content-Length)' });
+    const length = Number(declared);
+    if (length > FEED_MAX_HAND_OVER_BYTES) return plain(res, 413, { error: `a record handed over may have at most ${FEED_MAX_HAND_OVER_BYTES} bytes` });
+    if (!plausible(req)) return plain(res, 401, { error: 'the question does not carry a proof in the form the feed takes, in a conversation it began: begin one with GET /hello', renew: true });
+    if (handing >= FEED_MAX_HANDING) return plain(res, 429, { error: `${FEED_MAX_HANDING} records are being handed over already; hand this one over again in a moment` }, { 'Retry-After': '5' });
     handing++;
     try {
-      return send(200, await handOver(given));
-    } catch (e) {
-      return send(500, { error: String(e?.message ?? e).slice(0, 500) });
+      const chunks = [];
+      let size = 0;
+      const timer = setTimeout(() => req.destroy(), FEED_HAND_OVER_READ_MS);
+      try {
+        for await (const chunk of req) {
+          size += chunk.length;
+          if (size > length) return plain(res, 400, { error: 'the body is longer than the length it states' });
+          chunks.push(chunk);
+        }
+      } catch {
+        // Let go (too slow), or the reader went away: nothing to answer.
+        return true;
+      } finally {
+        clearTimeout(timer);
+      }
+      if (size !== length) return plain(res, 400, { error: 'the body is shorter than the length it states' });
+      const body = Buffer.concat(chunks);
+      const talk = conversation(req, res, body);
+      if (!talk) return true;
+      const send = (code, answer, more) => proved(res, talk, code, answer, more);
+      if (!handOver) return send(404, { error: 'this recorder takes no record handed over' });
+      let given;
+      try {
+        given = JSON.parse(body.toString('utf8'));
+      } catch {
+        return send(400, { error: 'what was handed over is not JSON' });
+      }
+      try {
+        return send(200, await handOver(given));
+      } catch (e) {
+        return send(500, { error: String(e?.message ?? e).slice(0, 500) });
+      }
     } finally {
       handing--;
     }
+  }
+
+  /**
+   * Whether a question's four headers are in the form the feed takes, in a
+   * conversation this recorder holds or began recently. Nothing is kept,
+   * and the proof itself is not checked here: conversation checks it, over
+   * the body.
+   */
+  function plausible(req) {
+    const session = req.headers['provared-feed-session'];
+    const theirs = req.headers['provared-feed-hello'];
+    if (!isRandom(session) || !isRandom(req.headers['provared-feed-nonce']) || !isRandom(req.headers['provared-feed-proof'])) return false;
+    if (sessions.has(session)) return true;
+    if (ended.has(session) || !isRandom(theirs)) return false;
+    const begun = Number(Buffer.from(session, 'base64url').readBigUInt64BE(0));
+    const time = now();
+    return time - begun >= 0 && time - begun <= FEED_HELLO_MS && sameProof(session, Buffer.from(sessionNumber(theirs, begun), 'base64url'));
   }
 
   return {
