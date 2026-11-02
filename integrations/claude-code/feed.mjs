@@ -294,10 +294,11 @@ function lineFromBytes(buf) {
  * @param {{folder: string, memory: () => {key: number, path: string, text: () => string, saved?: () => number, inForce: boolean}[], token: {token: string|null, problem: string|null, path: string}, now?: () => number}} o
  *   memory: the books the recorder holds open, asked each time; key names one book for as long as
  *   the recorder holds it, wherever its file now is; saved gives how many characters of its text the
- *   recorder has written to the file (all of it where not given); now, sessionQuestions and maxBusy are
- *   for the tests (the clock, FEED_SESSION_QUESTIONS and FEED_MAX_BUSY by default)
+ *   recorder has written to the file (all of it where not given); now, sessionQuestions, maxBusy and
+ *   handOverReadMs are for the tests (the clock, FEED_SESSION_QUESTIONS, FEED_MAX_BUSY and
+ *   FEED_HAND_OVER_READ_MS by default)
  */
-export function createFeed({ folder, memory, token, handOver = null, now = Date.now, sessionQuestions = FEED_SESSION_QUESTIONS, maxBusy = FEED_MAX_BUSY }) {
+export function createFeed({ folder, memory, token, handOver = null, now = Date.now, sessionQuestions = FEED_SESSION_QUESTIONS, maxBusy = FEED_MAX_BUSY, handOverReadMs = FEED_HAND_OVER_READ_MS }) {
   let version = 0;
   let waiting = new Set();
   let closed = false;
@@ -664,7 +665,7 @@ export function createFeed({ folder, memory, token, handOver = null, now = Date.
     try {
       const chunks = [];
       let size = 0;
-      const timer = setTimeout(() => req.destroy(), FEED_HAND_OVER_READ_MS);
+      const timer = setTimeout(() => req.destroy(), handOverReadMs);
       try {
         for await (const chunk of req) {
           size += chunk.length;
