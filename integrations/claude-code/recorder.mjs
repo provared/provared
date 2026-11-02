@@ -152,7 +152,17 @@ export const SIGNING_ORIGIN = 'https://sign.prova.red';
 export const CANCELLATION_AHEAD_MS = 24 * 60 * 60 * 1000;
 /** At most this many permissions from passkeys this computer does not trust wait for "admit-passkey". */
 export const MAX_WAITING_PERMISSIONS = 8;
-const ORIGIN_FORM = /^(?:https:\/\/[a-z0-9.-]{1,253}|http:\/\/localhost)(?::[0-9]{1,5})?$/;
+/** An origin written as a browser writes it: https:// any website, or http://localhost, with nothing after the name and port. */
+function originForm(o) {
+  let u;
+  try {
+    u = new URL(o);
+  } catch {
+    return false;
+  }
+  if (u.origin !== o) return false;
+  return u.protocol === 'https:' || (u.protocol === 'http:' && u.hostname === 'localhost');
+}
 
 /**
  * The signing addresses a record handed over is taken from: the setting, or
@@ -165,7 +175,7 @@ export function signingOriginsFrom(setting) {
   const list = (Array.isArray(setting) ? setting : String(setting).split(',')).map((s) => String(s).trim()).filter(Boolean);
   if (list.length === 0) return [SIGNING_ORIGIN];
   for (const o of list) {
-    if (!ORIGIN_FORM.test(o)) throw new Error(`The signing address ${JSON.stringify(o)} (PROVARED_CLAUDE_CODE_SIGNING_ORIGIN) is not an address such as ${SIGNING_ORIGIN}: an https:// address with nothing after the name and port, or http://localhost for a test.`);
+    if (!originForm(o)) throw new Error(`The signing address ${JSON.stringify(o)} (PROVARED_CLAUDE_CODE_SIGNING_ORIGIN) is not an address such as ${SIGNING_ORIGIN}: an https:// address with nothing after the name and port, or http://localhost for a test.`);
   }
   return [...new Set(list)];
 }
