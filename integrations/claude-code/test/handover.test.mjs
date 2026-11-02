@@ -255,6 +255,16 @@ test('the hand-over is proved like every question of the feed: over the body, wi
     assert.equal(big.status, 413);
     // Headers that are not a proof's, in a conversation the recorder never began: refused before the body is read.
     assert.equal((await fetch(`http://127.0.0.1:${w.port}/hand-over`, { method: 'POST', body: '{}' })).status, 401);
+    // So the answer comes at once, though the body it states never arrives.
+    const early = await new Promise((done, fail) => {
+      const socket = connect(w.port, '127.0.0.1');
+      let got = '';
+      const timer = setTimeout(() => { socket.destroy(); done('no answer'); }, 3000);
+      socket.on('data', (d) => { got += d; if (got.includes('\r\n')) { clearTimeout(timer); socket.destroy(); done(got.split('\r\n')[0]); } });
+      socket.on('error', fail);
+      socket.write(['POST /hand-over HTTP/1.1', 'Host: 127.0.0.1', 'Content-Length: 100', 'Provared-Feed-Session: x', '', '{'].join('\r\n'));
+    });
+    assert.match(early, /^HTTP\/1\.1 401/);
     // A body that does not state its length (sent in pieces): refused before it is read.
     const pieces = await new Promise((done, fail) => {
       const req = request({ host: '127.0.0.1', port: w.port, method: 'POST', path: '/hand-over' }, (res) => {
@@ -366,8 +376,11 @@ test('while a cancellation is held, a renewal that starts before its date is ref
     const date = Date.now() + 10 * 60000;
     const c = await cancel(w.passkey, first, date);
     assert.equal((await w.hand({ kind: 'cancellation', cancellation: c })).outcome, 'held');
-    const before = await w.hand({ kind: 'renewal', slip: await signSlip({ agentKeys: w.agent.keys, passkey: w.passkey, from: Date.now() - 1000 }) });
+    const early = await signSlip({ agentKeys: w.agent.keys, passkey: w.passkey, from: Date.now() - 1000 });
+    const before = await w.hand({ kind: 'renewal', slip: early });
     assert.equal(before.code, 'before-cancellation');
+    // Renewed on this computer ("renew", not handed over): refused as well, while the cancellation is held.
+    await assert.rejects(w.service.renew(early), { code: 'cancellation-held' });
     assert.deepEqual(kinds(w.folder), ['slip']);
     const after = await w.hand({ kind: 'renewal', slip: await signSlip({ agentKeys: w.agent.keys, passkey: w.passkey, from: date + 60000, until: date + 3600000 }) });
     assert.equal(after.outcome, 'taken', after.message);
@@ -376,6 +389,11 @@ test('while a cancellation is held, a renewal that starts before its date is ref
     assert.equal(kept.length, 1);
     assert.equal(kept[0].cancellation.payload, c.payload);
     assert.ok(kept[0].acknowledgements?.length, 'with the acknowledgement signed for it');
+    // No new book while it is held, though the permission in force is not the one it cancels.
+    assert.equal((await status(w.port)).cancelled, false);
+    const r = await fetch(`http://127.0.0.1:${w.port}/new-book`, { method: 'POST', body: '{}' });
+    assert.equal(r.status, 409);
+    assert.match((await r.json()).error, /held beside the book/);
   } finally {
     await w.service.close();
   }
