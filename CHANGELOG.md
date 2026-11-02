@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## Not yet released
+
+- **The recorder beside Claude Code, as a plugin, installs library 0.8.0.** `integrations/claude-code/package.json` asks for `provared` `^0.8.0` (0.8.0 or later, before 0.9.0), where it asked for `>=0.6.0 <0.8.0`, and its lockfile installs 0.8.0, where it installed 0.6.0. The published `provared-claude-code` 0.1.0 is unchanged. Its README says so. The plugin's 18 tests pass.
+- **The home page** says what is new in 0.8.0.
 
 - **The recorder beside Claude Code takes records handed over from the
   application** (`integrations/claude-code`, not published; the library
