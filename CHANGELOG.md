@@ -9,28 +9,44 @@
   sealed, is handed to the recorder by the application's uploader through
   the feed, with no file carried by hand: `POST /hand-over`, proved as
   every question of the feed is, and over every byte of the body as well,
-  under a label of its own; at most 256 KiB, and four at once. The
+  under a label of its own. Before any byte of the body is read, the
+  recorder checks the length it states (`Content-Length`, at most 256 KiB;
+  411 without one) and the form of the proof's headers in a conversation
+  it began; at most four are taken on at once, counted from before the
+  body is read, and a body not whole within 10 seconds is let go. The
   recorder checks each record itself and answers with a code
-  (`taken`, `already`, `held` or `refused`, with a reason). A renewal is
-  taken as `renew` takes one without `--new-passkey`, and is never one
-  the recorder held before, nor one that starts before the permission in
-  force, so that a record held back and handed over late cannot take the
-  agent back. A renewal from a passkey the recorder does not trust is
-  refused, never added; `admit-passkey <thumbprint>` now also adds a
-  passkey the recorder has not trusted before, run on that computer only.
-  A cancellation is taken only for the permission in force: every call
-  under it is refused at once, and the cancellation and the agent's
-  acknowledgement are written into the book (the library's `add`); handed
-  over again, it changes nothing and gives back the same acknowledgement.
-  While the permission in force is cancelled, no new book is started,
-  since a new book would begin with that permission and not its
-  cancellation; `status` says `cancelled`. A permission refused with a
-  passkey not on the list now carries a code (`passkey-not-trusted` and
-  the others, on the error), and its words name `admit-passkey` as well
-  as `--new-passkey`. What changes for a user: `admit-passkey` on a
-  thumbprint not on the list adds it where it used to refuse, and
-  `retire-passkey` on one not on the list says "not on the list of
-  passkeys this recorder trusts". Tests: `test/handover.test.mjs`.
+  (`taken`, `already`, `held` or `refused`, with a reason). Each must
+  have been signed at https://sign.prova.red, or where
+  `PROVARED_CLAUDE_CODE_SIGNING_ORIGIN` says (`other-signing-address`). A
+  renewal is taken as `renew` takes one without `--new-passkey`, and is
+  never one the recorder held before, nor one that starts before the
+  permission in force, nor one that starts before any cancellation the
+  recorder holds, in a book or held beside it (`before-cancellation`), so
+  that a record held back and handed over late cannot start the agent
+  again. A renewal from a passkey the recorder does not trust is refused,
+  never added; the refused permission waits in `waiting-permissions.json`,
+  and `admit-passkey <thumbprint>` for a passkey never trusted shows it in
+  full and takes it, with its passkey, only once the person types `yes`
+  on that computer (with nothing waiting from that passkey, it admits
+  nothing). A cancellation is taken only for the permission in force:
+  every call under it is refused at once, and the cancellation and the
+  agent's acknowledgement are written into the book (the library's
+  `add`); handed over again, it changes nothing and gives back the same
+  acknowledgement. One dated ahead of the clock is held beside the book and
+  kept in `held-cancellations.json`, which is given to the writer at each
+  start, so a restart does not lose it; one more than 24 hours ahead is
+  refused (`too-far-ahead`). A renewal while one is held is taken only if
+  it starts after its date (`cancellation-held`, also for `renew`), and the
+  cancellation stays held. While the permission in force is cancelled, or
+  a cancellation is held, no new book is started; `status` says
+  `cancelled`. A cancellation of a permission a later one replaced is
+  refused (`not-in-force`: the agent acts under the later permission,
+  which this does not stop). A permission refused with a passkey not on
+  the list now carries a code (`passkey-not-trusted` and the others, on
+  the error). What changes for a user: `retire-passkey` on a passkey not
+  on the list says "not on the list of passkeys this recorder trusts", and
+  a record handed over must name the signing page's address. Tests:
+  `test/handover.test.mjs`.
 
 ## 0.8.0 (1 November 2026)
 
