@@ -2,9 +2,9 @@
 
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/provared/provared/badge)](https://scorecard.dev/viewer/?uri=github.com/provared/provared)
 
-A guard for an AI agent's tools: it keeps the tools' credentials away
-from the agent, and stops any tool call that the person did not allow in
-a permission they signed with a passkey.
+A guard for an AI agent's tools: it holds the tools' credentials in
+place of the agent, and stops any tool call that the person did not
+allow in a permission they signed with a passkey.
 
 The guard, [provared-mcp-executor](mcp-executor/README.md), stands
 between the agent and a tool server that speaks the Model Context
@@ -27,7 +27,12 @@ one agent and one tool server. Tool servers reached over the network
 (MCP over HTTP, the protocol of the web), one guard for several agents,
 sealing the record, and keys held in a key service are designed but not
 built. And it proves nothing about a tool the agent can reach without
-it: the tool's credential must be taken away from the agent.
+it: the tool's credential must be taken away from the agent. It keeps
+the credential, and its own keys, from the agent only where the agent
+cannot read the guard's files: an agent with a shell or file tools that
+runs as the same computer user can read them. So run the guard under a
+separate user account that the agent cannot use, or give the agent no
+shell or file tools; a tested recipe for this is not written yet.
 
 *Evidence, not a verdict.* A record shows what was signed and by which
 keys. People decide what it means.
