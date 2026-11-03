@@ -2,9 +2,9 @@
 
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/provared/provared/badge)](https://scorecard.dev/viewer/?uri=github.com/provared/provared)
 
-A guard for an AI agent's tools: it stops the agent from making any
-tool call that the person did not allow in a permission they signed with
-a passkey.
+A guard for an AI agent's tools: it keeps the tools' credentials away
+from the agent, and stops any tool call that the person did not allow in
+a permission they signed with a passkey.
 
 The guard, [provared-mcp-executor](mcp-executor/README.md), stands
 between the agent and a tool server that speaks the Model Context
