@@ -26,17 +26,20 @@
 <body>
 <header>
   <h1><svg class="mark" viewBox="0 0 64 64" width="36" height="36" aria-hidden="true"><circle cx="32" cy="32" r="32" fill="#8f000f"/><path d="M20 15 H37 L45 23 V49 H20 Z" fill="#ffffff"/><path d="M37 15 V23 H45" fill="none" stroke="#8f000f" stroke-width="2.5" stroke-linejoin="round"/><path d="M25 29 H40 M25 35 H36" stroke="#8f000f" stroke-width="2.5" stroke-linecap="round"/><path d="M24.5 43 C27 39, 29 46, 31.5 42.5 C34 39, 36 46, 40.5 41.5" fill="none" stroke="#8f000f" stroke-width="3" stroke-linecap="round"/></svg>Provared</h1>
-  <p class="lead">Proof of what an AI agent was allowed to do, and what it then did.</p>
-  <p>A person signs the permission with a passkey. The agent signs a receipt for each action. A free checker says whether the agent stayed within the permission, and where it did not.</p>
+  <p class="lead">A guard for an AI agent's tools: it keeps the tools' credentials away from the agent, and stops any tool call that you did not allow in a permission signed with your passkey.</p>
+  <p>The guard stands between the agent and a tool server that speaks the Model Context Protocol (MCP), the common way for AI agents to reach tools. It holds the tool server's credential in place of the agent, and refuses a call the permission does not allow before the call reaches the tool. It can also test what a call would change, for example which paths a file tool may touch.</p>
+  <p>The record follows from it. For each call it lets through, the guard writes a signed receipt and countersigns it with keys of its own; for a call the permission does not allow, a signed note of the refusal. Anyone can check these records later, on their own computer, with the free checker.</p>
   <p class="motto">For anyone who runs an agent for other people, or has to check one. Evidence, not a verdict.</p>
   <nav class="buttons" aria-label="Pages">
-    <a class="primary" href="try/">Try it in your browser</a>
+    <a class="primary" href="https://github.com/provared/provared/blob/main/mcp-executor/README.md">Set up the guard</a>
+    <a href="try/">Try a record in your browser</a>
     <a href="three-minutes.html">In plain words</a>
     <a href="over-the-limit.html">For developers</a>
     <a href="records/">A real record</a>
     <a href="https://claude.ai/artifact/VPk1ZoT36y8op1r6x9KqgS">The draft, explained</a>
   </nav>
   <nav class="buttons jumps" aria-label="On this page">
+    <a href="#other">Other ways to record an agent</a>
     <a href="#new">What is new</a>
     <a href="#first">A first record</a>
     <a href="#checker">What the checker says</a>
@@ -46,7 +49,26 @@
 </header>
 <main>
 
-<p>What the free checker prints for the sample record that comes with the library: an invented office agent that went over its limit at its fifth order.</p>
+<p><strong>What it does not do yet.</strong> It guards only a tool server that it starts itself, on the same computer, the two programs talking through their standard input and output (MCP's "stdio" transport). One guard serves one agent and one tool server. Tool servers reached over the network (MCP over HTTP, the protocol of the web), one guard for several agents, sealing the record, and keys held in a key service are designed but not built. And it proves nothing about a tool the agent can reach without it: the tool's credential must be taken away from the agent.</p>
+
+<pre>npm install -g provared-mcp-executor</pre>
+
+<p>The guard is the npm package provared-mcp-executor. "Executor" is the Internet-Draft's word for software, other than the agent, that acts for it and refuses what the permission does not allow. It needs Node.js 24.7 or later, and nothing but the Provared library. <a href="https://github.com/provared/provared/blob/main/mcp-executor/README.md">Its README</a> sets it up in five steps: write its settings, make its keys, sign the permission with your passkey at <a href="https://sign.prova.red/">sign.prova.red</a>, check the settings, and name the guard in the agent's MCP client where the tool server was named. For a client whose settings are JSON:</p>
+
+<pre>{
+  "mcpServers": {
+    "files": {
+      "command": "provared-mcp-executor",
+      "args": ["stdio", "--config", "/etc/provared-mcp/files/executor.json"]
+    }
+  }
+}</pre>
+
+<p>To see it work first, <a href="https://github.com/provared/provared/tree/main/mcp-executor/demo">a demonstration</a> runs the guard in front of a made-up tool server, with no settings and no secret; its records prove nothing about anyone. The guard is listed in the <a href="https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.provared/mcp-executor">official MCP Registry</a> as <code>io.github.provared/mcp-executor</code>.</p>
+
+<h2 id="checked">The record, checked</h2>
+
+<p>The guard's records are read by the same free checker as every Provared record. What it prints for the sample record that comes with the library: an invented office agent that went over its limit at its fifth order.</p>
 
 <pre>Summary
   Is the record intact?                 yes
@@ -59,7 +81,17 @@
 pip install provared
 npx provared-check --sample</pre>
 
-<p>The third command prints the answer above in full. Or <a href="try/">try it in your browser</a>, with nothing to install: an agent orders under a limit, and the checker finds where it went over. The library needs Node.js 24.7 or later, or Python 3.11 or later; it has no dependencies, sends nothing anywhere, holds no money and starts no payment. If you do not write code, start with <a href="three-minutes.html">Provared in plain words</a>.</p>
+<p>The third command prints the answer above in full. Or <a href="try/">try it in your browser</a>, with nothing to install: an agent orders under a limit, and the checker finds where it went over. The library needs Node.js 24.7 or later, or Python 3.11 or later; in JavaScript it has no dependencies, and in Python one. It sends nothing anywhere, holds no money and starts no payment. If you do not write code, start with <a href="three-minutes.html">Provared in plain words</a>.</p>
+
+<h2 id="other">Other ways to record an agent</h2>
+
+<p>The guard is one way to put an agent's actions behind a signed permission. The others write the same kind of record, read by the same checker:</p>
+<ul>
+  <li><strong>The library</strong>, in JavaScript or Python, for an agent you write yourself: each action is checked against the permission first and receipted after. See <a href="#first">a first record of your own</a>, below.</li>
+  <li><strong>The recorder beside Claude Code</strong>, <a href="https://www.npmjs.com/package/provared-claude-code">provared-claude-code on npm</a>, also a Claude Code plugin, which checks and receipts every tool call Claude Code makes. It keeps <a href="records/">the real record</a>.</li>
+  <li><strong>Packages for two Python agent frameworks</strong>, LangChain and Pydantic AI, and, in the repository, an example for one JavaScript agent framework.</li>
+  <li><strong>The gateway</strong>, for agents that act through web interfaces: it stands in front of each system an agent uses, holds that system's credential and receipts each call. It is in <a href="https://github.com/provared/provared/tree/main/gateway">the repository</a>, not yet on npm.</li>
+</ul>
 
 <h2 id="new">What is new</h2>
 
