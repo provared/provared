@@ -13,7 +13,7 @@ import { test } from 'node:test';
 const { checkBook, identifierFingerprint } = await import('provared');
 const { httpWorld, openHttpWorld, call, request, post, rawRequest, auth, META, TOKEN } = await import('./http-world.mjs');
 const { CALL_DOCUMENT, RESULT_DOCUMENT, TOOL_DOCUMENT, CALL_META, UNLISTED_ACTION, UNREADABLE_ANSWER } = await import('../executor.mjs');
-const { CREDENTIAL_REMOVED, readHttpSettings, sseReader, sseEvent, secretHash } = await import('../http.mjs');
+const { CREDENTIAL_REMOVED, MAX_SESSIONS, readHttpSettings, sseReader, sseEvent, secretHash } = await import('../http.mjs');
 const { readCopy, loadCopyKey } = await import('../copy.mjs');
 const { compareCopyWithBook } = await import('../compare.mjs');
 const { until, pause } = await import('./world.mjs');
@@ -606,6 +606,35 @@ test('attack: an agent that stops reading a fast stream. The upstream is paused,
     s.res.destroy();
     const after = await call(w, 'alpha', 'echo', { a: 1 });
     assert.equal(after.status, 200, 'the agent is served again');
+  } finally {
+    await w.close();
+  }
+});
+
+test('attack: one agent opens sessions without end. Past its own cap its oldest is forgotten; the other agent\'s session is never evicted', async () => {
+  const w = await httpWorld({ config: { timeout: 20000 } });
+  try {
+    const init = await request(w, 'beta', 'initialize', { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 't', version: '1' } });
+    const betaSession = init.headers.get('mcp-session-id');
+    assert.equal((await request(w, 'beta', 'ping', undefined, { headers: { 'mcp-session-id': betaSession } })).status, 200);
+    // The first alone, so that it is surely the oldest; the rest side by side.
+    assert.equal((await request(w, 'alpha', 'with-session', { session: 'alpha-0' })).status, 200);
+    let n = 1;
+    const N = MAX_SESSIONS + 1;
+    const worker = async () => {
+      for (;;) {
+        const i = n++;
+        if (i >= N) return;
+        const r = await request(w, 'alpha', 'with-session', { session: `alpha-${i}` });
+        assert.equal(r.status, 200);
+      }
+    };
+    await Promise.all(Array.from({ length: 8 }, worker));
+    const after = await request(w, 'beta', 'ping', undefined, { headers: { 'mcp-session-id': betaSession } });
+    assert.equal(after.status, 200, 'beta\'s session is still beta\'s');
+    assert.equal((await request(w, 'alpha', 'ping', undefined, { headers: { 'mcp-session-id': 'alpha-0' } })).status, 404, 'alpha\'s oldest is forgotten');
+    assert.equal((await request(w, 'alpha', 'ping', undefined, { headers: { 'mcp-session-id': `alpha-${N - 1}` } })).status, 200, 'alpha\'s newest is kept');
+    assert.equal((await request(w, 'beta', 'ping', undefined, { headers: { 'mcp-session-id': `alpha-${N - 1}` } })).status, 404, 'and is alpha\'s alone');
   } finally {
     await w.close();
   }

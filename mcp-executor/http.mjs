@@ -30,8 +30,8 @@ export const BODY_LIMIT = 10 * 1024 * 1024;
 export const ANSWER_LIMIT = MAX_LINE_BYTES;
 /** The most the executor holds for an agent that is not reading its stream (res.writableLength): one answer's worth. Past it the exchange is cut. The upstream is paused as soon as the agent's connection takes no more, so this is reached only where one event is itself over the limit in bytes. */
 export const BACKLOG_LIMIT = ANSWER_LIMIT;
-/** The most sessions the executor remembers; past it the oldest is forgotten, and its agent begins a new one. */
-export const MAX_SESSIONS = 10000;
+/** The most sessions the executor remembers for one agent; past it that agent's oldest is forgotten, and the agent begins a new one. The total is bounded by this times the number of agents, which the settings fix. */
+export const MAX_SESSIONS = 1000;
 /** The most requests of one agent in flight at once, of every kind; tool calls are also bounded by maxWaiting. */
 export const MAX_OPEN = 256;
 /** The hash of a secret, as the settings hold it: SHA-256 in base64url. */
@@ -284,6 +284,8 @@ export async function openHttpExecutor(config, more = {}) {
     const agent = await openAgent(prepared, { settings, executorKeys: shared.executorKeys, now, log, name });
     agent.hash = Buffer.from(paths.secretHash);
     agent.open = 0;
+    /** The sessions this agent opened, oldest first. */
+    agent.sessions = new Set();
     agents.set(name, agent);
   }
   for (const w of warnings) log({ event: 'warning', message: w });
@@ -295,12 +297,21 @@ export async function openHttpExecutor(config, more = {}) {
   /** The text with the upstream's credential taken out, wherever it stands. Everything that goes to an agent passes through here. */
   const scrub = credential ? (text) => text.split(credential.token).join(CREDENTIAL_REMOVED) : (text) => text;
 
-  // Sessions the upstream opened (Mcp-Session-Id), each owned by the agent that opened it.
+  // Sessions the upstream opened (Mcp-Session-Id), each owned by the agent that opened it. An agent past its cap loses its own oldest, never another's.
   const sessions = new Map();
   const ownSession = (id, agent) => {
     if (sessions.has(id)) return;
     sessions.set(id, agent.name);
-    if (sessions.size > MAX_SESSIONS) sessions.delete(sessions.keys().next().value);
+    agent.sessions.add(id);
+    if (agent.sessions.size > MAX_SESSIONS) {
+      const oldest = agent.sessions.values().next().value;
+      agent.sessions.delete(oldest);
+      sessions.delete(oldest);
+    }
+  };
+  const forgetSession = (id, agent) => {
+    sessions.delete(id);
+    agent.sessions.delete(id);
   };
 
   const signedIn = (header) => {
@@ -696,7 +707,7 @@ export async function openHttpExecutor(config, more = {}) {
       const ex = exchange(ctx, { method: req.method, headers: h.headers, kind: req.method === 'GET' ? 'stream' : 'other' });
       res.on('close', () => ex.cancel());
       await ex.end;
-      if (req.method === 'DELETE' && sessionId && res.statusCode < 300) sessions.delete(sessionId);
+      if (req.method === 'DELETE' && sessionId && res.statusCode < 300) forgetSession(sessionId, agent);
       return;
     }
     const type = String(req.headers['content-type'] ?? '').toLowerCase();

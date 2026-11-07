@@ -1491,12 +1491,14 @@ default as the gateway's, refused with 413 whether declared or not; an
 upstream JSON body, or one event, up to 16 MiB (`ANSWER_LIMIT`, the stdio
 line limit), past which the exchange is cut and a call gets "no answer";
 the executor's `timeout` on every POST exchange (a GET stream of server
-messages is open-ended by nature, bounded by the event limit alone); 256
+messages is open-ended by nature, bounded by the event limit and by X113,
+which cuts off an agent that reads nothing for `timeout` ms); 256
 requests of one agent in flight at once (`MAX_OPEN`), beside `maxWaiting`
-for its calls, which `callCore` counts for each agent; 10,000 sessions
-remembered, the oldest forgotten first. Why: each bounds something an
-upstream or an agent could otherwise grow without end. The other way: no
-bound on the GET stream's events, or a bound on its length in time.
+for its calls, which `callCore` counts for each agent; 1,000 sessions
+remembered for each agent, that agent's oldest forgotten first (X114). Why:
+each bounds something an upstream or an agent could otherwise grow without
+end. The other way: no bound on the GET stream's events, or a bound on its
+length in time.
 
 **X108. A session belongs to the agent that opened it.** An
 `Mcp-Session-Id` the upstream gives in a 2xx answer is remembered for the
@@ -1584,3 +1586,13 @@ a slot for ever. `timeout` is reused rather than a knob of its own: one
 limit on how long the executor waits for the far side, whichever side that
 is. The other way: a bound on memory alone, which would cut a slow but
 honest agent rather than wait for it.
+
+**X114. Sessions are capped for each agent, not for the executor.** Each
+agent may have 1,000 sessions remembered (`MAX_SESSIONS`); past that its own
+oldest is forgotten and it begins a new one; the total is at most 1,000 times
+the number of agents, which the settings fix at the start. Why: a review
+showed one agent evicting every other agent's session by opening ten
+thousand of its own under one executor-wide cap; a cap for each agent lets
+an agent harm only itself, and the total still has a bound. The other way:
+one cap with a fair share for each agent, which would have to be recomputed
+as agents come and go.
