@@ -1,0 +1,46 @@
+{
+  "name": "Provared MCP executor in front of the files server",
+  "service": "executor",
+  "listen": { "host": "127.0.0.1", "port": 8796 },
+  "path": "/mcp",
+  "upstream": {
+    "url": "http://127.0.0.1:9000/mcp",
+    "credential": { "file": "secrets/files-token" }
+  },
+  "agents": {
+    "research": {
+      "secretHash": "<the hash provared-mcp-executor secret prints>",
+      "slip": "slips/research.json",
+      "book": "books/research.jsonl",
+      "keys": "keys/research.jwk",
+      "issuerKeys": ["<thumbprint of the person's passkey>"],
+      "copy": "copies/research.jsonl",
+      "copyKey": "copies/research.jsonl.key"
+    },
+    "ordering": {
+      "secretHash": "<the hash provared-mcp-executor secret prints>",
+      "slip": "slips/ordering.json",
+      "book": "books/ordering.jsonl",
+      "keys": "keys/ordering.jwk",
+      "issuerKeys": ["<thumbprint of the person's passkey>"]
+    }
+  },
+  "executor": {
+    "keys": "keys/executor.jwk"
+  },
+  "tools": {
+    "read_file": { "action": "provared.data.read" },
+    "write_file": { "action": "provared.data.change" },
+    "order_supplies": { "action": "supplies.order", "amount": { "unit": "GBP", "pointer": "/total" } },
+    "send_messages": { "action": "provared.message.send", "amount": { "unit": "messages", "count": "/recipients" } }
+  },
+  "contentRules": "content-rules.json",
+  "unlisted": "refuse",
+  "hideUnlisted": true,
+  "timeout": 300000,
+  "denialsPerHour": 600,
+  "callIdInMeta": true,
+  "maxWaiting": 16,
+  "bodyLimit": 10485760,
+  "allowedOrigins": []
+}

@@ -94,10 +94,7 @@ export function readSettings(config, root) {
   const s = {};
   const at = (what, text) => problems.push(`${what}: ${text}`);
   if (!isObject(config)) return { settings: null, problems: ['The settings must be a JSON object.'], warnings };
-  s.name = config.name ?? 'Provared MCP executor';
-  if (typeof s.name !== 'string' || s.name.length < 1 || s.name.length > 200) at('name', 'must be text of 1 to 200 characters.');
-  s.service = config.service ?? 'executor';
-  if (typeof s.service !== 'string' || !SHORT_NAME.test(s.service)) at('service', 'must be 1 to 64 lower-case letters, digits, full stops, hyphens or underscores: the id the slip gives the executor in "with".');
+  readIdentity(config, s, at);
 
   const server = config.server;
   if (!isObject(server)) at('server', 'must be an object naming the tool server: command, args, cwd, env.');
@@ -176,6 +173,17 @@ export function readSettings(config, root) {
 /** The settings both ways of running share: the name, the service id, the tool rules and the knobs of readKnobs. */
 export const SHARED_KEYS = ['name', 'service', 'tools', 'unlisted', 'hideUnlisted', 'timeout', 'denialsPerHour', 'callIdInMeta', 'maxWaiting', 'contentRules'];
 export const UNLISTED_FORWARD_WARNING = 'unlisted is "forward": a call to a tool that no rule names is sent on with no receipt and no denial. The record then leaves those calls out.';
+
+/** The executor's name and its service id (the id the slip gives it in "with"). Into s. */
+export function readIdentity(config, s, at) {
+  s.name = config.name ?? 'Provared MCP executor';
+  if (typeof s.name !== 'string' || s.name.length < 1 || s.name.length > 200) at('name', 'must be text of 1 to 200 characters.');
+  s.service = config.service ?? 'executor';
+  if (typeof s.service !== 'string' || !SHORT_NAME.test(s.service)) at('service', 'must be 1 to 64 lower-case letters, digits, full stops, hyphens or underscores: the id the slip gives the executor in "with".');
+}
+
+/** Whether a value is a JSON object (not null, not a list). */
+export { isObject, pathFrom, SHORT_NAME };
 
 /** An agent's paths and issuer keys, as the settings give them under "prefix" (agent, or agents.<name>). */
 export function readAgentPaths(agent, root, at, prefix) {
