@@ -171,8 +171,8 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
         }
         if (how === 'twice') {
           const send = sse(res);
-          send({ jsonrpc: '2.0', id, result: { resultType: 'complete', content: [{ type: 'text', text: 'first' }] } });
-          send({ jsonrpc: '2.0', id, result: { resultType: 'complete', content: [{ type: 'text', text: 'second' }] } });
+          // Both in one write, so that they arrive in one chunk.
+          send(`${JSON.stringify({ jsonrpc: '2.0', id, result: { resultType: 'complete', content: [{ type: 'text', text: 'first' }] } })}\n\nid: ev-2\ndata: ${JSON.stringify({ jsonrpc: '2.0', id, result: { resultType: 'complete', content: [{ type: 'text', text: 'second' }] } })}`, 'id: ev-1\n');
           return res.end();
         }
         if (how === 'drop') {

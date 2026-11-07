@@ -7,13 +7,14 @@ import './local-library.mjs'; // first: "provared" is this repository's own libr
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import http from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 
 const { checkBook, identifierFingerprint } = await import('provared');
 const { httpWorld, openHttpWorld, call, request, post, rawRequest, auth, META, TOKEN } = await import('./http-world.mjs');
 const { CALL_DOCUMENT, RESULT_DOCUMENT, TOOL_DOCUMENT, CALL_META, EXECUTOR_STOPPED, UNLISTED_ACTION, UNREADABLE_ANSWER } = await import('../executor.mjs');
-const { CREDENTIAL_REMOVED, MAX_SESSIONS, readHttpSettings, sseReader, sseEvent, secretHash } = await import('../http.mjs');
+const { CREDENTIAL_REMOVED, MAX_OPEN, MAX_SESSIONS, readHttpSettings, sseReader, sseEvent, secretHash } = await import('../http.mjs');
 const { readCopy, loadCopyKey } = await import('../copy.mjs');
 const { compareCopyWithBook } = await import('../compare.mjs');
 const { until, pause } = await import('./world.mjs');
@@ -765,6 +766,104 @@ test('cancellation on a legacy session (2025-11-25): the agent\'s notifications/
     assert.ok(docs(stubs[0])['provared.error']);
     assert.ok(docs(stubs[1])[RESULT_DOCUMENT], 'the real result is the outcome');
     await until(() => w.executor.agent('alpha').calls() === 0);
+  } finally {
+    await w.close();
+  }
+});
+
+/** A POST that declares a body and sends only part of it, held open: {status} once the executor answers, or null after "wait" ms. */
+function partialBody(w, agent, { declared, part, wait = 1500 }) {
+  return new Promise((done) => {
+    const u = new URL(w.url);
+    const req = http.request({ host: u.hostname, port: u.port, path: u.pathname, method: 'POST', agent: false, headers: { 'content-type': 'application/json', 'content-length': declared, connection: 'close', ...auth(w, agent) } });
+    const timer = setTimeout(() => {
+      req.destroy();
+      done({ status: null });
+    }, wait);
+    req.on('response', (res) => {
+      clearTimeout(timer);
+      res.resume();
+      res.on('end', () => done({ status: res.statusCode }));
+      res.on('error', () => done({ status: res.statusCode }));
+    });
+    req.on('error', () => {
+      clearTimeout(timer);
+      done({ status: null });
+    });
+    req.write(part);
+  });
+}
+
+test('defences on the agent\'s side, each with what it changes: the cap on requests in flight (503 past 256, the other agent unaffected, the count back to 0 after); a session header given twice or malformed (400, not 404); an aborted request closes the exchange with the upstream at once; a declared body over the limit is refused before it is read', async () => {
+  const w = await httpWorld({ config: { bodyLimit: 2048, timeout: 5000 } });
+  try {
+    const a = w.executor.agent('alpha');
+    // 256 GET streams held open fill the agent's cap; the next is refused, and only for this agent.
+    const streams = [];
+    for (let i = 0; i < MAX_OPEN; i++) streams.push(await rawRequest(w, { method: 'GET', headers: { accept: 'text/event-stream', ...auth(w, 'alpha') }, stream: true }));
+    assert.equal(a.open(), MAX_OPEN);
+    const over = await request(w, 'alpha', 'ping');
+    assert.equal(over.status, 503);
+    assert.ok(w.logs.some((e) => e.event === 'refused' && e.code === 'too-many-open'));
+    assert.equal((await request(w, 'beta', 'ping')).status, 200, 'the other agent is not affected');
+    for (const s of streams) s.res.destroy();
+    await until(() => a.open() === 0, { timeout: 5000 });
+    assert.equal((await request(w, 'alpha', 'ping')).status, 200, 'the count came back down, so the agent is served again');
+    // A session header given twice, or outside the allowed shape, is a malformed request (400), not an unknown session (404).
+    const twice = await rawRequest(w, { headers: { 'content-type': 'application/json', ...auth(w, 'alpha'), 'mcp-session-id': ['a', 'b'] }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'ping' }) });
+    assert.equal(twice.status, 400);
+    const spaced = await rawRequest(w, { headers: { 'content-type': 'application/json', ...auth(w, 'alpha'), 'mcp-session-id': 'has a space' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'ping' }) });
+    assert.equal(spaced.status, 400);
+    // The agent aborts a request the upstream never answers: the exchange with the upstream is closed then, not at the timeout, and the slot is freed.
+    const c = new AbortController();
+    const hang = rawRequest(w, { headers: { 'content-type': 'application/json', ...auth(w, 'alpha') }, body: JSON.stringify({ jsonrpc: '2.0', id: 'h1', method: 'hang' }), signal: c.signal }).catch((e) => e.name);
+    await until(() => w.upstream.seen.some((x) => x.body?.method === 'hang'));
+    const abortedBefore = w.upstream.aborted;
+    c.abort();
+    assert.equal(await hang, 'AbortError');
+    await until(() => w.upstream.aborted > abortedBefore, { timeout: 1500 });
+    await until(() => a.open() === 0, { timeout: 1500 });
+    // A body declared larger than the limit is refused on the declaration, before any of it is read.
+    const declared = await partialBody(w, 'alpha', { declared: 5000, part: '{"jsonrpc":' });
+    assert.equal(declared.status, 413);
+    await until(() => a.open() === 0);
+  } finally {
+    await w.close();
+  }
+});
+
+test('defences on the upstream\'s side, each with what it changes: a session id on a non-2xx answer is not owned; the stream to the upstream is closed once a call\'s outcome is in, although the upstream goes on; nothing after the outcome in the same chunk reaches the agent; an answer cut short is no outcome', async () => {
+  const w = await httpWorld({ config: { timeout: 3000 } });
+  try {
+    // A session id the upstream gives on a 500 is not remembered for the agent, so a request under it is refused by the executor and never sent.
+    const failed = await request(w, 'alpha', 'with-session', { session: 'evil', status: 500 });
+    assert.equal(failed.status, 500);
+    const seenBefore = w.upstream.seen.length;
+    const under = await request(w, 'alpha', 'ping', undefined, { headers: { 'mcp-session-id': 'evil' } });
+    assert.equal(under.status, 404);
+    assert.equal(w.upstream.seen.length, seenBefore, 'the upstream was not asked');
+    // The response came, then the upstream streams on without end: the executor has what it needs and closes the stream to the upstream.
+    const abortedBefore = w.upstream.aborted;
+    const endless = await call(w, 'alpha', 'odd', { how: 'answer-then-endless' }, { id: 'd-1' });
+    assert.equal(endless.json.result.content[0].text, 'done');
+    await until(() => w.upstream.aborted > abortedBefore, { timeout: 2000 });
+    // The response and a notification after it arrived in one chunk: the agent gets the response as the final event and nothing after it.
+    const after = await call(w, 'alpha', 'odd', { how: 'after' }, { id: 'd-2' });
+    assert.equal(after.json.id, 'd-2');
+    assert.equal(after.events.length, 1, 'the response alone');
+    assert.ok(!after.body.includes('after the answer'));
+    assert.ok(after.rawEvents[0].startsWith('id: ev-1\n'), 'the event that carried the outcome keeps its id line');
+    // Two responses in one chunk: the first is the outcome, and the final event the agent gets carries the first's id line, not the second's.
+    const twice = await call(w, 'alpha', 'odd', { how: 'twice' }, { id: 'd-2b' });
+    assert.equal(twice.json.result.content[0].text, 'first');
+    assert.ok(twice.rawEvents.at(-1).startsWith('id: ev-1\n'), `the final event keeps the id of the event that carried the outcome: ${twice.rawEvents.at(-1).split('\n')[0]}`);
+    // A JSON answer cut short of its declared length is no outcome.
+    const short = await call(w, 'alpha', 'odd', { how: 'short' }, { id: 'd-3' });
+    assert.equal(short.json.error.code, 1002);
+    assert.match(short.json.error.message, /before its answer was complete/);
+    const stubs = stubsOf(await bookOf(w, 'alpha'));
+    assert.equal(stubs.length, 4);
+    assert.ok(docs(stubs[0])[RESULT_DOCUMENT] && docs(stubs[1])[RESULT_DOCUMENT] && docs(stubs[2])[RESULT_DOCUMENT] && docs(stubs[3])['provared.error']);
   } finally {
     await w.close();
   }
