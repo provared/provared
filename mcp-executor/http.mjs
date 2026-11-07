@@ -28,6 +28,8 @@ import { CODES, MAX_LINE_BYTES, idKey, isId, readMessage, responseText, spliceId
 export const BODY_LIMIT = 10 * 1024 * 1024;
 /** The most one answer of the upstream may be (a JSON body, or one event of a stream): 16 MiB, as one line of a stdio server. */
 export const ANSWER_LIMIT = MAX_LINE_BYTES;
+/** The most the executor holds for an agent that is not reading its stream (res.writableLength): one answer's worth. Past it the exchange is cut. The upstream is paused as soon as the agent's connection takes no more, so this is reached only where one event is itself over the limit in bytes. */
+export const BACKLOG_LIMIT = ANSWER_LIMIT;
 /** The most sessions the executor remembers; past it the oldest is forgotten, and its agent begins a new one. */
 export const MAX_SESSIONS = 10000;
 /** The most requests of one agent in flight at once, of every kind; tool calls are also bounded by maxWaiting. */
@@ -377,9 +379,37 @@ export async function openHttpExecutor(config, more = {}) {
     let timer = null;
     let req = null;
     let streaming = false;
-    /** Write to the agent, unless it has gone. */
+    /** The upstream's response, once it has come: paused while the agent is not reading. */
+    let up_ = null;
+    let stallTimer = null;
+    let done;
+    const end = new Promise((d) => {
+      done = d;
+    });
+    const finishAnd = (f) => (...a) => {
+      f(...a);
+      done();
+    };
+    /** The agent is not taking what the upstream sends: the exchange is cut, since it would otherwise hold memory and a slot for ever. */
+    const stalled = (why) => {
+      agent.log({ event: 'agent-not-reading', kind, held: res.writableLength, reason: why });
+      req?.destroy();
+      fail_(502, `The agent did not read what the executor sent it (${why}), so the exchange with the upstream was cut.`);
+      res.destroy();
+    };
+    /** Write to the agent, unless it has gone. Where the agent's connection takes no more, the upstream is paused until it drains; an agent that drains nothing within the timeout, or that holds more than the limit, is cut off. */
     const toAgent = (text) => {
-      if (!res.destroyed && !res.writableEnded) res.write(text);
+      if (res.destroyed || res.writableEnded || finished) return;
+      if (res.writableLength > BACKLOG_LIMIT) return stalled(`more than ${BACKLOG_LIMIT} bytes waiting`);
+      if (res.write(text) || !up_ || stallTimer) return;
+      up_.pause();
+      stallTimer = setTimeout(() => stalled(`nothing read for ${settings.timeout} ms`), settings.timeout);
+      stallTimer.unref();
+      res.once('drain', () => {
+        clearTimeout(stallTimer);
+        stallTimer = null;
+        if (!finished) up_.resume();
+      });
     };
     const endAgent = () => {
       if (!res.destroyed && !res.writableEnded) res.end();
@@ -388,6 +418,7 @@ export async function openHttpExecutor(config, more = {}) {
       if (finished) return;
       finished = true;
       if (timer) clearTimeout(timer);
+      if (stallTimer) clearTimeout(stallTimer);
       ctx.upstream = null;
     };
     /** The outcome of a call, once. */
@@ -403,12 +434,8 @@ export async function openHttpExecutor(config, more = {}) {
       if (streaming) return endAgent();
       refuse(res, status, kind === 'request' ? clientId : null, CODES.noAnswer, text);
     };
-    const end = new Promise((done) => {
-      const finishAnd = (f) => (...a) => {
-        f(...a);
-        done();
-      };
-      const fail_ = finishAnd(fail);
+    const fail_ = finishAnd(fail);
+    (() => {
       try {
         // The length is of the body as sent (the executor's id spliced in), never of the agent's text.
         req = lib.request(upstream, { method, headers: body === undefined ? headers : { ...headers, 'content-length': Buffer.byteLength(body) }, agent: false });
@@ -429,6 +456,7 @@ export async function openHttpExecutor(config, more = {}) {
         fail_(502, `The message to the upstream failed before a whole answer came (${e.code ?? 'error'}).`);
       });
       req.on('response', (up) => {
+        up_ = up;
         const status = up.statusCode ?? 0;
         const type = String(up.headers['content-type'] ?? '').toLowerCase();
         const returned = {};
@@ -568,7 +596,7 @@ export async function openHttpExecutor(config, more = {}) {
       });
       if (body !== undefined) req.end(body);
       else req.end();
-    });
+    })();
     return {
       end,
       /** Close the stream to the upstream: the transport's cancellation. */
