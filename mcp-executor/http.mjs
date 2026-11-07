@@ -55,6 +55,8 @@ const SESSION_ID = /^[\x21-\x7e]{1,512}$/;
 const PROTOCOL_VERSION_META = 'io.modelcontextprotocol/protocolVersion';
 /** The member of params that Mcp-Name mirrors, for each method that has one, as the 2026-07-28 revision's table of standard request headers says (X110). */
 const MIRRORED_NAME = new Map([['tools/call', 'name'], ['prompts/get', 'name'], ['resources/read', 'uri']]);
+/** A number as JSON writes one (RFC 8259): no hexadecimal, no space, no "Infinity", none of what Number() would take besides. */
+const JSON_NUMBER = /^(-?)(0|[1-9][0-9]*)(?:\.([0-9]+))?(?:[eE]([+-]?[0-9]+))?$/;
 
 /** SHA-256 of a secret, in base64url: the form the settings hold (the same as the gateway's). */
 export function secretHash(secret) {
@@ -337,6 +339,22 @@ export async function openHttpExecutor(config, more = {}) {
       return null;
     }
   };
+  /**
+   * A number's exact value as text, one text however it is written (42, 42.0
+   * and 4.2e1 alike), or null where the text is not a number in JSON's form.
+   * Exact, where Number() would round: a header that differs from the body
+   * only past what a double holds must not pass as equal to it (X110).
+   */
+  const exactNumber = (text) => {
+    const m = JSON_NUMBER.exec(text);
+    if (!m) return null;
+    const [, sign, whole, fraction = '', exponent = '0'] = m;
+    const digits = (whole + fraction).replace(/^0+/, '');
+    let end = digits.length;
+    while (end > 0 && digits[end - 1] === '0') end -= 1;
+    if (end === 0) return '0';
+    return `${sign}${digits.slice(0, end)}e${Number(exponent) - fraction.length + digits.length - end}`;
+  };
   /** The instance value at the exact property path in the call's arguments, or undefined. */
   const argumentAt = (args, path) => {
     let at = args;
@@ -435,7 +453,8 @@ export async function openHttpExecutor(config, more = {}) {
         const path = annotations.get(message.params.name)?.get(param);
         if (!path) return { problem: `The header ${name} names no argument of the tool "${message.params.name}" that the upstream's tools/list annotates with x-mcp-header, so the executor cannot check it against the body.` };
         const value = argumentAt(message.params.arguments, path);
-        const agrees = typeof value === 'string' ? value === given : ((typeof value === 'number' || typeof value === 'boolean') && String(value) === given);
+        const number = typeof value === 'number' ? exactNumber(String(value)) : null;
+        const agrees = typeof value === 'string' ? value === given : (typeof value === 'boolean' ? String(value) === given : number !== null && number === exactNumber(given));
         if (!agrees) return { problem: `The header ${name} does not agree with the body's arguments at ${path.join('.')}.` };
       }
       headers[name] = values[0];

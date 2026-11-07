@@ -65,7 +65,10 @@
   `params.name` on a `tools/call` or `prompts/get`, as the specification's
   table says; on any other method it is refused with 400 and -32020, as a
   message with no such field always was, where a `params.name` that agreed
-  used to pass (X110).
+  used to pass (X110). An `Mcp-Param-*` header against a number in the body
+  is compared as a number, exactly and only in JSON's form of a number, so
+  `42.0` agrees with 42, which it did not, and `0x2A`, an empty value and
+  `Infinity` do not (X110).
 
 ## 0.8.0 (1 November 2026)
 

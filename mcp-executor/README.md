@@ -155,7 +155,9 @@ What the executor does with each request:
   argument at the
   property of the tool's `inputSchema` that the upstream's `tools/list`
   annotated `x-mcp-header: <name>` (a value wrapped as `=?base64?…?=` is
-  decoded before comparing). Every other header is dropped, and the names
+  decoded before comparing, and a number in the body is compared as a
+  number with a header in JSON's form of one, so `42.0` agrees with 42 and
+  `0x2A` does not). Every other header is dropped, and the names
   of the dropped ones are logged. A mirrored header that does not agree
   with the body, or that the executor cannot check (no `tools/list` seen
   yet, no such annotation, a GET or a response, an `Mcp-Name` on any other

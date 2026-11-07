@@ -1567,8 +1567,18 @@ tools/call, resources/read, prompts/get requests |", with
 1,000 tools, 64 headers each, properties nested up to 8 deep), and an
 `Mcp-Param-<name>` goes on only where the message is a `tools/call`, the
 tool's annotations name `<name>` (case not counted), and the argument at
-the annotated path is text equal to the decoded header, or a number or
-boolean whose text is; `Mcp-Method` only where it is the body's `method`;
+the annotated path is text equal to the decoded header, a boolean whose
+text is, or a number equal to it as a number, since "servers SHOULD compare
+the header value and the body value numerically rather than as strings
+(e.g., 42.0 and 42 are considered equal)". A header can equal a number only
+in the form JSON writes one (RFC 8259): not `0x2A`, an empty value,
+`Infinity` or anything with a space, all of which `Number()` would take or
+make something of, and not `042` or `+42`. An exponent is allowed, since
+that is how a large number's text reads (`1e+21`, which passed as text
+before). The comparison is of the exact decimal value, not of doubles, so
+that `42.00000000000000000001`, which rounds to 42, is refused; the body's
+number is compared as `JSON.parse` read it, so a body number with more
+digits than a double holds is compared after that rounding. `Mcp-Method` only where it is the body's `method`;
 `Mcp-Name` only where it is, as text, the body's `params.uri` on a
 `resources/read`, or its `params.name` on a `tools/call` or `prompts/get`.
 Anything else (no annotation seen, a disagreement, a GET or DELETE, a

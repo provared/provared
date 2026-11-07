@@ -742,6 +742,42 @@ test('Mcp-Name mirrors params.uri on resources/read and params.name on tools/cal
   }
 });
 
+test('Mcp-Param-* against a number in the body is compared as a number, and only a header in JSON\'s form of a number can agree', async () => {
+  const w = await httpWorld();
+  try {
+    await request(w, 'alpha', 'tools/list', { _meta: META });
+    const withCount = (count, value) => call(w, 'alpha', 'echo', { count }, { headers: { 'mcp-param-count': value } });
+    // Equal as numbers: goes on, as the agent sent it.
+    const base64 = (text) => `=?base64?${Buffer.from(text).toString('base64')}?=`;
+    for (const [count, value] of [[42, '42'], [42, '42.0'], [42.0, '42.000'], [42, '4.2e1'], [42, '420E-1'], [42, base64('42.0')], [0, '0.0'], [0, '-0'], [-5, '-5.0'], [0.1, '0.10'], [1e21, '1e+21'], [1e21, '1000000000000000000000']]) {
+      const passed = await withCount(count, value);
+      assert.equal(passed.status, 200, `${value} is ${count}`);
+      assert.equal(passed.json.result.structuredContent.headers['mcp-param-count'], value);
+    }
+    const sent = seenCalls(w).length;
+    // Not equal, or not a number in that form, whatever Number() would make of it. Whitespace can only arrive in the Base64 form: HTTP strips it from a plain header.
+    for (const value of ['43', '0x2A', '0b101010', '0o52', '', 'Infinity', '+42', '042', '42.', '.42e2', '42e', 'NaN', base64(' 42'), base64('42\n'), base64(''), '42.00000000000000000001', '41.99999999999999999999']) {
+      const refused = await withCount(42, value);
+      assert.equal(refused.status, 400, `"${value}" is not 42`);
+      assert.equal(refused.json.error.code, -32020);
+      assert.match(refused.json.error.message, /does not agree with the body's arguments at count/);
+    }
+    assert.equal((await withCount(0.1, '0.1000000000000000001')).status, 400, 'equal to 0.1 only once rounded to a double');
+    // A body number that JSON.parse reads as Infinity is no number to agree with.
+    for (const value of ['Infinity', '1e400']) {
+      const huge = await post(w, 'alpha', null, { raw: `{"jsonrpc":"2.0","id":"huge","method":"tools/call","params":{"name":"echo","arguments":{"count":1e400},"_meta":${JSON.stringify(META)}}}`, headers: { 'mcp-param-count': value } });
+      assert.equal(huge.status, 400, `${value} against 1e400`);
+    }
+    // A string in the body is compared as text, and a boolean by its text, as before.
+    assert.equal((await call(w, 'alpha', 'echo', { region: '42' }, { headers: { 'mcp-param-region': '42.0' } })).status, 400);
+    assert.equal((await withCount(true, '1')).status, 400);
+    assert.equal(seenCalls(w).length, sent, 'none of it reached the upstream');
+    assert.equal((await withCount(true, 'true')).status, 200);
+  } finally {
+    await w.close();
+  }
+});
+
 test('an upstream that refuses a call with a non-2xx status and a JSON-RPC error under the call\'s id (the specification\'s way: 400 with HeaderMismatch or UnsupportedProtocolVersion, 404 with -32601): the error is the outcome, relayed scrubbed under the agent\'s id with the status; a non-2xx without such a body stays "not known"', async () => {
   const w = await httpWorld();
   try {
