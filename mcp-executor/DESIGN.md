@@ -1609,8 +1609,11 @@ as on stdio, so the agent's MCP library reads it as a response; a body
 that cannot be read as one message is 400 with a JSON-RPC error (the id
 where one was read, else null); the transport's own refusals are 401 (not
 signed in), 403 (`Origin`), 404 (the path, a session), 405 (a method other
-than POST, GET or DELETE), 413 (the body), 415 (not `application/json`),
-503 (too many in flight), each with a JSON-RPC error body and id null;
+than POST, GET or DELETE), 408 (a body not whole within `timeout`), 413
+(the body), 415 (not `application/json`), 503 (too many in flight, or the
+executor stopping), each with a JSON-RPC error body and id null; a
+mirrored header that disagrees with the body or cannot be checked is 400
+with -32020 (X110);
 an upstream failure on a request that is not a call is 502 or 504 with the
 same. A duplicate id is counted for each agent (on stdio, for the one
 session), so two concurrent calls of one agent under one id are refused
