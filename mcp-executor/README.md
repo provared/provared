@@ -3,8 +3,8 @@
 **This is the executor's record of what an agent asked for through it, and
 what the executor did with each call. It proves nothing about calls that do
 not go through it.** It counts only if the agent has no other way to the
-tool servers behind it: take the servers' credentials away from the agent,
-so that the executor alone holds them.
+tool server behind it: take the server's credential away from the agent,
+so that the executor alone holds it.
 
 An **executor**, in the words of the Internet-Draft
 [draft-izmaylov-agent-permission-receipts](https://datatracker.ietf.org/doc/draft-izmaylov-agent-permission-receipts/),
@@ -58,7 +58,7 @@ npm install -g provared-mcp-executor
 ```
 
 Or from a copy of the repository: in `mcp-executor`, `npm pack`, then
-`npm install -g ./provared-mcp-executor-0.2.0.tgz`.
+`npm install -g ./provared-mcp-executor-0.3.0.tgz`.
 
 It needs Node.js 24.7 or later, and depends only on the `provared` library,
 at version 0.7.0 or a later 0.7 version (`^0.7.0`): its receipts name
