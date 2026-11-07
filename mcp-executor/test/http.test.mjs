@@ -349,9 +349,11 @@ test('attack: an upstream that answers with another id, answers twice, drops the
     assert.equal(otherSse.json.error.code, 1002);
     assert.match(otherSse.json.error.message, /ended the stream before it answered/);
     const twice = await call(w, 'alpha', 'odd', { how: 'twice' }, { id: 'o-3' });
-    const answers = twice.events.filter((e) => e.id === 'o-3');
+    const answers = twice.events.filter((e) => e && typeof e === 'object' && Object.hasOwn(e, 'result'));
     assert.equal(answers.length, 1, 'one response for the call, not two');
+    assert.equal(answers[0].id, 'o-3');
     assert.equal(answers[0].result.content[0].text, 'first');
+    assert.ok(!twice.body.includes('provared-'), 'no message under the executor\'s own id reaches the agent');
     const drop = await call(w, 'alpha', 'odd', { how: 'drop' }, { id: 'o-4' });
     assert.equal(drop.events[0].method, 'notifications/progress');
     assert.equal(drop.json.error.code, 1002);
