@@ -79,7 +79,10 @@
   and `Mcp-Param-*` are never generated. The 503 to a new request during a
   stop has a test that fails without it. The redundant `up.complete` check
   is gone: a short body ends in the `error` and `aborted` handlers, never
-  at `end`. X113 says how narrowly `BACKLOG_LIMIT` can be reached.
+  at `end`. X113 says how narrowly `BACKLOG_LIMIT` can be reached. The
+  README and section 10 state a limit that was not stated: a JSON answer
+  nobody reads is held after its slot is freed, up to 16 MiB for each
+  connection, until the connection closes.
 
 ## 0.8.0 (1 November 2026)
 

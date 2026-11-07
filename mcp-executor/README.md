@@ -209,7 +209,10 @@ What the executor does with each request:
   exchange cut, the upstream's stream having been paused meanwhile rather
   than buffered, and a very slow reader can be cut too, since the clock
   stops only when all that is waiting has gone; each agent may have 256 requests in flight and 1,000 sessions
-  remembered, its own oldest forgotten first.
+  remembered, its own oldest forgotten first. A JSON answer the agent does
+  not read is still held after its place among the 256 is freed, up to
+  16 MiB for each connection, until that connection closes; the executor
+  does not limit the number of connections.
 - A stop on request (SIGINT, SIGTERM) with a call in flight settles the
   call as the executor's stop ("The executor stopped while this call was
   with the tool server, so its outcome is not known."), writes its receipt,

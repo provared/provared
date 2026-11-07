@@ -393,7 +393,10 @@ JSON body or one event up to 16 MiB, as a line on stdio; the executor's
 `timeout` on every POST exchange; 256 requests of one agent in flight at
 once, beside `maxWaiting` for its calls; an `Origin` refused unless the
 settings allow it, and the local address listened on unless they say
-otherwise (X109). A stop on request with a call in flight settles the call
+otherwise (X109). A JSON answer nobody reads is held after its place among
+the 256 is freed, up to 16 MiB for each connection (`ANSWER_LIMIT`), until
+that connection closes: the exchange has ended, so neither `timeout` nor
+X113 reaches it, and the number of connections is not limited. A stop on request with a call in flight settles the call
 as the executor's stop, writes its receipt and answers the agent before the
 connections close (X115); a stop without warning, followed by a start,
 writes the receipt from the agent's copy before the executor listens
