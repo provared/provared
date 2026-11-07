@@ -161,7 +161,12 @@ What the executor does with each request:
   events forwarded one by one as they arrive. The response under the call's
   id is the outcome and ends the call; a response under another id is never
   taken as the outcome. The stream to the upstream is closed once the
-  outcome is in.
+  outcome is in. An upstream that refuses a call with a 4xx status and a
+  JSON-RPC error under the call's id (the specification's way: 400 for a
+  header mismatch or an unsupported protocol version, 404 for a method it
+  does not have) has that error recorded as the outcome and relayed, with
+  its status, under the agent's id; a non-2xx with no such body is
+  recorded as "outcome not known", and its body is not relayed.
 - Legacy sessions pass through: the `Mcp-Session-Id` the upstream gives
   comes back as it is, the GET stream of server messages and `initialize`
   pass through, and a session belongs to the agent that opened it. Another

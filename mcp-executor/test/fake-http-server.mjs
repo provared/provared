@@ -201,7 +201,7 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
           return res.end(`broken ${req.headers.authorization}`);
         }
         // A refusal the specification makes normal: a non-2xx status with a JSON-RPC error under the call's id.
-        if (how === 'status-json') return json(res, args.status ?? 400, { jsonrpc: '2.0', id, error: { code: args.code ?? -32022, message: `Refused by the server ${req.headers.authorization}`, data: { supported: ['2025-11-25'] } } });
+        if (how === 'status-json') return json(res, args.status ?? 400, { jsonrpc: '2.0', id: args.otherId ? 'someone-else' : id, ...(args.result ? { result: { content: [] } } : { error: { code: args.code ?? -32022, message: `Refused by the server ${req.headers.authorization}`, data: { supported: ['2025-11-25'] } } }) });
         if (how === 'after') {
           // The response and a notification after it, in one write: nothing after the response should reach the agent.
           const send = sse(res);

@@ -1459,7 +1459,9 @@ executor]"; a 401 or 403 from the upstream is answered as the executor's
 own error ("The upstream refused the executor's credential") with none of
 its headers or body; a 3xx is never followed and never relayed, since a
 redirection would carry the token elsewhere; a non-2xx answer to a call is
-an outcome of its own, body not relayed. A token shorter than 16 characters
+relayed, scrubbed, only where its body is a JSON-RPC error under the call's
+id (X116), and is otherwise an outcome of its own, body not relayed. A
+token shorter than 16 characters
 gets a warning, since text that happens to hold it would be replaced too.
 Why: the brief says the credential must reach the agent in no header,
 body, error or log, and an upstream that echoes its bearer token in a
@@ -1478,8 +1480,9 @@ passes to the agent as it was, including a response under another id
 (X5); a JSON body under another id, or that is not a message, ends the
 call at once with "not its response", since no further answer can come on
 that exchange, where stdio waits for the timeout. A stream that ends
-without the response, a dropped connection and a non-2xx status are
-outcomes of "no answer" (1002) with a receipt naming `provared.error`. A
+without the response, a dropped connection and a non-2xx status without a
+JSON-RPC error under the call's id (X116) are outcomes of "no answer"
+(1002) with a receipt naming `provared.error`. A
 response that cannot be read strictly but whose top-level id is the call's
 is handed to the agent as it was, with the receipt of `UNREADABLE_ANSWER`,
 as on stdio. The event that carried the outcome keeps its other lines
@@ -1621,3 +1624,19 @@ is tested as a separate process; on Windows, which delivers no signal to a
 child, a wrapper (`test/signal-wrapper.mjs`) raises the signal named over
 an IPC channel, and the command's own handlers run. The other way: settle
 with `OUTCOME_UNKNOWN` as the review suggested, for one text to recognise.
+
+**X116. A non-2xx answer to a call is an outcome where its body is a
+JSON-RPC error under the call's id.** The specification makes 400 with
+`UnsupportedProtocolVersionError` or `HeaderMismatch`, and 404 with -32601,
+the normal way a server refuses, and tells the client to "inspect the
+response body before falling back". So such a body is read whole, and where
+it is a response under the executor's id with an `error` member, that error
+is the outcome (`server-error`, the receipt naming it) and goes to the agent
+scrubbed, under its id, with the upstream's status, as a 200 body does. A
+non-2xx whose body is not that (no body, another id, unreadable, or a
+`result` under a refusing status) stays "outcome not known" with the body
+not relayed; 401 and 403 stay the executor's own problem, nothing relayed;
+a 3xx is never followed. Why: before this every 4xx was "outcome not
+known", which hid the server's own reason from the record and the agent.
+The other way: take a `result` under a 4xx as an answer, which the
+specification gives no meaning.

@@ -490,11 +490,8 @@ export async function openHttpExecutor(config, more = {}) {
           agent.log({ event: 'upstream-refused-credential', status });
           return fail_(502, `The upstream refused the executor's credential (HTTP ${status}).`);
         }
-        if (kind === 'call' && (status < 200 || status >= 300)) {
-          req.destroy();
-          return fail_(502, `The upstream answered HTTP ${status} to this call, so its outcome is not known.`);
-        }
-        if (type.startsWith('text/event-stream')) {
+        // A call's answer on a non-2xx status is read whole: the specification refuses with a 4xx and a JSON-RPC error under the id (X116).
+        if (type.startsWith('text/event-stream') && (kind !== 'call' || (status >= 200 && status < 300))) {
           // Each event goes on as it arrives; the one that answers under the executor's id is taken.
           streaming = true;
           ctx.streaming = true;
@@ -589,9 +586,17 @@ export async function openHttpExecutor(config, more = {}) {
           const m = read.refused ? null : read.message;
           const foundId = read.refused ? (text === null ? undefined : topLevelId(text)?.value) : m?.id;
           if (kind === 'call') {
+            const ok = status >= 200 && status < 300;
             if (foundId !== serverId) {
               agent.log({ event: 'upstream-other-id', id: typeof foundId === 'string' ? foundId.slice(0, 80) : (foundId ?? null) });
-              return done(outcome({ kind: 'error', text: 'The upstream answered this call with a message that is not its response (another id, or no message), so its outcome is not known.', code: CODES.noAnswer }));
+              return done(outcome({ kind: 'error', text: ok ? 'The upstream answered this call with a message that is not its response (another id, or no message), so its outcome is not known.' : `The upstream answered HTTP ${status} to this call with no response under its id, so its outcome is not known.`, code: CODES.noAnswer }));
+            }
+            if (!ok) {
+              // The specification's way of refusing: a 4xx with a JSON-RPC error under the call's id. That error is the outcome, relayed with its status; anything else on a non-2xx is no outcome.
+              if (read.refused || read.kind !== 'response' || !Object.hasOwn(m, 'error')) return done(outcome({ kind: 'error', text: `The upstream answered HTTP ${status} to this call without a JSON-RPC error under its id, so its outcome is not known.`, code: CODES.noAnswer }));
+              agent.log({ event: 'upstream-refused-call', status, code: typeof m.error.code === 'number' ? m.error.code : null });
+              ctx.answerStatus = status;
+              return done(outcome({ kind: 'server-error', text: read.text, errorText: `The tool server answered with an error: ${JSON.stringify(m.error)}` }));
             }
             if (read.refused) return done(outcome({ kind: 'unreadable', text, errorText: null }));
             if (read.kind !== 'response') return done(outcome({ kind: 'error', text: 'The upstream answered this call with a message that is not a response, so its outcome is not known.', code: CODES.noAnswer }));
@@ -751,7 +756,7 @@ export async function openHttpExecutor(config, more = {}) {
               if (!res.writableEnded && !res.destroyed) res.end(scrub(sseEvent(ctx.finalEvent ?? [], text)));
               return;
             }
-            json(res, 200, scrub(text));
+            json(res, ctx.answerStatus ?? 200, scrub(text));
           },
           unavailable: () => (stopping ? 'The executor is stopping, so this call was not sent.' : null),
           send: (call, forwarded) => {

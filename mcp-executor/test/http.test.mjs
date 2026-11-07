@@ -668,3 +668,35 @@ test('a stop with a call in flight and another waiting its turn: the sent call i
     await w.close();
   }
 });
+
+test('an upstream that refuses a call with a non-2xx status and a JSON-RPC error under the call\'s id (the specification\'s way: 400 with HeaderMismatch or UnsupportedProtocolVersion, 404 with -32601): the error is the outcome, relayed scrubbed under the agent\'s id with the status; a non-2xx without such a body stays "not known"', async () => {
+  const w = await httpWorld();
+  try {
+    const r400 = await call(w, 'alpha', 'odd', { how: 'status-json', status: 400, code: -32022 }, { id: 'v-1' });
+    assert.equal(r400.status, 400, 'the status comes back as it was');
+    assert.equal(r400.json.id, 'v-1');
+    assert.equal(r400.json.error.code, -32022);
+    assert.ok(!r400.body.includes(TOKEN) && r400.body.includes(CREDENTIAL_REMOVED), 'scrubbed as a 200 body is');
+    const r404 = await call(w, 'alpha', 'odd', { how: 'status-json', status: 404, code: -32601 }, { id: 'v-2' });
+    assert.equal(r404.status, 404);
+    assert.equal(r404.json.error.code, -32601);
+    assert.equal(w.logs.filter((e) => e.event === 'taken' && e.outcome === 'server-error').length, 2, 'each is a server-error outcome');
+    // The same status with no response under the call's id, or with a result rather than an error: no outcome can be read from it.
+    const other = await call(w, 'alpha', 'odd', { how: 'status-json', status: 400, otherId: true }, { id: 'v-3' });
+    assert.equal(other.status, 200);
+    assert.equal(other.json.error.code, 1002);
+    assert.match(other.json.error.message, /HTTP 400 to this call with no response under its id/);
+    const result = await call(w, 'alpha', 'odd', { how: 'status-json', status: 400, result: true }, { id: 'v-4' });
+    assert.equal(result.json.error.code, 1002);
+    assert.match(result.json.error.message, /HTTP 400 to this call without a JSON-RPC error/);
+    const stubs = stubsOf(await bookOf(w, 'alpha'));
+    assert.equal(stubs.length, 4, 'every call that was sent has its receipt');
+    const refusal = (code) => `The tool server answered with an error: ${JSON.stringify({ code, message: `Refused by the server Bearer ${TOKEN}`, data: { supported: ['2025-11-25'] } })}`;
+    assert.equal(docs(stubs[0])['provared.error'], await identifierFingerprint(refusal(-32022)), 'the receipt names the server\'s error');
+    assert.equal(docs(stubs[1])['provared.error'], await identifierFingerprint(refusal(-32601)));
+    assert.ok(docs(stubs[2])['provared.error'] && docs(stubs[3])['provared.error']);
+    assert.ok(w.logs.some((e) => e.event === 'upstream-refused-call' && e.status === 400 && e.code === -32022));
+  } finally {
+    await w.close();
+  }
+});
