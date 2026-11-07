@@ -868,3 +868,36 @@ test('defences on the upstream\'s side, each with what it changes: a session id 
     await w.close();
   }
 });
+
+test('the four headers that come back from the upstream are scrubbed as a body is: a session id that holds the token reaches the agent with the token replaced', async () => {
+  const w = await httpWorld();
+  try {
+    const r = await request(w, 'alpha', 'with-session', { session: `abc${TOKEN}def` });
+    assert.equal(r.status, 200);
+    const session = r.headers.get('mcp-session-id');
+    assert.ok(session && !session.includes(TOKEN) && session.includes(CREDENTIAL_REMOVED), `the header as the agent got it: ${session}`);
+  } finally {
+    await w.close();
+  }
+});
+
+test('a body that never finishes: an authenticated POST that stops sending is refused (408) once the timeout passes, its connection closed and its slot freed; a GET stream outlives the timeout', async () => {
+  const w = await httpWorld({ config: { timeout: 1000 } });
+  try {
+    const a = w.executor.agent('alpha');
+    const held = await partialBody(w, 'alpha', { declared: 1000, part: '{"jsonrpc":', wait: 3000 });
+    assert.equal(held.status, 408);
+    await until(() => a.open() === 0);
+    assert.ok(w.logs.some((e) => e.event === 'refused' && e.code === 'body-timeout'));
+    // The GET stream of server messages has no such limit.
+    const s = await rawRequest(w, { method: 'GET', headers: { accept: 'text/event-stream', ...auth(w, 'alpha') }, stream: true });
+    await new Promise((d) => s.res.once('data', d));
+    await pause(1500);
+    assert.equal(a.open(), 1, 'the stream is still open after the timeout');
+    assert.ok(!s.res.destroyed);
+    s.res.destroy();
+    await until(() => a.open() === 0);
+  } finally {
+    await w.close();
+  }
+});

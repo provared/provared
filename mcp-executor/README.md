@@ -194,9 +194,14 @@ What the executor does with each request:
   call running, bounded by `timeout`, and its real outcome is recorded.
 - A request that names an `Origin` is refused (403) unless
   `allowedOrigins` lists it; a body over `bodyLimit` (10 MiB) is refused
-  (413); an answer or an event of the upstream over 16 MiB is cut off; a
+  (413), and one that does not arrive whole within `timeout` is refused
+  (408); an answer or an event of the upstream over 16 MiB is cut off; a
   call the upstream does not answer within `timeout` is cancelled and gets
-  a receipt that says its outcome is not known.
+  a receipt that says its outcome is not known; an agent that reads
+  nothing of what the executor sends it for `timeout` has that exchange
+  cut, the upstream's stream having been paused meanwhile rather than
+  buffered; each agent may have 256 requests in flight and 1,000 sessions
+  remembered, its own oldest forgotten first.
 - A stop on request (SIGINT, SIGTERM) with a call in flight settles the
   call as the executor's stop ("The executor stopped while this call was
   with the tool server, so its outcome is not known."), writes its receipt,
@@ -208,13 +213,15 @@ What the executor does with each request:
 **When the credential is kept from the agent, and when it is not.** The
 upstream's token never goes to an agent in a header, a body, an error or a
 log: the executor forwards none of the upstream's headers but the four
-named, relays nothing of an upstream answer that refuses the token (401 or
-403; the agent is told the executor's credential was refused, and no more),
-never follows a redirection, and replaces the token's text wherever it
-occurs in anything it sends an agent (a tool result that echoes it, an
-error text, an event) with the words "[a credential was removed by the
-Provared executor]". That holds for the token as it is in the file; a token
-the upstream encodes or splits before echoing it is not seen. It holds only
+named, and those with the token's text replaced too; relays nothing of an
+upstream answer that refuses the token (401 or 403; the agent is told the
+executor's credential was refused, and no more); never follows a
+redirection; and replaces the token's text wherever it occurs in anything
+it sends an agent (a tool result that echoes it, an error text, an event, a
+header) with the words "[a credential was removed by the Provared
+executor]". That holds for the token as it is in the file; a token the
+upstream encodes or splits before echoing it is not seen, and JSON's own
+escaping of a `/`, `"` or `\` in the token counts as encoding. It holds only
 for what passes through the executor: an agent that can reach the upstream
 by another way, or read the executor's files, has the token. And the
 agents' secrets are only as safe as the connection they travel on: the

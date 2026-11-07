@@ -541,7 +541,8 @@ export async function openHttpExecutor(config, more = {}) {
         const status = up.statusCode ?? 0;
         const type = String(up.headers['content-type'] ?? '').toLowerCase();
         const returned = {};
-        for (const name of RETURNED_HEADERS) if (up.headers[name] !== undefined && typeof up.headers[name] === 'string') returned[name] = up.headers[name];
+        // The few headers that come back are scrubbed as a body is: a header is a way to carry a token too.
+        for (const name of RETURNED_HEADERS) if (up.headers[name] !== undefined && typeof up.headers[name] === 'string') returned[name] = scrub(up.headers[name]);
         const sessionId = up.headers['mcp-session-id'];
         if (typeof sessionId === 'string' && SESSION_ID.test(sessionId) && status < 300) ownSession(sessionId, agent);
         // Never followed: a redirection would carry the credential elsewhere. And the upstream's refusal of the executor's credential is the executor's problem, not the agent's: nothing of it is relayed.
@@ -699,7 +700,13 @@ export async function openHttpExecutor(config, more = {}) {
 
   // --- one request ---
 
-  /** Read the request's body, up to the limit: the bytes, or null where it is too large. */
+  /**
+   * Read the request's body, up to the limit: the bytes, or null where it is
+   * too large. A body that does not arrive whole within the timeout fails
+   * with code BODY_TIMEOUT: the server's own request timeout is off, since a
+   * GET stream or a long answer must not be cut, so the body's reading has
+   * a limit of its own (X119).
+   */
   function readBody(req) {
     const declared = Number(req.headers['content-length']);
     if (Number.isFinite(declared) && declared > settings.bodyLimit) return Promise.resolve(null);
@@ -707,18 +714,25 @@ export async function openHttpExecutor(config, more = {}) {
       const chunks = [];
       let size = 0;
       let over = false;
+      const timer = setTimeout(() => failed(Object.assign(new Error('The body did not arrive whole in time.'), { code: 'BODY_TIMEOUT' })), settings.timeout);
+      timer.unref();
+      const settle = (f) => (v) => {
+        clearTimeout(timer);
+        f(v);
+      };
       req.on('data', (chunk) => {
         if (over) return;
         size += chunk.length;
         if (size > settings.bodyLimit) {
           over = true;
           chunks.length = 0;
-          return done(null);
+          return settle(done)(null);
         }
         chunks.push(chunk);
       });
-      req.on('end', () => done(over ? null : Buffer.concat(chunks)));
-      req.on('error', failed);
+      req.on('end', settle(() => done(over ? null : Buffer.concat(chunks))));
+      req.on('error', settle(failed));
+      req.on('close', settle(() => failed(Object.assign(new Error('The connection closed before the body was whole.'), { code: 'BODY_CLOSED' }))));
     });
   }
 
@@ -794,7 +808,13 @@ export async function openHttpExecutor(config, more = {}) {
     let body;
     try {
       body = await readBody(req);
-    } catch {
+    } catch (e) {
+      if (e.code === 'BODY_TIMEOUT') {
+        agent.log({ event: 'refused', code: 'body-timeout' });
+        refuse(res, 408, null, CODES.invalidRequest, `The body did not arrive whole within ${settings.timeout} ms.`, { connection: 'close' });
+        return req.destroy();
+      }
+      if (e.code === 'BODY_CLOSED') return;
       return refuse(res, 400, null, CODES.invalidRequest, 'The body could not be read.');
     }
     if (body === null) {
@@ -932,6 +952,7 @@ export async function openHttpExecutor(config, more = {}) {
     /** Start listening as the settings say (or on "port", for tests). Gives {address, port}. */
     listen({ port = settings.listen.port, host = settings.listen.host } = {}) {
       if (server) throw new Error('The executor is already listening.');
+      // No request timeout of the server's own, which would cut a long GET stream; the headers have a minute, and the body's reading its own limit (readBody).
       server = http.createServer({ requestTimeout: 0, headersTimeout: 60000 }, handle);
       server.on('clientError', (e, socket) => {
         if (socket.writable) socket.end('HTTP/1.1 400 Bad Request\r\nconnection: close\r\n\r\n');

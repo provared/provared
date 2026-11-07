@@ -348,9 +348,9 @@ countersignature, the copy) is the same code, `callCore` in
    credential, a bearer token read from a file, as the gateway does for web
    calls (X105). Headers go on by allow-list (X104). Nothing the upstream
    answers reaches an agent with that token in it: the upstream's headers
-   come back by allow-list, a refusal of the token (401, 403) and a
-   redirection are not relayed, and every byte sent to an agent is checked
-   for the token's text (X105).
+   come back by allow-list and scrubbed, a refusal of the token (401, 403)
+   and a redirection are not relayed, and every byte sent to an agent is
+   checked for the token's text (X105).
 2. **Framing.** A POST carries one message, read as strictly as a line on
    stdio (X4): a batch or a shape that is not a message goes no further. A
    request goes to the upstream under an id of the executor's own, as on
@@ -399,7 +399,8 @@ What it does not do: it speaks plain HTTP, so the agents' secrets and the
 upstream's token are only as safe as the connection (encryption is
 something else's); it binds a session to its agent only while it runs; a
 token the upstream encodes before echoing is not seen by the check of
-X105; and the credential is kept from an agent only for what passes
+X105, and JSON's escaping of a `/`, `"` or `\` in the token counts as
+encoding; and the credential is kept from an agent only for what passes
 through the executor.
 
 ## 11. F-157: rules on the content of a change
@@ -1463,9 +1464,10 @@ lists of credential, address and override headers.
 reaches no agent.** No `env` and no `value` form: the brief names a file,
 and the gateway warns against the others. Without a credential the upstream
 is called with none and the start says so. Every byte to an agent (a JSON
-body, each event of a stream, an error of the executor's own) has the
-token's text replaced with "[a credential was removed by the Provared
-executor]"; a 401 or 403 from the upstream is answered as the executor's
+body, each event of a stream, an error of the executor's own, each of the
+four headers that come back) has the token's text replaced with "[a
+credential was removed by the Provared executor]"; a 401 or 403 from the
+upstream is answered as the executor's
 own error ("The upstream refused the executor's credential") with none of
 its headers or body; a 3xx is never followed and never relayed, since a
 redirection would carry the token elsewhere; a non-2xx answer to a call is
@@ -1476,7 +1478,9 @@ gets a warning, since text that happens to hold it would be replaced too.
 Why: the brief says the credential must reach the agent in no header,
 body, error or log, and an upstream that echoes its bearer token in a
 result is not far-fetched. The limit: a token the upstream encodes or
-splits before echoing is not seen. The other way: trust the upstream.
+splits before echoing is not seen, and JSON's own escaping of a `/`, `"`
+or `\` in the token counts as encoding (the check is on the text as sent,
+not on the decoded value). The other way: trust the upstream.
 
 **X106. Framing.** Each request goes under an id of the executor's own
 (`serverIds`, one maker per executor; on stdio one per session, so that
@@ -1506,9 +1510,10 @@ and in a stream alike (`filteredList`, shared with stdio).
 default as the gateway's, refused with 413 whether declared or not; an
 upstream JSON body, or one event, up to 16 MiB (`ANSWER_LIMIT`, the stdio
 line limit), past which the exchange is cut and a call gets "no answer";
-the executor's `timeout` on every POST exchange (a GET stream of server
-messages is open-ended by nature, bounded by the event limit and by X113,
-which cuts off an agent that reads nothing for `timeout` ms); 256
+the executor's `timeout` on every POST exchange, and on the reading of a
+POST body (X119) (a GET stream of server messages is open-ended by nature,
+bounded by the event limit and by X113, which cuts off an agent that reads
+nothing for `timeout` ms); 256
 requests of one agent in flight at once (`MAX_OPEN`), beside `maxWaiting`
 for its calls, which `callCore` counts for each agent; 1,000 sessions
 remembered for each agent, that agent's oldest forgotten first (X114). Why:
@@ -1694,3 +1699,23 @@ the three headers from the body the rules checked, which would make the
 executor a conforming modern client on the agent's behalf but could not
 know which `Mcp-Param-*` the upstream wants before its `tools/list` is
 seen.
+
+**X118. The four headers that come back from the upstream are scrubbed
+too.** `Content-Type`, `Mcp-Session-Id`, `MCP-Protocol-Version` and
+`Cache-Control` go to the agent with the token's text replaced, as a body
+or an event does. Why: a header is a way to carry a token, and the claim
+that every byte to an agent is checked was wider than the code before this.
+A session id that held the token would come back changed and so be
+unknown to the upstream; the agent then begins a new session, which is the
+right outcome for an upstream that puts its own credential in a session
+id. The other way: narrow the claim.
+
+**X119. The reading of a POST body has a time limit of `timeout` ms.**
+The server's own request timeout stays off, since it would cut a long GET
+stream or a long answer; instead `readBody` fails after `timeout` with 408
+and closes the connection, and a connection that closes mid-body ends the
+reading too, so a half-sent body counts in the agent's requests in flight
+only until then. Why: a review showed an authenticated POST that stopped
+sending staying open for ever and holding a slot. `timeout` again rather
+than a knob of its own (as X113). The other way: Node's `requestTimeout`,
+which does not tell a body from a stream.
