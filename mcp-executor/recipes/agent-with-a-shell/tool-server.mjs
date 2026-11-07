@@ -1,4 +1,4 @@
-// tool-server.mjs: a STAND-IN tool server (not a real one) for the example. Runs in pv3-tools-server. SDK tool server over HTTP requiring a bearer token (read from /secret/token). Logs one line per request to stdout.
+// tool-server.mjs: a STAND-IN tool server (not a real one) for the example. Runs in provared-example-tools-server. SDK tool server over HTTP requiring a bearer token (read from /secret/token). Logs one line per request to stdout.
 import http from 'node:http';
 import { readFileSync } from 'node:fs';
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';

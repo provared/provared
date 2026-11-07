@@ -1,4 +1,4 @@
-// guard-setup.mjs: runs in the guard container (pv3-guard). Makes keys, a slip, settings, the upstream token file and one agent secret. Prints no secret.
+// guard-setup.mjs: runs in the guard container (provared-example-guard). Makes keys, a slip, settings, the upstream token file and one agent secret. Prints no secret.
 // The slip is signed with the library's DEVELOPMENT STAND-IN for a passkey (provared/dev). A real slip is signed by a person with a real passkey.
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
@@ -31,7 +31,7 @@ writeFileSync('/data/out-agent-secret', secret);
 const settings = {
   name: 'Recipe guard', service: 'executor',
   listen: { host: '127.0.0.1', port: 8796 },
-  upstream: { url: 'http://pv3-tools-server:9000/mcp', credential: { file: 'secrets/upstream' } },
+  upstream: { url: 'http://provared-example-tools-server:9000/mcp', credential: { file: 'secrets/upstream' } },
   agents: { alpha: { secretHash: secretHash(secret), slip: 'slips/alpha.json', book: 'books/alpha.jsonl', keys: 'keys/alpha.jwk', issuerKeys: [await thumbprint(passkey.key)], copy: 'copies/alpha.jsonl', copyKey: 'copies/alpha.jsonl.key' } },
   executor: { keys: 'keys/executor.jwk' },
   tools: { allowed_tool: { action: 'allowed.act' }, other_tool: { action: 'other.act' } },

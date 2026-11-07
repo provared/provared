@@ -1,8 +1,8 @@
 #!/bin/sh
 # run.sh: runs the whole example. Needs Docker and the image node:24, and network access for npm.
 # Run it from this folder:  sh run.sh
-# It makes three containers (pv3-guard, pv3-tools-server, pv3-agent) and two networks
-# (pv3-agent, and pv3-tools which is --internal), runs seven checks, prints each as
+# It makes three containers (provared-example-guard, provared-example-tools-server, provared-example-agent) and two networks
+# (provared-example-agent, and provared-example-tools which is --internal), runs seven checks, prints each as
 # PASSED or FAILED, and removes the containers and networks by name, even after a failure.
 # All secrets are made fresh inside the guard container (/data) and are never written
 # to this folder; they go when the container is removed.
@@ -12,8 +12,8 @@ export MSYS_NO_PATHCONV=1   # Git Bash on Windows: do not rewrite /paths given t
 MSYS2_ARG_CONV_EXCL='*'; export MSYS2_ARG_CONV_EXCL
 cd "$(dirname "$0")" || exit 1
 
-G=pv3-guard; S=pv3-tools-server; A=pv3-agent
-NA=pv3-agent; NT=pv3-tools
+G=provared-example-guard; S=provared-example-tools-server; A=provared-example-agent
+NA=provared-example-agent; NT=provared-example-tools
 IMG=node:24
 FAILS=0
 
@@ -81,7 +81,7 @@ step "make keys, a slip, the token, the agent secret and the settings (slip sign
 docker exec "$G" sh -c 'cd /data && node guard-setup.mjs' || die "guard-setup"
 
 step "make the certificate"
-docker exec "$G" sh -c 'mkdir -p /data/tls && openssl req -x509 -newkey rsa:2048 -nodes -keyout /data/tls/key.pem -out /data/tls/cert.pem -days 2 -subj /CN=pv3-guard -addext subjectAltName=DNS:pv3-guard 2>/dev/null' || die "certificate"
+docker exec "$G" sh -c 'mkdir -p /data/tls && openssl req -x509 -newkey rsa:2048 -nodes -keyout /data/tls/key.pem -out /data/tls/cert.pem -days 2 -subj /CN=provared-example-guard -addext subjectAltName=DNS:provared-example-guard 2>/dev/null' || die "certificate"
 
 step "hand each container only what it needs"
 docker exec "$G" cat /data/out-token | docker exec -i "$S" sh -c 'cat > /secret/token' || die "token to tool server"

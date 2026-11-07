@@ -3,7 +3,7 @@ import tls from 'node:tls';
 import { writeFileSync } from 'node:fs';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-const URL_ = process.argv[2] ?? 'https://pv3-guard:8443/mcp';
+const URL_ = process.argv[2] ?? 'https://provared-example-guard:8443/mcp';
 const received = [];
 const show = (l, v) => { const s = JSON.stringify(v); received.push(s); console.log(`[${l}]`, s); };
 // check 1: report the negotiated TLS version with a separate handshake

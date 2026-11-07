@@ -39,9 +39,11 @@ The executor holds the agent's keys and the server's credential. The agent
 holds neither, so it cannot write, change or skip a receipt, as long as it
 cannot read the executor's files: an agent with a shell or file tools that
 runs as the same computer user can read them, and then the copy, the keys
-and the credential are all in its reach. Run the executor under a separate
-user account that the agent cannot use, or give the agent no shell or file
-tools; a tested recipe for this is not written yet. The executor
+and the credential are all in its reach. Run the executor under a separate user account that the agent cannot use,
+or give the agent no shell or file tools. Over HTTP it can also run where
+the agent cannot sign in: [an example](recipes/agent-with-a-shell/README.md)
+does this with three containers on one computer, and passes its checks;
+on separate computers it has not been tried. The executor
 also keeps its own copy of every call, apart from the agent's log, which can
 be held against the log to find a receipt that was left out
 (`compare`).
