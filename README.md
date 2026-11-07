@@ -24,10 +24,13 @@ denial). Anyone can check these records later, on their own computer,
 with the free checker.
 
 **What it does not do yet.** One guard stands in front of one tool
-server. Over the network it has been tried with the official MCP software
-on protocol version 2025-11-25 only; on the newer 2026-07-28 it has met
-only a test server of its own. The agents' secrets travel in the clear
-unless something else encrypts the connection to the guard. Sealing the
+server, and over the network the credential it holds is a bearer token
+read from a file. Over HTTP it has been tried with the official MCP
+software on protocol version 2025-11-25 only, with every program on one
+computer; on the newer 2026-07-28 it has met only a test server of its
+own. The agents' secrets travel in the clear unless something else
+encrypts the connection to the guard, and so does the tool server's
+credential if the tool server is reached by plain HTTP. Sealing the
 record and keys held in a key service are designed but not built. And it
 proves nothing about a tool the agent can reach without
 it: the tool's credential must be taken away from the agent. It keeps
@@ -226,8 +229,8 @@ each part protects against, is in
   (`npm install -g provared-claude-code`, also installable as a Claude
   Code plugin), which checks and receipts every tool call Claude Code
   makes; and [the executor for MCP tool servers](mcp-executor/README.md)
-  (`npm install -g provared-mcp-executor`), which stands between an
-  agent and its tool servers, holds their credentials, and countersigns
+  (`npm install -g provared-mcp-executor`), which stands between agents and a tool server, holds the server's
+  credential, and countersigns
   each receipt with keys of its own.
 - **[The pages at prova.red](https://prova.red/)**: the checker's answer
   for the sample record, a worked example for developers, and the same

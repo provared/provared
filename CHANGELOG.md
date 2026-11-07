@@ -9,13 +9,18 @@
   server in front of one upstream HTTP MCP server. Each agent signs in with
   a secret of its own (`Authorization: Bearer <secret>`; the settings hold
   its SHA-256, which `provared-mcp-executor secret` prints) and has its own
-  slip, keys, book and copy; one agent can never write to, read from or act
-  under another's. The agent's `Authorization` header is removed and the
-  upstream's bearer token, read from a file, is added; the token reaches no
-  agent in any header, body, error or log: the upstream's headers come
-  back by allow-list, its refusal of the token and any redirection are not
-  relayed, and the token's text is replaced wherever it would appear in
-  what an agent is sent. One message per POST, read as strictly as a line
+  slip, keys, book and copy; through the executor, one agent cannot write
+  to, read from or act under another's, though an agent that can read the
+  executor's files is not held by this. The agent's `Authorization` header
+  is removed and the upstream's bearer token, read from a file, is added;
+  the executor sends an agent the token in no header, body, error or log:
+  the upstream's headers come back by allow-list, its refusal of the token
+  and any redirection are not relayed, and the token's text is replaced
+  wherever it would appear in what an agent is sent. That holds for the
+  token as it is in the file, and only for what passes through the
+  executor: a token the upstream encodes or splits is not seen, and an
+  agent that can read the executor's files, or reach the upstream another
+  way, has it. One message per POST, read as strictly as a line
   on stdio; the answer as JSON or as a stream of events forwarded as they
   arrive, with the response under the executor's id as the outcome; legacy
   sessions pass through, each bound to the agent that opened it; the agent
@@ -26,15 +31,14 @@
   allow it, and the executor listens on 127.0.0.1 by default. The rules,
   the check, the documents, the countersignature and the copy are the same
   code as on stdio (`callCore` in `executor.mjs`), and the check still
-  happens before anything reaches the upstream; the stdio path is
-  unchanged and its 70 tests pass as they were. `check`, `keys` and
+  happens before anything reaches the upstream; the stdio path behaves as it did, its handling of a call now in the
+  shared `callCore`, and its 70 tests pass as they were. `check`, `keys` and
   `compare --agent <name>` read the HTTP settings too. New files
   `mcp-executor/http.mjs`, `executor-http.example.json`,
   `test/http.test.mjs`, `test/http-cli.test.mjs`, `test/fake-http-server.mjs`
   and `test/http-world.mjs`; `DESIGN.md` sections 2, 10, 12 and choices
   X101 to X112; the README's "Over HTTP, for several agents".
-- **The HTTP executor after an independent review** (`mcp-executor/http.mjs`;
-  not published). An agent that reads nothing of a stream no longer makes
+- **The HTTP executor after an independent review by an AI reviewer** (`mcp-executor/http.mjs`; part of 0.3.0). An agent that reads nothing of a stream no longer makes
   the executor buffer the upstream without bound: the upstream is paused
   until the agent drains, and an agent whose connection does not take what
   is waiting within `timeout` is cut off (X113). Sessions are capped for each agent (1,000), so an
@@ -57,9 +61,8 @@
   ends the run when the tests do. Each of the transport's defences in
   depth now has a test that fails without it; the one that cannot be told
   apart from Node's own behaviour (`up.complete`) is named as redundant.
-  New file `test/signal-wrapper.mjs`; the stdio path is unchanged.
-- **The HTTP executor after a re-check** (`mcp-executor/http.mjs`; not
-  published). `Mcp-Name` is compared with `params.uri` on a
+  New file `test/signal-wrapper.mjs`; the stdio path behaves as it did.
+- **The HTTP executor after a re-check** (`mcp-executor/http.mjs`; part of 0.3.0). `Mcp-Name` is compared with `params.uri` on a
   `resources/read`, where a correct header was refused before, and with
   `params.name` on a `tools/call` or `prompts/get`, as the specification's
   table says; on any other method it is refused with 400 and -32020, as a

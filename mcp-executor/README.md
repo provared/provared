@@ -701,6 +701,10 @@ did what its result says, or a copy changed by whoever holds the copy key.
   else encrypts the connection; the executor listens on the local address
   by default. A session id the upstream gives is bound to the agent that
   opened it only for as long as the executor runs.
+- **Tried with.** Over HTTP the executor has been tried with the official
+  MCP software on protocol version 2025-11-25 only, with every program on
+  one computer; on 2026-07-28 it has met only a test server of its own
+  (`test/fake-http-server.mjs`).
 - **The rules on content** test only what a call carries, and prove
   nothing about calls that do not go through the executor; see "What the
   rules can never promise" above.
