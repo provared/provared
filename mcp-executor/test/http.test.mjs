@@ -294,46 +294,78 @@ test('attack: a batch, or a message shape that would carry a tools/call past the
   }
 });
 
-test('attack: headers trying to reach the upstream (hop-by-hop, Authorization, Cookie, forged Mcp-Param-*); mirrored metadata must agree with the body, and the body\'s values go on', async () => {
+test('attack: headers trying to reach the upstream (hop-by-hop, Authorization, Cookie, forged Mcp-Param-*, Mcp-Name, Mcp-Method); a mirrored header goes on only where it agrees with the body at the place the specification names, and the executor refuses a mismatch with 400 and -32020', async () => {
   const w = await httpWorld();
   try {
-    // A forged Mcp-Param header with nothing in the body to match is refused; one that agrees goes on.
-    const forged = await call(w, 'alpha', 'echo', {}, { headers: { 'mcp-param-foo': 'bar' } });
-    assert.equal(forged.status, 400);
-    assert.match(forged.json.error.message, /does not agree with the body/);
-    const disagree = await call(w, 'alpha', 'echo', {}, { headers: { 'mcp-param-foo': 'bar' }, meta: { 'io.modelcontextprotocol/foo': 'baz' } });
+    // Mcp-Param-<name> mirrors the argument whose inputSchema property the upstream annotates with x-mcp-header. Until the executor has seen the upstream's tools/list, no such header can be checked, so none passes.
+    const unseen = await call(w, 'alpha', 'echo', { region: 'eu-west1' }, { headers: { 'mcp-param-region': 'eu-west1' } });
+    assert.equal(unseen.status, 400);
+    assert.equal(unseen.json.error.code, -32020);
+    assert.match(unseen.json.error.message, /annotates with x-mcp-header/);
+    await request(w, 'alpha', 'tools/list', { _meta: META });
+    const forged = await call(w, 'alpha', 'echo', { foo: 'bar' }, { headers: { 'mcp-param-foo': 'bar' } });
+    assert.equal(forged.status, 400, 'no annotation names "foo"');
+    assert.equal(forged.json.error.code, -32020);
+    const disagree = await call(w, 'alpha', 'echo', { region: 'eu-west1' }, { headers: { 'mcp-param-region': 'us-west1' } });
     assert.equal(disagree.status, 400);
-    const agree = await call(w, 'alpha', 'echo', {}, { headers: { 'mcp-param-foo': 'bar' }, meta: { 'io.modelcontextprotocol/foo': 'bar' } });
+    assert.equal(disagree.json.error.code, -32020);
+    assert.match(disagree.json.error.message, /does not agree with the body's arguments at region/);
+    const viaMeta = await call(w, 'alpha', 'echo', { region: 'eu-west1' }, { headers: { 'mcp-param-region': 'us-west1' }, meta: { 'x/region': 'us-west1' } });
+    assert.equal(viaMeta.status, 400, 'a _meta member is not where the value lives');
+    const missing = await call(w, 'alpha', 'echo', {}, { headers: { 'mcp-param-region': 'eu-west1' } });
+    assert.equal(missing.status, 400, 'the argument is absent');
+    const badBase64 = await call(w, 'alpha', 'echo', { region: 'eu' }, { headers: { 'mcp-param-region': '=?base64?%%%?=' } });
+    assert.equal(badBase64.status, 400);
+    assert.equal(seenCalls(w).length, 0, 'none of it reached the upstream');
+    // Agreeing headers go on as given: plain, Base64-wrapped (decoded before comparing), a number, a nested property; and Mcp-Method and Mcp-Name that agree with the body.
+    const agree = await call(w, 'alpha', 'echo', { region: 'eu-west1', tenant: { id: 'acme' }, count: 3 }, { headers: { 'mcp-param-region': 'eu-west1', 'mcp-param-tenant-id': '=?base64?YWNtZQ==?=', 'mcp-param-count': '3', 'mcp-method': 'tools/call', 'mcp-name': 'echo' } });
     assert.equal(agree.status, 200);
-    assert.equal(agree.json.result.structuredContent.headers['mcp-param-foo'], 'bar');
+    const got = agree.json.result.structuredContent.headers;
+    assert.equal(got['mcp-param-region'], 'eu-west1');
+    assert.equal(got['mcp-param-tenant-id'], '=?base64?YWNtZQ==?=', 'as the agent sent it');
+    assert.equal(got['mcp-param-count'], '3');
+    assert.equal(got['mcp-method'], 'tools/call');
+    assert.equal(got['mcp-name'], 'echo');
+    // Mcp-Name or Mcp-Method that disagrees with the body: refused, never forwarded.
+    const wrongName = await call(w, 'alpha', 'echo', {}, { headers: { 'mcp-name': 'hidden' } });
+    assert.equal(wrongName.status, 400);
+    assert.equal(wrongName.json.error.code, -32020);
+    const wrongMethod = await call(w, 'alpha', 'echo', {}, { headers: { 'mcp-method': 'tools/list' } });
+    assert.equal(wrongMethod.status, 400);
+    assert.equal(wrongMethod.json.error.code, -32020);
+    assert.equal(seenCalls(w).length, 1);
+    // Only the body, on either era: not refused, and the executor adds no header of its own.
+    const bodyOnly = await call(w, 'alpha', 'echo', {});
+    assert.equal(bodyOnly.status, 200);
+    assert.equal(bodyOnly.json.result.structuredContent.headers['mcp-method'], undefined);
+    assert.equal(bodyOnly.json.result.structuredContent.headers['mcp-name'], undefined);
+    assert.equal(bodyOnly.json.result.structuredContent.headers['mcp-protocol-version'], '2026-07-28', 'the body\'s value is mirrored for the upstream');
     // The protocol version: a header that disagrees with the body is refused; the body's value goes on, header or no header.
     const mismatch = await call(w, 'alpha', 'echo', {}, { headers: { 'mcp-protocol-version': '2025-11-25' } });
     assert.equal(mismatch.status, 400);
+    assert.equal(mismatch.json.error.code, -32020);
     assert.match(mismatch.json.error.message, /does not agree/);
-    assert.equal(mismatch.json.id, mismatch.json.id);
     const same = await call(w, 'alpha', 'echo', {}, { headers: { 'mcp-protocol-version': '2026-07-28' } });
     assert.equal(same.json.result.structuredContent.headers['mcp-protocol-version'], '2026-07-28');
-    const bodyOnly = await call(w, 'alpha', 'echo', {});
-    assert.equal(bodyOnly.json.result.structuredContent.headers['mcp-protocol-version'], '2026-07-28', 'the body\'s value is mirrored for the upstream');
     const legacy = await post(w, 'alpha', { jsonrpc: '2.0', id: 9, method: 'tools/call', params: { name: 'echo', arguments: {} } }, { headers: { 'mcp-protocol-version': '2025-11-25' } });
     assert.equal(legacy.json.result.structuredContent.headers['mcp-protocol-version'], '2025-11-25', 'a legacy client\'s header, with no version in the body, goes on');
     const twoVersions = await rawRequest(w, { headers: { 'content-type': 'application/json', ...auth(w, 'alpha'), 'mcp-protocol-version': ['2026-07-28', '2026-07-28'] }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'ping' }) });
     assert.equal(twoVersions.status, 400);
-    // Mcp-Param on a request with no message (GET), or on a response, is refused.
-    const onGet = await rawRequest(w, { method: 'GET', headers: { accept: 'text/event-stream', ...auth(w, 'alpha'), 'mcp-param-foo': 'bar' } });
+    // A mirrored header on a request with no message (GET), or on a response, is refused.
+    const onGet = await rawRequest(w, { method: 'GET', headers: { accept: 'text/event-stream', ...auth(w, 'alpha'), 'mcp-param-region': 'eu' } });
     assert.equal(onGet.status, 400);
+    const onResponse = await post(w, 'alpha', { jsonrpc: '2.0', id: 'r', result: {} }, { headers: { 'mcp-method': 'ping' } });
+    assert.equal(onResponse.status, 400);
     // Every header but the few the transport needs is dropped on the way, whatever its name or its Connection listing.
     assert.equal(seenCalls(w).length, 4);
     for (const s of seenCalls(w)) {
-      const names = Object.keys(s.headers);
-      for (const name of names) assert.ok(['accept', 'accept-language', 'content-type', 'content-length', 'host', 'connection', 'authorization', 'mcp-protocol-version', 'mcp-param-foo'].includes(name), `${name} reached the upstream`);
+      for (const name of Object.keys(s.headers)) assert.ok(['accept', 'accept-language', 'content-type', 'content-length', 'host', 'connection', 'authorization', 'mcp-protocol-version', 'mcp-param-region', 'mcp-param-tenant-id', 'mcp-param-count', 'mcp-method', 'mcp-name'].includes(name), `${name} reached the upstream`);
       assert.equal(s.headers.authorization, `Bearer ${TOKEN}`);
     }
   } finally {
     await w.close();
   }
 });
-
 test('attack: an upstream that answers with another id, answers twice, drops the stream midway, redirects, or refuses the credential. The outcome is never taken from the wrong message, a redirection is never followed, and nothing of the upstream\'s refusal reaches the agent', async () => {
   const w = await httpWorld({ config: { timeout: 1500 } });
   try {

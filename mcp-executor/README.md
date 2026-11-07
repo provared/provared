@@ -147,12 +147,21 @@ What the executor does with each request:
   executor's own credential, a bearer token read from the file
   `upstream.credential.file`. Of the agent's headers only `Accept`,
   `Accept-Language`, `Content-Type`, `Mcp-Session-Id` and `Last-Event-ID`
-  go on, with the `MCP-Protocol-Version` the body states and any
-  `Mcp-Param-*` header that agrees with the body's `_meta`; every other
-  header is dropped, and the names of the dropped ones are logged. An
-  `MCP-Protocol-Version` or `Mcp-Param-*` header that does not agree with
-  the body is refused (400). Of the upstream's headers only `Content-Type`,
-  `Mcp-Session-Id`, `MCP-Protocol-Version` and `Cache-Control` come back.
+  go on, with the `MCP-Protocol-Version` the body states, and the mirrored
+  headers of the 2026-07-28 revision where each agrees with the body:
+  `Mcp-Method` with the body's `method`, `Mcp-Name` with its
+  `params.name`, and `Mcp-Param-<name>` with the call's argument at the
+  property of the tool's `inputSchema` that the upstream's `tools/list`
+  annotated `x-mcp-header: <name>` (a value wrapped as `=?base64?…?=` is
+  decoded before comparing). Every other header is dropped, and the names
+  of the dropped ones are logged. A mirrored header that does not agree
+  with the body, or that the executor cannot check (no `tools/list` seen
+  yet, no such annotation, a GET or a response), is refused with 400 and
+  JSON-RPC error -32020 (the specification's HeaderMismatch), and nothing
+  reaches the upstream; a request with none of these headers is not
+  refused, and the executor adds none of its own. Of the upstream's
+  headers only `Content-Type`, `Mcp-Session-Id`, `MCP-Protocol-Version`
+  and `Cache-Control` come back.
 - One message per POST, read as strictly as a line on stdio: a batch, a
   repeated member name, an id that is not text or a whole number, a number
   beyond 2^53 - 1, or a shape that is not a message is refused (400) and

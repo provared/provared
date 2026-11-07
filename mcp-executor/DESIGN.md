@@ -366,13 +366,19 @@ countersignature, the copy) is the same code, `callCore` in
    then closes its stream to the upstream, and the outcome is settled as
    not known, as on stdio; the receipt names `provared.error`. The agent's
    own `notifications/cancelled` does the same (X111).
-4. **Mirrored metadata.** The `MCP-Protocol-Version` header must agree with
+4. **Mirrored headers.** The `MCP-Protocol-Version` header must agree with
    the body's `_meta` value where both are given; the body's value is what
-   goes on. An `Mcp-Param-<name>` header goes on only where the body's
-   `_meta` holds a member so named with that value; otherwise the request
-   is refused (X110). The specification's text on `x-mcp-header` and on
-   the `Origin` rule was not among the sources of section 3, so X109 and
-   X110 take the safest reading and name what is to be checked.
+   goes on. `Mcp-Method` and `Mcp-Name` go on only where they are the
+   body's `method` and `params.name`. An `Mcp-Param-<name>` header goes on
+   only where the upstream's `tools/list` annotated a property of the
+   tool's `inputSchema` with `x-mcp-header: <name>` and the call's
+   argument at that property's path is the header's value, the Base64
+   form decoded first. A header that disagrees, or that the executor
+   cannot check, is refused with 400 and -32020 (the specification's
+   HeaderMismatch) and nothing reaches the upstream; their absence is not
+   refused, and the executor adds none (X110, X117). The specification's
+   text on the `Origin` rule was not among the sources of section 3, so
+   X109 takes the safest reading and names what is to be checked.
 
 Limits (X107): the agent's body up to `bodyLimit` (10 MiB); an upstream
 JSON body or one event up to 16 MiB, as a line on stdio; the executor's
@@ -1434,8 +1440,8 @@ need the comparison to filter and the key to bind the name.
 
 **X104. Headers go to the upstream by allow-list, not by deny-list.**
 `Accept`, `Accept-Language`, `Content-Type`, `Mcp-Session-Id` and
-`Last-Event-ID` pass; `MCP-Protocol-Version` and `Mcp-Param-*` as X110
-says; `Authorization` is the executor's; `Content-Length` is of the body
+`Last-Event-ID` pass; `MCP-Protocol-Version`, `Mcp-Method`, `Mcp-Name`
+and `Mcp-Param-*` as X110 says; `Authorization` is the executor's; `Content-Length` is of the body
 as sent (the executor's id is longer than the agent's); every other header
 (`Cookie`, `X-Api-Key`, anything named in `Connection`, `X-Forwarded-*`,
 `Origin`, a header of a name nobody foresaw) is dropped, and the names of
@@ -1532,18 +1538,35 @@ specification's security warning of the Streamable HTTP transport
 the body's `_meta."io.modelcontextprotocol/protocolVersion"` are both
 given and differ, 400; the body's value goes on; a header alone (a legacy
 client, no version in the body) goes on; a header given twice, or a body
-value that is not text, 400. `Mcp-Param-<name>`: goes on only where the
-message's `_meta` holds a member whose name, or the part after its last
-`/`, is `<name>` (case not counted) with a text, number or boolean value
-whose text is the header's; otherwise 400; on a GET, a DELETE or a POST
-whose message is a response (no `params`), any `Mcp-Param-*` is 400. Why:
-section 10 says these must agree with the body and the body's values go
-on; the mapping from `_meta` members to headers (`x-mcp-header`) was not
-among the texts of section 3, so the executor adds no `Mcp-Param-*` of its
-own and lets through only what the body confirms. To be checked against
-the specification's text on `x-mcp-header` and `Mcp-Param-*`: which
-members are mirrored, how a name is formed, and whether a server generates
-the header from the body. The other way: forward the headers as given.
+value that is not text, 400. The mirrored headers of the 2026-07-28
+revision, as its text says (read 7 November 2026): a property of a tool's
+`inputSchema` annotated `x-mcp-header: <name>` is mirrored as
+`Mcp-Param-<name>`, whose value is "the instance value at the exact
+property path of the annotated property" in the call's `arguments`; a
+value may be wrapped as `=?base64?…?=`, which "servers MUST decode …
+before comparing"; a mismatch is "400 Bad Request and JSON-RPC error code
+-32020 (HeaderMismatch)"; `Mcp-Method` and `Mcp-Name` mirror the method
+and the name. So the executor learns the annotations from every
+`tools/list` answer that passes through it (before any filtering; up to
+1,000 tools, 64 headers each, properties nested up to 8 deep), and an
+`Mcp-Param-<name>` goes on only where the message is a `tools/call`, the
+tool's annotations name `<name>` (case not counted), and the argument at
+the annotated path is text equal to the decoded header, or a number or
+boolean whose text is; `Mcp-Method` only where it is the body's `method`;
+`Mcp-Name` only where it is the body's `params.name` as text. Anything
+else (no annotation seen, a disagreement, a GET or DELETE, a response, a
+Base64 form that does not decode, a header given twice) is refused with
+400 and -32020 before anything reaches the upstream, as is a
+`MCP-Protocol-Version` mismatch, so that a client reading the body does
+not take the executor for a legacy server. Their absence is never
+refused, on either era, and the executor adds none of its own (X117). Why:
+a header must never reach the upstream disagreeing with the body the rules
+checked, and the body is what the rules read. The earlier rule (a
+`_meta` member of the same name) was wrong; this one follows the text.
+To be checked: what `Mcp-Name` mirrors for a request that is not a
+`tools/call` (the executor takes `params.name`; a `resources/read` may
+mirror its `uri`), where the passage was not among those read. The other
+way: forward the headers as given, or generate them from the body.
 
 **X111. Cancellation over HTTP is closing the stream to the upstream, and
 nothing more is sent to it.** The agent closing its response before the
@@ -1640,3 +1663,21 @@ a 3xx is never followed. Why: before this every 4xx was "outcome not
 known", which hid the server's own reason from the record and the agent.
 The other way: take a `result` under a 4xx as an answer, which the
 specification gives no meaning.
+
+**X117. The executor generates no mirrored header, and refuses none for
+being absent.** On the 2026-07-28 revision `Mcp-Method` and `Mcp-Name`
+"are REQUIRED for compliance", and a validating server "MUST reject requests
+where … a required standard header is missing"; the legacy revision has no
+such headers. A request that carries only the body goes on as it is, on
+either era: the executor adds neither `Mcp-Method`, `Mcp-Name` nor any
+`Mcp-Param-*`, and refuses nothing for their absence. Why: a header the
+executor made up would be a claim it makes on the agent's behalf, and
+whether it is required is the upstream's rule to apply, not the executor's
+to guess for a legacy upstream that has never heard of it; a validating
+upstream's refusal (400, -32020 or a missing-header error, with a JSON-RPC
+body) now reaches the agent and the record as the call's outcome (X116),
+so a client that sends only the body learns why. The other way: generate
+the three headers from the body the rules checked, which would make the
+executor a conforming modern client on the agent's behalf but could not
+know which `Mcp-Param-*` the upstream wants before its `tools/list` is
+seen.

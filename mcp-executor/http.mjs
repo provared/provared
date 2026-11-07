@@ -38,6 +38,10 @@ export const MAX_OPEN = 256;
 export const STOP_WAIT = 5000;
 /** The hash of a secret, as the settings hold it: SHA-256 in base64url. */
 export const SECRET_HASH = /^[A-Za-z0-9_-]{43}$/;
+/** The JSON-RPC error code of the specification's HeaderMismatch: the executor's own refusal of a header that does not agree with the body, so that a client reading the body does not take the executor for a legacy server. */
+export const HEADER_MISMATCH = -32020;
+/** The most tools whose x-mcp-header annotations are remembered from the upstream's tools/list; past it the oldest learnt is forgotten. */
+export const MAX_ANNOTATED_TOOLS = 1000;
 /** What stands in place of the upstream's credential wherever it would have reached an agent. */
 export const CREDENTIAL_REMOVED = '[a credential was removed by the Provared executor]';
 
@@ -302,6 +306,45 @@ export async function openHttpExecutor(config, more = {}) {
   /** Set by close(): no new request is taken, no waiting call is sent, and a call with the upstream is settled as the executor's stop. */
   let stopping = false;
 
+  // What the upstream's tools/list said of each tool's arguments: for each tool, the Mcp-Param-<name> (lower case) each x-mcp-header annotation names, and the path of the annotated property in the call's arguments. Learnt from every tools/list answer that passes, before any filtering.
+  const annotations = new Map();
+  const walkSchema = (schema, path, found, depth) => {
+    if (!isObject(schema) || depth > 8 || found.size >= 64) return;
+    if (path.length && typeof schema['x-mcp-header'] === 'string' && /^[A-Za-z0-9!#$%&'*+.^_`|~-]{1,128}$/.test(schema['x-mcp-header'])) found.set(schema['x-mcp-header'].toLowerCase(), path);
+    if (isObject(schema.properties)) for (const [key, sub] of Object.entries(schema.properties)) walkSchema(sub, [...path, key], found, depth + 1);
+  };
+  const learnAnnotations = (m) => {
+    const tools = m?.result?.tools;
+    if (!Array.isArray(tools)) return;
+    for (const tool of tools) {
+      if (!isObject(tool) || typeof tool.name !== 'string') continue;
+      const found = new Map();
+      walkSchema(tool.inputSchema, [], found, 0);
+      annotations.delete(tool.name);
+      annotations.set(tool.name, found);
+      if (annotations.size > MAX_ANNOTATED_TOOLS) annotations.delete(annotations.keys().next().value);
+    }
+  };
+  /** The value of a mirrored header as the body holds it: the Base64 form (=?base64?...?=) decoded, as the specification says a server must before comparing; null where it cannot be. */
+  const decodeMirrored = (value) => {
+    const m = /^=\?base64\?([A-Za-z0-9+/]*={0,2})\?=$/.exec(value);
+    if (!m) return value;
+    try {
+      return new TextDecoder('utf-8', { fatal: true }).decode(Buffer.from(m[1], 'base64'));
+    } catch {
+      return null;
+    }
+  };
+  /** The instance value at the exact property path in the call's arguments, or undefined. */
+  const argumentAt = (args, path) => {
+    let at = args;
+    for (const key of path) {
+      if (!isObject(at) || !Object.hasOwn(at, key)) return undefined;
+      at = at[key];
+    }
+    return at;
+  };
+
   // Sessions the upstream opened (Mcp-Session-Id), each owned by the agent that opened it. An agent past its cap loses its own oldest, never another's.
   const sessions = new Map();
   const ownSession = (id, agent) => {
@@ -344,13 +387,19 @@ export async function openHttpExecutor(config, more = {}) {
   /** An error of the executor's own, as a JSON-RPC error under the request's id (null where none was read), with the HTTP status given. */
   const refuse = (res, status, id, code, message, extra = {}) => json(res, status, responseText(id, { error: { code, message } }), extra);
 
-  /** The agreed headers for the upstream: the agent's few that pass, the body's protocol version, and the Mcp-Param headers that agree with the body. */
+  /**
+   * The agreed headers for the upstream: the agent's few that pass, the
+   * body's protocol version, and the mirrored headers of the 2026-07-28
+   * revision (Mcp-Method, Mcp-Name, Mcp-Param-*) where each agrees with the
+   * body (X110). A header that does not, or that cannot be checked, is a
+   * problem, and nothing goes to the upstream.
+   */
   function headersFor(req, message, body) {
     const dropped = [];
     const headers = {};
     for (const [name, values] of Object.entries(req.headersDistinct)) {
       if (FORWARDED_HEADERS.includes(name)) headers[name] = values.length === 1 ? values[0] : values;
-      else if (name === 'mcp-protocol-version' || name.startsWith('mcp-param-')) continue;
+      else if (name === 'mcp-protocol-version' || name === 'mcp-method' || name === 'mcp-name' || name.startsWith('mcp-param-')) continue;
       else if (!QUIET_HEADERS.includes(name) && !name.startsWith('sec-')) dropped.push(name);
     }
     const meta = isObject(message?.params) && isObject(message.params._meta) ? message.params._meta : null;
@@ -361,14 +410,30 @@ export async function openHttpExecutor(config, more = {}) {
     if (versions.length === 1 && bodyVersion !== undefined && versions[0] !== bodyVersion) return { problem: `The MCP-Protocol-Version header (${versions[0]}) does not agree with the body's _meta.${PROTOCOL_VERSION_META} (${bodyVersion}).` };
     if (bodyVersion !== undefined) headers['mcp-protocol-version'] = bodyVersion;
     else if (versions.length === 1) headers['mcp-protocol-version'] = versions[0];
-    // Mcp-Param-<name> mirrors a _meta member: it goes on only where the body holds that member with the same value.
-    for (const [name, values] of Object.entries(req.headersDistinct)) {
-      if (!name.startsWith('mcp-param-')) continue;
-      if (!message) return { problem: `The header ${name} mirrors a member of a message's _meta, and this request carries no message.` };
-      const param = name.slice('mcp-param-'.length);
+    // The mirrored headers of the 2026-07-28 revision go on only where each agrees with the body; a mismatch, or a header the executor cannot check, stops the request (X110).
+    const mirrored = Object.entries(req.headersDistinct).filter(([name]) => name === 'mcp-method' || name === 'mcp-name' || name.startsWith('mcp-param-'));
+    for (const [name, values] of mirrored) {
+      if (!message) return { problem: `The header ${name} mirrors a member of a message, and this request carries no message.` };
       if (values.length !== 1) return { problem: `The header ${name} is given twice.` };
-      const found = meta ? Object.entries(meta).find(([k, v]) => (k.toLowerCase() === param || k.slice(k.lastIndexOf('/') + 1).toLowerCase() === param) && ['string', 'number', 'boolean'].includes(typeof v) && String(v) === values[0]) : undefined;
-      if (!found) return { problem: `The header ${name} does not agree with the body: no member of the message's _meta is named so with that value.` };
+      const given = decodeMirrored(values[0]);
+      if (given === null) return { problem: `The header ${name} is in the Base64 form (=?base64?...?=) and cannot be decoded.` };
+      if (name === 'mcp-method') {
+        if (typeof message.method !== 'string') return { problem: `The header ${name} mirrors a request's method, and this message is a response.` };
+        if (given !== message.method) return { problem: `The header ${name} (${given}) does not agree with the body's method (${message.method}).` };
+      } else if (name === 'mcp-name') {
+        const bodyName = message.params?.name;
+        if (typeof bodyName !== 'string') return { problem: `The header ${name} mirrors the body's params.name, which this message does not have as text.` };
+        if (given !== bodyName) return { problem: `The header ${name} does not agree with the body's params.name.` };
+      } else {
+        // Mcp-Param-<name> mirrors the call's argument whose inputSchema property the upstream annotated with x-mcp-header: <name>, as its tools/list said.
+        const param = name.slice('mcp-param-'.length);
+        if (message.method !== 'tools/call' || typeof message.params?.name !== 'string') return { problem: `The header ${name} mirrors an argument of a tools/call, and this message is not one.` };
+        const path = annotations.get(message.params.name)?.get(param);
+        if (!path) return { problem: `The header ${name} names no argument of the tool "${message.params.name}" that the upstream's tools/list annotates with x-mcp-header, so the executor cannot check it against the body.` };
+        const value = argumentAt(message.params.arguments, path);
+        const agrees = typeof value === 'string' ? value === given : ((typeof value === 'number' || typeof value === 'boolean') && String(value) === given);
+        if (!agrees) return { problem: `The header ${name} does not agree with the body's arguments at ${path.join('.')}.` };
+      }
       headers[name] = values[0];
     }
     if (body !== undefined) {
@@ -388,7 +453,7 @@ export async function openHttpExecutor(config, more = {}) {
    * where it answers a tools/list), or "other" (a notification or a
    * response: whatever comes back is relayed). Gives {end: Promise, cancel}.
    */
-  function exchange(ctx, { method, headers, body, kind, clientId, serverId, list, onOutcome }) {
+  function exchange(ctx, { method, headers, body, kind, clientId, serverId, list, learn, onOutcome }) {
     const { res, agent } = ctx;
     let finished = false;
     let settledOutcome = false;
@@ -522,6 +587,7 @@ export async function openHttpExecutor(config, more = {}) {
                     else outcome({ kind: 'server-error', text: read.text, errorText: `The tool server answered with an error: ${JSON.stringify(m.error)}` });
                     return done();
                   }
+                  if (learn && m && read.kind === 'response') learnAnnotations(m);
                   const filtered = list && m ? filteredList(read.text, m, clientId, settings) : null;
                   if (filtered?.hidden) agent.log({ event: 'tools-hidden', hidden: filtered.hidden });
                   return toAgent(scrub(sseEvent(event.others, filtered ? filtered.text : (spliceId(event.data, clientId) ?? event.data))));
@@ -606,6 +672,7 @@ export async function openHttpExecutor(config, more = {}) {
           // A request's answer: under the client's id, filtered where it lists tools.
           let out = text ?? bytes.toString('utf8');
           if (serverId !== undefined && foundId === serverId) {
+            if (learn && m && read.kind === 'response') learnAnnotations(m);
             const filtered = list && m && read.kind === 'response' ? filteredList(read.text, m, clientId, settings) : null;
             if (filtered?.hidden) agent.log({ event: 'tools-hidden', hidden: filtered.hidden });
             out = filtered ? filtered.text : (spliceId(out, clientId) ?? out);
@@ -713,7 +780,7 @@ export async function openHttpExecutor(config, more = {}) {
     if (req.method !== 'POST') {
       // The GET stream of server messages, or the DELETE that ends a session: no message, so no mirrored metadata to check; the same few headers go on.
       const h = headersFor(req, null, undefined);
-      if (h.problem) return refuse(res, 400, null, CODES.invalidRequest, h.problem);
+      if (h.problem) return refuse(res, 400, null, HEADER_MISMATCH, h.problem);
       if (h.dropped.length) agent.log({ event: 'headers-dropped', headers: h.dropped });
       const ex = exchange(ctx, { method: req.method, headers: h.headers, kind: req.method === 'GET' ? 'stream' : 'other' });
       res.on('close', () => ex.cancel());
@@ -743,7 +810,7 @@ export async function openHttpExecutor(config, more = {}) {
     const h = headersFor(req, m, read.text);
     if (h.problem) {
       agent.log({ event: 'refused', code: 'header-mismatch' });
-      return refuse(res, 400, read.kind === 'request' ? m.id : null, CODES.invalidRequest, h.problem);
+      return refuse(res, 400, read.kind === 'request' ? m.id : null, HEADER_MISMATCH, h.problem);
     }
     if (h.dropped.length) agent.log({ event: 'headers-dropped', headers: h.dropped });
 
@@ -798,7 +865,7 @@ export async function openHttpExecutor(config, more = {}) {
       }
       // Every other request goes under an id of the executor's own, and its answer comes back under the agent's.
       const serverId = newServerId();
-      const ex = exchange(ctx, { method: 'POST', headers: h.headers, body: spliceId(read.text, serverId) ?? JSON.stringify({ ...m, id: serverId }), kind: 'request', clientId: m.id, serverId, list: m.method === 'tools/list' && settings.hideUnlisted });
+      const ex = exchange(ctx, { method: 'POST', headers: h.headers, body: spliceId(read.text, serverId) ?? JSON.stringify({ ...m, id: serverId }), kind: 'request', clientId: m.id, serverId, list: m.method === 'tools/list' && settings.hideUnlisted, learn: m.method === 'tools/list' });
       res.on('close', () => ex.cancel());
       await ex.end;
       return;
