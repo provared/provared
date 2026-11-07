@@ -44,7 +44,10 @@ export const CALL_META = 'red.prova/call-id';
 /** The action name a denial carries for a call to a tool that no rule names. */
 export const UNLISTED_ACTION = 'executor.unlisted';
 
-export const OUTCOME_UNKNOWN = 'The executor stopped while this call was with the tool server, so its outcome is not known. The receipt was written when the executor next started, from its own copy of what it had sent.';
+/** The error text a receipt names where the executor stopped on request (a signal, close()) with the call with the server: the receipt is written then, before the stop completes. */
+export const EXECUTOR_STOPPED = 'The executor stopped while this call was with the tool server, so its outcome is not known.';
+/** The same, where the executor stopped without warning and the receipt was written at the next start, from the copy. */
+export const OUTCOME_UNKNOWN = `${EXECUTOR_STOPPED} The receipt was written when the executor next started, from its own copy of what it had sent.`;
 export const RESULT_NOT_FINGERPRINTED = 'The tool server answered, and its result could not be written in the one form of RFC 8785 (text that is not well-formed Unicode, a number JSON cannot write, or a whole number beyond 9,007,199,254,740,991), so the receipt names no result.';
 /** The error text a receipt names where the server's answer could not be read as a message; the answer went to the client as it was. */
 export const UNREADABLE_ANSWER = 'The tool server answered with a line the executor could not read as a message (not JSON, a member name given twice, or not a response), so the receipt names no result. The line was handed to the agent as it was.';

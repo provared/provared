@@ -13,11 +13,12 @@ import { fileURLToPath } from 'node:url';
 
 const { checkBook, identifierFingerprint } = await import('provared');
 const { httpWorld, call, request, rawRequest, auth } = await import('./http-world.mjs');
-const { OUTCOME_UNKNOWN, WRITTEN_LATE_DOCUMENT } = await import('../executor.mjs');
+const { EXECUTOR_STOPPED, OUTCOME_UNKNOWN, WRITTEN_LATE_DOCUMENT } = await import('../executor.mjs');
 const { secretHash } = await import('../http.mjs');
 const { until } = await import('./world.mjs');
 
 const BIN = fileURLToPath(new URL('../bin.mjs', import.meta.url));
+const WRAPPER = fileURLToPath(new URL('./signal-wrapper.mjs', import.meta.url));
 
 const children = new Set();
 function start(args, cwd) {
@@ -210,4 +211,50 @@ test('http: the wrong path, a method the endpoint does not take, and no settings
   const none = await run(['http']);
   assert.equal(none.code, 2);
   assert.match(none.stderr, /--config/);
+});
+
+test('http: SIGINT with a call in flight. The call is settled as the executor\'s stop, its receipt written and the agent answered, and the process ends with code 0', async () => {
+  const w = await httpWorld({ open: false, agents: ['alpha'] });
+  const port = await freePort();
+  w.settings.listen = { host: '127.0.0.1', port };
+  w.settings.timeout = 30000;
+  writeFileSync(w.configPath, JSON.stringify(w.settings));
+  w.url = `http://127.0.0.1:${port}/mcp`;
+  // Through the wrapper, with an IPC channel: Windows delivers no signal to a child, so there the test sends the signal's name and the wrapper raises it; elsewhere the real signal is sent.
+  const child = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', WRAPPER, 'http', '--config', w.configPath], { cwd: w.folder, stdio: ['pipe', 'pipe', 'pipe', 'ipc'], windowsHide: true });
+  children.add(child);
+  child.on('exit', () => children.delete(child));
+  child.stdin.end();
+  const err = [];
+  child.stderr.on('data', (c) => err.push(c));
+  const exited = new Promise((done) => child.on('exit', (code) => done(code)));
+  try {
+    await until(async () => {
+      try {
+        return (await request(w, 'alpha', 'ping')).status === 200;
+      } catch {
+        return false;
+      }
+    }, { timeout: 15000, every: 100 });
+    const pending = call(w, 'alpha', 'slow', { ms: 20000 }, { id: 'stopped' });
+    await until(() => w.upstream.seen.some((s) => s.body?.params?.name === 'slow'));
+    if (process.platform === 'win32') child.send('SIGINT');
+    else child.kill('SIGINT');
+    const answer = await pending;
+    assert.equal(answer.status, 200);
+    assert.equal(answer.json.id, 'stopped');
+    assert.equal(answer.json.error.code, 1002);
+    assert.equal(answer.json.error.message, EXECUTOR_STOPPED);
+    assert.equal(await exited, 0, Buffer.concat(err).toString('utf8'));
+    const book = await checkBook(readFileSync(w.agents.alpha.book, 'utf8'), { issuerKeys: w.settings.agents.alpha.issuerKeys });
+    const stubs = book.entries.filter((e) => e.kind === 'stub');
+    assert.equal(stubs.length, 1);
+    const d = Object.fromEntries(stubs[0].content.details.map((x) => [x.name, x.sha256]));
+    assert.equal(d['provared.error'], await identifierFingerprint(EXECUTOR_STOPPED));
+    assert.equal(d[WRITTEN_LATE_DOCUMENT], undefined, 'written at the stop, not at the next start');
+    assert.ok(w.upstream.aborted >= 1, 'the stream to the upstream was closed');
+  } finally {
+    await kill(child);
+    await w.upstream.close();
+  }
 });

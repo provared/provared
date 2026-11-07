@@ -21,7 +21,7 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import http from 'node:http';
 import https from 'node:https';
 import { unfinished } from './copy.mjs';
-import { SHARED_KEYS, SHORT_NAME, UNLISTED_FORWARD_WARNING, callCore, describeContentRules, describeSlip, describeTools, filteredList, isObject, openAgent, pathFrom, prepareAgent, prepareShared, readAgentPaths, readCredentialFile, readIdentity, readKnobs, readToolRules, serverIds } from './executor.mjs';
+import { EXECUTOR_STOPPED, SHARED_KEYS, SHORT_NAME, UNLISTED_FORWARD_WARNING, callCore, describeContentRules, describeSlip, describeTools, filteredList, isObject, openAgent, pathFrom, prepareAgent, prepareShared, readAgentPaths, readCredentialFile, readIdentity, readKnobs, readToolRules, serverIds } from './executor.mjs';
 import { CODES, MAX_LINE_BYTES, idKey, isId, readMessage, responseText, spliceId, topLevelId, unsafeInteger } from './jsonrpc.mjs';
 
 /** The most a POST body may be, unless the settings say otherwise: 10 MiB, as the gateway takes. */
@@ -34,6 +34,8 @@ export const BACKLOG_LIMIT = ANSWER_LIMIT;
 export const MAX_SESSIONS = 1000;
 /** The most requests of one agent in flight at once, of every kind; tool calls are also bounded by maxWaiting. */
 export const MAX_OPEN = 256;
+/** How long a stop waits for the calls in flight to be receipted and answered before it closes the connections. */
+export const STOP_WAIT = 5000;
 /** The hash of a secret, as the settings hold it: SHA-256 in base64url. */
 export const SECRET_HASH = /^[A-Za-z0-9_-]{43}$/;
 /** What stands in place of the upstream's credential wherever it would have reached an agent. */
@@ -296,6 +298,9 @@ export async function openHttpExecutor(config, more = {}) {
 
   /** The text with the upstream's credential taken out, wherever it stands. Everything that goes to an agent passes through here. */
   const scrub = credential ? (text) => text.split(credential.token).join(CREDENTIAL_REMOVED) : (text) => text;
+
+  /** Set by close(): no new request is taken, no waiting call is sent, and a call with the upstream is settled as the executor's stop. */
+  let stopping = false;
 
   // Sessions the upstream opened (Mcp-Session-Id), each owned by the agent that opened it. An agent past its cap loses its own oldest, never another's.
   const sessions = new Map();
@@ -675,6 +680,7 @@ export async function openHttpExecutor(config, more = {}) {
       log({ event: 'not-signed-in' });
       return refuse(res, 401, null, CODES.invalidRequest, 'Sign in to the executor with your own secret, in one header: Authorization: Bearer <secret>.', { 'www-authenticate': 'Bearer' });
     }
+    if (stopping) return refuse(res, 503, null, CODES.notRecorded, 'The executor is stopping and takes no request.', { connection: 'close' });
     if (req.headers.upgrade !== undefined || req.method === 'CONNECT') return refuse(res, 400, null, CODES.invalidRequest, 'The executor takes no upgrade and no tunnel.');
     if (!['POST', 'GET', 'DELETE'].includes(req.method)) return refuse(res, 405, null, CODES.invalidRequest, 'The MCP endpoint takes POST (a message), GET (the stream of server messages) and DELETE (the end of a session).', { allow: 'POST, GET, DELETE' });
     // A session belongs to the agent that opened it.
@@ -747,7 +753,7 @@ export async function openHttpExecutor(config, more = {}) {
             }
             json(res, 200, scrub(text));
           },
-          unavailable: () => null,
+          unavailable: () => (stopping ? 'The executor is stopping, so this call was not sent.' : null),
           send: (call, forwarded) => {
             const ex = exchange(ctx, { method: 'POST', headers: h.headers, body: JSON.stringify(forwarded), kind: 'call', serverId: call.serverId, onOutcome: (o) => call.settle?.(o) });
             ctx.exchange = ex;
@@ -776,7 +782,7 @@ export async function openHttpExecutor(config, more = {}) {
           call.cancelled = true;
           if (call.state === 'sent' && call.settle) {
             call.cancelUpstream?.();
-            call.settle({ kind: 'error', text: 'The agent closed the connection while this call was with the tool server, so its outcome is not known.', code: CODES.noAnswer });
+            call.settle({ kind: 'error', text: stopping ? EXECUTOR_STOPPED : 'The agent closed the connection while this call was with the tool server, so its outcome is not known.', code: CODES.noAnswer });
           }
         });
         await handled;
@@ -852,11 +858,28 @@ export async function openHttpExecutor(config, more = {}) {
         });
       });
     },
-    /** Stop listening, and let every agent's writer finish what it has. */
+    /**
+     * Stop: no new request is taken; every call that is with the upstream is
+     * settled as the executor's stop (EXECUTOR_STOPPED), its receipt written
+     * and the agent answered; a call waiting its turn is not sent and is
+     * answered so; then the connections are closed and every agent's writer
+     * finishes what it has. The answers are waited for up to STOP_WAIT ms.
+     */
     async close() {
-      if (server) {
-        const s = server;
-        server = null;
+      stopping = true;
+      const s = server;
+      server = null;
+      for (const a of agents.values()) {
+        for (const call of a.calls.values()) {
+          if (call.state === 'sent' && call.settle) {
+            call.cancelUpstream?.();
+            call.settle({ kind: 'error', text: EXECUTOR_STOPPED, code: CODES.noAnswer });
+          }
+        }
+      }
+      const deadline = Date.now() + STOP_WAIT;
+      while ([...agents.values()].some((a) => a.calls.size > 0) && Date.now() < deadline) await new Promise((d) => setTimeout(d, 20));
+      if (s) {
         await new Promise((done) => {
           s.close(() => done());
           s.closeAllConnections?.();

@@ -176,8 +176,13 @@ What the executor does with each request:
   (413); an answer or an event of the upstream over 16 MiB is cut off; a
   call the upstream does not answer within `timeout` is cancelled and gets
   a receipt that says its outcome is not known.
-- A stop with a call in flight, followed by a start, writes that call's
-  receipt from the agent's copy before the executor listens, as on stdio.
+- A stop on request (SIGINT, SIGTERM) with a call in flight settles the
+  call as the executor's stop ("The executor stopped while this call was
+  with the tool server, so its outcome is not known."), writes its receipt,
+  answers the agent with that error, and then closes; a call still waiting
+  its turn is not sent and is answered so. A stop without warning, followed
+  by a start, writes the receipt from the agent's copy before the executor
+  listens, as on stdio.
 
 **When the credential is kept from the agent, and when it is not.** The
 upstream's token never goes to an agent in a header, a body, an error or a

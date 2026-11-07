@@ -379,8 +379,11 @@ JSON body or one event up to 16 MiB, as a line on stdio; the executor's
 `timeout` on every POST exchange; 256 requests of one agent in flight at
 once, beside `maxWaiting` for its calls; an `Origin` refused unless the
 settings allow it, and the local address listened on unless they say
-otherwise (X109). A stop with a call in flight, followed by a start, writes
-the receipt from the agent's copy before the executor listens (section 8).
+otherwise (X109). A stop on request with a call in flight settles the call
+as the executor's stop, writes its receipt and answers the agent before the
+connections close (X115); a stop without warning, followed by a start,
+writes the receipt from the agent's copy before the executor listens
+(section 8).
 
 What it does not do: it speaks plain HTTP, so the agents' secrets and the
 upstream's token are only as safe as the connection (encryption is
@@ -1596,3 +1599,25 @@ thousand of its own under one executor-wide cap; a cap for each agent lets
 an agent harm only itself, and the total still has a bound. The other way:
 one cap with a fair share for each agent, which would have to be recomputed
 as agents come and go.
+
+**X115. A stop on request settles the calls in flight as the executor's
+stop, and says so in their receipts.** `close()` (which SIGINT and SIGTERM
+reach in `bin http`) first marks the executor as stopping: no new request is
+taken (503), a call waiting its turn is not sent (the link's `unavailable`)
+and is answered so, and every call that is with the upstream has its
+exchange closed and is settled with `EXECUTOR_STOPPED` ("The executor
+stopped while this call was with the tool server, so its outcome is not
+known."), code 1002; the receipts are written and the agents answered, which
+the stop waits for up to `STOP_WAIT` (5 s); only then are the connections
+closed. Why: before this the stop closed every connection first, and the
+receipts blamed the agent ("The agent closed the connection…"), which was
+false. The text is the first sentence of `OUTCOME_UNKNOWN` and not the
+whole of it: the second sentence ("The receipt was written when the
+executor next started, from its own copy") is true of a stop without
+warning and false of this one, where the receipt is written before the stop
+completes; a receipt must not say what did not happen. `OUTCOME_UNKNOWN` is
+now built from `EXECUTOR_STOPPED` and its text is unchanged. The signal path
+is tested as a separate process; on Windows, which delivers no signal to a
+child, a wrapper (`test/signal-wrapper.mjs`) raises the signal named over
+an IPC channel, and the command's own handlers run. The other way: settle
+with `OUTCOME_UNKNOWN` as the review suggested, for one text to recognise.

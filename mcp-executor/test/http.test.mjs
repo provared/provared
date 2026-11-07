@@ -12,7 +12,7 @@ import { test } from 'node:test';
 
 const { checkBook, identifierFingerprint } = await import('provared');
 const { httpWorld, openHttpWorld, call, request, post, rawRequest, auth, META, TOKEN } = await import('./http-world.mjs');
-const { CALL_DOCUMENT, RESULT_DOCUMENT, TOOL_DOCUMENT, CALL_META, UNLISTED_ACTION, UNREADABLE_ANSWER } = await import('../executor.mjs');
+const { CALL_DOCUMENT, RESULT_DOCUMENT, TOOL_DOCUMENT, CALL_META, EXECUTOR_STOPPED, UNLISTED_ACTION, UNREADABLE_ANSWER } = await import('../executor.mjs');
 const { CREDENTIAL_REMOVED, MAX_SESSIONS, readHttpSettings, sseReader, sseEvent, secretHash } = await import('../http.mjs');
 const { readCopy, loadCopyKey } = await import('../copy.mjs');
 const { compareCopyWithBook } = await import('../compare.mjs');
@@ -635,6 +635,35 @@ test('attack: one agent opens sessions without end. Past its own cap its oldest 
     assert.equal((await request(w, 'alpha', 'ping', undefined, { headers: { 'mcp-session-id': 'alpha-0' } })).status, 404, 'alpha\'s oldest is forgotten');
     assert.equal((await request(w, 'alpha', 'ping', undefined, { headers: { 'mcp-session-id': `alpha-${N - 1}` } })).status, 200, 'alpha\'s newest is kept');
     assert.equal((await request(w, 'beta', 'ping', undefined, { headers: { 'mcp-session-id': `alpha-${N - 1}` } })).status, 404, 'and is alpha\'s alone');
+  } finally {
+    await w.close();
+  }
+});
+
+test('a stop with a call in flight and another waiting its turn: the sent call is settled as the executor\'s stop, receipted and answered; the waiting one is never sent and is answered so', async () => {
+  const w = await httpWorld({ config: { timeout: 20000 } });
+  try {
+    const sent = call(w, 'alpha', 'slow', { ms: 10000 }, { id: 'st-1' });
+    await until(() => seenCalls(w).length === 1);
+    const waiting = call(w, 'alpha', 'echo', { later: true }, { id: 'st-2' });
+    await pause(150);
+    const closed = w.executor.close();
+    const a1 = await sent;
+    assert.equal(a1.status, 200);
+    assert.equal(a1.json.id, 'st-1');
+    assert.equal(a1.json.error.code, 1002);
+    assert.equal(a1.json.error.message, EXECUTOR_STOPPED, 'the stop is the executor\'s, not the agent\'s doing');
+    const a2 = await waiting;
+    assert.equal(a2.json.error.code, 1002);
+    assert.match(a2.json.error.message, /stopping, so this call was not sent/);
+    await closed;
+    assert.equal(seenCalls(w).length, 1, 'the waiting call never reached the upstream');
+    await until(() => w.upstream.aborted >= 1);
+    const stubs = stubsOf(await bookOf(w, 'alpha'));
+    assert.equal(stubs.length, 1, 'one receipt: the sent call\'s');
+    assert.equal(docs(stubs[0])['provared.error'], await identifierFingerprint(EXECUTOR_STOPPED));
+    assert.equal(copyOf(w, 'alpha').lines.at(-1).entry.outcome, 'error');
+    assert.ok(w.logs.some((e) => e.event === 'taken' && e.outcome === 'error'));
   } finally {
     await w.close();
   }
