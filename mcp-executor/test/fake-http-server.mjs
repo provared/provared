@@ -4,13 +4,15 @@
 // has tools that behave in the ways the tests need: answers as JSON or as a
 // stream of events, answers under another id, twice, never, or with a
 // stream cut midway; a redirection; an answer that echoes every header it
-// was given, so that a test can see what reached it. Nothing here leaves
-// this computer.
+// was given, so that a test can see what reached it; a refusal with a
+// non-2xx status and a JSON-RPC body; a stream as fast as the client
+// takes it; a request it never answers. Nothing here leaves this computer.
 
 import http from 'node:http';
 
 const TOOLS = [
-  { name: 'echo', description: 'Gives back its arguments, and what the server sees.', inputSchema: { type: 'object' } },
+  // "echo" annotates two arguments with x-mcp-header, one of them nested: the tests of Mcp-Param-* headers use them.
+  { name: 'echo', description: 'Gives back its arguments, and what the server sees.', inputSchema: { type: 'object', properties: { region: { type: 'string', 'x-mcp-header': 'region' }, tenant: { type: 'object', properties: { id: { type: 'string', 'x-mcp-header': 'Tenant-Id' } } }, count: { type: 'integer', 'x-mcp-header': 'count' } } } },
   { name: 'order', description: 'Places an order.', inputSchema: { type: 'object', properties: { total: { type: 'integer' } } } },
   { name: 'slow', description: 'Answers after a while, or never.', inputSchema: { type: 'object' } },
   { name: 'stream', description: 'Answers as a stream of events.', inputSchema: { type: 'object' } },
@@ -68,6 +70,26 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
     if (req.method === 'GET') {
       // The stream of server messages (legacy): one notification, then open until the client closes.
       seen.push({ method: 'GET', headers: req.headers });
+      if (req.headers['last-event-id'] === 'fast') {
+        // A stream as fast as the client takes it: 64 KiB events for as long as the connection lasts (the review's case of an agent that reads nothing).
+        const big = 'y'.repeat(65536);
+        state.fastBytes = 0;
+        state.fastClosed = false;
+        res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store' });
+        res.on('close', () => {
+          state.fastClosed = true;
+        });
+        const pump = () => {
+          for (;;) {
+            if (res.destroyed) return;
+            const ok = res.write(`data: ${big}\n\n`);
+            state.fastBytes += big.length + 8;
+            if (!ok) return res.once('drain', pump);
+          }
+        };
+        pump();
+        return;
+      }
       const send = sse(res);
       send({ jsonrpc: '2.0', method: 'notifications/message', params: { level: 'info', data: `hello ${req.headers['mcp-session-id'] ?? 'no-session'}` } }, 'id: ev-1\n');
       return;
@@ -103,6 +125,9 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
         return result(res, id, { protocolVersion: params.protocolVersion ?? '2025-11-25', capabilities: { tools: {} }, serverInfo: { name: 'fake-http-server', version: '0.0.1' } }, { 'mcp-session-id': session });
       }
       if (method === 'ping') return result(res, id, {});
+      if (method === 'hang') return; // never answers
+      // Opens a session of the client's naming, with the status it asks for (a session id on a non-2xx answer is the review's case).
+      if (method === 'with-session') return json(res, params.status ?? 200, { jsonrpc: '2.0', id, result: {} }, { 'mcp-session-id': params.session });
       if (method === 'tools/list') {
         const page = params.cursor === 'page2' ? TOOLS.slice(4) : TOOLS.slice(0, 4);
         if (params.sse) {
@@ -175,6 +200,27 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
           res.writeHead(args.status ?? 500, { 'content-type': 'text/plain' });
           return res.end(`broken ${req.headers.authorization}`);
         }
+        // A refusal the specification makes normal: a non-2xx status with a JSON-RPC error under the call's id.
+        if (how === 'status-json') return json(res, args.status ?? 400, { jsonrpc: '2.0', id, error: { code: args.code ?? -32022, message: `Refused by the server ${req.headers.authorization}`, data: { supported: ['2025-11-25'] } } });
+        if (how === 'after') {
+          // The response and a notification after it, in one write: nothing after the response should reach the agent.
+          const send = sse(res);
+          send(`${JSON.stringify({ jsonrpc: '2.0', id, result: { resultType: 'complete', content: [{ type: 'text', text: 'done' }] } })}\n\ndata: ${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/message', params: { level: 'info', data: 'after the answer' } })}`, 'id: ev-1\n');
+          return res.end();
+        }
+        if (how === 'answer-then-endless') {
+          const send = sse(res);
+          send({ jsonrpc: '2.0', id, result: { resultType: 'complete', content: [{ type: 'text', text: 'done' }] } });
+          const t = setInterval(() => send({ jsonrpc: '2.0', method: 'notifications/progress', params: { progressToken: 'p', progress: 1 } }), 10);
+          res.on('close', () => clearInterval(t));
+          return;
+        }
+        if (how === 'short') {
+          // Declares more than it sends, then drops the connection.
+          res.writeHead(200, { 'content-type': 'application/json', 'content-length': 100 });
+          res.write('{"jsonrpc":');
+          return setTimeout(() => res.destroy(), 20);
+        }
         if (how === 'not-json') {
           res.writeHead(200, { 'content-type': 'application/json' });
           return res.end('{"jsonrpc":"2.0","id":' + JSON.stringify(id) + ',"result":{"a":1,"a":2}}');
@@ -201,6 +247,13 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
         },
         get aborted() {
           return state.aborted;
+        },
+        /** Bytes written to the "fast" GET stream, and whether its connection has closed. */
+        get fastBytes() {
+          return state.fastBytes ?? 0;
+        },
+        get fastClosed() {
+          return state.fastClosed ?? false;
         },
         close: () =>
           new Promise((closed) => {
