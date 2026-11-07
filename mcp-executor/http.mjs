@@ -56,6 +56,7 @@ const PROTOCOL_VERSION_META = 'io.modelcontextprotocol/protocolVersion';
 /** The member of params that Mcp-Name mirrors, for each method that has one, as the 2026-07-28 revision's table of standard request headers says (X110). */
 const MIRRORED_NAME = new Map([['tools/call', 'name'], ['prompts/get', 'name'], ['resources/read', 'uri']]);
 /** A number as JSON writes one (RFC 8259): no hexadecimal, no space, no "Infinity", none of what Number() would take besides. */
+// eslint-disable-next-line security/detect-unsafe-regex -- no repetition inside repetition can match the same text two ways (runs of digits kept apart by a full stop and an "e" the digits cannot match), so matching takes time in step with the text.
 const JSON_NUMBER = /^(-?)(0|[1-9][0-9]*)(?:\.([0-9]+))?(?:[eE]([+-]?[0-9]+))?$/;
 
 /** SHA-256 of a secret, in base64url: the form the settings hold (the same as the gateway's). */

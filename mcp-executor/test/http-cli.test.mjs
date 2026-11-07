@@ -57,12 +57,12 @@ function freePort() {
     });
   });
 }
-/** End a child for good (on Windows, kill is final), and wait for it. */
+/** End a child for good, and wait for it. SIGKILL, because the executor answers SIGTERM by settling its calls, and this is the stop it gets no chance to answer (on Windows every kill is final). */
 function kill(child) {
   return new Promise((done) => {
     if (child.exitCode !== null) return done();
     child.on('exit', () => done());
-    child.kill();
+    child.kill('SIGKILL');
   });
 }
 
@@ -131,6 +131,7 @@ test('http: a real process in front of the upstream; stopped in the middle of a 
     assert.ok(!logs().some((e) => JSON.stringify(e).includes(w.agents.alpha.secret)), 'the secret is in no log line');
   } finally {
     await kill(child);
+    await w.upstream.close();
   }
   const compared = await run(['compare', '--config', w.configPath, '--agent', 'alpha'], { cwd: w.folder });
   assert.equal(compared.code, 0, compared.stderr);
@@ -140,7 +141,6 @@ test('http: a real process in front of the upstream; stopped in the middle of a 
   const noAgent = await run(['compare', '--config', w.configPath], { cwd: w.folder });
   assert.equal(noAgent.code, 2);
   assert.match(noAgent.stderr, /--agent <name>/);
-  await w.upstream.close();
 });
 
 test('secret prints a secret and its hash; check and keys read the HTTP settings', async () => {
