@@ -72,7 +72,11 @@
   ms" claimed more than the code does, and now says what happens: an agent
   whose connection does not take what the executor has waiting within
   `timeout` is cut, and a very slow reader can be cut too; the code is as it
-  was, and a new test shows the slow reader cut (README, X107, X113).
+  was, and a new test shows the slow reader cut (README, X107, X113). X117
+  said the executor generates no mirrored header and that a request of only
+  a body goes on as it is, where the body's protocol version goes on as
+  `MCP-Protocol-Version`; it now says so, and that `Mcp-Method`, `Mcp-Name`
+  and `Mcp-Param-*` are never generated.
 
 ## 0.8.0 (1 November 2026)
 

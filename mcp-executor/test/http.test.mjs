@@ -335,7 +335,7 @@ test('attack: headers trying to reach the upstream (hop-by-hop, Authorization, C
     assert.equal(wrongMethod.status, 400);
     assert.equal(wrongMethod.json.error.code, -32020);
     assert.equal(seenCalls(w).length, 1);
-    // Only the body, on either era: not refused, and the executor adds no header of its own.
+    // Only the body, on either era: not refused; the body's protocol version goes on, and Mcp-Method and Mcp-Name are never generated.
     const bodyOnly = await call(w, 'alpha', 'echo', {});
     assert.equal(bodyOnly.status, 200);
     assert.equal(bodyOnly.json.result.structuredContent.headers['mcp-method'], undefined);

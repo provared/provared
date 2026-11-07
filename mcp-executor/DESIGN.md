@@ -383,7 +383,8 @@ countersignature, the copy) is the same code, `callCore` in
    form decoded first. A header that disagrees, or that the executor
    cannot check, is refused with 400 and -32020 (the specification's
    HeaderMismatch) and nothing reaches the upstream; their absence is not
-   refused, and the executor adds none (X110, X117). The specification's
+   refused, and the executor never generates `Mcp-Method`, `Mcp-Name` or
+   `Mcp-Param-*` (X110, X117). The specification's
    text on the `Origin` rule was not among the sources of section 3, so
    X109 takes the safest reading and names what is to be checked.
 
@@ -1586,8 +1587,10 @@ response, an `Mcp-Name` on any other method, whatever its params hold, a
 Base64 form that does not decode, a header given twice) is refused with
 400 and -32020 before anything reaches the upstream, as is a
 `MCP-Protocol-Version` mismatch, so that a client reading the body does
-not take the executor for a legacy server. Their absence is never
-refused, on either era, and the executor adds none of its own (X117). Why:
+not take the executor for a legacy server. The absence of any of these
+headers is never refused, on either era; the body's protocol version goes
+on as its header, and `Mcp-Method`, `Mcp-Name` and `Mcp-Param-*` are never
+generated (X117). Why:
 a header must never reach the upstream disagreeing with the body the rules
 checked, and the body is what the rules read. The earlier rule (a
 `_meta` member of the same name) was wrong; this one follows the text.
@@ -1707,13 +1710,15 @@ known", which hid the server's own reason from the record and the agent.
 The other way: take a `result` under a 4xx as an answer, which the
 specification gives no meaning.
 
-**X117. The executor generates no mirrored header, and refuses none for
-being absent.** On the 2026-07-28 revision `Mcp-Method` and `Mcp-Name`
+**X117. The executor generates no `Mcp-Method`, `Mcp-Name` or `Mcp-Param-*`
+header, and refuses none for being absent.** On the 2026-07-28 revision `Mcp-Method` and `Mcp-Name`
 "are REQUIRED for compliance", and a validating server "MUST reject requests
 where … a required standard header is missing"; the legacy revision has no
-such headers. A request that carries only the body goes on as it is, on
-either era: the executor adds neither `Mcp-Method`, `Mcp-Name` nor any
-`Mcp-Param-*`, and refuses nothing for their absence. Why: a header the
+such headers. A request that carries only the body goes on, on either era,
+with one header it did not send where the body states a protocol version:
+that version, as `MCP-Protocol-Version` (X110), copied from the body the
+rules checked. `Mcp-Method`, `Mcp-Name` and `Mcp-Param-*` are never
+generated, and nothing is refused for their absence. Why: a header the
 executor made up would be a claim it makes on the agent's behalf, and
 whether it is required is the upstream's rule to apply, not the executor's
 to guess for a legacy upstream that has never heard of it; a validating

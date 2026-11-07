@@ -164,7 +164,9 @@ What the executor does with each request:
   method), is refused with 400 and
   JSON-RPC error -32020 (the specification's HeaderMismatch), and nothing
   reaches the upstream; a request with none of these headers is not
-  refused, and the executor adds none of its own. Of the upstream's
+  refused, and the executor never generates `Mcp-Method`, `Mcp-Name` or
+  `Mcp-Param-*` itself, though the protocol version the body states goes on
+  as its header. Of the upstream's
   headers only `Content-Type`, `Mcp-Session-Id`, `MCP-Protocol-Version`
   and `Cache-Control` come back.
 - One message per POST, read as strictly as a line on stdio: a batch, a
