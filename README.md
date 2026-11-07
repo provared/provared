@@ -248,10 +248,13 @@ each part protects against, is in
 
 **Version 0.8.0, a draft.** Published as it is, by one author in their
 own time, built with AI tools since 3 October 2026; fixes as time
-allows. The code has been through more than 80 rounds of review by AI reviewers,
-each reviewer a fresh session given the code, the documents and a brief
-of what to look at; every fault was fixed, or stated as a limit, and
-kept as a test. No person other than the author has reviewed it yet.
+allows. The code has been through more than 80 rounds of review by AI
+reviewers, each a fresh session given the code, the documents and a
+brief of what to look at. Until 7 November 2026 each reviewer likely
+also had the author's private planning notes loaded, so could see the
+author's reasoning; since then reviewers start without them. Every
+fault was fixed, or stated as a limit, and kept as a test. No person
+other than the author has reviewed it yet.
 That is an invitation. The format may still change.
 Every published version stays on npm and the Python Package Index, so a
 record made with one version can always be checked by that version.

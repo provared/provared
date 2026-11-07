@@ -84,6 +84,101 @@
   nobody reads is held after its slot is freed, up to 16 MiB for each
   connection, until the connection closes.
 
+- **The recorder's README states more limits of records handed over,**
+  from a review of 3 November 2026: the 300-second rule rests on the clock
+  of the device the person signs on, and on the application's page, since
+  the signing page sets no limit on a start; a start refused as
+  `starts-later` is remembered in memory only, so "refused for good" is
+  corrected; a clock more than about six minutes ahead has a renewal from
+  the application refused if it is handed over soon after the press. The message for a
+  `held-cancellations.json` the recorder cannot take now says to take out
+  only the others where the file also holds one the person signed.
+
+- **The recorder beside Claude Code takes records handed over from the
+  application** (`integrations/claude-code`, not published; the library
+  is unchanged). A renewal or a cancellation the person signed in the
+  application's signing window, and the application kept with the book,
+  sealed, is handed to the recorder by the application's uploader through
+  the feed, with no file carried by hand: `POST /hand-over`, proved as
+  every question of the feed is, and over every byte of the body as well,
+  under a label of its own. Before any byte of the body is read, the
+  recorder checks the length it states (`Content-Length`, at most 256 KiB;
+  411 without one) and the form of the proof's headers in a conversation
+  it began; at most four are taken on at once, counted from before the
+  body is read, and a body not whole within 10 seconds is let go. The
+  recorder checks each record itself and answers with a code
+  (`taken`, `already`, `held` or `refused`, with a reason). Each must
+  have been signed at https://sign.prova.red, or where
+  `PROVARED_CLAUDE_CODE_SIGNING_ORIGIN` says (`other-signing-address`). A
+  renewal is taken as `renew` takes one without `--new-passkey`, and is
+  never one the recorder held before, nor one that starts before the
+  permission in force, nor one that starts before any cancellation the
+  recorder holds, in a book or held beside it (`before-cancellation`), so
+  that a record held back and handed over late cannot start the agent
+  again. A renewal from a passkey the recorder does not trust is refused,
+  never added; the refused permission waits in `waiting-permissions.json`,
+  and `admit-passkey <thumbprint>` for a passkey never trusted shows it in
+  full and takes it, with its passkey, only once the person types `yes`
+  on that computer (with nothing waiting from that passkey, it admits
+  nothing). A cancellation is taken only for the permission in force:
+  every call under it is refused at once, and the cancellation and the
+  agent's acknowledgement are written into the book (the library's
+  `add`); handed over again, it changes nothing and gives back the same
+  acknowledgement. One dated ahead of the clock is held beside the book and
+  kept in `held-cancellations.json`, which is given to the writer at each
+  start, so a restart does not lose it; one more than 24 hours ahead is
+  refused (`too-far-ahead`). A renewal while one is held is taken only if
+  it starts after its date (`cancellation-held`, also for `renew`), and the
+  cancellation stays held. While the permission in force is cancelled, or
+  a cancellation is held, no new book is started; `status` says
+  `cancelled`. A cancellation of a permission a later one replaced is
+  refused (`not-in-force`: the agent acts under the later permission,
+  which this does not stop). A permission refused with a passkey not on
+  the list now carries a code (`passkey-not-trusted` and the others, on
+  the error). What changes for a user: `retire-passkey` on a passkey not
+  on the list says "not on the list of passkeys this recorder trusts", and
+  a record handed over must name the signing page's address. Tests:
+  `test/handover.test.mjs`.
+
+- **Records handed over: the fixes of a second review** (the recorder
+  beside Claude Code, not published). A permission does not say when it
+  was signed, so: a renewal handed over that starts more than 300 seconds
+  (the allowance between clocks the format uses) ahead of the recorder's
+  clock is refused (`starts-later`, a new code, checked before its
+  passkey, so such a one never waits; handed over again it is still
+  refused while the recorder runs, within the limits its README states); and `before-cancellation` now refuses
+  a renewal that starts less than 300 seconds after any cancellation the
+  recorder holds, where it refused one that started before it. With the
+  application's own rule (a renewal it sends starts no more than 300
+  seconds after the press of Sign), and where the clocks agree, a renewal
+  signed before a cancellation is refused whatever start the application
+  allows, and one signed after it, starting 300 seconds after it, is
+  taken; no permission handed over starts sooner than five minutes after
+  the cancellation's date.
+  `admit-passkey <thumbprint>` for a passkey never trusted no longer takes
+  the permission through the plain `renew`: it asks the running recorder
+  (a new route, `POST /admit`) to run every check a record handed over
+  goes through, with that one passkey admitted for that one permission,
+  and it refuses while the recorder is stopped. Before, a renewal from the
+  person's new passkey that waited from before a cancellation was taken
+  after it, and the agent acted again. A waiting permission that fails a
+  check is dropped from the list and said; the rest are shown with the
+  thumbprint worked out from each permission, the one that starts latest
+  first, and that one is taken on `yes`. `waiting-permissions.json` keeps
+  at most one permission for each passkey, the one that starts latest,
+  so that whoever hands records over cannot choose which of the person's
+  is shown. A cancellation handed over is taken whatever address the
+  permission it cancels was signed at, where it was refused for the
+  signing-address setting: it only takes away, and it checks against the
+  permission's own passkey and address. A `held-cancellations.json` that
+  holds a cancellation the recorder cannot take stops the start with a
+  message that names the file and what to do. The time the feed waits for
+  the body of a record handed over can be shortened for tests
+  (`handOverReadMs`). What changes for a user: a renewal handed over must
+  now start between 300 seconds after the latest cancellation and 300
+  seconds after the recorder's clock; `admit-passkey` for a passkey never
+  trusted needs the recorder running. Tests: `test/handover.test.mjs`.
+
 ## 0.8.0 (1 November 2026)
 
 Version 0.8.0 changes the library's browser part, `src/passkey-browser.js`, which a web page uses to have a person sign with a passkey. A new function, `signChallengeWithChosenPasskey`, lets a page whose browser has forgotten which passkey signed before ask the device to offer the passkeys it holds for the website; the page must then check what comes back against the key it expects. Every signing function now also says which passkey signed (`credentialId`). What changes for a user: every other signing function now refuses, before the device is asked, a passkey that does not name its identifier as text of at least one character, with a `PasskeyError` of code `cancelled` and the words "No passkey was named, so nothing was signed." A missing or non-text identifier already failed with that code, with other words; a passkey whose identifier was empty text was handed to the device, and now throws instead. The signing page uses all this to open as a small window for another page (the Provared application), sign a new permission, a renewal or a cancellation there, and hand the record back; the signing page is served at sign.prova.red and is not in the npm package. Nothing else in the library changes: no record's bytes, no rule of the checker, nothing in the Python version but its version number, so a book checks with 0.8.0 exactly as with 0.7.0. Beside the library, in this repository, with entries in the list below: `provared-mcp-executor` 0.2.0, with rules on the content of a tool call, already published on npm on 1 November 2026; and a reader of Agent Middleware's receipts, `provared-agent-middleware`, not published. The framework packages `provared-langchain` and `pydantic-ai-provared` stay at 0.2.0, unchanged.

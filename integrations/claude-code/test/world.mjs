@@ -138,10 +138,11 @@ export async function runHook(port, event, toolName, toolInput, { file = hook, e
 }
 
 /** A command of the recorder, run as a person runs it, on a temporary folder and a port of the test's own. */
-export function runCommand(args, { folder, port, cwd = folder }) {
+export function runCommand(args, { folder, port, cwd = folder, input }) {
   if (!resolve(folder).startsWith(temporary + sep) || !resolve(cwd).startsWith(temporary + sep)) throw new Error('A test runs the commands in a temporary folder only.');
   if (!Number.isInteger(port) || port === LIVE_PORT) throw new Error('A test runs the commands on a port of its own only.');
-  return run([recorderFile, ...args], { cwd, env: { PROVARED_CLAUDE_CODE_DIR: folder, PROVARED_CLAUDE_CODE_PORT: String(port) } });
+  // "input": what the person types (admit-passkey asks before it takes a passkey never trusted).
+  return run([recorderFile, ...args], { cwd, input, env: { PROVARED_CLAUDE_CODE_DIR: folder, PROVARED_CLAUDE_CODE_PORT: String(port) } });
 }
 
 /** A port that nothing listens on, at the moment it is asked for. */

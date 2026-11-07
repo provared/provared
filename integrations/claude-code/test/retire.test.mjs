@@ -112,7 +112,7 @@ test('a retired passkey signs no new permission, even with --new-passkey; what i
   }
 });
 
-test('only a passkey on the list can be retired or admitted; the thumbprint must be one; a folder with no list has nothing to retire', async () => {
+test('only a passkey on the list can be retired or admitted again; the thumbprint must be one; a folder with no list has nothing to retire', async () => {
   const { folder, passkey } = await world([]);
   const A = await thumbprint(passkey.key);
   const port = await freePort();
@@ -126,13 +126,15 @@ test('only a passkey on the list can be retired or admitted; the thumbprint must
   const other = await thumbprint((await developmentPasskey()).key);
   const notOn = await runCommand(['retire-passkey', other], { folder, port });
   assert.notEqual(notOn.code, 0);
-  assert.match(notOn.out + notOn.err, /is not on the list of passkeys whose permissions this recorder has taken/);
+  assert.match(notOn.out + notOn.err, /is not on the list of passkeys this recorder trusts/);
   assert.deepEqual(readRetired(folder), []);
   const malformed = await runCommand(['retire-passkey', 'not-a-thumbprint'], { folder, port });
   assert.notEqual(malformed.code, 0);
   assert.match(malformed.out + malformed.err, /named by its thumbprint/);
   assert.equal((await runCommand(['retire-passkey'], { folder, port })).code, 2, 'the usage, with no thumbprint');
+  // A passkey never trusted is not added by itself: only with a permission it signed (handover.test.mjs).
   assert.throws(() => retirePasskey(folder, other, false), /nothing to admit/);
+  assert.deepEqual(readTrusted(folder), [A]);
   // Retired, the passkey of the permission in force: the recorder starts all the same.
   assert.deepEqual(retirePasskey(folder, A, true), { passkeys: [A], retired: [A], changed: true });
   const started = await startService({ folder, port: 0 });
