@@ -1817,7 +1817,7 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
   // held before (one held back and handed over again would take the agent
   // back to it), and starts no earlier than the permission in force, no
   // more than HAND_OVER_ALLOWANCE_MS ahead of this computer's clock when it
-  // is handed over ("starts-later", refused for good), and at least
+  // is handed over ("starts-later"), and at least
   // HAND_OVER_ALLOWANCE_MS after every cancellation the recorder holds. A
   // passkey this computer does not trust is refused, never added: the
   // person adds it here, with "admit-passkey", which runs these same checks
@@ -1846,7 +1846,7 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
   // its start comes nearer (a restart forgets them; the uploader does not
   // hand over again a record refused with this code).
   const startsLater = new Set();
-  const startsLaterWords = (from) => `This permission starts at ${from}, more than ${HAND_OVER_ALLOWANCE_MS / 60000} minutes ahead of this computer's clock when it was handed over, so it is not taken, now or later. A permission does not say when it was signed: one that starts later than that could have been signed before a cancellation and kept back until after it. Sign one that starts within ${HAND_OVER_ALLOWANCE_MS / 60000} minutes of signing; to use one that starts later, put it on this computer yourself: ${RUN} renew <file>.`;
+  const startsLaterWords = (from) => `This permission starts at ${from}, more than ${HAND_OVER_ALLOWANCE_MS / 60000} minutes ahead of this computer's clock when it was handed over, so it is not taken, and it stays refused while this recorder runs. A permission does not say when it was signed: one that starts later than that could have been signed before a cancellation and kept back until after it. Sign one that starts within ${HAND_OVER_ALLOWANCE_MS / 60000} minutes of signing; to use one that starts later, put it on this computer yourself: ${RUN} renew <file>.`;
 
   // admit: the thumbprint of a passkey this computer does not trust, which
   // the person admits here ("admit-passkey") for this one permission; check:

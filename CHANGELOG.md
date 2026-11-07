@@ -10,8 +10,8 @@
   of the device the person signs on, and on the application's page, since
   the signing page sets no limit on a start; a start refused as
   `starts-later` is remembered in memory only, so "refused for good" is
-  corrected; a clock more than about six minutes ahead has every renewal
-  from the application refused. The message for a
+  corrected; a clock more than about six minutes ahead has a renewal from
+  the application refused if it is handed over soon after the press. The message for a
   `held-cancellations.json` the recorder cannot take now says to take out
   only the others where the file also holds one the person signed.
 
@@ -65,16 +65,17 @@
   beside Claude Code, not published). A permission does not say when it
   was signed, so: a renewal handed over that starts more than 300 seconds
   (the allowance between clocks the format uses) ahead of the recorder's
-  clock is refused for good (`starts-later`, a new code, checked before
-  its passkey, so such a one never waits; handed over again it is still
-  refused while the recorder runs); and `before-cancellation` now refuses
+  clock is refused (`starts-later`, a new code, checked before its
+  passkey, so such a one never waits; handed over again it is still
+  refused while the recorder runs, within the limits its README states); and `before-cancellation` now refuses
   a renewal that starts less than 300 seconds after any cancellation the
   recorder holds, where it refused one that started before it. With the
   application's own rule (a renewal it sends starts no more than 300
-  seconds after the press of Sign), a renewal signed before a
-  cancellation is refused whatever start the application allows, and one
-  signed after it, starting 300 seconds after it, is taken; after a
-  cancellation the agent stays stopped for at least five minutes.
+  seconds after the press of Sign), and where the clocks agree, a renewal
+  signed before a cancellation is refused whatever start the application
+  allows, and one signed after it, starting 300 seconds after it, is
+  taken; no permission handed over starts sooner than five minutes after
+  the cancellation's date.
   `admit-passkey <thumbprint>` for a passkey never trusted no longer takes
   the permission through the plain `renew`: it asks the running recorder
   (a new route, `POST /admit`) to run every check a record handed over

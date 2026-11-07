@@ -667,11 +667,12 @@ POST http://127.0.0.1:8794/hand-over      {"kind": "renewal", "slip": …} or {"
   starts at least 300 seconds after every cancellation the recorder
   holds, in a book or held beside it (`before-cancellation`). The
   application gives every renewal it sends a start no more than 300
-  seconds after the person pressed Sign, so one signed before a
-  cancellation starts before the cancellation's date and 300 seconds and
-  is refused, while one signed after it starts at that point and is
-  taken; after a cancellation the agent stays stopped for at least five
-  minutes. A permission that starts later than that is put in place on
+  seconds after the person pressed Sign, so, where the clocks agree, one
+  signed before a cancellation starts before the cancellation's date and
+  300 seconds and is refused, while one signed after it starts at that
+  point and is taken; no permission handed over starts sooner than five
+  minutes after the cancellation's date. See "Limits" below for where
+  this does not hold. A permission that starts later than that is put in place on
   this computer by file (`renew <file>`). **A passkey not on the list is
   refused (`passkey-not-trusted`), never added.** The refused permission
   waits in `waiting-permissions.json` (nothing in it trusted): at most one
@@ -740,22 +741,24 @@ POST http://127.0.0.1:8794/hand-over      {"kind": "renewal", "slip": …} or {"
   cancellation, on a device whose clock is fast, can pass both rules and
   be taken: signed on a phone ten minutes fast, it starts about nine
   minutes ahead, and a cancellation made two minutes later, on a computer
-  with the right clock, does not stop it if the server holds the renewal
-  back for two minutes more and then hands it over. The signing page
+  with the right clock, does not stop it if the server holds the renewal back until at least
+  two minutes after the cancellation and then hands it over. The signing page
   (https://sign.prova.red) sets no limit of its own on the start, so the
   rule also rests on the application's page: a faulty or attacked
   application page could ask for a start further ahead and hold the
   renewal back. A start refused as `starts-later` is remembered in memory
   only, for the last 1,000 refused: after a restart of the recorder, or
-  once others have pushed it out, the same renewal is taken if it is
-  handed over when its start has come near.
+  once others, signed or not, have pushed it out, the same renewal can be
+  taken if it is handed over when its start has come near.
   Where the clock of the computer the person signs on is ahead of this
   one by more than the time between their cancellation and their next
-  renewal, that renewal is refused (`starts-later`): sign it again a
-  little later. With no cancellation at all, a clock more than about six
-  minutes ahead has every renewal from the application refused the same
-  way, because the application starts a renewal a minute before the
-  press: set that device's clock right. Many permissions from passkeys this computer does not
+  renewal, that renewal is refused (`starts-later`) if it is handed over
+  promptly: sign it again a little later. With no cancellation at all, a
+  renewal from the application is refused the same way when the clock is
+  ahead by more than six minutes and the time from the press to the
+  hand-over, because the application starts a renewal a minute before the
+  press: set that device's clock right. One handed over later than that
+  can still be taken, as above. Many permissions from passkeys this computer does not
   trust, handed over by the server, can push the person's own waiting
   permission out of `waiting-permissions.json` (eight in all): it is then
   put in place by file (`renew <file> --new-passkey`). Any program on
