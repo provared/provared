@@ -37,8 +37,8 @@
 - **The HTTP executor after an independent review** (`mcp-executor/http.mjs`;
   not published). An agent that reads nothing of a stream no longer makes
   the executor buffer the upstream without bound: the upstream is paused
-  until the agent drains, and an agent that drains nothing for `timeout`
-  is cut off (X113). Sessions are capped for each agent (1,000), so an
+  until the agent drains, and an agent whose connection does not take what
+  is waiting within `timeout` is cut off (X113). Sessions are capped for each agent (1,000), so an
   agent can evict only its own (X114). A stop on request (SIGINT,
   SIGTERM, `close()`) settles a call in flight as the executor's stop
   (`EXECUTOR_STOPPED`, the first sentence of `OUTCOME_UNKNOWN`), writes
@@ -68,7 +68,11 @@
   used to pass (X110). An `Mcp-Param-*` header against a number in the body
   is compared as a number, exactly and only in JSON's form of a number, so
   `42.0` agrees with 42, which it did not, and `0x2A`, an empty value and
-  `Infinity` do not (X110).
+  `Infinity` do not (X110). The log and receipt text "nothing read for N
+  ms" claimed more than the code does, and now says what happens: an agent
+  whose connection does not take what the executor has waiting within
+  `timeout` is cut, and a very slow reader can be cut too; the code is as it
+  was, and a new test shows the slow reader cut (README, X107, X113).
 
 ## 0.8.0 (1 November 2026)
 

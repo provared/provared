@@ -494,20 +494,20 @@ export async function openHttpExecutor(config, more = {}) {
       f(...a);
       done();
     };
-    /** The agent is not taking what the upstream sends: the exchange is cut, since it would otherwise hold memory and a slot for ever. */
+    /** The agent's connection is not taking what the executor has waiting: the exchange is cut, since it would otherwise hold memory and a slot for ever. */
     const stalled = (why) => {
       agent.log({ event: 'agent-not-reading', kind, held: res.writableLength, reason: why });
       req?.destroy();
-      fail_(502, `The agent did not read what the executor sent it (${why}), so the exchange with the upstream was cut.`);
+      fail_(502, `The agent's connection did not take what the executor had waiting (${why}), so the exchange with the upstream was cut.`);
       res.destroy();
     };
-    /** Write to the agent, unless it has gone. Where the agent's connection takes no more, the upstream is paused until it drains; an agent that drains nothing within the timeout, or that holds more than the limit, is cut off. */
+    /** Write to the agent, unless it has gone. Where the agent's connection takes no more, the upstream is paused until it drains; an agent whose connection does not fully drain within the timeout, even one reading slowly, or for which more than the limit is waiting, is cut off (X113). */
     const toAgent = (text) => {
       if (res.destroyed || res.writableEnded || finished) return;
       if (res.writableLength > BACKLOG_LIMIT) return stalled(`more than ${BACKLOG_LIMIT} bytes waiting`);
       if (res.write(text) || !up_ || stallTimer) return;
       up_.pause();
-      stallTimer = setTimeout(() => stalled(`nothing read for ${settings.timeout} ms`), settings.timeout);
+      stallTimer = setTimeout(() => stalled(`not all taken within ${settings.timeout} ms`), settings.timeout);
       stallTimer.unref();
       res.once('drain', () => {
         clearTimeout(stallTimer);

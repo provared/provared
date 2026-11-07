@@ -634,11 +634,33 @@ test('attack: an agent that stops reading a fast stream. The upstream is paused,
     assert.ok(w.upstream.fastBytes - written < 2 * 1024 * 1024, 'still paused');
     // Nothing read within the timeout: the exchange is cut, the upstream's stream closed, the slot freed.
     await until(() => w.upstream.fastClosed, { timeout: 4000 });
-    assert.ok(w.logs.some((e) => e.event === 'agent-not-reading' && e.kind === 'stream'));
+    assert.ok(w.logs.some((e) => e.event === 'agent-not-reading' && e.kind === 'stream' && e.reason === 'not all taken within 1500 ms'));
     await until(() => w.executor.agent('alpha').open() === 0);
     s.res.destroy();
     const after = await call(w, 'alpha', 'echo', { a: 1 });
     assert.equal(after.status, 200, 'the agent is served again');
+  } finally {
+    await w.close();
+  }
+});
+
+test('a very slow reader is cut too: the clock stops only when the connection has taken all that is waiting, not at each part read', async () => {
+  const w = await httpWorld({ config: { timeout: 1000 } });
+  try {
+    const s = await rawRequest(w, { method: 'GET', headers: { accept: 'text/event-stream', 'last-event-id': 'fast', ...auth(w, 'alpha') }, stream: true });
+    assert.equal(s.status, 200);
+    s.res.pause();
+    let taken = 0;
+    const reading = setInterval(() => {
+      taken += s.res.read(1024)?.length ?? 0;
+    }, 50);
+    s.res.on('error', () => {});
+    await until(() => w.upstream.fastClosed, { timeout: 6000 });
+    clearInterval(reading);
+    assert.ok(taken > 0, 'the agent was reading all the while');
+    assert.ok(w.logs.some((e) => e.event === 'agent-not-reading' && e.reason === 'not all taken within 1000 ms'));
+    s.res.destroy();
+    await until(() => w.executor.agent('alpha').open() === 0);
   } finally {
     await w.close();
   }

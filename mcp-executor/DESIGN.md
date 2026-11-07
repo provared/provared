@@ -1515,8 +1515,8 @@ upstream JSON body, or one event, up to 16 MiB (`ANSWER_LIMIT`, the stdio
 line limit), past which the exchange is cut and a call gets "no answer";
 the executor's `timeout` on every POST exchange, and on the reading of a
 POST body (X119) (a GET stream of server messages is open-ended by nature,
-bounded by the event limit and by X113, which cuts off an agent that reads
-nothing for `timeout` ms); 256
+bounded by the event limit and by X113, which cuts off an agent whose
+connection does not take what is waiting within `timeout` ms); 256
 requests of one agent in flight at once (`MAX_OPEN`), beside `maxWaiting`
 for its calls, which `callCore` counts for each agent; 1,000 sessions
 remembered for each agent, that agent's oldest forgotten first (X114). Why:
@@ -1640,11 +1640,14 @@ executor over `node:http` on one connection for each request: the
 built-in `fetch` keeps connections alive, which kept the test process
 from ending and tripped an assertion in Node.js on Windows at exit.
 
-**X113. An agent that does not read.** `res.write`'s return value is
-honoured: where the agent's connection takes no more, the upstream's
-response is paused until the agent drains it; an agent that drains nothing
-within `timeout` ms is cut off (the exchange with the upstream closed, the
-agent's connection destroyed, a call's outcome "not known"), and so is one
+**X113. An agent that does not take what it is sent.** `res.write`'s return
+value is honoured: where the agent's connection takes no more, the
+upstream's response is paused until the connection has taken all that is
+waiting. An agent whose connection does not take what the executor has
+waiting within `timeout` ms is cut off (the exchange with the upstream
+closed, the agent's connection destroyed, a call's outcome "not known").
+The clock stops only when all of it has gone, not at each part read, so a
+very slow reader can be cut too, though it is reading. So is an agent
 for which more than 16 MiB is waiting (`BACKLOG_LIMIT`), which the pause
 makes reachable only where one event is itself over the limit in bytes. Why:
 a review showed an agent that reads nothing making the executor hold an
@@ -1652,8 +1655,9 @@ upstream stream without bound (954 MiB in four seconds); a GET stream has no
 time limit (X107), so a stalled one must end by this rule or hold memory and
 a slot for ever. `timeout` is reused rather than a knob of its own: one
 limit on how long the executor waits for the far side, whichever side that
-is. The other way: a bound on memory alone, which would cut a slow but
-honest agent rather than wait for it.
+is. The other way: a bound on memory alone, or a clock that begins again at
+each part read, either of which would spare a slow but honest agent, and
+leave one that reads a byte at a time holding a slot.
 
 **X114. Sessions are capped for each agent, not for the executor.** Each
 agent may have 1,000 sessions remembered (`MAX_SESSIONS`); past that its own

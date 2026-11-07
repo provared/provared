@@ -202,10 +202,11 @@ What the executor does with each request:
   (413), and one that does not arrive whole within `timeout` is refused
   (408); an answer or an event of the upstream over 16 MiB is cut off; a
   call the upstream does not answer within `timeout` is cancelled and gets
-  a receipt that says its outcome is not known; an agent that reads
-  nothing of what the executor sends it for `timeout` has that exchange
-  cut, the upstream's stream having been paused meanwhile rather than
-  buffered; each agent may have 256 requests in flight and 1,000 sessions
+  a receipt that says its outcome is not known; an agent whose connection
+  does not take what the executor has waiting within `timeout` has that
+  exchange cut, the upstream's stream having been paused meanwhile rather
+  than buffered, and a very slow reader can be cut too, since the clock
+  stops only when all that is waiting has gone; each agent may have 256 requests in flight and 1,000 sessions
   remembered, its own oldest forgotten first.
 - A stop on request (SIGINT, SIGTERM) with a call in flight settles the
   call as the executor's stop ("The executor stopped while this call was
