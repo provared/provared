@@ -317,9 +317,14 @@ export function spliceId(text, newId) {
   return `${text.slice(0, at.start)}${JSON.stringify(newId)}${text.slice(at.end)}`;
 }
 
+/** A response, as the text of one message (no line feed). */
+export function responseText(id, body) {
+  return JSON.stringify({ jsonrpc: '2.0', id, ...body });
+}
+
 /** A response, as one line with its line feed, as a Buffer. */
 export function responseLine(id, body) {
-  return Buffer.from(`${JSON.stringify({ jsonrpc: '2.0', id, ...body })}\n`);
+  return Buffer.from(`${responseText(id, body)}\n`);
 }
 
 /** A notification, as one line with its line feed, as a Buffer. */

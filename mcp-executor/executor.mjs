@@ -30,7 +30,7 @@ import { delimiter, isAbsolute, resolve } from 'node:path';
 import { argumentsFingerprint, checkBook, countersign, denialCodes, entryLine, fingerprint, fromBase64url, identifierFingerprint, openRecorder, randomId, thumbprint } from 'provared';
 import { loadCopyKey, openCopy, readCopy, unfinished } from './copy.mjs';
 import { aboutSlip, bookFile, loadKeyFile, readIfThere, slipFrom, untilFree } from './files.mjs';
-import { CODES, MAX_LINE_BYTES, idKey, isId, notificationLine, readLines, readMessage, repeatedName, responseLine, spliceId, topLevelId, unsafeInteger } from './jsonrpc.mjs';
+import { CODES, MAX_LINE_BYTES, idKey, isId, notificationLine, readLines, readMessage, repeatedName, responseLine, responseText, spliceId, topLevelId, unsafeInteger } from './jsonrpc.mjs';
 import { RULES_DOCUMENT, RULE_DOCUMENT, RULES_ENTRY_PREFIX, TOOL_NAME, lookUp, readPointer, readRules, rulesFingerprint, statesContentRules, testCall } from './rules.mjs';
 
 /** The document, in each stub and denial, whose fingerprint is that of the executor's own identifier for the call (a label, not a reserved name). */
@@ -44,7 +44,10 @@ export const CALL_META = 'red.prova/call-id';
 /** The action name a denial carries for a call to a tool that no rule names. */
 export const UNLISTED_ACTION = 'executor.unlisted';
 
-export const OUTCOME_UNKNOWN = 'The executor stopped while this call was with the tool server, so its outcome is not known. The receipt was written when the executor next started, from its own copy of what it had sent.';
+/** The error text a receipt names where the executor stopped on request (a signal, close()) with the call with the server: the receipt is written then, before the stop completes. */
+export const EXECUTOR_STOPPED = 'The executor stopped while this call was with the tool server, so its outcome is not known.';
+/** The same, where the executor stopped without warning and the receipt was written at the next start, from the copy. */
+export const OUTCOME_UNKNOWN = `${EXECUTOR_STOPPED} The receipt was written when the executor next started, from its own copy of what it had sent.`;
 export const RESULT_NOT_FINGERPRINTED = 'The tool server answered, and its result could not be written in the one form of RFC 8785 (text that is not well-formed Unicode, a number JSON cannot write, or a whole number beyond 9,007,199,254,740,991), so the receipt names no result.';
 /** The error text a receipt names where the server's answer could not be read as a message; the answer went to the client as it was. */
 export const UNREADABLE_ANSWER = 'The tool server answered with a line the executor could not read as a message (not JSON, a member name given twice, or not a response), so the receipt names no result. The line was handed to the agent as it was.';
@@ -94,10 +97,7 @@ export function readSettings(config, root) {
   const s = {};
   const at = (what, text) => problems.push(`${what}: ${text}`);
   if (!isObject(config)) return { settings: null, problems: ['The settings must be a JSON object.'], warnings };
-  s.name = config.name ?? 'Provared MCP executor';
-  if (typeof s.name !== 'string' || s.name.length < 1 || s.name.length > 200) at('name', 'must be text of 1 to 200 characters.');
-  s.service = config.service ?? 'executor';
-  if (typeof s.service !== 'string' || !SHORT_NAME.test(s.service)) at('service', 'must be 1 to 64 lower-case letters, digits, full stops, hyphens or underscores: the id the slip gives the executor in "with".');
+  readIdentity(config, s, at);
 
   const server = config.server;
   if (!isObject(server)) at('server', 'must be an object naming the tool server: command, args, cwd, env.');
@@ -146,17 +146,7 @@ export function readSettings(config, root) {
 
   const agent = config.agent;
   if (!isObject(agent)) at('agent', 'must be an object: slip, book, keys, issuerKeys.');
-  else {
-    s.agent = {};
-    for (const k of ['slip', 'book', 'keys']) {
-      if (typeof agent[k] !== 'string' || agent[k] === '') at(`agent.${k}`, 'must be a path.');
-      else s.agent[k] = pathFrom(root, agent[k]);
-    }
-    s.agent.issuerKeys = agent.issuerKeys;
-    if (!Array.isArray(agent.issuerKeys) || agent.issuerKeys.length === 0 || !agent.issuerKeys.every((t) => typeof t === 'string' && /^[A-Za-z0-9_-]{43}$/.test(t))) {
-      at('agent.issuerKeys', 'must list the thumbprint of each passkey the executor trusts (43 characters of base64url each); with none, nothing is allowed.');
-    }
-  }
+  else s.agent = readAgentPaths(agent, root, at, 'agent');
 
   const ex = config.executor;
   if (!isObject(ex)) at('executor', 'must be an object: keys, copy, copyKey.');
@@ -172,6 +162,48 @@ export function readSettings(config, root) {
     else s.executor.copyKey = pathFrom(root, copyKey);
   }
 
+  readToolRules(config, s, at);
+  readKnobs(config, s, at, root);
+  s.shutdownWait = config.shutdownWait ?? 5000;
+  if (!Number.isInteger(s.shutdownWait) || s.shutdownWait < 100 || s.shutdownWait > 600000) at('shutdownWait', 'must be a whole number of milliseconds from 100 to 600,000.');
+  for (const k of Object.keys(config)) {
+    if (![...SHARED_KEYS, 'server', 'agent', 'executor', 'shutdownWait'].includes(k)) warnings.push(`${k}: not a setting; set aside.`);
+  }
+  if (s.unlisted === 'forward') warnings.push(UNLISTED_FORWARD_WARNING);
+  return { settings: problems.length ? null : s, problems, warnings };
+}
+
+/** The settings both ways of running share: the name, the service id, the tool rules and the knobs of readKnobs. */
+export const SHARED_KEYS = ['name', 'service', 'tools', 'unlisted', 'hideUnlisted', 'timeout', 'denialsPerHour', 'callIdInMeta', 'maxWaiting', 'contentRules'];
+export const UNLISTED_FORWARD_WARNING = 'unlisted is "forward": a call to a tool that no rule names is sent on with no receipt and no denial. The record then leaves those calls out.';
+
+/** The executor's name and its service id (the id the slip gives it in "with"). Into s. */
+export function readIdentity(config, s, at) {
+  s.name = config.name ?? 'Provared MCP executor';
+  if (typeof s.name !== 'string' || s.name.length < 1 || s.name.length > 200) at('name', 'must be text of 1 to 200 characters.');
+  s.service = config.service ?? 'executor';
+  if (typeof s.service !== 'string' || !SHORT_NAME.test(s.service)) at('service', 'must be 1 to 64 lower-case letters, digits, full stops, hyphens or underscores: the id the slip gives the executor in "with".');
+}
+
+/** Whether a value is a JSON object (not null, not a list). */
+export { isObject, pathFrom, SHORT_NAME };
+
+/** An agent's paths and issuer keys, as the settings give them under "prefix" (agent, or agents.<name>). */
+export function readAgentPaths(agent, root, at, prefix) {
+  const a = {};
+  for (const k of ['slip', 'book', 'keys']) {
+    if (typeof agent[k] !== 'string' || agent[k] === '') at(`${prefix}.${k}`, 'must be a path.');
+    else a[k] = pathFrom(root, agent[k]);
+  }
+  a.issuerKeys = agent.issuerKeys;
+  if (!Array.isArray(agent.issuerKeys) || agent.issuerKeys.length === 0 || !agent.issuerKeys.every((t) => typeof t === 'string' && /^[A-Za-z0-9_-]{43}$/.test(t))) {
+    at(`${prefix}.issuerKeys`, 'must list the thumbprint of each passkey the executor trusts (43 characters of base64url each); with none, nothing is allowed.');
+  }
+  return a;
+}
+
+/** The rules in "tools": each tool's action and, where it applies, its amount. Into s.tools. */
+export function readToolRules(config, s, at) {
   s.tools = new Map();
   if (!isObject(config.tools)) at('tools', 'must be an object: each member a tool name, with the action name the slip uses for it and, where it applies, its amount.');
   else {
@@ -211,6 +243,10 @@ export function readSettings(config, root) {
       s.tools.set(tool, entry);
     }
   }
+}
+
+/** The knobs both ways of running share: unlisted, hideUnlisted, timeout, denialsPerHour, callIdInMeta, contentRules, maxWaiting. Into s. */
+export function readKnobs(config, s, at, root) {
   s.unlisted = config.unlisted ?? 'refuse';
   if (!['refuse', 'forward'].includes(s.unlisted)) at('unlisted', 'must be "refuse" or "forward".');
   s.hideUnlisted = config.hideUnlisted ?? true;
@@ -221,8 +257,6 @@ export function readSettings(config, root) {
   if (!Number.isInteger(s.denialsPerHour) || s.denialsPerHour < 1 || s.denialsPerHour > 100000) at('denialsPerHour', 'must be a whole number from 1 to 100,000.');
   s.callIdInMeta = config.callIdInMeta ?? true;
   if (typeof s.callIdInMeta !== 'boolean') at('callIdInMeta', 'must be true or false.');
-  s.shutdownWait = config.shutdownWait ?? 5000;
-  if (!Number.isInteger(s.shutdownWait) || s.shutdownWait < 100 || s.shutdownWait > 600000) at('shutdownWait', 'must be a whole number of milliseconds from 100 to 600,000.');
   s.contentRules = null;
   if (config.contentRules !== undefined) {
     if (typeof config.contentRules !== 'string' || config.contentRules === '') at('contentRules', 'must be the path of the rules file (rules on the content of a change).');
@@ -230,11 +264,6 @@ export function readSettings(config, root) {
   }
   s.maxWaiting = config.maxWaiting ?? 16;
   if (!Number.isInteger(s.maxWaiting) || s.maxWaiting < 1 || s.maxWaiting > 1000) at('maxWaiting', 'must be a whole number from 1 to 1,000: the most tool calls in progress or waiting their turn at once.');
-  for (const k of Object.keys(config)) {
-    if (!['name', 'service', 'server', 'agent', 'executor', 'tools', 'unlisted', 'hideUnlisted', 'timeout', 'denialsPerHour', 'callIdInMeta', 'shutdownWait', 'maxWaiting', 'contentRules'].includes(k)) warnings.push(`${k}: not a setting; set aside.`);
-  }
-  if (s.unlisted === 'forward') warnings.push('unlisted is "forward": a call to a tool that no rule names is sent on with no receipt and no denial. The record then leaves those calls out.');
-  return { settings: problems.length ? null : s, problems, warnings };
 }
 
 /**
@@ -313,13 +342,17 @@ function credentialValue(name, from) {
     if (v === undefined) throw new Error(`server.env.${name}: the variable ${from.env} is not set in the executor's environment.`);
     return v;
   }
+  return readCredentialFile(from.file, `server.env.${name}`);
+}
+
+/** Read a credential from a file, as the gateway does: one line ending at the end is dropped. Its value is returned, never logged. */
+export function readCredentialFile(path, what) {
   let text;
   try {
-    text = readFileSync(from.file, 'utf8');
+    text = readFileSync(path, 'utf8');
   } catch (e) {
-    throw new Error(`server.env.${name}: the file could not be read (${e.code ?? e.message}).`);
+    throw new Error(`${what}: the file could not be read (${e.code ?? e.message}).`);
   }
-  // One line ending at the end is dropped, as the gateway drops it.
   return text.replace(/\r?\n$/, '');
 }
 
@@ -345,28 +378,49 @@ export async function loadRules(path) {
 }
 
 /**
- * Open everything the executor needs but the server: the keys, the slip,
- * the book, the copy, and the stub writer. Says what is wrong in one error.
- * With "readOnly" nothing is written: no slip line to the book file, no copy
- * key made (checkConfig).
+ * Open what every agent shares: the executor's own keys, and the rules on
+ * content where the settings name a rules file. Gives
+ * {executorKeys, content, warnings}; throws where a rule names a tool that
+ * "forward" would send on untested.
  */
-async function prepare(config, root, { now = Date.now, log = () => {}, readOnly = false } = {}) {
-  const { settings, problems, warnings } = readSettings(config, root);
-  if (problems.length) throw new Error(`The settings have problems:\n- ${problems.join('\n- ')}`);
-  const program = resolveCommand(settings.server.command, { root, path: settings.server.path });
-  if (program.warning) warnings.push(program.warning);
-  settings.server.resolved = program.path;
-  const agentKeys = await loadKeyFile(settings.agent.keys, 'agent');
+export async function prepareShared(settings) {
+  const warnings = [];
   const executorKeys = await loadKeyFile(settings.executor.keys, 'agent');
-  const slipText = readIfThere(settings.agent.slip);
-  if (slipText === '') throw new Error(`The slip ${settings.agent.slip} is missing. Sign the permission (at https://sign.prova.red) and save it there.`);
-  const about = await aboutSlip(slipFrom(slipText, settings.agent.slip));
+  let content = null;
+  if (settings.contentRules) {
+    content = await loadRules(settings.contentRules);
+    for (const rule of content.rules) {
+      for (const tool of rule.tools) {
+        if (settings.tools.has(tool)) continue;
+        // With "forward", a call to a tool that no rule in "tools" names is sent on before any content rule is reached, so the content rule would never be tested.
+        if (settings.unlisted === 'forward') throw new Error(`contentRules: the rule ${JSON.stringify(rule.name)} names the tool "${tool}", which no rule in "tools" names, and "unlisted" is "forward": a call to that tool would be sent on with no content rule tested. Add "${tool}" to "tools", or set "unlisted" to "refuse".`);
+        warnings.push(`contentRules: the rule ${JSON.stringify(rule.name)} names the tool "${tool}", which no rule in "tools" names, so the executor never sends a call to it and the content rule is never tested.`);
+      }
+    }
+  }
+  return { executorKeys, content, warnings };
+}
+
+/**
+ * Open one agent: its keys, its slip (held against the executor's keys, the
+ * tool rules and the rules on content), its book, its copy and its stub
+ * writer. "paths": slip, book, keys, issuerKeys, copy, copyKey. Says what
+ * is wrong in one error. With "readOnly" nothing is written: no slip line to
+ * the book file, no copy key made (checkConfig).
+ */
+export async function prepareAgent(paths, settings, shared, { now = Date.now, readOnly = false } = {}) {
+  const warnings = [];
+  const { executorKeys, content } = shared;
+  const agentKeys = await loadKeyFile(paths.keys, 'agent');
+  const slipText = readIfThere(paths.slip);
+  if (slipText === '') throw new Error(`The slip ${paths.slip} is missing. Sign the permission (at https://sign.prova.red) and save it there.`);
+  const about = await aboutSlip(slipFrom(slipText, paths.slip));
   const c = about.content;
-  if (!sameKeys(c.agent?.keys, agentKeys.keys)) throw new Error(`The slip ${settings.agent.slip} names other agent keys than ${settings.agent.keys} holds. The executor writes receipts only under a permission for the keys it holds.`);
+  if (!sameKeys(c.agent?.keys, agentKeys.keys)) throw new Error(`The slip ${paths.slip} names other agent keys than ${paths.keys} holds. The executor writes receipts only under a permission for the keys it holds.`);
   const named = Array.isArray(c.with) ? c.with.find((w) => w?.id === settings.service) : undefined;
   if (!named) throw new Error(`The slip does not name the executor in "with" as "${settings.service}". Add {"id": "${settings.service}", "name": …, "keys": <the executor's keys>} to the permission's "with" (provared-mcp-executor keys prints the entry).`);
   if (!sameKeys(named.keys, executorKeys.keys)) throw new Error(`The slip names "${settings.service}" in "with" with other keys than ${settings.executor.keys} holds, so the executor's countersignatures would not check.`);
-  if (!settings.agent.issuerKeys.includes(about.issuerKey)) {
+  if (!paths.issuerKeys.includes(about.issuerKey)) {
     throw new Error(`The slip was signed by a passkey (thumbprint ${about.issuerKey}) that agent.issuerKeys does not list, so nothing would be allowed.`);
   }
   const requires = Array.isArray(c.requires) ? c.requires : [];
@@ -378,33 +432,70 @@ async function prepare(config, root, { now = Date.now, log = () => {}, readOnly 
   for (const rule of settings.tools.values()) {
     if (!actions.has(rule.action)) warnings.push(`tools.${rule.tool}: its action "${rule.action}" is not among the slip's actions, so every call to it will be refused (action-not-allowed).`);
   }
-  // The rules on content: read strictly and fingerprinted, then held
-  // against what the slip states of the agent's software: nothing where it
-  // states nothing (a warning says how to add it); a stop where it states
-  // software and not these rules, since the person approved other rules;
-  // and a stop where the slip states rules on content and the settings name
-  // no rules file, since the person approved rules and none would run.
-  let content = null;
+  // The rules on content, held against what the slip states of the agent's
+  // software: nothing where it states nothing (a warning says how to add
+  // it); a stop where it states software and not these rules, since the
+  // person approved other rules; and a stop where the slip states rules on
+  // content and the settings name no rules file, since the person approved
+  // rules and none would run.
   if (!settings.contentRules && statesContentRules(c.agent?.software)) {
-    throw new Error(`The slip ${settings.agent.slip} states rules on content in the agent's software (agent.software holds an entry whose name begins "${RULES_ENTRY_PREFIX}"), and the settings name no rules file (contentRules): the executor would run without the rules the person approved. Set "contentRules" to the approved rules file, or sign a permission that states no rules on content.`);
+    throw new Error(`The slip ${paths.slip} states rules on content in the agent's software (agent.software holds an entry whose name begins "${RULES_ENTRY_PREFIX}"), and the settings name no rules file (contentRules): the executor would run without the rules the person approved. Set "contentRules" to the approved rules file, or sign a permission that states no rules on content.`);
   }
-  if (settings.contentRules) {
-    content = await loadRules(settings.contentRules);
-    for (const rule of content.rules) {
-      for (const tool of rule.tools) {
-        if (settings.tools.has(tool)) continue;
-        // With "forward", a call to a tool that no rule in "tools" names is sent on before any content rule is reached, so the content rule would never be tested.
-        if (settings.unlisted === 'forward') throw new Error(`contentRules: the rule ${JSON.stringify(rule.name)} names the tool "${tool}", which no rule in "tools" names, and "unlisted" is "forward": a call to that tool would be sent on with no content rule tested. Add "${tool}" to "tools", or set "unlisted" to "refuse".`);
-        warnings.push(`contentRules: the rule ${JSON.stringify(rule.name)} names the tool "${tool}", which no rule in "tools" names, so the executor never sends a call to it and the content rule is never tested.`);
-      }
-    }
+  if (content) {
     const software = Array.isArray(c.agent?.software) ? c.agent.software : null;
     const entry = JSON.stringify(softwareEntry(settings.name, content.fingerprint));
     if (software && !software.some((x) => x?.sha256 === content.fingerprint)) {
-      throw new Error(`The slip ${settings.agent.slip} states the agent's software (agent.software), and the rules on content in force (${settings.contentRules}, fingerprint ${content.fingerprint}) are not among what it states: the person approved other rules than these. Put the approved rules file back, or sign a permission whose agent.software holds ${entry}.`);
+      throw new Error(`The slip ${paths.slip} states the agent's software (agent.software), and the rules on content in force (${settings.contentRules}, fingerprint ${content.fingerprint}) are not among what it states: the person approved other rules than these. Put the approved rules file back, or sign a permission whose agent.software holds ${entry}.`);
     }
     if (!software) warnings.push(`The slip states nothing of the agent's software (agent.software), so a reader cannot see that the rules on content in force are the ones the person approved. Add ${entry} to the permission's agent.software and sign it again (provared-mcp-executor keys prints the entry).`);
   }
+
+  // The book and the stub writer. The slip goes into the book first,
+  // where the book does not hold it yet: a new book, or a new slip.
+  const onDisk = readIfThere(paths.book);
+  let text = onDisk;
+  const checkOptions = { issuerKeys: paths.issuerKeys };
+  let result = text ? await checkBook(text, checkOptions) : null;
+  if (result && result.summary.problemFound) throw new Error(`The book file ${paths.book} does not pass its check, so the executor does not write to it.`);
+  if (!result || !result.entries.some((e) => e.kind === 'slip' && e.fingerprint === about.fingerprint)) {
+    text += `${entryLine({ slip: about.slip })}\n`;
+    result = await checkBook(text, checkOptions);
+    if (result.summary.problemFound) throw new Error(`The slip does not pass its check: ${result.entries.at(-1).problems.map((q) => q.message).join(' ')}`);
+  }
+  const file = bookFile(paths.book, onDisk);
+  const writer = await openRecorder({
+    book: text,
+    slip: about.fingerprint,
+    privateKeys: agentKeys.privateKeys,
+    issuerKeys: paths.issuerKeys,
+    now,
+    denials: true,
+    denialsPerHour: settings.denialsPerHour,
+  });
+  if (!readOnly) file.save(writer.book());
+  const copyKey = loadCopyKey(paths.copyKey, { create: !readOnly });
+  const read = copyKey ? readCopy(paths.copy, copyKey, settings.name) : { lines: [], checked: 0, refused: 0, cut: null, next: 0, sequence: { ok: true, problem: null } };
+  if (!copyKey && existsSync(paths.copy)) throw new Error(`The copy ${paths.copy} holds lines, and its key ${paths.copyKey} is missing, so no line could be checked. Put the key back.`);
+  if (read.cut !== null) throw new Error(`The copy ${paths.copy} ends part-way through a line (a stop while it was written). Look at it, and take off the part line by hand before the executor starts.`);
+  if (read.lines.length > 0 && read.checked === 0) throw new Error(`No line of the copy ${paths.copy} checks under the copy key ${paths.copyKey}: the key is not the one the copy was written with. Put back the key the copy was written with.`);
+  if (!read.sequence.ok) throw new Error(`The copy ${paths.copy} is not whole: ${read.sequence.problem} The executor does not start on a copy with a line missing, moved or put twice; look at it, and keep what it shows.`);
+  const copy = copyKey ? openCopy(paths.copy, copyKey, settings.name, read.next) : null;
+  return { paths, warnings, agentKeys, about, file, writer, copy, read };
+}
+
+/**
+ * Open everything the stdio executor needs but the server: the keys, the
+ * slip, the book, the copy, the stub writer and the credentials. Says what
+ * is wrong in one error. With "readOnly" nothing is written (checkConfig).
+ */
+async function prepare(config, root, { now = Date.now, readOnly = false } = {}) {
+  const { settings, problems, warnings } = readSettings(config, root);
+  if (problems.length) throw new Error(`The settings have problems:\n- ${problems.join('\n- ')}`);
+  const program = resolveCommand(settings.server.command, { root, path: settings.server.path });
+  if (program.warning) warnings.push(program.warning);
+  settings.server.resolved = program.path;
+  const shared = await prepareShared(settings);
+  warnings.push(...shared.warnings);
   // The credentials: read now, so that a missing one stops the start, and
   // kept in memory for the server's environment alone.
   const env = {};
@@ -417,38 +508,9 @@ async function prepare(config, root, { now = Date.now, log = () => {}, readOnly 
     env[name] = credentialValue(name, from);
     credentialNames.push(name);
   }
-
-  // The book and the stub writer. The slip goes into the book first,
-  // where the book does not hold it yet: a new book, or a new slip.
-  const onDisk = readIfThere(settings.agent.book);
-  let text = onDisk;
-  const checkOptions = { issuerKeys: settings.agent.issuerKeys };
-  let result = text ? await checkBook(text, checkOptions) : null;
-  if (result && result.summary.problemFound) throw new Error(`The book file ${settings.agent.book} does not pass its check, so the executor does not write to it.`);
-  if (!result || !result.entries.some((e) => e.kind === 'slip' && e.fingerprint === about.fingerprint)) {
-    text += `${entryLine({ slip: about.slip })}\n`;
-    result = await checkBook(text, checkOptions);
-    if (result.summary.problemFound) throw new Error(`The slip does not pass its check: ${result.entries.at(-1).problems.map((q) => q.message).join(' ')}`);
-  }
-  const file = bookFile(settings.agent.book, onDisk);
-  const writer = await openRecorder({
-    book: text,
-    slip: about.fingerprint,
-    privateKeys: agentKeys.privateKeys,
-    issuerKeys: settings.agent.issuerKeys,
-    now,
-    denials: true,
-    denialsPerHour: settings.denialsPerHour,
-  });
-  if (!readOnly) file.save(writer.book());
-  const copyKey = loadCopyKey(settings.executor.copyKey, { create: !readOnly });
-  const read = copyKey ? readCopy(settings.executor.copy, copyKey, settings.name) : { lines: [], checked: 0, refused: 0, cut: null, next: 0, sequence: { ok: true, problem: null } };
-  if (!copyKey && existsSync(settings.executor.copy)) throw new Error(`The copy ${settings.executor.copy} holds lines, and its key ${settings.executor.copyKey} is missing, so no line could be checked. Put the key back.`);
-  if (read.cut !== null) throw new Error(`The copy ${settings.executor.copy} ends part-way through a line (a stop while it was written). Look at it, and take off the part line by hand before the executor starts.`);
-  if (read.lines.length > 0 && read.checked === 0) throw new Error(`No line of the copy ${settings.executor.copy} checks under the copy key ${settings.executor.copyKey}: the key is not the one the copy was written with. Put back the key the copy was written with.`);
-  if (!read.sequence.ok) throw new Error(`The copy ${settings.executor.copy} is not whole: ${read.sequence.problem} The executor does not start on a copy with a line missing, moved or put twice; look at it, and keep what it shows.`);
-  const copy = copyKey ? openCopy(settings.executor.copy, copyKey, settings.name, read.next) : null;
-  return { settings, warnings, agentKeys, executorKeys, about, env, credentialNames, file, writer, copy, read, content };
+  const agent = await prepareAgent({ ...settings.agent, copy: settings.executor.copy, copyKey: settings.executor.copyKey }, settings, shared, { now, readOnly });
+  warnings.push(...agent.warnings);
+  return { settings, warnings, agent, agentKeys: agent.agentKeys, executorKeys: shared.executorKeys, about: agent.about, env, credentialNames, read: agent.read, content: shared.content };
 }
 
 /**
@@ -459,7 +521,19 @@ async function prepare(config, root, { now = Date.now, log = () => {}, readOnly 
  */
 export async function checkConfig(config, root) {
   const { settings, problems, warnings } = readSettings(config, root);
-  const describe = (t) => {
+  const tools = settings ? describeTools(settings) : [];
+  if (problems.length) return { problems, warnings, tools };
+  try {
+    const p = await prepare(config, root, { readOnly: true });
+    return { problems: [], warnings: p.warnings, tools, program: p.settings.server.resolved, slip: describeSlip(p.about, p.content), credentials: p.credentialNames, contentRules: describeContentRules(p.settings, p.content, p.about), unfinished: unfinished(p.read).length };
+  } catch (e) {
+    return { problems: [e.message], warnings, tools };
+  }
+}
+
+/** The tool rules, as "check" shows them. */
+export function describeTools(settings) {
+  return [...settings.tools.values()].map((t) => {
     const shown = { tool: t.tool, action: t.action };
     if (t.amount) {
       shown.amount = { unit: t.amount.unit };
@@ -468,51 +542,45 @@ export async function checkConfig(config, root) {
       else shown.amount.count = t.amount.count;
     }
     return shown;
-  };
-  const tools = settings ? [...settings.tools.values()].map(describe) : [];
-  if (problems.length) return { problems, warnings, tools };
-  try {
-    const p = await prepare(config, root, { readOnly: true });
-    const software = Array.isArray(p.about.content.agent?.software) ? p.about.content.agent.software : null;
-    const contentRules = p.content ? { path: p.settings.contentRules, fingerprint: p.content.fingerprint, rules: p.content.names, statedInSlip: software ? software.some((x) => x?.sha256 === p.content.fingerprint) : null } : null;
-    return { problems: [], warnings: p.warnings, tools, program: p.settings.server.resolved, slip: { fingerprint: p.about.fingerprint, issuerKey: p.about.issuerKey, agent: p.about.content.agent?.name, validUntil: p.about.content.validUntil }, credentials: p.credentialNames, contentRules, unfinished: unfinished(p.read).length };
-  } catch (e) {
-    return { problems: [e.message], warnings, tools };
-  }
+  });
 }
 
-// --- the executor ---
+/** A slip, as "check" shows it. */
+export function describeSlip(about) {
+  return { fingerprint: about.fingerprint, issuerKey: about.issuerKey, agent: about.content.agent?.name, validUntil: about.content.validUntil };
+}
+
+/** The rules on content in force, as "check" shows them, with whether this slip states them. */
+export function describeContentRules(settings, content, about) {
+  if (!content) return null;
+  const software = Array.isArray(about.content.agent?.software) ? about.content.agent.software : null;
+  return { path: settings.contentRules, fingerprint: content.fingerprint, rules: content.names, statedInSlip: software ? software.some((x) => x?.sha256 === content.fingerprint) : null };
+}
+
+// --- one agent, running ---
 
 /**
- * Open the executor on its settings: keys, slip, book, copy and stub writer
- * are read now; the tool server is started by "attach". A call the copy
- * shows as sent and never given its receipt (the executor stopped
- * meanwhile) is given one now, under the slip it was sent under: with what
- * the executor knew of the outcome where its copy holds that, or naming
- * "provared.error" with OUTCOME_UNKNOWN. Where that slip is not the one in
- * force, the executor does not open.
- *
- * @param {object} config the settings, as in executor.example.json
- * @param {{root?: string, now?: () => number, log?: (event: object) => void, serverStderr?: NodeJS.WritableStream|null}} [more]
+ * One agent as the executor runs it: its writer, book file and copy; one
+ * call at a time through its writer; whether it has stopped; and the calls
+ * it has in progress. A call its copy shows as sent and never given its
+ * receipt (the executor stopped meanwhile) is given one now, under the slip
+ * it was sent under: with what the executor knew of the outcome where the
+ * copy holds that, or naming "provared.error" with OUTCOME_UNKNOWN. Where
+ * that slip is not the one in force, this throws and the executor does not
+ * open. With "name" (several agents) every log event names the agent.
  */
-export async function openExecutor(config, more = {}) {
-  const root = more.root ?? process.cwd();
-  const now = more.now ?? Date.now;
-  const log = more.log ?? ((event) => process.stderr.write(`${JSON.stringify({ provared: 'mcp-executor', ...event })}\n`));
-  const p = await prepare(config, root, { now, log });
-  const { settings, about, file, writer, copy, content } = p;
-  // The rules file in force, named in every receipt and denial by its fingerprint.
-  const rulesDocument = content ? { name: RULES_DOCUMENT, sha256: content.fingerprint } : null;
-  for (const w of p.warnings) log({ event: 'warning', message: w });
-  for (const l of p.read.lines) if (!l.valid) log({ event: 'copy-line-refused', line: l.raw.slice(0, 80) });
+export async function openAgent(prepared, { settings, executorKeys, now, log, name = null }) {
+  const { about, file, writer, copy, paths } = prepared;
+  const agentLog = name === null ? log : (event) => log({ agent: name, ...event });
+  for (const l of prepared.read.lines) if (!l.valid) agentLog({ event: 'copy-line-refused', line: l.raw.slice(0, 80) });
 
   let stopped = null;
   const stop = (why, event) => {
     stopped ??= why;
-    log({ event, reason: why });
+    agentLog({ event, reason: why });
   };
 
-  /** Append what the book gained to its file. False, and the executor stopped, where that failed. */
+  /** Append what the book gained to its file. False, and the agent stopped, where that failed. */
   function save() {
     try {
       file.save(writer.book());
@@ -532,7 +600,7 @@ export async function openExecutor(config, more = {}) {
     }
     return held;
   };
-  const open = unfinished(p.read);
+  const open = unfinished(prepared.read);
   if (open.length) {
     const held = await stubsByCall();
     for (const { sending: s, done: d } of open) {
@@ -542,20 +610,20 @@ export async function openExecutor(config, more = {}) {
         continue;
       }
       if (s.slip !== about.fingerprint) {
-        throw new Error(`The copy ${settings.executor.copy} shows call ${s.call} sent under permission ${s.slip}, which is not the one in force (${about.fingerprint}), and the book holds no receipt for it. The executor cannot write that receipt under the permission in force. Put back the permission it was sent under and start again, so that the receipt is written; then put the new permission in place.`);
+        throw new Error(`The copy ${paths.copy} shows call ${s.call} sent under permission ${s.slip}, which is not the one in force (${about.fingerprint}), and the book holds no receipt for it. The executor cannot write that receipt under the permission in force. Put back the permission it was sent under and start again, so that the receipt is written; then put the new permission in place.`);
       }
       // What the copy knows of the outcome, where the receipt was made and could not be written; else the fixed text.
       const known = Array.isArray(d?.documents) && d.documents.length ? d.documents : null;
       const details = [...(Array.isArray(s.details) ? s.details : []), ...(known ?? [{ name: 'provared.error', sha256: await identifierFingerprint(OUTCOME_UNKNOWN) }]), { name: WRITTEN_LATE_DOCUMENT, sha256: await identifierFingerprint(WRITTEN_LATE) }];
       let made;
       try {
-        made = await writer.record({ action: s.action, ...(s.amount ? { amount: s.amount } : {}), with: settings.service, details }, { when: Date.parse(s.when), countersign: (stub) => countersign(stub, p.executorKeys.privateKeys, now()) });
+        made = await writer.record({ action: s.action, ...(s.amount ? { amount: s.amount } : {}), with: settings.service, details }, { when: Date.parse(s.when), countersign: (stub) => countersign(stub, executorKeys.privateKeys, now()) });
       } catch (e) {
         throw new Error(`The copy shows call ${s.call} sent and never given its receipt, and the receipt could not be written now (${e.message}). The executor does not start until it is.`);
       }
       if (!save()) throw new Error(`The receipt of call ${s.call} could not be written to the book file: ${stopped}`);
       copy.note({ kind: 'done', call: s.call, when: new Date(now()).toISOString(), outcome: known ? 'written-late' : 'outcome-unknown', stub: made.fingerprint, countersigned: made.countersignature.accepted });
-      log({ event: 'receipt-written-late', call: s.call, stub: made.fingerprint, outcome: known ? 'as the copy knew it' : 'not known' });
+      agentLog({ event: 'receipt-written-late', call: s.call, stub: made.fingerprint, outcome: known ? 'as the copy knew it' : 'not known' });
     }
   }
 
@@ -570,9 +638,321 @@ export async function openExecutor(config, more = {}) {
     return mine;
   };
 
+  return {
+    name,
+    paths,
+    about,
+    file,
+    writer,
+    copy,
+    agentKeys: prepared.agentKeys,
+    log: agentLog,
+    stop,
+    stopped: () => stopped,
+    save,
+    inTurn,
+    /** The tool calls in progress or waiting their turn, by the client's id. @type {Map<string, object>} */
+    calls: new Map(),
+  };
+}
+
+// --- the handling of one tools/call, shared by both transports ---
+
+/** A maker of ids of the executor's own for requests sent to the server: unique for the session and not guessable (a number from 1 and a random part). */
+export function serverIds() {
+  let next = 1;
+  return () => `provared-${next++}-${randomId()}`;
+}
+
+/**
+ * The text of a tools/list answer for the client, with the tools that have
+ * no rule taken out and every number kept as the server wrote it, under the
+ * client's id. Gives {text, hidden}, or null where the text is not such an
+ * answer. "m" is the message as readMessage read it.
+ */
+export function filteredList(text, m, clientId, settings) {
+  if (!Object.hasOwn(m, 'result') || !isObject(m.result) || !Array.isArray(m.result.tools)) return null;
+  // Read again with every number kept as the server wrote it, so that filtering changes nothing else.
+  let exact;
+  try {
+    exact = JSON.parse(text, (k, v, context) => (typeof v === 'number' ? JSON.rawJSON(context.source) : v));
+  } catch {
+    exact = m;
+  }
+  const shown = exact.result.tools.filter((t) => isObject(t) && typeof t.name === 'string' && settings.tools.has(t.name));
+  return { text: JSON.stringify({ ...exact, id: clientId, result: { ...exact.result, tools: shown } }), hidden: exact.result.tools.length - shown.length };
+}
+
+/**
+ * The handling of one tools/call (DESIGN.md, section 5), the same on stdio
+ * and over HTTP: the rule, the amount, the rules on content, the check
+ * before acting, the copy's line, the sending, the receipt and the answer.
+ * The transport gives a "link" to the client and the server:
+ *   newServerId()                an id of the executor's own for the call (serverIds)
+ *   answer(text)                 one message for the client, as text without a line feed
+ *   unavailable()                why the server can take no call now, or null
+ *   send(call, forwarded)        forward the call (the message under the executor's id, with its _meta); false where it could not be sent
+ *   cancel(call, reason)         on the executor's timeout: tell the server, or close the stream
+ *   forward(id, serverId, text)  an unlisted call sent on unchecked ("unlisted": "forward")
+ *   track(call), untrack(call)   hold a call while it is in flight
+ * The transport settles the outcome with call.settle(outcome), once:
+ * {kind: 'answer', text, result, unsafe}, {kind: 'server-error', text,
+ * errorText}, {kind: 'unreadable', text, errorText} or {kind: 'error',
+ * text, code}. "text" is the server's message as it wrote it, which goes to
+ * the client under the client's id.
+ */
+export function callCore({ settings, content, executorKeys, now }) {
+  // The rules file in force, named in every receipt and denial by its fingerprint.
+  const rulesDocument = content ? { name: RULES_DOCUMENT, sha256: content.fingerprint } : null;
+  const countersignWith = (stub) => countersign(stub, executorKeys.privateKeys, now());
+
+  async function handleCall(agent, link, id, message, text) {
+    const { log, copy, writer, file, about, calls } = agent;
+    const answerError = (code, words, data) => link.answer(responseText(id, { error: { code, message: words, ...(data === undefined ? {} : { data }) } }));
+    const key = idKey(id);
+    if (calls.has(key)) return answerError(CODES.invalidRequest, 'A request with this id is already in progress.');
+    if (calls.size >= settings.maxWaiting) {
+      log({ event: 'refused', code: 'too-many-waiting', waiting: calls.size });
+      return answerError(CODES.notRecorded, `The executor already has ${calls.size} tool calls in progress or waiting their turn, the most it takes at once (maxWaiting). This call was not taken and nothing was written; ask again when one has ended.`);
+    }
+    const params = message.params ?? {};
+    const name = params.name;
+    if (typeof name !== 'string' || !TOOL_NAME.test(name)) return answerError(CODES.invalidParams, 'The tool name must be 1 to 128 letters, digits, underscores, hyphens or full stops.');
+    if (Object.hasOwn(params, 'arguments') && !isObject(params.arguments)) return answerError(CODES.invalidParams, 'The arguments must be an object.');
+    if (Object.hasOwn(params, '_meta') && !isObject(params._meta)) return answerError(CODES.invalidParams, 'The _meta member must be an object.');
+    const serverId = link.newServerId();
+    const call = { id, serverId, state: 'queued', cancelled: false, settle: null, timer: null };
+    const callId = randomId();
+    try {
+      const rule = settings.tools.get(name);
+      if (!rule && settings.unlisted === 'forward') {
+        log({ event: 'forwarded-unlisted', tool: name, call: callId });
+        link.forward(id, serverId, text);
+        return;
+      }
+      calls.set(key, call);
+      link.track(call);
+      const argsText = Object.hasOwn(params, 'arguments') ? JSON.stringify(params.arguments) : undefined;
+      const args = params.arguments;
+      const details = [
+        { name: 'provared.arguments', sha256: await argumentsFingerprint(args ?? {}) },
+        { name: TOOL_DOCUMENT, sha256: await identifierFingerprint(name) },
+        { name: CALL_DOCUMENT, sha256: await identifierFingerprint(callId) },
+        ...(rulesDocument ? [rulesDocument] : []),
+      ];
+      const trace = typeof params._meta?.traceparent === 'string' ? TRACEPARENT.exec(params._meta.traceparent) : null;
+      if (trace) details.push({ name: 'provared.trace-id', sha256: await identifierFingerprint(trace[1]) });
+      // What a denial names: what was asked for, without the identifier that was never sent.
+      const asked = details.filter((d) => d.name !== CALL_DOCUMENT);
+      const refuse = async (reason, request, source, codes, ruleName) => {
+        let denial = null;
+        try {
+          const d = await agent.inTurn(() => writer.deny(request, { source, ...(codes ? { codes } : {}) }));
+          if (d.written) denial = d.fingerprint;
+          agent.save();
+        } catch (e) {
+          log({ event: 'denial-not-written', call: callId, error: e.message });
+        }
+        copy.note({ kind: 'refused', call: callId, when: new Date(now()).toISOString(), slip: about.fingerprint, tool: name, action: request.action, ...(request.amount ? { amount: request.amount } : {}), reason: reason.code, ...(codes ? { codes } : {}), ...(ruleName ? { rule: ruleName } : {}), ...(denial ? { denial } : {}) });
+        log({ event: 'refused', call: callId, tool: name, code: reason.code, ...(codes ? { codes } : {}), ...(ruleName ? { rule: ruleName } : {}) });
+        // A tool execution error, so that the model is told and can choose another call.
+        link.answer(responseText(id, { result: { content: [{ type: 'text', text: `Not taken by the Provared executor: ${reason.message}` }], isError: true, _meta: { 'red.prova/refused': reason.code, ...(codes ? { 'red.prova/codes': codes } : {}), ...(ruleName ? { 'red.prova/rule': ruleName } : {}), ...(denial ? { 'red.prova/denial': denial } : {}) } } }));
+      };
+      if (!rule) return refuse({ code: 'unlisted', message: `No rule of the executor names the tool "${name}", so the call was not sent.` }, { action: UNLISTED_ACTION, with: settings.service, details: asked }, 'rule');
+      if (agent.stopped()) {
+        log({ event: 'refused', call: callId, tool: name, code: 'executor-stopped' });
+        return answerError(CODES.notRecorded, `The executor takes no call: ${agent.stopped()}`);
+      }
+      const got = amountOf(rule, args, argsText);
+      if (got.problem) return refuse(got.problem, { action: rule.action, with: settings.service, details: asked }, 'rule');
+      if (content) {
+        // The rules on content: a call a rule refuses, or whose content a rule cannot read exactly, is not sent.
+        const refused = testCall(content.rules, name, args, argsText);
+        if (refused) {
+          return refuse(refused.reason, { action: rule.action, ...(got.amount ? { amount: got.amount } : {}), with: settings.service, details: [...asked, { name: RULE_DOCUMENT, sha256: await identifierFingerprint(refused.rule) }] }, 'rule', undefined, refused.rule);
+        }
+      }
+      const request = { action: rule.action, ...(got.amount ? { amount: got.amount } : {}), with: settings.service, details };
+      if (settings.callIdInMeta) details.push({ name: 'provared.request-id', sha256: details.find((d) => d.name === CALL_DOCUMENT).sha256 });
+
+      // The message sent to the server: the client's call under the executor's id, with the executor's identifier in _meta where the settings say.
+      const forwarded = { ...message, id: serverId, ...(settings.callIdInMeta ? { params: { ...params, _meta: { ...(params._meta ?? {}), [CALL_META]: callId } } } : {}) };
+
+      let sent = false;
+      let outcome;
+      let afterDocuments = [];
+      let done;
+      try {
+        done = await agent.inTurn(async () => {
+          if (agent.stopped()) return { stopped: true };
+          if (call.cancelled) return { withdrawn: true };
+          if (!file.holds(writer.book()) && !agent.save()) return { stopped: true };
+          let intact;
+          try {
+            intact = file.intact();
+          } catch {
+            intact = false;
+          }
+          if (!intact) {
+            agent.stop('the book file is not as the executor left it: something else changed it.', 'book-changed');
+            return { stopped: true };
+          }
+          const result = await writer.act(
+            request,
+            async () => {
+              // The agent may have withdrawn the call while the stub was being made and checked.
+              if (call.cancelled) throw new NotSent('withdrawn');
+              const away = link.unavailable();
+              if (away) throw new NotSent(away, CODES.noAnswer);
+              // Before anything goes to the server: the copy's line, on the disk.
+              try {
+                copy.note({ kind: 'sending', call: callId, when: new Date(now()).toISOString(), slip: about.fingerprint, tool: name, action: rule.action, ...(got.amount ? { amount: got.amount } : {}), with: settings.service, details });
+              } catch (e) {
+                agent.stop(`its own copy could not be written (${e.message}).`, 'copy-not-written');
+                throw new NotSent(`The executor could not write its own copy of this call, so the call was not sent: ${e.message}`, CODES.notRecorded);
+              }
+              call.state = 'sent';
+              sent = true;
+              outcome = await new Promise((settle) => {
+                // Settled once: by the server's answer, the timeout, the agent's cancellation or the server's end.
+                call.settle = (o) => {
+                  if (!call.settle) return;
+                  call.settle = null;
+                  clearTimeout(call.timer);
+                  call.timer = null;
+                  settle(o);
+                };
+                call.timer = setTimeout(() => {
+                  if (!call.settle) return;
+                  link.cancel(call, `The Provared executor gave this call ${settings.timeout} ms and got no answer.`);
+                  call.settle({ kind: 'error', text: `The tool server gave no answer within ${settings.timeout} ms, so the executor cancelled the call (call ${callId}). Its outcome is not known.`, code: CODES.noAnswer });
+                }, settings.timeout);
+                if (!link.send(call, forwarded)) call.settle({ kind: 'error', text: 'The tool server has ended, so the call could not be sent. Whether any of it reached the server is not known.', code: CODES.noAnswer });
+              });
+              return outcome;
+            },
+            {
+              denial: false,
+              countersign: countersignWith,
+              detailsAfter: async (o) => {
+                if (o.kind === 'error') afterDocuments = [{ name: 'provared.error', sha256: await identifierFingerprint(o.text) }];
+                else if (o.kind === 'server-error') afterDocuments = [{ name: 'provared.error', sha256: await identifierFingerprint(o.errorText) }];
+                else if (o.kind === 'unreadable') afterDocuments = [{ name: 'provared.error', sha256: await identifierFingerprint(UNREADABLE_ANSWER) }];
+                else if (o.unsafe) {
+                  log({ event: 'result-not-fingerprinted', call: callId, error: 'The result holds a whole number beyond 9,007,199,254,740,991.' });
+                  afterDocuments = [{ name: 'provared.error', sha256: await identifierFingerprint(RESULT_NOT_FINGERPRINTED) }];
+                } else {
+                  try {
+                    afterDocuments = [{ name: RESULT_DOCUMENT, sha256: await argumentsFingerprint(o.result) }];
+                  } catch (e) {
+                    log({ event: 'result-not-fingerprinted', call: callId, error: e.message });
+                    afterDocuments = [{ name: 'provared.error', sha256: await identifierFingerprint(RESULT_NOT_FINGERPRINTED) }];
+                  }
+                }
+                return afterDocuments;
+              },
+            },
+          );
+          if (!result.done) result.denial = await writer.deny({ ...request, details: asked }, { source: 'check', codes: denialCodes(result.answer) });
+          const saved = agent.save();
+          if (result.done) {
+            const cs = result.stub.countersignature;
+            let csFingerprint = null;
+            if (cs.accepted) {
+              try {
+                const entry = JSON.parse(result.stub.line);
+                csFingerprint = await fingerprint(fromBase64url(entry.countersignature.payload));
+              } catch {
+                csFingerprint = null;
+              }
+            }
+            // The "done" line names the stub only once it is on the disk. Where the
+            // book could not be written, the line holds what the executor knew of the
+            // outcome and no stub, and the call stays unfinished: the next start
+            // writes the receipt from the "sending" line and these documents.
+            const added = result.detailsAfter?.added ? afterDocuments : [];
+            try {
+              copy.note({ kind: 'done', call: callId, when: new Date(now()).toISOString(), outcome: outcome.kind, ...(saved ? { stub: result.stub.fingerprint } : {}), countersigned: cs.accepted, ...(csFingerprint ? { countersignature: csFingerprint } : {}), documents: added });
+            } catch (e) {
+              agent.stop(`its own copy could not be written (${e.message}).`, 'copy-not-written');
+            }
+          }
+          return result;
+        });
+      } catch (e) {
+        if (e instanceof NotSent) {
+          if (e.message === 'withdrawn') {
+            copy.note({ kind: 'withdrawn', call: callId, when: new Date(now()).toISOString(), tool: name, action: rule.action });
+            log({ event: 'withdrawn', call: callId, tool: name });
+            return;
+          }
+          return answerError(e.code ?? CODES.notRecorded, e.message);
+        }
+        if (sent) {
+          agent.stop(`a call was sent and its receipt could not be written (${e.message}).`, 'receipt-not-written');
+          if (outcome && outcome.kind !== 'error') link.answer(spliceId(outcome.text, id) ?? outcome.text);
+          else answerError(CODES.notRecorded, 'The executor could not write the receipt of this call.');
+          return;
+        }
+        log({ event: 'call-failed', call: callId, error: e.message });
+        return answerError(CODES.notRecorded, `The executor could not handle this call: ${e.message}`);
+      }
+      if (done.withdrawn) {
+        copy.note({ kind: 'withdrawn', call: callId, when: new Date(now()).toISOString(), tool: name, action: rule.action });
+        log({ event: 'withdrawn', call: callId, tool: name });
+        return;
+      }
+      if (done.stopped) {
+        log({ event: 'refused', call: callId, tool: name, code: 'executor-stopped' });
+        return answerError(CODES.notRecorded, `The executor takes no call: ${agent.stopped()}`);
+      }
+      if (!done.done) {
+        const codes = denialCodes(done.answer);
+        const words = [...done.answer.problems, ...done.answer.breaches].map((f) => f.message).join(' ');
+        const denial = done.denial?.written ? done.denial.fingerprint : null;
+        copy.note({ kind: 'refused', call: callId, when: new Date(now()).toISOString(), slip: about.fingerprint, tool: name, action: rule.action, ...(got.amount ? { amount: got.amount } : {}), reason: 'not-allowed', codes, ...(denial ? { denial } : {}) });
+        log({ event: 'refused', call: callId, tool: name, code: 'not-allowed', codes });
+        return link.answer(responseText(id, { result: { content: [{ type: 'text', text: `Not taken by the Provared executor: the permission does not allow this call. ${words}` }], isError: true, _meta: { 'red.prova/refused': 'not-allowed', 'red.prova/codes': codes, ...(denial ? { 'red.prova/denial': denial } : {}) } } }));
+      }
+      if (done.stub.countersignature.problem) log({ event: 'countersignature-not-taken', call: callId, problem: done.stub.countersignature.problem.code });
+      if (done.detailsAfter?.problem) log({ event: 'details-not-added', call: callId, problem: done.detailsAfter.problem.code });
+      log({ event: 'taken', call: callId, tool: name, action: rule.action, outcome: outcome.kind, stub: done.stub.fingerprint, countersigned: done.stub.countersignature.accepted, saved: !agent.stopped() });
+      if (outcome.kind === 'error') answerError(outcome.code ?? CODES.noAnswer, outcome.text, { 'red.prova/stub': done.stub.fingerprint });
+      else link.answer(spliceId(outcome.text, id) ?? outcome.text);
+    } finally {
+      if (call.timer) clearTimeout(call.timer);
+      calls.delete(key);
+      link.untrack(call);
+    }
+  }
+
+  return { handleCall, rulesDocument };
+}
+
+// --- the executor, over stdio ---
+
+/**
+ * Open the executor on its settings: keys, slip, book, copy and stub writer
+ * are read now; the tool server is started by "attach". A call the copy
+ * shows as sent and never given its receipt (the executor stopped
+ * meanwhile) is given one now (openAgent).
+ *
+ * @param {object} config the settings, as in executor.example.json
+ * @param {{root?: string, now?: () => number, log?: (event: object) => void, serverStderr?: NodeJS.WritableStream|null}} [more]
+ */
+export async function openExecutor(config, more = {}) {
+  const root = more.root ?? process.cwd();
+  const now = more.now ?? Date.now;
+  const log = more.log ?? ((event) => process.stderr.write(`${JSON.stringify({ provared: 'mcp-executor', ...event })}\n`));
+  const p = await prepare(config, root, { now });
+  const { settings, about, content } = p;
+  for (const w of p.warnings) log({ event: 'warning', message: w });
+  const agent = await openAgent(p.agent, { settings, executorKeys: p.executorKeys, now, log });
+  const core = callCore({ settings, content, executorKeys: p.executorKeys, now });
+
   let attached = null;
   // How many requests the executor holds for the server's answer: tool calls, and all others (for status and for tests).
-  const stats = { calls: 0, requests: 0 };
+  const stats = { requests: 0 };
 
   /**
    * Start the tool server, and carry messages between the agent's client
@@ -616,14 +996,11 @@ export async function openExecutor(config, more = {}) {
     // later request. "mapped" holds every request in flight by its server
     // id: tool calls ("call"), tools/list requests to be filtered ("list"),
     // unlisted calls sent on ("forwarded") and all others ("request"). Tool
-    // calls are also held by the client's id ("calls"), for a repeated id
-    // and for cancellation.
+    // calls are also held by the client's id (agent.calls), for a repeated
+    // id and for cancellation.
     /** @type {Map<string, {id: any, kind: string, call?: object}>} */
     const mapped = new Map();
-    /** @type {Map<string, {id: any, serverId: string, state: string, settle?: (outcome: object) => void, cancelled?: boolean}>} */
-    const calls = new Map();
-    let nextServerId = 1;
-    const newServerId = () => `provared-${nextServerId++}-${randomId()}`;
+    const calls = agent.calls;
     // Requests that are not tool calls are forgotten after MAX_MAPPED of them wait unanswered, the oldest first (a server that never answers).
     const waitingOrder = [];
     const remember = (serverId, entry) => {
@@ -657,230 +1034,26 @@ export async function openExecutor(config, more = {}) {
       return Buffer.from(`${spliced ?? text}\n`);
     };
 
-    // A call that was begun and whose server-side outcome arrives, or never does.
-    function awaitOutcome(call, callId) {
-      return new Promise((settle) => {
-        call.settle = settle;
-        call.timer = setTimeout(() => {
-          call.settle = null;
-          markSettled(call.serverId);
-          toServer(notificationLine('notifications/cancelled', { requestId: call.serverId, reason: `The Provared executor gave this call ${settings.timeout} ms and got no answer.` }));
-          settle({ kind: 'error', text: `The tool server gave no answer within ${settings.timeout} ms, so the executor cancelled the call (call ${callId}). Its outcome is not known.`, code: CODES.noAnswer });
-        }, settings.timeout);
-      });
-    }
-
-    async function handleCall(id, message, text) {
-      const key = idKey(id);
-      if (calls.has(key)) return answerError(id, CODES.invalidRequest, 'A request with this id is already in progress.');
-      if (calls.size >= settings.maxWaiting) {
-        log({ event: 'refused', code: 'too-many-waiting', waiting: calls.size });
-        return answerError(id, CODES.notRecorded, `The executor already has ${calls.size} tool calls in progress or waiting their turn, the most it takes at once (maxWaiting). This call was not taken and nothing was written; ask again when one has ended.`);
-      }
-      const params = message.params ?? {};
-      const name = params.name;
-      if (typeof name !== 'string' || !TOOL_NAME.test(name)) return answerError(id, CODES.invalidParams, 'The tool name must be 1 to 128 letters, digits, underscores, hyphens or full stops.');
-      if (Object.hasOwn(params, 'arguments') && !isObject(params.arguments)) return answerError(id, CODES.invalidParams, 'The arguments must be an object.');
-      if (Object.hasOwn(params, '_meta') && !isObject(params._meta)) return answerError(id, CODES.invalidParams, 'The _meta member must be an object.');
-      const serverId = newServerId();
-      const call = { id, serverId, state: 'queued', cancelled: false };
-      const callId = randomId();
-      try {
-        const rule = settings.tools.get(name);
-        if (!rule && settings.unlisted === 'forward') {
-          log({ event: 'forwarded-unlisted', tool: name, call: callId });
-          remember(serverId, { id, kind: 'forwarded' });
-          toServer(Buffer.from(`${spliceId(text, serverId)}\n`));
-          return;
-        }
-        calls.set(key, call);
-        stats.calls = calls.size;
-        remember(serverId, { id, kind: 'call', call });
-        const argsText = Object.hasOwn(params, 'arguments') ? JSON.stringify(params.arguments) : undefined;
-        const args = params.arguments;
-        const details = [
-          { name: 'provared.arguments', sha256: await argumentsFingerprint(args ?? {}) },
-          { name: TOOL_DOCUMENT, sha256: await identifierFingerprint(name) },
-          { name: CALL_DOCUMENT, sha256: await identifierFingerprint(callId) },
-          ...(rulesDocument ? [rulesDocument] : []),
-        ];
-        const trace = typeof params._meta?.traceparent === 'string' ? TRACEPARENT.exec(params._meta.traceparent) : null;
-        if (trace) details.push({ name: 'provared.trace-id', sha256: await identifierFingerprint(trace[1]) });
-        // What a denial names: what was asked for, without the identifier that was never sent.
-        const asked = details.filter((d) => d.name !== CALL_DOCUMENT);
-        const refuse = async (reason, request, source, codes, ruleName) => {
-          let denial = null;
-          try {
-            const d = await inTurn(() => writer.deny(request, { source, ...(codes ? { codes } : {}) }));
-            if (d.written) denial = d.fingerprint;
-            save();
-          } catch (e) {
-            log({ event: 'denial-not-written', call: callId, error: e.message });
-          }
-          copy.note({ kind: 'refused', call: callId, when: new Date(now()).toISOString(), slip: about.fingerprint, tool: name, action: request.action, ...(request.amount ? { amount: request.amount } : {}), reason: reason.code, ...(codes ? { codes } : {}), ...(ruleName ? { rule: ruleName } : {}), ...(denial ? { denial } : {}) });
-          log({ event: 'refused', call: callId, tool: name, code: reason.code, ...(codes ? { codes } : {}), ...(ruleName ? { rule: ruleName } : {}) });
-          // A tool execution error, so that the model is told and can choose another call.
-          toClient(responseLine(id, { result: { content: [{ type: 'text', text: `Not taken by the Provared executor: ${reason.message}` }], isError: true, _meta: { 'red.prova/refused': reason.code, ...(codes ? { 'red.prova/codes': codes } : {}), ...(ruleName ? { 'red.prova/rule': ruleName } : {}), ...(denial ? { 'red.prova/denial': denial } : {}) } } }));
-        };
-        if (!rule) return refuse({ code: 'unlisted', message: `No rule of the executor names the tool "${name}", so the call was not sent.` }, { action: UNLISTED_ACTION, with: settings.service, details: asked }, 'rule');
-        if (stopped) {
-          log({ event: 'refused', call: callId, tool: name, code: 'executor-stopped' });
-          return answerError(id, CODES.notRecorded, `The executor takes no call: ${stopped}`);
-        }
-        const got = amountOf(rule, args, argsText);
-        if (got.problem) return refuse(got.problem, { action: rule.action, with: settings.service, details: asked }, 'rule');
-        if (content) {
-          // The rules on content: a call a rule refuses, or whose content a rule cannot read exactly, is not sent.
-          const refused = testCall(content.rules, name, args, argsText);
-          if (refused) {
-            return refuse(refused.reason, { action: rule.action, ...(got.amount ? { amount: got.amount } : {}), with: settings.service, details: [...asked, { name: RULE_DOCUMENT, sha256: await identifierFingerprint(refused.rule) }] }, 'rule', undefined, refused.rule);
-          }
-        }
-        const request = { action: rule.action, ...(got.amount ? { amount: got.amount } : {}), with: settings.service, details };
-        if (settings.callIdInMeta) details.push({ name: 'provared.request-id', sha256: details.find((d) => d.name === CALL_DOCUMENT).sha256 });
-
-        // The line sent to the server: the client's call under the executor's id, with the executor's identifier in _meta where the settings say.
-        const forwarded = { ...message, id: serverId, ...(settings.callIdInMeta ? { params: { ...params, _meta: { ...(params._meta ?? {}), [CALL_META]: callId } } } : {}) };
-        const line = Buffer.from(`${JSON.stringify(forwarded)}\n`);
-
-        let sent = false;
-        let outcome;
-        let afterDocuments = [];
-        let done;
-        try {
-          done = await inTurn(async () => {
-            if (stopped) return { stopped: true };
-            if (call.cancelled) return { withdrawn: true };
-            if (!file.holds(writer.book()) && !save()) return { stopped: true };
-            let intact;
-            try {
-              intact = file.intact();
-            } catch {
-              intact = false;
-            }
-            if (!intact) {
-              stop('the book file is not as the executor left it: something else changed it.', 'book-changed');
-              return { stopped: true };
-            }
-            const result = await writer.act(
-              request,
-              async () => {
-                // The agent may have withdrawn the call while the stub was being made and checked.
-                if (call.cancelled) throw new NotSent('withdrawn');
-                if (serverGone) throw new NotSent('The tool server has ended.', CODES.noAnswer);
-                // Before anything goes to the server: the copy's line, on the disk.
-                try {
-                  copy.note({ kind: 'sending', call: callId, when: new Date(now()).toISOString(), slip: about.fingerprint, tool: name, action: rule.action, ...(got.amount ? { amount: got.amount } : {}), with: settings.service, details });
-                } catch (e) {
-                  stop(`its own copy could not be written (${e.message}).`, 'copy-not-written');
-                  throw new NotSent(`The executor could not write its own copy of this call, so the call was not sent: ${e.message}`, CODES.notRecorded);
-                }
-                call.state = 'sent';
-                sent = true;
-                const waiting = awaitOutcome(call, callId);
-                if (!toServer(line)) {
-                  clearTimeout(call.timer);
-                  outcome = { kind: 'error', text: 'The tool server has ended, so the call could not be sent. Whether any of it reached the server is not known.', code: CODES.noAnswer };
-                  return outcome;
-                }
-                outcome = await waiting;
-                return outcome;
-              },
-              {
-                denial: false,
-                countersign: (stub) => countersign(stub, p.executorKeys.privateKeys, now()),
-                detailsAfter: async (o) => {
-                  if (o.kind === 'error') afterDocuments = [{ name: 'provared.error', sha256: await identifierFingerprint(o.text) }];
-                  else if (o.kind === 'server-error') afterDocuments = [{ name: 'provared.error', sha256: await identifierFingerprint(o.errorText) }];
-                  else if (o.kind === 'unreadable') afterDocuments = [{ name: 'provared.error', sha256: await identifierFingerprint(UNREADABLE_ANSWER) }];
-                  else if (o.unsafe) {
-                    log({ event: 'result-not-fingerprinted', call: callId, error: 'The result holds a whole number beyond 9,007,199,254,740,991.' });
-                    afterDocuments = [{ name: 'provared.error', sha256: await identifierFingerprint(RESULT_NOT_FINGERPRINTED) }];
-                  } else {
-                    try {
-                      afterDocuments = [{ name: RESULT_DOCUMENT, sha256: await argumentsFingerprint(o.result) }];
-                    } catch (e) {
-                      log({ event: 'result-not-fingerprinted', call: callId, error: e.message });
-                      afterDocuments = [{ name: 'provared.error', sha256: await identifierFingerprint(RESULT_NOT_FINGERPRINTED) }];
-                    }
-                  }
-                  return afterDocuments;
-                },
-              },
-            );
-            if (!result.done) result.denial = await writer.deny({ ...request, details: asked }, { source: 'check', codes: denialCodes(result.answer) });
-            const saved = save();
-            if (result.done) {
-              const cs = result.stub.countersignature;
-              let csFingerprint = null;
-              if (cs.accepted) {
-                try {
-                  const entry = JSON.parse(result.stub.line);
-                  csFingerprint = await fingerprint(fromBase64url(entry.countersignature.payload));
-                } catch {
-                  csFingerprint = null;
-                }
-              }
-              // The "done" line names the stub only once it is on the disk. Where the
-              // book could not be written, the line holds what the executor knew of the
-              // outcome and no stub, and the call stays unfinished: the next start
-              // writes the receipt from the "sending" line and these documents.
-              const added = result.detailsAfter?.added ? afterDocuments : [];
-              try {
-                copy.note({ kind: 'done', call: callId, when: new Date(now()).toISOString(), outcome: outcome.kind, ...(saved ? { stub: result.stub.fingerprint } : {}), countersigned: cs.accepted, ...(csFingerprint ? { countersignature: csFingerprint } : {}), documents: added });
-              } catch (e) {
-                stop(`its own copy could not be written (${e.message}).`, 'copy-not-written');
-              }
-            }
-            return result;
-          });
-        } catch (e) {
-          if (e instanceof NotSent) {
-            if (e.message === 'withdrawn') {
-              copy.note({ kind: 'withdrawn', call: callId, when: new Date(now()).toISOString(), tool: name, action: rule.action });
-              log({ event: 'withdrawn', call: callId, tool: name });
-              return;
-            }
-            return answerError(id, e.code ?? CODES.notRecorded, e.message);
-          }
-          if (sent) {
-            stop(`a call was sent and its receipt could not be written (${e.message}).`, 'receipt-not-written');
-            if (outcome && outcome.kind !== 'error') toClient(forClient(outcome.text, id));
-            else answerError(id, CODES.notRecorded, 'The executor could not write the receipt of this call.');
-            return;
-          }
-          log({ event: 'call-failed', call: callId, error: e.message });
-          return answerError(id, CODES.notRecorded, `The executor could not handle this call: ${e.message}`);
-        }
-        if (done.withdrawn) {
-          copy.note({ kind: 'withdrawn', call: callId, when: new Date(now()).toISOString(), tool: name, action: rule.action });
-          log({ event: 'withdrawn', call: callId, tool: name });
-          return;
-        }
-        if (done.stopped) {
-          log({ event: 'refused', call: callId, tool: name, code: 'executor-stopped' });
-          return answerError(id, CODES.notRecorded, `The executor takes no call: ${stopped}`);
-        }
-        if (!done.done) {
-          const codes = denialCodes(done.answer);
-          const words = [...done.answer.problems, ...done.answer.breaches].map((f) => f.message).join(' ');
-          const denial = done.denial?.written ? done.denial.fingerprint : null;
-          copy.note({ kind: 'refused', call: callId, when: new Date(now()).toISOString(), slip: about.fingerprint, tool: name, action: rule.action, ...(got.amount ? { amount: got.amount } : {}), reason: 'not-allowed', codes, ...(denial ? { denial } : {}) });
-          log({ event: 'refused', call: callId, tool: name, code: 'not-allowed', codes });
-          return toClient(responseLine(id, { result: { content: [{ type: 'text', text: `Not taken by the Provared executor: the permission does not allow this call. ${words}` }], isError: true, _meta: { 'red.prova/refused': 'not-allowed', 'red.prova/codes': codes, ...(denial ? { 'red.prova/denial': denial } : {}) } } }));
-        }
-        if (done.stub.countersignature.problem) log({ event: 'countersignature-not-taken', call: callId, problem: done.stub.countersignature.problem.code });
-        if (done.detailsAfter?.problem) log({ event: 'details-not-added', call: callId, problem: done.detailsAfter.problem.code });
-        log({ event: 'taken', call: callId, tool: name, action: rule.action, outcome: outcome.kind, stub: done.stub.fingerprint, countersigned: done.stub.countersignature.accepted, saved: !stopped });
-        if (outcome.kind === 'error') answerError(id, outcome.code ?? CODES.noAnswer, outcome.text, { 'red.prova/stub': done.stub.fingerprint });
-        else toClient(forClient(outcome.text, id));
-      } finally {
-        if (call.timer) clearTimeout(call.timer);
-        calls.delete(key);
-        if (mapped.get(serverId)?.kind === 'call') forget(serverId);
-        stats.calls = calls.size;
-      }
-    }
+    // The link the shared call handling uses: one line per message each way.
+    const newServerId = serverIds();
+    const link = {
+      newServerId,
+      answer: (text) => toClient(Buffer.from(`${text}\n`)),
+      unavailable: () => (serverGone ? 'The tool server has ended.' : null),
+      send: (call, forwarded) => toServer(Buffer.from(`${JSON.stringify(forwarded)}\n`)),
+      cancel: (call, reason) => {
+        markSettled(call.serverId);
+        toServer(notificationLine('notifications/cancelled', { requestId: call.serverId, reason }));
+      },
+      forward: (id, serverId, text) => {
+        remember(serverId, { id, kind: 'forwarded' });
+        toServer(Buffer.from(`${spliceId(text, serverId)}\n`));
+      },
+      track: (call) => remember(call.serverId, { id: call.id, kind: 'call', call }),
+      untrack: (call) => {
+        if (mapped.get(call.serverId)?.kind === 'call') forget(call.serverId);
+      },
+    };
 
     // --- from the client ---
     const clientEnded = new Promise((done) => {
@@ -894,7 +1067,7 @@ export async function openExecutor(config, more = {}) {
           const m = read.message;
           if (read.kind === 'request') {
             if (m.method === 'tools/call') {
-              handleCall(m.id, m, read.text).catch((e) => {
+              core.handleCall(agent, link, m.id, m, read.text).catch((e) => {
                 log({ event: 'call-failed', error: e.message });
                 answerError(m.id, CODES.notRecorded, `The executor could not handle this call: ${e.message}`);
               });
@@ -927,11 +1100,8 @@ export async function openExecutor(config, more = {}) {
                 if (call.state === 'sent' && call.settle) {
                   // Forwarded; the server then sends nothing more for it, so the outcome is settled here.
                   toServer(renamed);
-                  clearTimeout(call.timer);
-                  const settle = call.settle;
-                  call.settle = null;
                   markSettled(call.serverId);
-                  settle({ kind: 'error', text: 'The agent cancelled this call while it was with the tool server, so its outcome is not known.', code: CODES.noAnswer });
+                  call.settle({ kind: 'error', text: 'The agent cancelled this call while it was with the tool server, so its outcome is not known.', code: CODES.noAnswer });
                   return;
                 }
                 if (call.state === 'queued') return; // never sent: nothing for the server to cancel
@@ -954,13 +1124,6 @@ export async function openExecutor(config, more = {}) {
     // --- from the server ---
     /** The entry for a server id, or undefined. */
     const entryFor = (id) => (typeof id === 'string' ? mapped.get(id) : undefined);
-    /** Settle a tool call's outcome from the server's line. */
-    const settleCall = (call, outcome) => {
-      clearTimeout(call.timer);
-      const settle = call.settle;
-      call.settle = null;
-      settle(outcome);
-    };
     readLines(child.stdout, {
       onLine: (line) => {
         const read = readMessage(line, { strictNumbers: false });
@@ -978,7 +1141,7 @@ export async function openExecutor(config, more = {}) {
           const found = text === null ? null : topLevelId(text);
           const entry = found ? entryFor(found.value) : undefined;
           log({ event: 'server-line-not-read', code: read.refused.code, ...(entry ? { matched: entry.kind } : {}) });
-          if (entry?.kind === 'call' && entry.call.state === 'sent' && entry.call.settle) return settleCall(entry.call, { kind: 'unreadable', text, errorText: UNREADABLE_ANSWER });
+          if (entry?.kind === 'call' && entry.call.state === 'sent' && entry.call.settle) return entry.call.settle({ kind: 'unreadable', text, errorText: UNREADABLE_ANSWER });
           if (entry && entry.kind !== 'call') {
             forget(found.value);
             return toClient(forClient(text, entry.id));
@@ -992,8 +1155,8 @@ export async function openExecutor(config, more = {}) {
             const call = entry.call;
             if (call.state === 'sent' && call.settle) {
               const unsafe = unsafeInteger(read.text) !== null;
-              if (Object.hasOwn(m, 'result')) settleCall(call, { kind: 'answer', text: read.text, result: m.result, unsafe });
-              else settleCall(call, { kind: 'server-error', text: read.text, errorText: `The tool server answered with an error: ${JSON.stringify(m.error)}` });
+              if (Object.hasOwn(m, 'result')) call.settle({ kind: 'answer', text: read.text, result: m.result, unsafe });
+              else call.settle({ kind: 'server-error', text: read.text, errorText: `The tool server answered with an error: ${JSON.stringify(m.error)}` });
               return;
             }
             log({ event: 'late-answer-dropped', id: m.id });
@@ -1003,18 +1166,13 @@ export async function openExecutor(config, more = {}) {
             log({ event: 'late-answer-dropped', id: m.id });
             return;
           }
-          if (entry?.kind === 'list' && Object.hasOwn(m, 'result') && isObject(m.result) && Array.isArray(m.result.tools)) {
-            forget(m.id);
-            // Read again with every number kept as the server wrote it, so that filtering changes nothing else.
-            let exact;
-            try {
-              exact = JSON.parse(read.text, (k, v, context) => (typeof v === 'number' ? JSON.rawJSON(context.source) : v));
-            } catch {
-              exact = m;
+          if (entry?.kind === 'list') {
+            const filtered = filteredList(read.text, m, entry.id, settings);
+            if (filtered) {
+              forget(m.id);
+              if (filtered.hidden) log({ event: 'tools-hidden', hidden: filtered.hidden });
+              return toClient(Buffer.from(`${filtered.text}\n`));
             }
-            const shown = exact.result.tools.filter((t) => isObject(t) && typeof t.name === 'string' && settings.tools.has(t.name));
-            if (shown.length !== exact.result.tools.length) log({ event: 'tools-hidden', hidden: exact.result.tools.length - shown.length });
-            return toClient(Buffer.from(`${JSON.stringify({ ...exact, id: entry.id, result: { ...exact.result, tools: shown } })}\n`));
           }
           if (entry) {
             forget(m.id);
@@ -1032,12 +1190,7 @@ export async function openExecutor(config, more = {}) {
       child.on('exit', (code, signal) => {
         serverGone = true;
         for (const call of calls.values()) {
-          if (call.state === 'sent' && call.settle) {
-            clearTimeout(call.timer);
-            const settle = call.settle;
-            call.settle = null;
-            settle({ kind: 'error', text: 'The tool server ended before it answered this call, so its outcome is not known.', code: CODES.noAnswer });
-          }
+          if (call.state === 'sent' && call.settle) call.settle({ kind: 'error', text: 'The tool server ended before it answered this call, so its outcome is not known.', code: CODES.noAnswer });
         }
         log({ event: 'server-ended', code, signal });
         done({ code: code ?? 1, signal });
@@ -1068,7 +1221,7 @@ export async function openExecutor(config, more = {}) {
     const closed = serverEnded.then(async (ended) => {
       if (killTimer) clearTimeout(killTimer);
       // Every call that was sent has settled; let the writer finish writing their stubs.
-      await inTurn(() => {});
+      await agent.inTurn(() => {});
       outputOpen = false;
       return ended;
     });
@@ -1082,11 +1235,11 @@ export async function openExecutor(config, more = {}) {
     executorKeys: p.executorKeys.keys,
     attach,
     /** The stub writer: its "check()" is the book as the executor holds it. */
-    writer,
+    writer: agent.writer,
     /** Why the executor takes no more calls, or null. */
-    stopped: () => stopped,
+    stopped: () => agent.stopped(),
     /** How many tool calls, and how many requests of every kind, wait for the server's answer. */
-    status: () => ({ ...stats }),
+    status: () => ({ calls: agent.calls.size, requests: stats.requests }),
     /** Thumbprints of the executor's own keys, for the person who writes the permission. */
     async thumbprints() {
       return Promise.all(p.executorKeys.keys.map((k) => thumbprint(k)));

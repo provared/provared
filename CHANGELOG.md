@@ -4,6 +4,87 @@
 
 - **The recorder beside Claude Code, as a plugin, installs library 0.8.0.** `integrations/claude-code/package.json` asks for `provared` `^0.8.0` (0.8.0 or later, before 0.9.0), where it asked for `>=0.6.0 <0.8.0`, and its lockfile installs 0.8.0, where it installed 0.6.0. The published `provared-claude-code` 0.1.0 is unchanged. Its README says so. The plugin's 18 tests pass.
 - **The home page** says what is new in 0.8.0.
+- **`provared-mcp-executor` 0.3.0 runs over HTTP, for several agents.** `provared-mcp-executor http
+  --config executor-http.json` runs the executor as a Streamable HTTP MCP
+  server in front of one upstream HTTP MCP server. Each agent signs in with
+  a secret of its own (`Authorization: Bearer <secret>`; the settings hold
+  its SHA-256, which `provared-mcp-executor secret` prints) and has its own
+  slip, keys, book and copy; through the executor, one agent cannot write
+  to, read from or act under another's, though an agent that can read the
+  executor's files is not held by this. The agent's `Authorization` header
+  is removed and the upstream's bearer token, read from a file, is added;
+  the executor sends an agent the token in no header, body, error or log:
+  the upstream's headers come back by allow-list, its refusal of the token
+  and any redirection are not relayed, and the token's text is replaced
+  wherever it would appear in what an agent is sent. That holds for the
+  token as it is in the file, and only for what passes through the
+  executor: a token the upstream encodes or splits is not seen, and an
+  agent that can read the executor's files, or reach the upstream another
+  way, has it. One message per POST, read as strictly as a line
+  on stdio; the answer as JSON or as a stream of events forwarded as they
+  arrive, with the response under the executor's id as the outcome; legacy
+  sessions pass through, each bound to the agent that opened it; the agent
+  closing its stream cancels the call on the 2026-07-28 revision, which
+  is recorded as not known; `MCP-Protocol-Version`, `Mcp-Method`,
+  `Mcp-Name` and `Mcp-Param-*` headers must agree with the body, and a
+  mismatch is refused with -32020. An `Origin` is refused unless the settings
+  allow it, and the executor listens on 127.0.0.1 by default. The rules,
+  the check, the documents, the countersignature and the copy are the same
+  code as on stdio (`callCore` in `executor.mjs`), and the check still
+  happens before anything reaches the upstream; the stdio path behaves as it did, its handling of a call now in the
+  shared `callCore`, and its 70 tests pass as they were. `check`, `keys` and
+  `compare --agent <name>` read the HTTP settings too. New files
+  `mcp-executor/http.mjs`, `executor-http.example.json`,
+  `test/http.test.mjs`, `test/http-cli.test.mjs`, `test/fake-http-server.mjs`
+  and `test/http-world.mjs`; `DESIGN.md` sections 2, 10, 12 and choices
+  X101 to X112; the README's "Over HTTP, for several agents".
+- **The HTTP executor after an independent review by an AI reviewer** (`mcp-executor/http.mjs`; part of 0.3.0). An agent that reads nothing of a stream no longer makes
+  the executor buffer the upstream without bound: the upstream is paused
+  until the agent drains, and an agent whose connection does not take what
+  is waiting within `timeout` is cut off (X113). Sessions are capped for each agent (1,000), so an
+  agent can evict only its own (X114). A stop on request (SIGINT,
+  SIGTERM, `close()`) settles a call in flight as the executor's stop
+  (`EXECUTOR_STOPPED`, the first sentence of `OUTCOME_UNKNOWN`), writes
+  its receipt and answers the agent before closing the connections, where
+  it blamed the agent before (X115). A 4xx with a JSON-RPC error under the
+  call's id is the call's outcome, relayed scrubbed with its status, where
+  it was "outcome not known" (X116). `Mcp-Param-*` is compared with the
+  call's argument at the `inputSchema` property the upstream's `tools/list`
+  annotates `x-mcp-header`, decoded from the Base64 form, and `Mcp-Method`
+  and `Mcp-Name` with the body's method and name; a mismatch or a header
+  the executor cannot check is refused with 400 and -32020, and absence is
+  never refused (X110 rewritten, X117). On a legacy session the agent's
+  `notifications/cancelled` is sent on under the upstream's id for the
+  call, and a disconnection alone is not a cancellation (X111 rewritten).
+  The four upstream headers that come back are scrubbed (X118); the
+  reading of a POST body has a time limit (408; X119); the test script
+  ends the run when the tests do. Each of the transport's defences in
+  depth now has a test that fails without it; the one that cannot be told
+  apart from Node's own behaviour (`up.complete`) is named as redundant.
+  New file `test/signal-wrapper.mjs`; the stdio path behaves as it did.
+- **The HTTP executor after a re-check** (`mcp-executor/http.mjs`; part of 0.3.0). `Mcp-Name` is compared with `params.uri` on a
+  `resources/read`, where a correct header was refused before, and with
+  `params.name` on a `tools/call` or `prompts/get`, as the specification's
+  table says; on any other method it is refused with 400 and -32020, as a
+  message with no such field always was, where a `params.name` that agreed
+  used to pass (X110). An `Mcp-Param-*` header against a number in the body
+  is compared as a number, exactly and only in JSON's form of a number, so
+  `42.0` agrees with 42, which it did not, and `0x2A`, an empty value and
+  `Infinity` do not (X110). The log and receipt text "nothing read for N
+  ms" claimed more than the code does, and now says what happens: an agent
+  whose connection does not take what the executor has waiting within
+  `timeout` is cut, and a very slow reader can be cut too; the code is as it
+  was, and a new test shows the slow reader cut (README, X107, X113). X117
+  said the executor generates no mirrored header and that a request of only
+  a body goes on as it is, where the body's protocol version goes on as
+  `MCP-Protocol-Version`; it now says so, and that `Mcp-Method`, `Mcp-Name`
+  and `Mcp-Param-*` are never generated. The 503 to a new request during a
+  stop has a test that fails without it. The redundant `up.complete` check
+  is gone: a short body ends in the `error` and `aborted` handlers, never
+  at `end`. X113 says how narrowly `BACKLOG_LIMIT` can be reached. The
+  README and section 10 state a limit that was not stated: a JSON answer
+  nobody reads is held after its slot is freed, up to 16 MiB for each
+  connection, until the connection closes.
 
 - **The recorder's README states more limits of records handed over,**
   from a review of 3 November 2026: the 300-second rule rests on the clock
