@@ -626,7 +626,8 @@ export async function openHttpExecutor(config, more = {}) {
           if (finished) return done();
           if (!up.complete) return fail_(502, 'The upstream closed the connection before its answer was complete.');
           finish();
-          if (res.destroyed) return done();
+          // A call's outcome is recorded whether or not the agent is still there to hear it.
+          if (res.destroyed && kind !== 'call') return done();
           const bytes = Buffer.concat(chunks);
           if (kind === 'other') {
             if (bytes.length === 0) {
@@ -813,6 +814,9 @@ export async function openHttpExecutor(config, more = {}) {
       return refuse(res, 400, read.kind === 'request' ? m.id : null, HEADER_MISMATCH, h.problem);
     }
     if (h.dropped.length) agent.log({ event: 'headers-dropped', headers: h.dropped });
+    // A legacy session (2025-11-25: a session id, or a protocol version before 2026-07-28) cancels by notification, not by closing the stream (X111).
+    const version = h.headers['mcp-protocol-version'];
+    const legacy = sessionId !== undefined || (typeof version === 'string' && version < '2026-07-28');
 
     if (read.kind === 'request') {
       if (m.method === 'tools/call') {
@@ -848,9 +852,10 @@ export async function openHttpExecutor(config, more = {}) {
         const handled = core.handleCall(agent, link, m.id, m, read.text);
         const begun = agent.calls.get(key);
         const call = begun && begun !== before ? begun : null;
-        // The agent closing the response stream is its cancellation: the stream to the upstream is closed, and the outcome is not known, as on stdio.
+        // The agent closing the response stream is its cancellation (2026-07-28): the stream to the upstream is closed, and the outcome is not known, as on stdio. On a legacy session it is not ("Disconnection SHOULD NOT be interpreted as the client cancelling its request"): a call that was sent runs on, bounded by the timeout, and its outcome is recorded; the agent is not there for the answer.
         res.on('close', () => {
           if (res.writableFinished || !call || call.cancelled) return;
+          if (legacy && !stopping && call.state === 'sent') return agent.log({ event: 'agent-gone', legacy: true });
           call.cancelled = true;
           if (call.state === 'sent' && call.settle) {
             call.cancelUpstream?.();
@@ -882,11 +887,21 @@ export async function openHttpExecutor(config, more = {}) {
         const call = agent.calls.get(idKey(m.params.requestId));
         if (call && !call.cancelled) {
           call.cancelled = true;
-          if (call.state === 'sent' && call.settle) {
+          const cancelled = () => {
+            if (call.state !== 'sent' || !call.settle) return;
             call.cancelUpstream?.();
             call.settle({ kind: 'error', text: 'The agent cancelled this call while it was with the tool server, so its outcome is not known.', code: CODES.noAnswer });
+          };
+          if (legacy && call.state === 'sent') {
+            // 2025-11-25: "To cancel, the client SHOULD explicitly send an MCP CancelledNotification." It goes on under the upstream's id for the call, with the upstream's answer (202) as the agent's; then the stream is closed.
+            const ex = exchange(ctx, { method: 'POST', headers: h.headers, body: JSON.stringify({ ...m, params: { ...m.params, requestId: call.serverId } }), kind: 'other' });
+            res.on('close', () => ex.cancel());
+            await ex.end;
+            cancelled();
+            return;
           }
-          // The upstream knows the call by the executor's id; its stream was closed, which is the cancellation, so nothing more goes to it.
+          // 2026-07-28: "closing the SSE response stream is itself the cancellation signal and no notifications/cancelled message is expected." The upstream knows the call by the executor's id; its stream is closed, and nothing more goes to it.
+          cancelled();
           res.writeHead(202);
           return res.end();
         }

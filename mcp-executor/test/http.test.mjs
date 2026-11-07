@@ -732,3 +732,40 @@ test('an upstream that refuses a call with a non-2xx status and a JSON-RPC error
     await w.close();
   }
 });
+
+test('cancellation on a legacy session (2025-11-25): the agent\'s notifications/cancelled is sent on to the upstream under the upstream\'s id for the call, then the stream is closed; the agent merely disconnecting is not a cancellation, and the call\'s real outcome is recorded', async () => {
+  const w = await httpWorld({ config: { timeout: 5000 } });
+  try {
+    const init = await request(w, 'alpha', 'initialize', { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 't', version: '1' } });
+    const session = init.headers.get('mcp-session-id');
+    const pending = call(w, 'alpha', 'slow', { ms: 4000 }, { id: 'lc-1', headers: { 'mcp-session-id': session } });
+    await until(() => seenCalls(w).length === 1);
+    const note = await post(w, 'alpha', { jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: 'lc-1', reason: 'stop' } }, { headers: { 'mcp-session-id': session } });
+    assert.equal(note.status, 202, 'the upstream\'s answer to the notification');
+    const answer = await pending;
+    assert.equal(answer.json.error.code, 1002);
+    assert.match(answer.json.error.message, /cancelled this call/);
+    const forwarded = w.upstream.seen.filter((s) => s.body?.method === 'notifications/cancelled');
+    assert.equal(forwarded.length, 1, 'the notification reached the upstream');
+    assert.equal(forwarded[0].body.params.requestId, seenCalls(w)[0].body.id, 'under the upstream\'s id for the call');
+    assert.equal(forwarded[0].body.params.reason, 'stop');
+    assert.equal(forwarded[0].headers['mcp-session-id'], session);
+    await until(() => w.upstream.aborted >= 1);
+    // Disconnecting is not a cancellation here: the call runs on, and its answer is the outcome in the receipt, though the agent is not there to receive it.
+    const c = new AbortController();
+    const gone = call(w, 'alpha', 'slow', { ms: 500, tag: 'legacy' }, { id: 'lc-2', headers: { 'mcp-session-id': session }, signal: c.signal }).catch((e) => e.name);
+    await until(() => seenCalls(w).length === 2);
+    c.abort();
+    assert.equal(await gone, 'AbortError');
+    await until(() => w.logs.some((e) => e.event === 'taken' && e.outcome === 'answer'), { timeout: 3000 });
+    assert.equal(w.upstream.aborted, 1, 'the executor did not close the stream to the upstream');
+    assert.ok(w.logs.some((e) => e.event === 'agent-gone' && e.legacy === true));
+    const stubs = stubsOf(await bookOf(w, 'alpha'));
+    assert.equal(stubs.length, 2);
+    assert.ok(docs(stubs[0])['provared.error']);
+    assert.ok(docs(stubs[1])[RESULT_DOCUMENT], 'the real result is the outcome');
+    await until(() => w.executor.agent('alpha').calls() === 0);
+  } finally {
+    await w.close();
+  }
+});

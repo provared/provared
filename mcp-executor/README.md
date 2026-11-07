@@ -181,10 +181,17 @@ What the executor does with each request:
   pass through, and a session belongs to the agent that opened it. Another
   agent's request under it, or an unknown id (after a restart, the executor
   knows none), is answered 404, and the client begins a new session.
-- Cancellation is the agent closing the response stream. The executor then
-  closes its stream to the upstream, and the outcome is recorded as not
-  known, as on stdio. The agent's own `notifications/cancelled` for a call
-  in progress does the same and is answered 202.
+- Cancellation follows the era. On the 2026-07-28 revision, closing the
+  response stream is the cancellation: the executor then closes its stream
+  to the upstream, the outcome is recorded as not known, as on stdio, and
+  the agent's own `notifications/cancelled` for a call in progress does the
+  same and is answered 202, with nothing sent on. On a legacy session (a
+  session id, or a protocol version before 2026-07-28), where the
+  specification says a disconnection is not a cancellation, the agent's
+  `notifications/cancelled` is sent on to the upstream under the
+  upstream's id for the call, answered as the upstream answers it, and
+  then the stream is closed; the agent merely disconnecting leaves the
+  call running, bounded by `timeout`, and its real outcome is recorded.
 - A request that names an `Origin` is refused (403) unless
   `allowedOrigins` lists it; a body over `bodyLimit` (10 MiB) is refused
   (413); an answer or an event of the upstream over 16 MiB is cut off; a

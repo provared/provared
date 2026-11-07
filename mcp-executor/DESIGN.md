@@ -362,10 +362,14 @@ countersignature, the copy) is the same code, `callCore` in
    stream of server messages, `initialize` and DELETE pass through; another
    agent's request under the session, or an unknown id, is answered 404
    (X108).
-3. **Cancellation** is the agent closing the response stream. The executor
-   then closes its stream to the upstream, and the outcome is settled as
-   not known, as on stdio; the receipt names `provared.error`. The agent's
-   own `notifications/cancelled` does the same (X111).
+3. **Cancellation** follows the era. On 2026-07-28 it is the agent closing
+   the response stream: the executor then closes its stream to the
+   upstream, and the outcome is settled as not known, as on stdio; the
+   receipt names `provared.error`; the agent's own `notifications/cancelled`
+   does the same. On a legacy session the notification is sent on under the
+   upstream's id for the call and then the stream is closed, and a
+   disconnection alone is not a cancellation: the call runs on and its
+   outcome is recorded (X111).
 4. **Mirrored headers.** The `MCP-Protocol-Version` header must agree with
    the body's `_meta` value where both are given; the body's value is what
    goes on. `Mcp-Method` and `Mcp-Name` go on only where they are the
@@ -1568,20 +1572,29 @@ To be checked: what `Mcp-Name` mirrors for a request that is not a
 mirror its `uri`), where the passage was not among those read. The other
 way: forward the headers as given, or generate them from the body.
 
-**X111. Cancellation over HTTP is closing the stream to the upstream, and
-nothing more is sent to it.** The agent closing its response before the
-answer, the executor's timeout, and the agent's `notifications/cancelled`
-(as a POST of its own, naming a call of this agent in progress, answered
-202 and not forwarded) each close the upstream exchange and settle the
-outcome as not known, with a receipt naming `provared.error`; a call still
-waiting its turn is withdrawn and never sent, and the copy says so. The
-agent's response is then the executor's error, as a JSON body or as the
-final event. Why: section 10 says the transport's cancellation is the
-closed stream; the upstream knows the call by the executor's id, and a
-notification under it after the stream is closed would be a second
-message about a call that is already over. The other way: also POST
-`notifications/cancelled` to the upstream, as stdio sends it on the one
-stream it has.
+**X111. Cancellation over HTTP follows the era of the session.** On the
+2026-07-28 revision, "closing the SSE response stream is itself the
+cancellation signal and no `notifications/cancelled` message is expected":
+the agent closing its response before the answer, the executor's timeout,
+and the agent's `notifications/cancelled` (as a POST of its own, naming a
+call of this agent in progress, answered 202 and not forwarded) each close
+the upstream exchange and settle the outcome as not known, with a receipt
+naming `provared.error`. On a legacy session (an `Mcp-Session-Id`, or a
+protocol version before 2026-07-28), the 2025-11-25 text says
+"Disconnection SHOULD NOT be interpreted as the client cancelling its
+request. To cancel, the client SHOULD explicitly send an MCP
+`CancelledNotification`": so the agent's `notifications/cancelled` is sent
+on to the upstream with `requestId` replaced by the upstream's id for the
+call, the upstream's answer is the agent's, and then the exchange is closed
+and the outcome settled as not known; and the agent merely disconnecting
+is not a cancellation: a call that was sent runs on, bounded by `timeout`,
+and its real outcome is recorded, with the answer written to nobody. On
+either era a call still waiting its turn is withdrawn and never sent, and
+the copy says so. Why: before this, nothing reached a legacy upstream,
+which by its own text would have kept working; and a disconnection on a
+legacy session was recorded as "not known" where the upstream's answer was
+still to come. The other way: one rule for both eras, which would be wrong
+for one of them.
 
 **X112. The executor's own answers over HTTP.** A request that was read
 and refused by the executor (a call the permission does not allow, no
