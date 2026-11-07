@@ -20,9 +20,10 @@
   on stdio; the answer as JSON or as a stream of events forwarded as they
   arrive, with the response under the executor's id as the outcome; legacy
   sessions pass through, each bound to the agent that opened it; the agent
-  closing its stream cancels the call, which is recorded as not known;
-  `MCP-Protocol-Version` and `Mcp-Param-*` headers must agree with the
-  body, whose values go on. An `Origin` is refused unless the settings
+  closing its stream cancels the call on the 2026-07-28 revision, which
+  is recorded as not known; `MCP-Protocol-Version`, `Mcp-Method`,
+  `Mcp-Name` and `Mcp-Param-*` headers must agree with the body, and a
+  mismatch is refused with -32020. An `Origin` is refused unless the settings
   allow it, and the executor listens on 127.0.0.1 by default. The rules,
   the check, the documents, the countersignature and the copy are the same
   code as on stdio (`callCore` in `executor.mjs`), and the check still
@@ -33,6 +34,31 @@
   `test/http.test.mjs`, `test/http-cli.test.mjs`, `test/fake-http-server.mjs`
   and `test/http-world.mjs`; `DESIGN.md` sections 2, 10, 12 and choices
   X101 to X112; the README's "Over HTTP, for several agents".
+- **The HTTP executor after an independent review** (`mcp-executor/http.mjs`;
+  not published). An agent that reads nothing of a stream no longer makes
+  the executor buffer the upstream without bound: the upstream is paused
+  until the agent drains, and an agent that drains nothing for `timeout`
+  is cut off (X113). Sessions are capped for each agent (1,000), so an
+  agent can evict only its own (X114). A stop on request (SIGINT,
+  SIGTERM, `close()`) settles a call in flight as the executor's stop
+  (`EXECUTOR_STOPPED`, the first sentence of `OUTCOME_UNKNOWN`), writes
+  its receipt and answers the agent before closing the connections, where
+  it blamed the agent before (X115). A 4xx with a JSON-RPC error under the
+  call's id is the call's outcome, relayed scrubbed with its status, where
+  it was "outcome not known" (X116). `Mcp-Param-*` is compared with the
+  call's argument at the `inputSchema` property the upstream's `tools/list`
+  annotates `x-mcp-header`, decoded from the Base64 form, and `Mcp-Method`
+  and `Mcp-Name` with the body's method and name; a mismatch or a header
+  the executor cannot check is refused with 400 and -32020, and absence is
+  never refused (X110 rewritten, X117). On a legacy session the agent's
+  `notifications/cancelled` is sent on under the upstream's id for the
+  call, and a disconnection alone is not a cancellation (X111 rewritten).
+  The four upstream headers that come back are scrubbed (X118); the
+  reading of a POST body has a time limit (408; X119); the test script
+  ends the run when the tests do. Each of the transport's defences in
+  depth now has a test that fails without it; the one that cannot be told
+  apart from Node's own behaviour (`up.complete`) is named as redundant.
+  New file `test/signal-wrapper.mjs`; the stdio path is unchanged.
 
 ## 0.8.0 (1 November 2026)
 
