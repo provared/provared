@@ -5,6 +5,16 @@
 - **The recorder beside Claude Code, as a plugin, installs library 0.8.0.** `integrations/claude-code/package.json` asks for `provared` `^0.8.0` (0.8.0 or later, before 0.9.0), where it asked for `>=0.6.0 <0.8.0`, and its lockfile installs 0.8.0, where it installed 0.6.0. The published `provared-claude-code` 0.1.0 is unchanged. Its README says so. The plugin's 18 tests pass.
 - **The home page** says what is new in 0.8.0.
 
+- **The recorder's README states more limits of records handed over,**
+  from a review of 3 November 2026: the 300-second rule rests on the clock
+  of the device the person signs on, and on the application's page, since
+  the signing page sets no limit on a start; a start refused as
+  `starts-later` is remembered in memory only, so "refused for good" is
+  corrected; a clock more than about six minutes ahead has every renewal
+  from the application refused. The message for a
+  `held-cancellations.json` the recorder cannot take now says to take out
+  only the others where the file also holds one the person signed.
+
 - **The recorder beside Claude Code takes records handed over from the
   application** (`integrations/claude-code`, not published; the library
   is unchanged). A renewal or a cancellation the person signed in the

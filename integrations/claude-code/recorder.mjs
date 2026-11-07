@@ -1156,7 +1156,7 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
   } catch (e) {
     // The book opens without the held cancellations: one of them is what stopped it.
     if (heldAtStart.length > 0 && (await open(text, placed.fingerprint, trusted).then(() => true, () => false))) {
-      throw new Error(`${f.held} holds a cancellation the recorder cannot take (${e.message}), so the recorder does not start: a cancellation it held would be lost, and the agent would act again. Look at the file. If it holds only cancellations you did not sign, or ones of a permission that has ended, move it out of the folder and start the recorder again; if you signed one of them, keep your own copy, which a checker is handed beside the book.`);
+      throw new Error(`${f.held} holds a cancellation the recorder cannot take (${e.message}), so the recorder does not start: a cancellation it held would be lost, and the agent would act again. Look at the file. If it holds only cancellations you did not sign, or ones of a permission that has ended, move it out of the folder and start the recorder again; if it also holds one you signed, take out only the others, so that yours stays held; and if you signed the one that cannot be taken, keep your own copy, which a checker is handed beside the book.`);
     }
     throw e;
   }
