@@ -59,6 +59,13 @@
   depth now has a test that fails without it; the one that cannot be told
   apart from Node's own behaviour (`up.complete`) is named as redundant.
   New file `test/signal-wrapper.mjs`; the stdio path is unchanged.
+- **The HTTP executor after a re-check** (`mcp-executor/http.mjs`; not
+  published). `Mcp-Name` is compared with `params.uri` on a
+  `resources/read`, where a correct header was refused before, and with
+  `params.name` on a `tools/call` or `prompts/get`, as the specification's
+  table says; on any other method it is refused with 400 and -32020, as a
+  message with no such field always was, where a `params.name` that agreed
+  used to pass (X110).
 
 ## 0.8.0 (1 November 2026)
 

@@ -150,13 +150,16 @@ What the executor does with each request:
   go on, with the `MCP-Protocol-Version` the body states, and the mirrored
   headers of the 2026-07-28 revision where each agrees with the body:
   `Mcp-Method` with the body's `method`, `Mcp-Name` with its
-  `params.name`, and `Mcp-Param-<name>` with the call's argument at the
+  `params.uri` on a `resources/read` or its `params.name` on a
+  `tools/call` or `prompts/get`, and `Mcp-Param-<name>` with the call's
+  argument at the
   property of the tool's `inputSchema` that the upstream's `tools/list`
   annotated `x-mcp-header: <name>` (a value wrapped as `=?base64?…?=` is
   decoded before comparing). Every other header is dropped, and the names
   of the dropped ones are logged. A mirrored header that does not agree
   with the body, or that the executor cannot check (no `tools/list` seen
-  yet, no such annotation, a GET or a response), is refused with 400 and
+  yet, no such annotation, a GET or a response, an `Mcp-Name` on any other
+  method), is refused with 400 and
   JSON-RPC error -32020 (the specification's HeaderMismatch), and nothing
   reaches the upstream; a request with none of these headers is not
   refused, and the executor adds none of its own. Of the upstream's

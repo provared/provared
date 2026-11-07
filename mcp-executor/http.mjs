@@ -53,6 +53,8 @@ const RETURNED_HEADERS = ['content-type', 'mcp-session-id', 'mcp-protocol-versio
 const QUIET_HEADERS = ['host', 'connection', 'content-length', 'accept-encoding', 'user-agent', 'authorization', 'transfer-encoding', 'keep-alive', 'origin', 'mcp-protocol-version'];
 const SESSION_ID = /^[\x21-\x7e]{1,512}$/;
 const PROTOCOL_VERSION_META = 'io.modelcontextprotocol/protocolVersion';
+/** The member of params that Mcp-Name mirrors, for each method that has one, as the 2026-07-28 revision's table of standard request headers says (X110). */
+const MIRRORED_NAME = new Map([['tools/call', 'name'], ['prompts/get', 'name'], ['resources/read', 'uri']]);
 
 /** SHA-256 of a secret, in base64url: the form the settings hold (the same as the gateway's). */
 export function secretHash(secret) {
@@ -421,9 +423,11 @@ export async function openHttpExecutor(config, more = {}) {
         if (typeof message.method !== 'string') return { problem: `The header ${name} mirrors a request's method, and this message is a response.` };
         if (given !== message.method) return { problem: `The header ${name} (${given}) does not agree with the body's method (${message.method}).` };
       } else if (name === 'mcp-name') {
-        const bodyName = message.params?.name;
-        if (typeof bodyName !== 'string') return { problem: `The header ${name} mirrors the body's params.name, which this message does not have as text.` };
-        if (given !== bodyName) return { problem: `The header ${name} does not agree with the body's params.name.` };
+        const member = MIRRORED_NAME.get(message.method);
+        if (!member) return { problem: `The header ${name} mirrors a member of a tools/call, resources/read or prompts/get, and this message is none of them.` };
+        const bodyName = message.params?.[member];
+        if (typeof bodyName !== 'string') return { problem: `The header ${name} mirrors the body's params.${member}, which this message does not have as text.` };
+        if (given !== bodyName) return { problem: `The header ${name} does not agree with the body's params.${member}.` };
       } else {
         // Mcp-Param-<name> mirrors the call's argument whose inputSchema property the upstream annotated with x-mcp-header: <name>, as its tools/list said.
         const param = name.slice('mcp-param-'.length);

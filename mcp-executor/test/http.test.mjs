@@ -702,6 +702,46 @@ test('a stop with a call in flight and another waiting its turn: the sent call i
   }
 });
 
+test('Mcp-Name mirrors params.uri on resources/read and params.name on tools/call and prompts/get; on any other method it is refused', async () => {
+  const w = await httpWorld();
+  try {
+    const uri = 'file:///projects/myapp/config.json';
+    const reaching = (method) => w.upstream.seen.filter((s) => s.method === 'POST' && s.body?.method === method);
+    // The specification's own example: the header beside "uri" in params, not refused, and it reaches the upstream.
+    const read = await request(w, 'alpha', 'resources/read', { uri, _meta: META }, { headers: { 'mcp-method': 'resources/read', 'mcp-name': uri } });
+    assert.notEqual(read.status, 400);
+    assert.equal(reaching('resources/read').length, 1);
+    assert.equal(reaching('resources/read')[0].headers['mcp-name'], uri);
+    // One that disagrees, or that agrees only with a "name" a resources/read does not mirror: 400, -32020, and nothing reaches the upstream.
+    for (const params of [{ uri }, { uri, name: 'other' }]) {
+      const wrong = await request(w, 'alpha', 'resources/read', { ...params, _meta: META }, { headers: { 'mcp-name': 'other' } });
+      assert.equal(wrong.status, 400);
+      assert.equal(wrong.json.error.code, -32020);
+      assert.match(wrong.json.error.message, /does not agree with the body's params\.uri/);
+    }
+    const noUri = await request(w, 'alpha', 'resources/read', { name: 'other', _meta: META }, { headers: { 'mcp-name': 'other' } });
+    assert.equal(noUri.status, 400);
+    assert.equal(noUri.json.error.code, -32020);
+    assert.equal(reaching('resources/read').length, 1, 'none of the three reached the upstream');
+    // prompts/get mirrors params.name, and its "uri", if any, is not looked at.
+    const prompt = await request(w, 'alpha', 'prompts/get', { name: 'greeting', _meta: META }, { headers: { 'mcp-name': 'greeting' } });
+    assert.notEqual(prompt.status, 400);
+    assert.equal(reaching('prompts/get')[0].headers['mcp-name'], 'greeting');
+    const promptByUri = await request(w, 'alpha', 'prompts/get', { name: 'greeting', uri, _meta: META }, { headers: { 'mcp-name': uri } });
+    assert.equal(promptByUri.status, 400);
+    assert.equal(promptByUri.json.error.code, -32020);
+    assert.equal(reaching('prompts/get').length, 1);
+    // Any other method has no such field, whatever its params hold: refused, as a message with no params.name always was.
+    const other = await request(w, 'alpha', 'ping', { name: 'greeting', _meta: META }, { headers: { 'mcp-name': 'greeting' } });
+    assert.equal(other.status, 400);
+    assert.equal(other.json.error.code, -32020);
+    assert.match(other.json.error.message, /none of them/);
+    assert.equal(reaching('ping').length, 0);
+  } finally {
+    await w.close();
+  }
+});
+
 test('an upstream that refuses a call with a non-2xx status and a JSON-RPC error under the call\'s id (the specification\'s way: 400 with HeaderMismatch or UnsupportedProtocolVersion, 404 with -32601): the error is the outcome, relayed scrubbed under the agent\'s id with the status; a non-2xx without such a body stays "not known"', async () => {
   const w = await httpWorld();
   try {

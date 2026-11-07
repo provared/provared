@@ -372,8 +372,11 @@ countersignature, the copy) is the same code, `callCore` in
    outcome is recorded (X111).
 4. **Mirrored headers.** The `MCP-Protocol-Version` header must agree with
    the body's `_meta` value where both are given; the body's value is what
-   goes on. `Mcp-Method` and `Mcp-Name` go on only where they are the
-   body's `method` and `params.name`. An `Mcp-Param-<name>` header goes on
+   goes on. `Mcp-Method` goes on only where it is the body's `method`;
+   `Mcp-Name` only where it is the body's `params.uri` on a
+   `resources/read` or its `params.name` on a `tools/call` or
+   `prompts/get`, and on any other method it is refused. An
+   `Mcp-Param-<name>` header goes on
    only where the upstream's `tools/list` annotated a property of the
    tool's `inputSchema` with `x-mcp-header: <name>` and the call's
    argument at that property's path is the header's value, the Base64
@@ -1554,16 +1557,22 @@ revision, as its text says (read 7 November 2026): a property of a tool's
 property path of the annotated property" in the call's `arguments`; a
 value may be wrapped as `=?base64?…?=`, which "servers MUST decode …
 before comparing"; a mismatch is "400 Bad Request and JSON-RPC error code
--32020 (HeaderMismatch)"; `Mcp-Method` and `Mcp-Name` mirror the method
-and the name. So the executor learns the annotations from every
+-32020 (HeaderMismatch)"; `Mcp-Method` mirrors the method; and its table
+of standard request headers gives "| Mcp-Name | params.name or params.uri |
+tools/call, resources/read, prompts/get requests |", with
+`Mcp-Method: resources/read` and
+`Mcp-Name: file:///projects/myapp/config.json` as its example, beside
+`"uri"` in params. So the executor learns the annotations from every
 `tools/list` answer that passes through it (before any filtering; up to
 1,000 tools, 64 headers each, properties nested up to 8 deep), and an
 `Mcp-Param-<name>` goes on only where the message is a `tools/call`, the
 tool's annotations name `<name>` (case not counted), and the argument at
 the annotated path is text equal to the decoded header, or a number or
 boolean whose text is; `Mcp-Method` only where it is the body's `method`;
-`Mcp-Name` only where it is the body's `params.name` as text. Anything
-else (no annotation seen, a disagreement, a GET or DELETE, a response, a
+`Mcp-Name` only where it is, as text, the body's `params.uri` on a
+`resources/read`, or its `params.name` on a `tools/call` or `prompts/get`.
+Anything else (no annotation seen, a disagreement, a GET or DELETE, a
+response, an `Mcp-Name` on any other method, whatever its params hold, a
 Base64 form that does not decode, a header given twice) is refused with
 400 and -32020 before anything reaches the upstream, as is a
 `MCP-Protocol-Version` mismatch, so that a client reading the body does
@@ -1572,9 +1581,8 @@ refused, on either era, and the executor adds none of its own (X117). Why:
 a header must never reach the upstream disagreeing with the body the rules
 checked, and the body is what the rules read. The earlier rule (a
 `_meta` member of the same name) was wrong; this one follows the text.
-To be checked: what `Mcp-Name` mirrors for a request that is not a
-`tools/call` (the executor takes `params.name`; a `resources/read` may
-mirror its `uri`), where the passage was not among those read. The other
+On a method the table does not list, the header mirrors nothing, so it is
+treated as a message with no such field has always been: refused. The other
 way: forward the headers as given, or generate them from the body.
 
 **X111. Cancellation over HTTP follows the era of the session.** On the
