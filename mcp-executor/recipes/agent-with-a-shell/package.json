@@ -1,0 +1,10 @@
+{
+  "name": "agent-with-a-shell-recipe",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Stand-in tool server and client for the agent-with-a-shell example. Not part of provared-mcp-executor.",
+  "type": "module",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2"
+  }
+}
