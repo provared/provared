@@ -302,7 +302,10 @@ the book. The permission before is kept beside it, as
 
 The recorder takes a permission only from a passkey on its list,
 `trusted-passkeys.json` in its folder: the first `use` writes it, with
-that permission's passkey, and only `renew --new-passkey` adds to it.
+that permission's passkey, and only `renew <file> --new-passkey` and
+`admit-passkey <thumbprint>` (for a permission handed over and waiting,
+below) add to it, both run on this computer, each with a permission that
+passkey signed.
 A permission signed by any other passkey is refused, whether it is
 handed to `renew` or put in place by hand, and the recorder does not
 start while its book, or `slip.json`, holds one. If you made a new
@@ -619,6 +622,157 @@ still listens on 127.0.0.1 only; give its address as `127.0.0.1`, not
 `localhost`, which may lead to another program on the computer's other
 address.
 
+### Records handed over from the application
+
+The Provared application keeps the renewals and cancellations a person
+signs (in its signing window, at https://sign.prova.red) with the book,
+sealed; its uploader, beside this recorder, hands each one to the
+recorder on the same port, so that no file is carried by hand:
+
+```
+POST http://127.0.0.1:8794/hand-over      {"kind": "renewal", "slip": …} or {"kind": "cancellation", "cancellation": …}
+```
+
+- **Proved as every question of the feed is**, and over every byte of
+  the body as well, under a label of its own ("a question with a body");
+  the answer carries the recorder's proof. Before any byte of the body is
+  read, the recorder checks the length it states (`Content-Length`, at
+  most 256 KiB; a body sent without one is refused) and the form of the
+  proof's headers, in a conversation it began. At most four are taken on
+  at once, counted from before the body is read; a body that has not
+  arrived whole within 10 seconds is let go.
+- **Signed at the signing page.** A renewal handed over must have been
+  signed at https://sign.prova.red (`other-signing-address` otherwise). A
+  cancellation is taken whatever address the permission it cancels was
+  signed at: it only takes away, and it is taken only where it checks
+  against that permission's own passkey and own address. Another
+  address is named with `PROVARED_CLAUDE_CODE_SIGNING_ORIGIN` (an
+  https:// address, several with commas between them; `http://localhost`
+  only for a test).
+- **The recorder checks each record itself**, and takes nothing on the
+  word of whoever handed it over. It answers what it did, with a code a
+  program can read: `taken` (the book holds it now), `already` (it held
+  it before; nothing changes), `held` (below) or `refused` with a code.
+- **A renewal** is taken as `renew` takes one without `--new-passkey`:
+  from a passkey already on the list and not retired, for this folder's
+  agent keys, not ended. More rules, because a record kept on a server
+  can be held back and handed over late, and a permission does not say
+  when it was signed: it is never a permission this recorder held before
+  (`not-again`); it starts no earlier than the permission in force
+  (`older`); it starts no more than 300 seconds (the allowance between
+  clocks the format uses) ahead of this computer's clock when it is
+  handed over (`starts-later`: handed over again, by that fingerprint, it
+  is still refused while the recorder runs, even once its start has come
+  near; see "Limits" below); and it
+  starts at least 300 seconds after every cancellation the recorder
+  holds, in a book or held beside it (`before-cancellation`). The
+  application gives every renewal it sends a start no more than 300
+  seconds after the person pressed Sign, so, where the clocks agree, one
+  signed before a cancellation starts before the cancellation's date and
+  300 seconds and is refused, while one signed after it starts at that
+  point and is taken; no permission handed over starts sooner than five
+  minutes after the cancellation's date. See "Limits" below for where
+  this does not hold. A permission that starts later than that is put in place on
+  this computer by file (`renew <file>`). **A passkey not on the list is
+  refused (`passkey-not-trusted`), never added.** The refused permission
+  waits in `waiting-permissions.json` (nothing in it trusted): at most one
+  for each passkey, the one that starts latest, whichever was handed over
+  last, and at most eight in all. On this computer, `admit-passkey
+  <thumbprint>` asks the running recorder (it refuses while the recorder
+  is stopped: start it first) to run every check above on each
+  permission waiting from that passkey, with that one passkey admitted
+  for that one permission; one that fails, such as a permission signed
+  before a cancellation, is dropped from the list and said. It then shows
+  what is left in full (the thumbprint of the passkey, worked out from the
+  permission itself; who signed it, where, the agent, what it may do, its
+  limits, its dates, its purpose), the one that starts latest first, and
+  takes that one, with its passkey, only once the person types `yes`
+  there; with no permission waiting from that passkey, it admits nothing.
+  The server between the application and this computer could put a
+  permission signed by anyone's passkey where the uploader reads, so
+  compare the thumbprint shown with the one your signing page or
+  application shows before you type `yes`.
+  A retired passkey is refused (`passkey-retired`) until `admit-passkey`
+  admits it again. A
+  permission that does not pass its check (`not-sound`), or that names
+  other agent keys (`other-agent`), or has ended (`ended`), is refused.
+- **A cancellation** is taken only for the permission in force: the
+  recorder stops every call under it at once, writes the cancellation into
+  the book, and signs the agent's acknowledgement, which follows it into
+  the book (the library's stub writer, `add`). Handed over again, the
+  book is not changed and the same acknowledgement is handed back. One of a
+  permission a later one replaced is refused (`not-in-force`: the agent
+  acts under that later permission, which this does not stop; cancel that
+  one), and so is one of a permission this recorder never held
+  (`unknown-permission`), or one not signed with the permission's
+  passkey (`not-sound`). One dated more than 300 seconds ahead of this
+  computer's clock stops the calls at once and is written into the book,
+  with the acknowledgement, once the clock reaches its date (`held`).
+  Until then it is kept in `held-cancellations.json`, which the recorder
+  reads at each start, so a restart does not lose it (a file there that
+  cannot be read, or that holds a cancellation the recorder cannot take,
+  stops the recorder from starting, and the message names the file and
+  what to do). One dated more than
+  24 hours ahead is refused (`too-far-ahead`).
+- **A renewal while a cancellation is held** is taken by `renew` only if
+  it starts after the cancellation's date (`cancellation-held`
+  otherwise); one handed over must also start at least 300 seconds after
+  it, and no more than 300 seconds ahead of the clock, so none is taken
+  from the application until the clock has reached the cancellation's
+  date. The cancellation goes on being held, and is written into the
+  book, with the acknowledgement signed for it, when its date comes. No
+  new book is started while one is held.
+- **No new book while the permission in force is cancelled**: the new
+  book would begin with that permission and not its cancellation. No call
+  is taken under it, so the book does not grow; a renewal starts new books
+  again. `status` says whether the permission in force is cancelled
+  (`cancelled`).
+- **Limits.** A renewal the person set aside in the application, but
+  which an older copy of the book's content still held, can still be
+  handed over by a server that hands back that older copy, if it starts
+  at least 300 seconds after every cancellation the recorder holds:
+  cancel it if so. A permission does not say when it was signed, so the
+  rules above rest on the start the application gives a renewal: one
+  signed elsewhere, before a cancellation, with a start more than 300
+  seconds ahead, and held back until its start comes near, is taken.
+  The application measures its 300 seconds by the clock of the device the
+  person signs on, and this recorder can compare a start only with a
+  cancellation's date and its own clock. So a renewal signed before a
+  cancellation, on a device whose clock is fast, can pass both rules and
+  be taken: signed on a phone ten minutes fast, it starts about nine
+  minutes ahead, and a cancellation made two minutes later, on a computer
+  with the right clock, does not stop it if the server holds the renewal back until at least
+  two minutes after the cancellation and then hands it over. The signing page
+  (https://sign.prova.red) sets no limit of its own on the start, so the
+  rule also rests on the application's page: a faulty or attacked
+  application page could ask for a start further ahead and hold the
+  renewal back. A start refused as `starts-later` is remembered in memory
+  only, for the last 1,000 refused: after a restart of the recorder, or
+  once others, signed or not, have pushed it out, the same renewal can be
+  taken if it is handed over when its start has come near.
+  Where the clock of the computer the person signs on is ahead of this
+  one by more than the time between their cancellation and their next
+  renewal, that renewal is refused (`starts-later`) if it is handed over
+  promptly: sign it again a little later. With no cancellation at all, a
+  renewal from the application is refused the same way when the clock is
+  ahead by more than six minutes and the time from the press to the
+  hand-over, because the application starts a renewal a minute before the
+  press: set that device's clock right. One handed over later than that
+  can still be taken, as above. Many permissions from passkeys this computer does not
+  trust, handed over by the server, can push the person's own waiting
+  permission out of `waiting-permissions.json` (eight in all): it is then
+  put in place by file (`renew <file> --new-passkey`). Any program on
+  this computer that holds no token can open the four places for records
+  handed over and hold each for 10 seconds at a time, so that the
+  uploader's records wait; the agent can already stop the uploader, so
+  this gives it nothing new. Any program
+  on this computer can type `yes` to `admit-passkey`, or ask the
+  recorder directly to take a permission and its passkey with nobody
+  typing anything, as it can run `renew --new-passkey`: the evidence that
+  holds is a checker naming the person's own passkey. The application's note of what the recorder did
+  with each record is not proved to come from the uploader (see the
+  application's README); only the book confirms anything.
+
 ## Witnesses for the seals
 
 A seal fixes everything before it, but whoever keeps a book can show a
@@ -920,10 +1074,10 @@ version too (`npx provared-check` takes the latest).
 | `use <file>` | Put a signed permission in place and start the recorder; where a book exists already, the same as `renew` |
 | `renew <file>` | Take a new signed permission into the book, while the recorder runs or not; `--new-passkey` where you signed it with a passkey of yours that signed none before |
 | `retire-passkey <thumbprint>` | Take no new permission from that passkey, with or without `--new-passkey`; what it signed stands, and limits are still counted across the books it signed |
-| `admit-passkey <thumbprint>` | Take new permissions from a retired passkey again |
+| `admit-passkey <thumbprint>` | Take new permissions from a retired passkey again; for a passkey this recorder has never trusted (with the recorder running), check the permission it signed that was handed over and refused as every record handed over is checked, show it, and take both only once you type `yes` |
 | `start` | Run the recorder in this terminal, and see what it says |
 | `ensure` | Start the recorder in the background if it is not running (the hooks run this when a session starts) |
-| `status` | What the recorder holds: the permission, until when, the number of entries, the passkeys whose permissions are in the record and those retired (`trusted`, `retired`), the calls allowed and not yet recorded (`callsNotYetRecorded`), the books kept (`keptBooks`), when a new one is started (`newBookAt`), the feed's token file and how many questions wait (`feed`), and for each witness what it holds and why it is behind (`witnesses`) |
+| `status` | What the recorder holds: the permission, until when, the number of entries, the passkeys whose permissions are in the record and those retired (`trusted`, `retired`), the calls allowed and not yet recorded (`callsNotYetRecorded`), the books kept (`keptBooks`), when a new one is started (`newBookAt`), the feed's token file and how many questions wait (`feed`), and for each witness what it holds and why it is behind (`witnesses`), and whether the permission in force is cancelled (`cancelled`) |
 | `seal` | Seal the book now, with the recorder's three keys, and ask the witnesses named, waiting up to five seconds while no other request waits |
 | `new-book` | Seal the book, keep it as `book-<n>.jsonl`, and start a new one that begins with the permission in force (done by itself at 90,000 entries, or at 100 MB of text) |
 | `check [file]` | The checker's answer for the book, or, given a name such as `book-1.jsonl`, for a book kept before it. Name your passkey with `--issuer <its thumbprint>`, once for each passkey of yours; without it, `check` lists the passkeys the book's permissions name, as read from the book, and the checker takes none of them as one you trust. It names the witnesses in `witnesses.json` (`--witness`) and hands over the statements kept beside the book (`--seal`), unless you give your own |

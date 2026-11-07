@@ -14,6 +14,9 @@
 //                                   long (0 to 25; 25 where it is not given) for anything to change
 //     &max=<lines>                  at most this many lines (0 to 500; 500 where it is not given):
 //                                   0 asks only for the line before place n, the size and the last
+//   POST /hand-over                 a record the person signed elsewhere, handed to the recorder to
+//                                   take (a renewal or a cancellation, from the application); the
+//                                   recorder checks it itself and answers what it did (recorder.mjs)
 //
 // THE TOKEN NEVER TRAVELS. The recorder writes a token into its folder at
 // its first start (feed-token). A reader that holds it opens a
@@ -31,7 +34,8 @@
 // question. Each answer carries an HMAC under the same
 // key over the question's number, the answer's code and every byte of the
 // answer: so an answer is the recorder's, and is the answer to that
-// question. Every proof is compared in constant time. So a program that
+// question. A question with a body (POST /hand-over) carries its proof over
+// every byte of the body as well, under a label of its own. Every proof is compared in constant time. So a program that
 // listens on the recorder's address while the recorder is stopped learns
 // nothing, and nothing it says is taken; a program that cannot read the
 // recorder's folder cannot read the book through the feed.
@@ -72,6 +76,11 @@ export const FEED_TOKEN = 'feed-token';
 /** At most this many lines in one answer, and at most this many bytes of them (but always one line). */
 export const FEED_MAX_LINES = 500;
 export const FEED_MAX_BYTES = 4 * 1024 * 1024;
+/** The most bytes a record handed over may have; and at most this many are being taken at once (one more is told to ask again). */
+export const FEED_MAX_HAND_OVER_BYTES = 256 * 1024;
+export const FEED_MAX_HANDING = 4;
+/** A record handed over must arrive whole within this many milliseconds of its headers. */
+export const FEED_HAND_OVER_READ_MS = 10 * 1000;
 /** The longest a request waits for something new, in seconds. */
 export const FEED_MAX_WAIT = 25;
 /** At most this many requests wait at once; one more is answered at once with "429". */
@@ -96,6 +105,7 @@ export const FEED_LABELS = Object.freeze({
   recorder: 'provared feed v1: the recorder knows the token',
   key: 'provared feed v1: the key of a conversation',
   question: 'provared feed v1: a question',
+  questionWithBody: 'provared feed v1: a question with a body',
   answer: 'provared feed v1: an answer',
   session: 'provared feed v1: the recorder\'s number for a conversation',
 });
@@ -284,10 +294,11 @@ function lineFromBytes(buf) {
  * @param {{folder: string, memory: () => {key: number, path: string, text: () => string, saved?: () => number, inForce: boolean}[], token: {token: string|null, problem: string|null, path: string}, now?: () => number}} o
  *   memory: the books the recorder holds open, asked each time; key names one book for as long as
  *   the recorder holds it, wherever its file now is; saved gives how many characters of its text the
- *   recorder has written to the file (all of it where not given); now, sessionQuestions and maxBusy are
- *   for the tests (the clock, FEED_SESSION_QUESTIONS and FEED_MAX_BUSY by default)
+ *   recorder has written to the file (all of it where not given); now, sessionQuestions, maxBusy and
+ *   handOverReadMs are for the tests (the clock, FEED_SESSION_QUESTIONS, FEED_MAX_BUSY and
+ *   FEED_HAND_OVER_READ_MS by default)
  */
-export function createFeed({ folder, memory, token, now = Date.now, sessionQuestions = FEED_SESSION_QUESTIONS, maxBusy = FEED_MAX_BUSY }) {
+export function createFeed({ folder, memory, token, handOver = null, now = Date.now, sessionQuestions = FEED_SESSION_QUESTIONS, maxBusy = FEED_MAX_BUSY, handOverReadMs = FEED_HAND_OVER_READ_MS }) {
   let version = 0;
   let waiting = new Set();
   let closed = false;
@@ -298,6 +309,8 @@ export function createFeed({ folder, memory, token, now = Date.now, sessionQuest
   const sessions = new Map();
   // One answer is made at a time; "busy" counts those taken on.
   let busy = 0;
+  // Records being handed over now (POST /hand-over).
+  let handing = 0;
   let turn = Promise.resolve();
   const oneAtATime = (work) => {
     const run = turn.then(work);
@@ -482,7 +495,7 @@ export function createFeed({ folder, memory, token, now = Date.now, sessionQuest
    * or an answer already sent. Nothing is kept for a question whose proof
    * does not check.
    */
-  function conversation(req, res) {
+  function conversation(req, res, body = null) {
     const session = req.headers['provared-feed-session'];
     const theirs = req.headers['provared-feed-hello'];
     const nonce = req.headers['provared-feed-nonce'];
@@ -507,7 +520,10 @@ export function createFeed({ folder, memory, token, now = Date.now, sessionQuest
       if (!(time - begun >= 0 && time - begun <= FEED_HELLO_MS) || !sameProof(session, Buffer.from(sessionNumber(theirs, begun), 'base64url'))) return unknown();
       key = feedHmac(Buffer.from(token.token), FEED_LABELS.key, theirs, session);
     }
-    if (!isRandom(nonce) || !sameProof(given, feedHmac(key, FEED_LABELS.question, session, nonce, `${req.method} ${req.url}`))) {
+    const expected = body === null
+      ? feedHmac(key, FEED_LABELS.question, session, nonce, `${req.method} ${req.url}`)
+      : feedHmac(key, FEED_LABELS.questionWithBody, session, nonce, `${req.method} ${req.url}`, body);
+    if (!isRandom(nonce) || !sameProof(given, expected)) {
       plain(res, 401, { error: `the question does not carry the proof that its reader knows the token in the recorder's folder (${FEED_TOKEN})` }, { 'WWW-Authenticate': 'Provared-Feed' });
       return null;
     }
@@ -541,6 +557,7 @@ export function createFeed({ folder, memory, token, now = Date.now, sessionQuest
    */
   async function handle(req, res) {
     const url = new URL(req.url, 'http://127.0.0.1');
+    if (url.pathname === '/hand-over') return handOverRequest(req, res);
     if (url.pathname !== '/hello' && url.pathname !== '/books' && url.pathname !== '/lines') return false;
     if (req.method !== 'GET') return plain(res, 405, { error: 'the feed answers GET only' });
     if (token.problem || !token.token) return plain(res, 503, { error: `the feed is off: ${token.problem ?? 'it has no token'}` });
@@ -619,6 +636,87 @@ export function createFeed({ folder, memory, token, now = Date.now, sessionQuest
     return true;
   }
 
+  /**
+   * POST /hand-over: a record the person signed elsewhere, as JSON, handed
+   * to the recorder by a reader that holds the token. The proof covers the
+   * question and every byte of its body. The recorder checks the record
+   * itself (handOver) and answers what it did; the answer carries the
+   * recorder's proof, as every answer does.
+   *
+   * Before any byte of the body is read: the length it states
+   * (Content-Length, at most FEED_MAX_HAND_OVER_BYTES; a body sent without
+   * one is refused), and the form of the four headers of the proof, in a
+   * conversation this recorder holds or began. No more than
+   * FEED_MAX_HANDING are taken on at once, counted from before the body is
+   * read to the answer, proved or not; one more is told to ask again. A
+   * body not read whole within FEED_HAND_OVER_READ_MS is let go.
+   */
+  async function handOverRequest(req, res) {
+    if (req.method !== 'POST') return plain(res, 405, { error: 'a record is handed over with POST' });
+    if (token.problem || !token.token) return plain(res, 503, { error: `the feed is off: ${token.problem ?? 'it has no token'}` });
+    if (req.url !== '/hand-over') return plain(res, 400, { error: 'POST /hand-over takes nothing after its name' });
+    const declared = req.headers['content-length'];
+    if (typeof declared !== 'string' || !/^\d{1,7}$/.test(declared)) return plain(res, 411, { error: 'a record handed over states its length (Content-Length)' });
+    const length = Number(declared);
+    if (length > FEED_MAX_HAND_OVER_BYTES) return plain(res, 413, { error: `a record handed over may have at most ${FEED_MAX_HAND_OVER_BYTES} bytes` });
+    if (!plausible(req)) return plain(res, 401, { error: 'the question does not carry a proof in the form the feed takes, in a conversation it began: begin one with GET /hello', renew: true });
+    if (handing >= FEED_MAX_HANDING) return plain(res, 429, { error: `${FEED_MAX_HANDING} records are being handed over already; hand this one over again in a moment` }, { 'Retry-After': '5' });
+    handing++;
+    try {
+      const chunks = [];
+      let size = 0;
+      const timer = setTimeout(() => req.destroy(), handOverReadMs);
+      try {
+        for await (const chunk of req) {
+          size += chunk.length;
+          if (size > length) return plain(res, 400, { error: 'the body is longer than the length it states' });
+          chunks.push(chunk);
+        }
+      } catch {
+        // Let go (too slow), or the reader went away: nothing to answer.
+        return true;
+      } finally {
+        clearTimeout(timer);
+      }
+      if (size !== length) return plain(res, 400, { error: 'the body is shorter than the length it states' });
+      const body = Buffer.concat(chunks);
+      const talk = conversation(req, res, body);
+      if (!talk) return true;
+      const send = (code, answer, more) => proved(res, talk, code, answer, more);
+      if (!handOver) return send(404, { error: 'this recorder takes no record handed over' });
+      let given;
+      try {
+        given = JSON.parse(body.toString('utf8'));
+      } catch {
+        return send(400, { error: 'what was handed over is not JSON' });
+      }
+      try {
+        return send(200, await handOver(given));
+      } catch (e) {
+        return send(500, { error: String(e?.message ?? e).slice(0, 500) });
+      }
+    } finally {
+      handing--;
+    }
+  }
+
+  /**
+   * Whether a question's four headers are in the form the feed takes, in a
+   * conversation this recorder holds or began recently. Nothing is kept,
+   * and the proof itself is not checked here: conversation checks it, over
+   * the body.
+   */
+  function plausible(req) {
+    const session = req.headers['provared-feed-session'];
+    const theirs = req.headers['provared-feed-hello'];
+    if (!isRandom(session) || !isRandom(req.headers['provared-feed-nonce']) || !isRandom(req.headers['provared-feed-proof'])) return false;
+    if (sessions.has(session)) return true;
+    if (ended.has(session) || !isRandom(theirs)) return false;
+    const begun = Number(Buffer.from(session, 'base64url').readBigUInt64BE(0));
+    const time = now();
+    return time - begun >= 0 && time - begun <= FEED_HELLO_MS && sameProof(session, Buffer.from(sessionNumber(theirs, begun), 'base64url'));
+  }
+
   return {
     handle,
     changed,
@@ -671,5 +769,25 @@ export function feedReader({ address, token, fetchImpl = globalThis.fetch }) {
     if (!ok) throw Object.assign(new Error('an answer of the feed does not carry the recorder\'s proof'), { code: 'not-proved' });
     return { code: r.status, body: JSON.parse(bytes.toString()), proved: true };
   }
-  return { get, hello };
+  /** A question with a body (POST), proved over every byte of the body. */
+  async function post(path, value, renewed = false) {
+    if (!talk) await hello();
+    const nonce = nodeCrypto.randomBytes(32).toString('base64url');
+    const body = Buffer.from(JSON.stringify(value));
+    const proof = feedHmac(talk.key, FEED_LABELS.questionWithBody, talk.session, nonce, `POST ${path}`, body).toString('base64url');
+    const r = await fetchImpl(new URL(path, address), { method: 'POST', body, headers: { 'Content-Type': 'application/json', 'Provared-Feed-Session': talk.session, 'Provared-Feed-Hello': talk.mine, 'Provared-Feed-Nonce': nonce, 'Provared-Feed-Proof': proof } });
+    const bytes = Buffer.from(await r.arrayBuffer());
+    if (r.status === 401) {
+      const answer = JSON.parse(bytes.toString());
+      if (answer.renew && !renewed) {
+        talk = null;
+        return post(path, value, true);
+      }
+      return { code: 401, body: answer, proved: false };
+    }
+    const ok = sameProof(r.headers.get('provared-feed-proof'), feedHmac(talk.key, FEED_LABELS.answer, talk.session, nonce, String(r.status), bytes));
+    if (!ok) throw Object.assign(new Error('an answer of the feed does not carry the recorder\'s proof'), { code: 'not-proved' });
+    return { code: r.status, body: JSON.parse(bytes.toString()), proved: true };
+  }
+  return { get, post, hello };
 }
