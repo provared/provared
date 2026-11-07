@@ -4,7 +4,16 @@
 
 - **The recorder beside Claude Code, as a plugin, installs library 0.8.0.** `integrations/claude-code/package.json` asks for `provared` `^0.8.0` (0.8.0 or later, before 0.9.0), where it asked for `>=0.6.0 <0.8.0`, and its lockfile installs 0.8.0, where it installed 0.6.0. The published `provared-claude-code` 0.1.0 is unchanged. Its README says so. The plugin's 18 tests pass.
 - **The home page** says what is new in 0.8.0.
-- **`provared-mcp-executor` 0.3.0 runs over HTTP, for several agents.** `provared-mcp-executor http
+- **An example: an agent with a shell, kept from the tool server's
+  credential** (`mcp-executor/recipes/agent-with-a-shell/`, not in the npm
+  package). `run.sh` puts the agent, the guard (0.3.0 from npm) and a
+  stand-in tool server in three Docker containers on one computer, the
+  link to the guard encrypted by a small TLS proxy, and prints seven
+  checks; all passed with Docker Desktop on Windows. Not tried on separate
+  computers. The top README, the home page and the package README point
+  to it, where they said no tested recipe was written.
+- **`provared-mcp-executor` 0.3.0 runs over HTTP, for several agents**
+  (on npm since 7 November 2026). `provared-mcp-executor http
   --config executor-http.json` runs the executor as a Streamable HTTP MCP
   server in front of one upstream HTTP MCP server. Each agent signs in with
   a secret of its own (`Authorization: Bearer <secret>`; the settings hold
