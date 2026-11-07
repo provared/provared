@@ -7,7 +7,9 @@ import './local-library.mjs'; // first: "provared" is this repository's own libr
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { once } from 'node:events';
 import http from 'node:http';
+import net from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 
@@ -795,6 +797,38 @@ test('Mcp-Param-* against a number in the body is compared as a number, and only
     assert.equal((await withCount(true, '1')).status, 400);
     assert.equal(seenCalls(w).length, sent, 'none of it reached the upstream');
     assert.equal((await withCount(true, 'true')).status, 200);
+  } finally {
+    await w.close();
+  }
+});
+
+test('a new request during a stop is refused with 503 and goes no further; the call in flight is settled as ever', async () => {
+  const w = await httpWorld({ config: { timeout: 20000 } });
+  try {
+    const sent = call(w, 'alpha', 'slow', { ms: 10000 }, { id: 'late-1' });
+    await until(() => seenCalls(w).length === 1);
+    // The connection is made before the stop, so that the request arrives while the stop waits for the call in flight.
+    const socket = net.connect(w.address.port, w.address.address);
+    await once(socket, 'connect');
+    const chunks = [];
+    socket.on('data', (c) => chunks.push(c));
+    socket.on('error', () => {});
+    const ended = once(socket, 'close');
+    const body = JSON.stringify({ jsonrpc: '2.0', id: 'late-2', method: 'tools/call', params: { name: 'echo', arguments: { late: true }, _meta: META } });
+    const closed = w.executor.close();
+    socket.write(`POST ${new URL(w.url).pathname} HTTP/1.1\r\nhost: ${w.address.address}\r\nauthorization: Bearer ${w.agents.alpha.secret}\r\ncontent-type: application/json\r\naccept: application/json, text/event-stream\r\ncontent-length: ${Buffer.byteLength(body)}\r\n\r\n${body}`);
+    await ended;
+    const [head, text] = Buffer.concat(chunks).toString('utf8').split('\r\n\r\n');
+    assert.match(head, /^HTTP\/1\.1 503 /);
+    assert.match(head, /connection: close/i);
+    const refused = JSON.parse(text);
+    assert.equal(refused.id, null);
+    assert.equal(refused.error.message, 'The executor is stopping and takes no request.');
+    const a1 = await sent;
+    assert.equal(a1.json.error.message, EXECUTOR_STOPPED);
+    await closed;
+    assert.equal(seenCalls(w).length, 1, 'the late call never reached the upstream');
+    assert.equal(stubsOf(await bookOf(w, 'alpha')).length, 1, 'one receipt: the sent call\'s');
   } finally {
     await w.close();
   }

@@ -28,7 +28,7 @@ import { CODES, MAX_LINE_BYTES, idKey, isId, readMessage, responseText, spliceId
 export const BODY_LIMIT = 10 * 1024 * 1024;
 /** The most one answer of the upstream may be (a JSON body, or one event of a stream): 16 MiB, as one line of a stdio server. */
 export const ANSWER_LIMIT = MAX_LINE_BYTES;
-/** The most the executor holds for an agent that is not reading its stream (res.writableLength): one answer's worth. Past it the exchange is cut. The upstream is paused as soon as the agent's connection takes no more, so this is reached only where one event is itself over the limit in bytes. */
+/** The most the executor holds for an agent that is not reading its stream (res.writableLength): one answer's worth. Past it the exchange is cut. The upstream is paused as soon as the agent's connection takes no more, so this is reached only where one event nearly fills it and more follow in the same read of the upstream (X113). */
 export const BACKLOG_LIMIT = ANSWER_LIMIT;
 /** The most sessions the executor remembers for one agent; past it that agent's oldest is forgotten, and the agent begins a new one. The total is bounded by this times the number of agents, which the settings fix. */
 export const MAX_SESSIONS = 1000;
@@ -648,7 +648,6 @@ export async function openHttpExecutor(config, more = {}) {
         up.on('aborted', () => fail_(502, 'The upstream closed the connection before its answer was complete.'));
         up.on('end', () => {
           if (finished) return done();
-          if (!up.complete) return fail_(502, 'The upstream closed the connection before its answer was complete.');
           finish();
           // A call's outcome is recorded whether or not the agent is still there to hear it.
           if (res.destroyed && kind !== 'call') return done();

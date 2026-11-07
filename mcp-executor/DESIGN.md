@@ -1651,8 +1651,13 @@ waiting within `timeout` ms is cut off (the exchange with the upstream
 closed, the agent's connection destroyed, a call's outcome "not known").
 The clock stops only when all of it has gone, not at each part read, so a
 very slow reader can be cut too, though it is reading. So is an agent
-for which more than 16 MiB is waiting (`BACKLOG_LIMIT`), which the pause
-makes reachable only where one event is itself over the limit in bytes. Why:
+for which more than 16 MiB is waiting (`BACKLOG_LIMIT`), a second defence
+left as it is, which the pause keeps almost out of reach: the reader's limit
+(X107) stops an event over 16 MiB first, so the backlog passes 16 MiB only
+where one event of nearly that size is waiting and more events came in the
+same read of the upstream, which are written before the pause takes effect.
+A trial on 7 November 2026 reached it so, with 16,777,709 waiting; no test
+does. Why:
 a review showed an agent that reads nothing making the executor hold an
 upstream stream without bound (954 MiB in four seconds); a GET stream has no
 time limit (X107), so a stalled one must end by this rule or hold memory and

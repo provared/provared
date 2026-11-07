@@ -76,7 +76,10 @@
   said the executor generates no mirrored header and that a request of only
   a body goes on as it is, where the body's protocol version goes on as
   `MCP-Protocol-Version`; it now says so, and that `Mcp-Method`, `Mcp-Name`
-  and `Mcp-Param-*` are never generated.
+  and `Mcp-Param-*` are never generated. The 503 to a new request during a
+  stop has a test that fails without it. The redundant `up.complete` check
+  is gone: a short body ends in the `error` and `aborted` handlers, never
+  at `end`. X113 says how narrowly `BACKLOG_LIMIT` can be reached.
 
 ## 0.8.0 (1 November 2026)
 
