@@ -4,8 +4,7 @@
 
 - **The recorder beside Claude Code, as a plugin, installs library 0.8.0.** `integrations/claude-code/package.json` asks for `provared` `^0.8.0` (0.8.0 or later, before 0.9.0), where it asked for `>=0.6.0 <0.8.0`, and its lockfile installs 0.8.0, where it installed 0.6.0. The published `provared-claude-code` 0.1.0 is unchanged. Its README says so. The plugin's 18 tests pass.
 - **The home page** says what is new in 0.8.0.
-- **`provared-mcp-executor` runs over HTTP, for several agents** (not
-  published; the package stays at 0.2.0). `provared-mcp-executor http
+- **`provared-mcp-executor` 0.3.0 runs over HTTP, for several agents.** `provared-mcp-executor http
   --config executor-http.json` runs the executor as a Streamable HTTP MCP
   server in front of one upstream HTTP MCP server. Each agent signs in with
   a secret of its own (`Authorization: Bearer <secret>`; the settings hold

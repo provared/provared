@@ -12,7 +12,10 @@ Protocol (MCP), the common way for AI agents to reach tools. It holds
 the tool server's credential in place of the agent, and refuses a call
 the permission does not allow before the call reaches the tool. It can
 also test what a call would change, for example which paths a file tool
-may touch.
+may touch. It starts a tool server itself on the same computer, for one
+agent (MCP's "stdio" transport), or, from version 0.3.0, stands in front
+of one reached over the network (MCP over HTTP, the protocol of the web),
+for several agents, each with its own secret, permission and record.
 
 The record follows from it. For each call it lets through, the guard
 writes a signed receipt and countersigns it with keys of its own; for a
@@ -20,13 +23,13 @@ call the permission does not allow, a signed note of the refusal (a
 denial). Anyone can check these records later, on their own computer,
 with the free checker.
 
-**What it does not do yet.** It guards only a tool server that it starts
-itself, on the same computer, the two programs talking through their
-standard input and output (MCP's "stdio" transport). One guard serves
-one agent and one tool server. Tool servers reached over the network
-(MCP over HTTP, the protocol of the web), one guard for several agents,
-sealing the record, and keys held in a key service are designed but not
-built. And it proves nothing about a tool the agent can reach without
+**What it does not do yet.** One guard stands in front of one tool
+server. Over the network it has been tried with the official MCP software
+on protocol version 2025-11-25 only; on the newer 2026-07-28 it has met
+only a test server of its own. The agents' secrets travel in the clear
+unless something else encrypts the connection to the guard. Sealing the
+record and keys held in a key service are designed but not built. And it
+proves nothing about a tool the agent can reach without
 it: the tool's credential must be taken away from the agent. It keeps
 the credential, and its own keys, from the agent only where the agent
 cannot read the guard's files: an agent with a shell or file tools that
