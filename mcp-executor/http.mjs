@@ -319,7 +319,7 @@ export async function openHttpExecutor(config, more = {}) {
 
   const JSON_TYPE = 'application/json; charset=utf-8';
   const json = (res, status, text, extra = {}) => {
-    if (res.headersSent || res.writableEnded) return;
+    if (res.headersSent || res.writableEnded || res.destroyed) return;
     const body = Buffer.from(`${text}\n`);
     res.writeHead(status, { 'content-type': JSON_TYPE, 'content-length': body.length, 'cache-control': 'no-store', ...extra });
     res.end(body);
@@ -378,6 +378,13 @@ export async function openHttpExecutor(config, more = {}) {
     let timer = null;
     let req = null;
     let streaming = false;
+    /** Write to the agent, unless it has gone. */
+    const toAgent = (text) => {
+      if (!res.destroyed && !res.writableEnded) res.write(text);
+    };
+    const endAgent = () => {
+      if (!res.destroyed && !res.writableEnded) res.end();
+    };
     const finish = () => {
       if (finished) return;
       finished = true;
@@ -394,7 +401,7 @@ export async function openHttpExecutor(config, more = {}) {
     const fail = (status, text) => {
       finish();
       if (kind === 'call') return outcome({ kind: 'error', text, code: CODES.noAnswer });
-      if (streaming) return res.end();
+      if (streaming) return endAgent();
       refuse(res, status, kind === 'request' ? clientId : null, CODES.noAnswer, text);
     };
     const end = new Promise((done) => {
@@ -448,7 +455,7 @@ export async function openHttpExecutor(config, more = {}) {
           // Each event goes on as it arrives; the one that answers under the executor's id is taken.
           streaming = true;
           ctx.streaming = true;
-          if (!res.headersSent) res.writeHead(status, { ...returned, 'content-type': 'text/event-stream', 'cache-control': 'no-store' });
+          if (!res.headersSent && !res.destroyed) res.writeHead(status, { ...returned, 'content-type': 'text/event-stream', 'cache-control': 'no-store' });
           res.flushHeaders?.();
           const decoder = new TextDecoder('utf-8');
           const reader = sseReader({
@@ -460,7 +467,7 @@ export async function openHttpExecutor(config, more = {}) {
             },
             onEvent: (event) => {
               if (finished) return;
-              if (event.data === null) return void res.write(scrub(event.raw));
+              if (event.data === null) return toAgent(scrub(event.raw));
               const read = readMessage(Buffer.from(event.data), { strictNumbers: false });
               const m = read.refused ? null : read.message;
               const foundId = read.refused ? topLevelId(event.data)?.value : m?.id;
@@ -477,11 +484,11 @@ export async function openHttpExecutor(config, more = {}) {
                   }
                   const filtered = list && m ? filteredList(read.text, m, clientId, settings) : null;
                   if (filtered?.hidden) agent.log({ event: 'tools-hidden', hidden: filtered.hidden });
-                  return void res.write(scrub(sseEvent(event.others, filtered ? filtered.text : (spliceId(event.data, clientId) ?? event.data))));
+                  return toAgent(scrub(sseEvent(event.others, filtered ? filtered.text : (spliceId(event.data, clientId) ?? event.data))));
                 }
                 if (kind === 'call') agent.log({ event: 'upstream-other-id', id: typeof foundId === 'string' ? foundId.slice(0, 80) : foundId });
               }
-              res.write(scrub(event.raw));
+              toAgent(scrub(event.raw));
             },
           });
           up.on('data', (chunk) => reader.feed(decoder.decode(chunk, { stream: true })));
@@ -491,7 +498,7 @@ export async function openHttpExecutor(config, more = {}) {
             if (finished) return done();
             finish();
             if (kind === 'call') return done(outcome({ kind: 'error', text: 'The upstream ended the stream before it answered this call, so its outcome is not known.', code: CODES.noAnswer }));
-            res.end();
+            endAgent();
             done();
           });
           return;
@@ -513,6 +520,7 @@ export async function openHttpExecutor(config, more = {}) {
           if (finished) return done();
           if (!up.complete) return fail_(502, 'The upstream closed the connection before its answer was complete.');
           finish();
+          if (res.destroyed) return done();
           const bytes = Buffer.concat(chunks);
           if (kind === 'other') {
             if (bytes.length === 0) {
@@ -696,7 +704,7 @@ export async function openHttpExecutor(config, more = {}) {
           newServerId,
           answer: (text) => {
             if (ctx.streaming) {
-              if (!res.writableEnded) res.end(scrub(sseEvent(ctx.finalEvent ?? [], text)));
+              if (!res.writableEnded && !res.destroyed) res.end(scrub(sseEvent(ctx.finalEvent ?? [], text)));
               return;
             }
             json(res, 200, scrub(text));
@@ -736,7 +744,7 @@ export async function openHttpExecutor(config, more = {}) {
         await handled;
         if (ctx.forwarded) await ctx.forwarded;
         // Withdrawn before it was sent: nothing to answer but that the connection ends.
-        if (!res.writableEnded && !res.headersSent && !ctx.exchange) res.end();
+        if (!res.writableEnded && !res.headersSent && !res.destroyed && !ctx.exchange) res.end();
         return;
       }
       // Every other request goes under an id of the executor's own, and its answer comes back under the agent's.

@@ -8,6 +8,7 @@
 // Imported with import(), after local-library.mjs.
 
 import { mkdirSync, writeFileSync } from 'node:fs';
+import http from 'node:http';
 import { join } from 'node:path';
 import { thumbprint } from 'provared';
 import { developmentPasskey } from 'provared/dev';
@@ -36,14 +37,15 @@ export const META = { 'io.modelcontextprotocol/protocolVersion': '2026-07-28', '
  * settings; "slips" gives per-agent slip options; "open" false leaves the
  * executor for the caller to open (openHttpWorld).
  */
-export async function httpWorld({ agents = ['alpha', 'beta'], config = {}, slips = {}, open = true, token = TOKEN, more = {} } = {}) {
+export async function httpWorld({ agents = ['alpha', 'beta'], config = {}, slips = {}, open = true, token = TOKEN, fileToken = token, more = {} } = {}) {
   const folder = tempFolder();
   for (const d of ['keys', 'slips', 'books', 'copies', 'secrets']) mkdirSync(join(folder, d));
   const executorKeys = await makeKeyFile(join(folder, 'keys', 'executor.jwk'), 'agent');
   const passkey = await developmentPasskey();
   const issuer = await thumbprint(passkey.key);
+  // The upstream expects "token"; the executor's file holds "fileToken" (the same, unless a test wants the upstream to refuse it).
   const upstream = await startFakeUpstream({ token });
-  writeFileSync(join(folder, 'secrets', 'upstream'), `${token}\n`);
+  writeFileSync(join(folder, 'secrets', 'upstream'), `${fileToken}\n`);
   const w = { folder, passkey, executorKeys, upstream, agents: {}, logs: [] };
   const settingsAgents = {};
   for (const name of agents) {
@@ -87,10 +89,42 @@ export async function openHttpWorld(w, more = {}) {
 }
 
 /** The Authorization header for an agent (its name), or as given. */
-function auth(w, agent) {
+export function auth(w, agent) {
   if (agent === null) return {};
   if (typeof agent === 'string' && w.agents[agent]) return { authorization: `Bearer ${w.agents[agent].secret}` };
   return { authorization: agent };
+}
+
+/**
+ * One HTTP request to the executor, on a connection of its own (no
+ * keep-alive, so that nothing outlives a test). "headers" is an object; a
+ * value that is a list sends the header that many times. "signal" (an
+ * AbortSignal) closes the connection, and the promise fails with an error
+ * named AbortError. With "stream", it gives {status, headers, res} as soon
+ * as the headers come, the body still to be read from "res".
+ */
+export function rawRequest(w, { method = 'POST', headers = {}, body, signal, stream = false } = {}) {
+  return new Promise((done, failed) => {
+    const u = new URL(w.url);
+    const req = http.request({ host: u.hostname, port: u.port, path: u.pathname, method, agent: false });
+    req.setHeader('connection', 'close');
+    for (const [name, value] of Object.entries(headers)) req.setHeader(name, value);
+    if (body !== undefined && !req.hasHeader('transfer-encoding')) req.setHeader('content-length', Buffer.byteLength(body));
+    const aborted = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    signal?.addEventListener('abort', () => req.destroy(aborted));
+    req.on('error', (e) => failed(e === aborted ? aborted : e));
+    req.on('response', (res) => {
+      const got = { status: res.statusCode, headers: new Headers(Object.entries(res.headers).filter(([, v]) => typeof v === 'string')), res };
+      if (stream) return done(got);
+      const chunks = [];
+      res.on('data', (c) => chunks.push(c));
+      res.on('error', (e) => failed(signal?.aborted ? aborted : e));
+      res.on('aborted', () => failed(signal?.aborted ? aborted : new Error('the answer was cut')));
+      res.on('end', () => done({ ...got, body: Buffer.concat(chunks).toString('utf8') }));
+    });
+    if (body !== undefined) req.end(body);
+    else req.end();
+  });
 }
 
 /**
@@ -99,13 +133,13 @@ function auth(w, agent) {
  * stream: each event's data as parsed JSON, or the text)}.
  */
 export async function post(w, agent, message, { headers = {}, signal, raw } = {}) {
-  const res = await fetch(w.url, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', ...auth(w, agent), ...headers }, body: raw ?? JSON.stringify(message), signal });
+  const res = await rawRequest(w, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', ...auth(w, agent), ...headers }, body: raw ?? JSON.stringify(message), signal });
   return readAnswer(res);
 }
 
-export async function readAnswer(res) {
+export function readAnswer(res) {
   const type = res.headers.get('content-type') ?? '';
-  const body = await res.text();
+  const body = res.body;
   const out = { status: res.status, headers: res.headers, body, type };
   if (type.startsWith('application/json') && body.trim()) {
     try {

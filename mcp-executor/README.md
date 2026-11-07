@@ -11,9 +11,13 @@ An **executor**, in the words of the Internet-Draft
 is software other than the agent that takes actions for it or holds what
 they need, and refuses an action the permission does not allow. This one
 stands between an agent and a tool server that speaks the Model Context
-Protocol (MCP) over the stdio transport. The agent's MCP client starts the
-executor as if it were the tool server; the executor starts the real server,
-with its credential, and for every `tools/call`:
+Protocol (MCP). It runs in two ways: over the stdio transport, where the
+agent's MCP client starts the executor as if it were the tool server and the
+executor starts the real server, with its credential; or over HTTP, where
+the executor is itself a Streamable HTTP MCP server in front of one upstream
+HTTP MCP server, and several agents call it, each signing in with a secret
+of its own (see "Over HTTP, for several agents"). Either way, for every
+`tools/call`:
 
 1. works out which action the call is, and its amount, from a rules file
    the person writes, by the tool's name, not from anything the agent says;
@@ -113,6 +117,104 @@ earlier read them as labels).
    The client starts the executor; the executor starts the server named in
    `server.command` with `server.args`, in `server.cwd`, with the
    credentials in `server.env`.
+
+## Over HTTP, for several agents
+
+```
+provared-mcp-executor http --config executor-http.json
+```
+
+The executor listens as a Streamable HTTP MCP server (one endpoint, `/mcp`
+unless the settings say otherwise, on `127.0.0.1:8796` unless they say
+otherwise) in front of one upstream HTTP MCP server named in
+`upstream.url`. Each agent signs in with a secret of its own, in one header,
+`Authorization: Bearer <secret>`, and has its own slip, keys, book and copy
+under `agents.<name>`. `provared-mcp-executor secret` makes a secret and
+prints its hash; the hash goes into the settings as the agent's
+`secretHash`, the secret goes to the agent and is stored nowhere else.
+`keys` makes the executor's key file and one for each agent, and prints the
+entries for each agent's permission; `check` reads every agent's slip;
+`compare --agent <name>` holds one agent's copy against its book.
+
+What the executor does with each request:
+
+- A `tools/call` goes through the same rules, check, receipt,
+  countersignature and copy as on stdio, under the slip and into the book
+  of the agent that sent it. The check happens before anything reaches the
+  upstream. One call at a time goes through each agent's writer; agents do
+  not wait for each other. `maxWaiting` holds for each agent on its own.
+- The agent's `Authorization` header is removed. The upstream is sent the
+  executor's own credential, a bearer token read from the file
+  `upstream.credential.file`. Of the agent's headers only `Accept`,
+  `Accept-Language`, `Content-Type`, `Mcp-Session-Id` and `Last-Event-ID`
+  go on, with the `MCP-Protocol-Version` the body states and any
+  `Mcp-Param-*` header that agrees with the body's `_meta`; every other
+  header is dropped, and the names of the dropped ones are logged. An
+  `MCP-Protocol-Version` or `Mcp-Param-*` header that does not agree with
+  the body is refused (400). Of the upstream's headers only `Content-Type`,
+  `Mcp-Session-Id`, `MCP-Protocol-Version` and `Cache-Control` come back.
+- One message per POST, read as strictly as a line on stdio: a batch, a
+  repeated member name, an id that is not text or a whole number, a number
+  beyond 2^53 - 1, or a shape that is not a message is refused (400) and
+  goes no further. A `tools/call` sent as a notification is dropped (202).
+- The upstream's answer comes back as it came: a JSON body, or a stream of
+  events forwarded one by one as they arrive. The response under the call's
+  id is the outcome and ends the call; a response under another id is never
+  taken as the outcome. The stream to the upstream is closed once the
+  outcome is in.
+- Legacy sessions pass through: the `Mcp-Session-Id` the upstream gives
+  comes back as it is, the GET stream of server messages and `initialize`
+  pass through, and a session belongs to the agent that opened it. Another
+  agent's request under it, or an unknown id (after a restart, the executor
+  knows none), is answered 404, and the client begins a new session.
+- Cancellation is the agent closing the response stream. The executor then
+  closes its stream to the upstream, and the outcome is recorded as not
+  known, as on stdio. The agent's own `notifications/cancelled` for a call
+  in progress does the same and is answered 202.
+- A request that names an `Origin` is refused (403) unless
+  `allowedOrigins` lists it; a body over `bodyLimit` (10 MiB) is refused
+  (413); an answer or an event of the upstream over 16 MiB is cut off; a
+  call the upstream does not answer within `timeout` is cancelled and gets
+  a receipt that says its outcome is not known.
+- A stop with a call in flight, followed by a start, writes that call's
+  receipt from the agent's copy before the executor listens, as on stdio.
+
+**When the credential is kept from the agent, and when it is not.** The
+upstream's token never goes to an agent in a header, a body, an error or a
+log: the executor forwards none of the upstream's headers but the four
+named, relays nothing of an upstream answer that refuses the token (401 or
+403; the agent is told the executor's credential was refused, and no more),
+never follows a redirection, and replaces the token's text wherever it
+occurs in anything it sends an agent (a tool result that echoes it, an
+error text, an event) with the words "[a credential was removed by the
+Provared executor]". That holds for the token as it is in the file; a token
+the upstream encodes or splits before echoing it is not seen. It holds only
+for what passes through the executor: an agent that can reach the upstream
+by another way, or read the executor's files, has the token. And the
+agents' secrets are only as safe as the connection they travel on: the
+executor listens on the local address by default and speaks plain HTTP, so
+an agent on another computer should reach it through an encrypted
+connection that something else provides.
+
+The settings (`executor-http.example.json` is a start): `name`, `service`,
+`tools`, `contentRules`, `unlisted`, `hideUnlisted`, `timeout`,
+`denialsPerHour`, `callIdInMeta` and `maxWaiting` as below; and
+
+- `listen`: `host` (default `127.0.0.1`; another address is warned about)
+  and `port` (default 8796). `path`: the endpoint (default `/mcp`).
+- `upstream`: `url` (http or https; plain http off this computer is warned
+  about) and `credential`: `{"file": <path>}`, the file that holds the
+  bearer token, readable by the executor alone. Without `credential` the
+  upstream is called with none, and the start says so.
+- `agents`: one member for each agent, by name (1 to 64 lower-case letters,
+  digits, full stops, hyphens or underscores): `secretHash`, `slip`,
+  `book`, `keys`, `issuerKeys`, and `copy` and `copyKey` (defaults
+  `copies/<name>.jsonl` and `copies/<name>.jsonl.key`). No two agents may
+  share a secret or a file.
+- `executor`: `keys`, the executor's own key file.
+- `bodyLimit`: the most a POST body may be, in bytes (default 10,485,760).
+- `allowedOrigins`: the origins (scheme, host and port) whose pages may
+  call the executor. Default none.
 
 ## The settings
 
@@ -512,6 +614,7 @@ nothing in a line says it is the last.
 
 ```
 provared-mcp-executor compare --config executor.json [--book <another copy of the book>]
+provared-mcp-executor compare --config executor-http.json --agent <name> [--book <another copy of the book>]
 ```
 
 For every call the copy shows as sent, the book is searched for the stub
@@ -546,9 +649,14 @@ did what its result says, or a copy changed by whoever holds the copy key.
   each counts against totals and counts.
 - **Time.** Times are the executor's clock. No seal and no outside
   time-stamp is written yet.
-- **One agent, one server.** One executor serves one agent (one slip, one
-  book) and one server. The HTTP transport, several agents, sealing and
+- **One server.** One executor stands in front of one tool server: on
+  stdio for one agent, over HTTP for several, each with its own slip and
+  book. Sealing, an `acknowledge` command, shipping the copy elsewhere and
   keys held in a key service are designed in `DESIGN.md` and not built.
+- **Over HTTP, the agents' secrets** travel in the clear unless something
+  else encrypts the connection; the executor listens on the local address
+  by default. A session id the upstream gives is bound to the agent that
+  opened it only for as long as the executor runs.
 - **The rules on content** test only what a call carries, and prove
   nothing about calls that do not go through the executor; see "What the
   rules can never promise" above.
@@ -563,8 +671,10 @@ npm test
 ```
 
 The tests start a made-up MCP server (`test/fake-server.mjs`) as a real
-process and speak to the executor over its streams; nothing is sent over
-the network. The name `provared` is taken to mean the repository's own
+process and speak to the executor over its streams, and a made-up HTTP MCP
+server (`test/fake-http-server.mjs`) on the local address, in front of
+which the HTTP executor is tested; nothing leaves the computer. The name
+`provared` is taken to mean the repository's own
 library (`test/local-library.mjs`), so the tests run against the library
 as it is in the same commit.
 

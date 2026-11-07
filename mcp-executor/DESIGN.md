@@ -44,6 +44,20 @@ the credential in the server's environment, and passes JSON-RPC messages
 between the two. The agent never sees the credential and never writes a
 receipt: the executor does both.
 
+Over HTTP (section 10) the executor is itself an MCP server, in front of
+one upstream HTTP MCP server, for several agents at once:
+
+```
+agent A ──HTTP, secret A──►                   ──HTTP, the upstream's──►  upstream MCP server
+agent B ──HTTP, secret B──►  executor          token, from a file
+                             holds: each agent's keys, slip, book and copy,
+                                    the executor's keys,
+                                    the upstream's token
+```
+
+Each agent signs in with a secret of its own and has its own slip, keys,
+book and copy; the handling of a call is the same code as on stdio.
+
 ## 3. Sources, as read on 31 October 2026
 
 - The MCP specification, revision 2026-07-28 (the latest), at
@@ -314,38 +328,66 @@ itself has a problem.
   cursor to the next.
 - The copy is only as safe as the folder it is in.
 
-## 10. Stage 2: the HTTP transport (design only)
+## 10. The HTTP transport, and several agents on one executor
 
-The Streamable HTTP transport (2026-07-28: "each message is an HTTP POST to
-a single MCP endpoint; replies arrive as a JSON object or a request-scoped
-SSE stream") changes four things:
+`provared-mcp-executor http --config …` runs the executor as a Streamable
+HTTP MCP server (2026-07-28: "each message is an HTTP POST to a single MCP
+endpoint; replies arrive as a JSON object or a request-scoped SSE stream")
+in front of one upstream HTTP MCP server (`http.mjs`). Four things differ
+from stdio; the rest (the rules, the check, the documents, the
+countersignature, the copy) is the same code, `callCore` in
+`executor.mjs`, which each transport reaches through a small link (X101).
 
-1. **Who is calling.** On stdio the client is the process that started the
-   executor. Over HTTP several agents may call one executor, so each agent
-   signs in with a secret of its own, as the gateway's agents do, and has
-   its own slip, keys and book. The executor is then an MCP server that
-   accepts a token of its own issue, and, as the authorization
-   specification requires, "MUST NOT accept or transit any other tokens":
-   the agent's `Authorization` header is removed and the upstream's
-   credential (a bearer token from a file) is added, exactly as the gateway
-   does for web calls.
-2. **Framing.** A POST carries one message; the answer is JSON or an SSE
-   stream in which the response with the request's id ends the call. The
-   executor reads the stream, forwards each event to the client as it
-   arrives, and takes the response with the call's id as the outcome.
-   Legacy sessions (`Mcp-Session-Id`, the GET stream for server-initiated
-   messages, `initialize`) pass through with the session id kept.
-3. **Cancellation** is the client closing the response stream. The
-   executor then closes its stream to the upstream; the outcome is not
-   known, as on stdio.
-4. **Mirrored metadata.** The `MCP-Protocol-Version` header and
-   `Mcp-Param-*` headers from `x-mcp-header` must agree with the body; the
-   executor forwards the body's values and refuses a mismatch as the
-   specification says the server would.
+1. **Who is calling.** Each agent signs in with a secret of its own, as the
+   gateway's agents do: one `Authorization: Bearer <secret>` header, whose
+   SHA-256 the settings hold as `secretHash`, compared in constant time
+   (X102). Each agent has its own slip, keys, book, copy and copy key
+   (X103); its calls go through its own writer, one at a time, and its
+   limits are its own. The executor accepts no other token: the agent's
+   `Authorization` is removed, and the upstream is sent the executor's
+   credential, a bearer token read from a file, as the gateway does for web
+   calls (X105). Headers go on by allow-list (X104). Nothing the upstream
+   answers reaches an agent with that token in it: the upstream's headers
+   come back by allow-list, a refusal of the token (401, 403) and a
+   redirection are not relayed, and every byte sent to an agent is checked
+   for the token's text (X105).
+2. **Framing.** A POST carries one message, read as strictly as a line on
+   stdio (X4): a batch or a shape that is not a message goes no further. A
+   request goes to the upstream under an id of the executor's own, as on
+   stdio; the answer is one JSON body or a stream of events, each event
+   forwarded to the agent as it arrives, and the response under the
+   executor's id is the outcome, handed back under the agent's id (X106).
+   Legacy sessions pass through: the `Mcp-Session-Id` the upstream gives
+   comes back as it is and is owned by the agent that received it; the GET
+   stream of server messages, `initialize` and DELETE pass through; another
+   agent's request under the session, or an unknown id, is answered 404
+   (X108).
+3. **Cancellation** is the agent closing the response stream. The executor
+   then closes its stream to the upstream, and the outcome is settled as
+   not known, as on stdio; the receipt names `provared.error`. The agent's
+   own `notifications/cancelled` does the same (X111).
+4. **Mirrored metadata.** The `MCP-Protocol-Version` header must agree with
+   the body's `_meta` value where both are given; the body's value is what
+   goes on. An `Mcp-Param-<name>` header goes on only where the body's
+   `_meta` holds a member so named with that value; otherwise the request
+   is refused (X110). The specification's text on `x-mcp-header` and on
+   the `Origin` rule was not among the sources of section 3, so X109 and
+   X110 take the safest reading and name what is to be checked.
 
-The rest is the same: the rules, the check, the documents, the
-countersignature, the copy. The gateway's HTTP code (headers never
-forwarded, the body limit, the journal) is the starting point.
+Limits (X107): the agent's body up to `bodyLimit` (10 MiB); an upstream
+JSON body or one event up to 16 MiB, as a line on stdio; the executor's
+`timeout` on every POST exchange; 256 requests of one agent in flight at
+once, beside `maxWaiting` for its calls; an `Origin` refused unless the
+settings allow it, and the local address listened on unless they say
+otherwise (X109). A stop with a call in flight, followed by a start, writes
+the receipt from the agent's copy before the executor listens (section 8).
+
+What it does not do: it speaks plain HTTP, so the agents' secrets and the
+upstream's token are only as safe as the connection (encryption is
+something else's); it binds a session to its agent only while it runs; a
+token the upstream encodes before echoing is not seen by the check of
+X105; and the credential is kept from an agent only for what passes
+through the executor.
 
 ## 11. F-157: rules on the content of a change
 
@@ -509,7 +551,10 @@ name the path is given, and which other tools reach the same file.
 
 ## 12. Stage 2 and later
 
-- The HTTP transport (section 10) and several agents on one executor.
+Built so far of stage 2: the rules on the content of a change (section
+11), and the HTTP transport with several agents on one executor (section
+10). Still to build:
+
 - An `acknowledge` command for a call sent under a permission no longer in
   force, as the gateway has.
 - Sealing the book on a timer or by command, with the recorder's three
@@ -1345,3 +1390,182 @@ message of X94 named the system's code as the cause, though Node.js reports
 `ENOENT` for a folder it cannot make on a read-only disk; it now says the
 folder "cannot be made or written" and gives the code as what the system
 reported, and a name that is a file gets words of its own. Two more tests.
+
+**X101. The HTTP transport is a second way to run the same executor, in
+`http.mjs` of the same package, and the handling of a call is one piece of
+code for both.** `executor.mjs` opens each agent (`prepareAgent`,
+`openAgent`: keys, slip, book, copy, writer, one call at a time, the late
+receipts at a start) and handles a `tools/call` (`callCore`) through a
+link the transport gives: an id for the server, how to send the call, how
+to answer the agent, how to cancel, and whether the server can take a call.
+On stdio the link writes lines; over HTTP it makes one exchange with the
+upstream. Why: the check, the documents, the countersignature and the copy
+cannot differ between transports, and a second copy of two hundred lines in
+a security-critical place would. The stdio tests pass unchanged. The other
+way: a separate package, or a transport that speaks to a stdio executor
+over a socket.
+
+**X102. Agents sign in as the gateway's do.** Exactly one `Authorization`
+header, `Bearer <secret>`, the secret 1 to 512 visible ASCII characters;
+the settings hold SHA-256 of the secret in base64url (`secretHash`), never
+the secret; the hash of what was given is held against each agent's with
+`timingSafeEqual`; `provared-mcp-executor secret` makes a secret and prints
+its hash, and stores neither. Two `Authorization` headers, a `Basic` one,
+or the hash itself sign in as nobody (401, `WWW-Authenticate: Bearer`). The
+secret is not logged, and a test holds every log line, book, copy and
+answer against it. Why: the gateway settled this already, and the brief
+says security-critical detail follows it. The other way: tokens the
+executor issues at a sign-in (the authorization specification's OAuth
+flow), which the gateway does not have either.
+
+**X103. Each agent has its own copy and copy key, by default
+`copies/<name>.jsonl` and `copies/<name>.jsonl.key` beside the settings,
+and no two agents may share a secret hash, a slip, a book, a key file, a
+copy or a copy key.** `compare` takes `--agent <name>` on HTTP settings;
+`check` reports each agent; `keys` makes one key file for each and prints
+the entries for each permission, with the executor's one entry for `with`.
+Why: a line of one agent's copy must not be able to stand in another's,
+and the gateway keeps a journal and a key for each agent. The other way:
+one copy for the executor with the agent's name in each line, which would
+need the comparison to filter and the key to bind the name.
+
+**X104. Headers go to the upstream by allow-list, not by deny-list.**
+`Accept`, `Accept-Language`, `Content-Type`, `Mcp-Session-Id` and
+`Last-Event-ID` pass; `MCP-Protocol-Version` and `Mcp-Param-*` as X110
+says; `Authorization` is the executor's; `Content-Length` is of the body
+as sent (the executor's id is longer than the agent's); every other header
+(`Cookie`, `X-Api-Key`, anything named in `Connection`, `X-Forwarded-*`,
+`Origin`, a header of a name nobody foresaw) is dropped, and the names of
+the dropped ones are logged, the usual ones of a browser or a library
+aside. Back from the upstream only `Content-Type`, `Mcp-Session-Id`,
+`MCP-Protocol-Version` and `Cache-Control`. Why: the authorization
+specification says a server "MUST NOT accept or transit any other
+tokens", and a token can ride in a header of any name; the gateway's
+deny-list fits web calls whose headers mean something to the upstream,
+and here they do not. The other way: the gateway's deny-list with its
+lists of credential, address and override headers.
+
+**X105. The upstream's credential is a bearer token from a file alone
+(`upstream.credential.file`), and the executor sees to it that the token
+reaches no agent.** No `env` and no `value` form: the brief names a file,
+and the gateway warns against the others. Without a credential the upstream
+is called with none and the start says so. Every byte to an agent (a JSON
+body, each event of a stream, an error of the executor's own) has the
+token's text replaced with "[a credential was removed by the Provared
+executor]"; a 401 or 403 from the upstream is answered as the executor's
+own error ("The upstream refused the executor's credential") with none of
+its headers or body; a 3xx is never followed and never relayed, since a
+redirection would carry the token elsewhere; a non-2xx answer to a call is
+an outcome of its own, body not relayed. A token shorter than 16 characters
+gets a warning, since text that happens to hold it would be replaced too.
+Why: the brief says the credential must reach the agent in no header,
+body, error or log, and an upstream that echoes its bearer token in a
+result is not far-fetched. The limit: a token the upstream encodes or
+splits before echoing is not seen. The other way: trust the upstream.
+
+**X106. Framing.** Each request goes under an id of the executor's own
+(`serverIds`, one maker per executor; on stdio one per session, so that
+the first id of a session is still `provared-1-…`), and the answer comes
+back under the agent's id, spliced into the upstream's text as on stdio.
+For a call, the response under the executor's id is the outcome: in a JSON
+body, or in the event of a stream that carries it, after which the stream
+to the upstream is closed (nothing more is wanted, and an unending stream
+after the answer would otherwise hold the call open). Every other event
+passes to the agent as it was, including a response under another id
+(X5); a JSON body under another id, or that is not a message, ends the
+call at once with "not its response", since no further answer can come on
+that exchange, where stdio waits for the timeout. A stream that ends
+without the response, a dropped connection and a non-2xx status are
+outcomes of "no answer" (1002) with a receipt naming `provared.error`. A
+response that cannot be read strictly but whose top-level id is the call's
+is handed to the agent as it was, with the receipt of `UNREADABLE_ANSWER`,
+as on stdio. The event that carried the outcome keeps its other lines
+(`id:`, `event:`, comments) in the final event the agent gets; the
+executor's own answer, where the stream had begun, is the final event.
+Notifications and the agent's responses are relayed as they are, with the
+upstream's status (202). A `tools/list` answer is filtered in a JSON body
+and in a stream alike (`filteredList`, shared with stdio).
+
+**X107. Limits.** The agent's POST body up to `bodyLimit`, 10 MiB by
+default as the gateway's, refused with 413 whether declared or not; an
+upstream JSON body, or one event, up to 16 MiB (`ANSWER_LIMIT`, the stdio
+line limit), past which the exchange is cut and a call gets "no answer";
+the executor's `timeout` on every POST exchange (a GET stream of server
+messages is open-ended by nature, bounded by the event limit alone); 256
+requests of one agent in flight at once (`MAX_OPEN`), beside `maxWaiting`
+for its calls, which `callCore` counts for each agent; 10,000 sessions
+remembered, the oldest forgotten first. Why: each bounds something an
+upstream or an agent could otherwise grow without end. The other way: no
+bound on the GET stream's events, or a bound on its length in time.
+
+**X108. A session belongs to the agent that opened it.** An
+`Mcp-Session-Id` the upstream gives in a 2xx answer is remembered for the
+agent whose request it answered; a request, GET or DELETE carrying a
+session id is served only where the executor remembers it for this agent,
+else 404, which the specification makes the client's cue to begin a new
+session; a DELETE by the owner forgets it; a restart forgets all, so every
+client begins anew. A header given twice, or an id outside 1 to 512
+visible ASCII characters, is refused (400). Why: a session id is a
+capability the upstream handed to one agent, and passing an unknown one
+on would let an agent use another's after a restart. The other way: pass
+unknown ids on and let the upstream decide, which it cannot.
+
+**X109. An `Origin` is refused (403) unless `allowedOrigins` lists it, and
+the executor listens on 127.0.0.1:8796 at `/mcp` unless the settings say
+otherwise; another address is warned about; the `Origin` itself never goes
+on.** The transport's rule on `Origin` (against DNS rebinding) was not
+among the texts of section 3, so this takes the safest reading: nothing
+from a web page unless the operator says so. To be checked against the
+specification's security warning of the Streamable HTTP transport
+(validating `Origin`; binding to localhost). The other way: allow any
+`Origin`, as a server for browsers would.
+
+**X110. Mirrored metadata.** `MCP-Protocol-Version`: where the header and
+the body's `_meta."io.modelcontextprotocol/protocolVersion"` are both
+given and differ, 400; the body's value goes on; a header alone (a legacy
+client, no version in the body) goes on; a header given twice, or a body
+value that is not text, 400. `Mcp-Param-<name>`: goes on only where the
+message's `_meta` holds a member whose name, or the part after its last
+`/`, is `<name>` (case not counted) with a text, number or boolean value
+whose text is the header's; otherwise 400; on a GET, a DELETE or a POST
+whose message is a response (no `params`), any `Mcp-Param-*` is 400. Why:
+section 10 says these must agree with the body and the body's values go
+on; the mapping from `_meta` members to headers (`x-mcp-header`) was not
+among the texts of section 3, so the executor adds no `Mcp-Param-*` of its
+own and lets through only what the body confirms. To be checked against
+the specification's text on `x-mcp-header` and `Mcp-Param-*`: which
+members are mirrored, how a name is formed, and whether a server generates
+the header from the body. The other way: forward the headers as given.
+
+**X111. Cancellation over HTTP is closing the stream to the upstream, and
+nothing more is sent to it.** The agent closing its response before the
+answer, the executor's timeout, and the agent's `notifications/cancelled`
+(as a POST of its own, naming a call of this agent in progress, answered
+202 and not forwarded) each close the upstream exchange and settle the
+outcome as not known, with a receipt naming `provared.error`; a call still
+waiting its turn is withdrawn and never sent, and the copy says so. The
+agent's response is then the executor's error, as a JSON body or as the
+final event. Why: section 10 says the transport's cancellation is the
+closed stream; the upstream knows the call by the executor's id, and a
+notification under it after the stream is closed would be a second
+message about a call that is already over. The other way: also POST
+`notifications/cancelled` to the upstream, as stdio sends it on the one
+stream it has.
+
+**X112. The executor's own answers over HTTP.** A request that was read
+and refused by the executor (a call the permission does not allow, no
+rule, the limits of X107 on calls, a duplicate id in progress, 1001, 1002)
+is answered 200 with the JSON-RPC result or error under the agent's id,
+as on stdio, so the agent's MCP library reads it as a response; a body
+that cannot be read as one message is 400 with a JSON-RPC error (the id
+where one was read, else null); the transport's own refusals are 401 (not
+signed in), 403 (`Origin`), 404 (the path, a session), 405 (a method other
+than POST, GET or DELETE), 413 (the body), 415 (not `application/json`),
+503 (too many in flight), each with a JSON-RPC error body and id null;
+an upstream failure on a request that is not a call is 502 or 504 with the
+same. A duplicate id is counted for each agent (on stdio, for the one
+session), so two concurrent calls of one agent under one id are refused
+and two agents may use the same ids. The tests' client speaks to the
+executor over `node:http` on one connection for each request: the
+built-in `fetch` keeps connections alive, which kept the test process
+from ending and tripped an assertion in Node.js on Windows at exit.

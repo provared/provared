@@ -4,6 +4,35 @@
 
 - **The recorder beside Claude Code, as a plugin, installs library 0.8.0.** `integrations/claude-code/package.json` asks for `provared` `^0.8.0` (0.8.0 or later, before 0.9.0), where it asked for `>=0.6.0 <0.8.0`, and its lockfile installs 0.8.0, where it installed 0.6.0. The published `provared-claude-code` 0.1.0 is unchanged. Its README says so. The plugin's 18 tests pass.
 - **The home page** says what is new in 0.8.0.
+- **`provared-mcp-executor` runs over HTTP, for several agents** (not
+  published; the package stays at 0.2.0). `provared-mcp-executor http
+  --config executor-http.json` runs the executor as a Streamable HTTP MCP
+  server in front of one upstream HTTP MCP server. Each agent signs in with
+  a secret of its own (`Authorization: Bearer <secret>`; the settings hold
+  its SHA-256, which `provared-mcp-executor secret` prints) and has its own
+  slip, keys, book and copy; one agent can never write to, read from or act
+  under another's. The agent's `Authorization` header is removed and the
+  upstream's bearer token, read from a file, is added; the token reaches no
+  agent in any header, body, error or log: the upstream's headers come
+  back by allow-list, its refusal of the token and any redirection are not
+  relayed, and the token's text is replaced wherever it would appear in
+  what an agent is sent. One message per POST, read as strictly as a line
+  on stdio; the answer as JSON or as a stream of events forwarded as they
+  arrive, with the response under the executor's id as the outcome; legacy
+  sessions pass through, each bound to the agent that opened it; the agent
+  closing its stream cancels the call, which is recorded as not known;
+  `MCP-Protocol-Version` and `Mcp-Param-*` headers must agree with the
+  body, whose values go on. An `Origin` is refused unless the settings
+  allow it, and the executor listens on 127.0.0.1 by default. The rules,
+  the check, the documents, the countersignature and the copy are the same
+  code as on stdio (`callCore` in `executor.mjs`), and the check still
+  happens before anything reaches the upstream; the stdio path is
+  unchanged and its 70 tests pass as they were. `check`, `keys` and
+  `compare --agent <name>` read the HTTP settings too. New files
+  `mcp-executor/http.mjs`, `executor-http.example.json`,
+  `test/http.test.mjs`, `test/http-cli.test.mjs`, `test/fake-http-server.mjs`
+  and `test/http-world.mjs`; `DESIGN.md` sections 2, 10, 12 and choices
+  X101 to X112; the README's "Over HTTP, for several agents".
 
 ## 0.8.0 (1 November 2026)
 
