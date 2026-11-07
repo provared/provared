@@ -2,10 +2,13 @@
 
 An agent with a shell or file tools can read every file its computer user
 can read. So a guard that runs as the same user cannot keep the tool
-server's credential from it. This example puts the guard where the agent
-cannot sign in: in a container of its own. The agent's container can reach
-the guard but not the tool server. The guard holds the credential; the
-agent holds only its own secret.
+server's credential from it. This example puts the guard in a container of its own, apart from the
+agent's container, so that the agent's shell cannot read the guard's
+files. The agent's container can reach the guard but not the tool server.
+The guard holds the credential; the agent holds only its own secret.
+Anyone who can run Docker commands on that computer, a person or an
+agent, can read the guard's files and the credential with them. So the
+agent must not run as a computer user who can use Docker.
 
 It has been run with Docker Desktop on Windows, on one computer. It has
 not been tried on separate computers.
@@ -35,17 +38,19 @@ sh run.sh
 ```
 
 It takes a few minutes, prints seven checks, and then removes its
-containers and networks, also after a failure. It first removes any
-container or network already named as in the table above, or
-`provared-example-agent` and `provared-example-tools` for the networks.
+containers and networks, also after a failure. Before it starts, it stops and removes any container named
+`provared-example-agent`, `provared-example-guard` or
+`provared-example-tools-server`, and any network named
+`provared-example-agent` or `provared-example-tools`, with whatever they
+hold. Do not run it where those names are in use.
 
 ## The seven checks
 
 1. The agent reaches the guard over TLS 1.3 and accepts its certificate.
 2. An allowed call runs; a refused call never reaches the tool server.
-3. The agent's book checks clean, and the guard's copy agrees with it.
-4. From a shell in the agent's container: the token is in no file, no
-   environment variable and no process's environment; the tool server's
+3. The agent's book, which the guard writes and keeps, shows no problem,
+   and the guard's copy agrees with it.
+4. From a shell in the agent's container: no text file, environment variable or process's environment holds the token; the tool server's
    name does not resolve; the guard's plain port refuses connections.
 5. The token is in nothing the agent received, and not in the guard's
    log, book or copy.
@@ -67,10 +72,15 @@ All seven passed on 7 November 2026, with the official MCP software
   it could read the guard's files, and the credential with them.
 - **A tool that returns the token in another form.** The guard removes
   only the token's exact text from what it sends an agent.
-- **The whole token.** Checks 4 and 5 search for the start every token
-  in this example has, as the agent never had its full value.
+- **The token in another form.** Checks 4 and 5 search for the start
+  that every token in this example has, as the agent never had its full
+  value. That also finds the whole token, but not one that is encoded,
+  split or in a binary file.
 - **A hardened proxy.** `proxy.mjs` asks for no client certificate;
   agents sign in with the guard's own secrets.
+- **The agent's shell.** The guard sees and records only the calls that
+  pass through it to the tool server, not what the agent does in its
+  shell.
 
 The guard's record shows what passed through the guard. It proves
 nothing about a tool the agent can reach another way. Evidence, not a

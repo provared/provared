@@ -37,11 +37,12 @@ it: the tool's credential must be taken away from the agent. It keeps
 the credential, and its own keys, from the agent only where the agent
 cannot read the guard's files: an agent with a shell or file tools that
 runs as the same computer user can read them. So run the guard under a separate user account that the agent cannot
-use, or give the agent no shell or file tools. Over HTTP the guard can
-also run where the agent cannot sign in:
-[an example](mcp-executor/recipes/agent-with-a-shell/README.md) does this
-with three containers on one computer, and passes its checks; on separate
-computers it has not been tried.
+use, or give the agent no shell or file tools. Over HTTP the guard can also
+run apart from the agent, where the agent cannot read the guard's files:
+[an example](mcp-executor/recipes/agent-with-a-shell/README.md) puts them
+in separate Docker containers on one computer, and its seven checks passed
+with Docker Desktop on Windows; on separate computers it has not been
+tried.
 
 *Evidence, not a verdict.* A record shows what was signed and by which
 keys. People decide what it means.
