@@ -2,7 +2,7 @@
 
 A way to test your own implementation of the Provared format, in any
 programming language, against Provared's shared test files
-(`test-vectors/`, about 14,700 cases in 95 files). The kit hands each
+(`test-vectors/`, about 14,800 cases in 97 files). The kit hands each
 case to your code, reads your answer, compares it with the answer stored
 in the file, and prints which cases match.
 

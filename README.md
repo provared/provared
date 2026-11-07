@@ -2,14 +2,89 @@
 
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/provared/provared/badge)](https://scorecard.dev/viewer/?uri=github.com/provared/provared)
 
-Proof of what an AI agent was allowed to do, and what it then did.
+A guard for an AI agent's tools: it holds the tools' credentials in
+place of the agent, and stops any tool call that the person did not
+allow in a permission they signed with a passkey.
 
-A person signs the permission with a passkey. The agent signs a receipt
-for each action. A free checker says whether the agent stayed within the
-permission, and where it did not.
+The guard, [provared-mcp-executor](mcp-executor/README.md), stands
+between the agent and a tool server that speaks the Model Context
+Protocol (MCP), the common way for AI agents to reach tools. It holds
+the tool server's credential in place of the agent, and refuses a call
+the permission does not allow before the call reaches the tool. It can
+also test what a call would change, for example which paths a file tool
+may touch.
+
+The record follows from it. For each call it lets through, the guard
+writes a signed receipt and countersigns it with keys of its own; for a
+call the permission does not allow, a signed note of the refusal (a
+denial). Anyone can check these records later, on their own computer,
+with the free checker.
+
+**What it does not do yet.** It guards only a tool server that it starts
+itself, on the same computer, the two programs talking through their
+standard input and output (MCP's "stdio" transport). One guard serves
+one agent and one tool server. Tool servers reached over the network
+(MCP over HTTP, the protocol of the web), one guard for several agents,
+sealing the record, and keys held in a key service are designed but not
+built. And it proves nothing about a tool the agent can reach without
+it: the tool's credential must be taken away from the agent. It keeps
+the credential, and its own keys, from the agent only where the agent
+cannot read the guard's files: an agent with a shell or file tools that
+runs as the same computer user can read them. So run the guard under a
+separate user account that the agent cannot use, or give the agent no
+shell or file tools; a tested recipe for this is not written yet.
 
 *Evidence, not a verdict.* A record shows what was signed and by which
 keys. People decide what it means.
+
+```
+npm install -g provared-mcp-executor   # Node.js 24.7 or later
+```
+
+[Its README](mcp-executor/README.md) sets it up in five steps: write its
+settings, make its keys, sign the permission with a passkey at
+https://sign.prova.red, check the settings, and name the guard in the
+agent's MCP client where the tool server was named. For a client whose
+settings are JSON:
+
+```json
+{
+  "mcpServers": {
+    "files": {
+      "command": "provared-mcp-executor",
+      "args": ["stdio", "--config", "/etc/provared-mcp/files/executor.json"]
+    }
+  }
+}
+```
+
+To see it work first, [mcp-executor/demo/](mcp-executor/demo/) runs the
+guard in front of a made-up tool server, with no settings and no secret;
+its records prove nothing about anyone. The guard is listed in the
+official MCP Registry as `io.github.provared/mcp-executor`. "Executor"
+is the Internet-Draft's word for software, other than the agent, that
+acts for it and refuses what the permission does not allow.
+
+## Other ways to record an agent
+
+The guard is one way to put an agent's actions behind a signed
+permission. The others write the same kind of record, read by the same
+checker:
+
+- **The library**, in JavaScript or Python, for an agent you write
+  yourself: each action is checked against the permission first and
+  receipted after (see "A first record of your own", below).
+- **[The recorder beside Claude Code](integrations/claude-code/README.md)**
+  (`provared-claude-code`, also a Claude Code plugin), which checks and
+  receipts every tool call Claude Code makes.
+- **Packages for two Python agent frameworks**, LangChain and Pydantic
+  AI, and [an example](examples/frameworks/) for the Vercel AI SDK.
+- **[The gateway](gateway/README.md)**, for agents that act through web
+  interfaces: it stands in front of each system an agent uses, holds
+  that system's credential and receipts each call. In the repository,
+  not yet on npm.
+
+## The checker, and the sample record
 
 ```
 npm install provared          # Node.js 24.7 or later, no dependencies
