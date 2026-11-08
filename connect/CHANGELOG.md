@@ -16,7 +16,7 @@
   refused with one sentence, and nothing from it is printed. The recorder
   beside Claude Code is taken unless `--feed` and `--feed-token`, or
   `--book`, name another. The line's format is in the README, with the
-  choices numbered 1059 to 1073.
+  choices numbered 1059 to 1075.
 - **The uploader and the hand-over moved here** from the application
   (`connector/upload.mjs`, `connector/handover.mjs`), with what they used
   of the application's shared code (`entry.mjs`, `outcomes.mjs`, the

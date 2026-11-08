@@ -234,6 +234,15 @@ Numbered on from the application's and the executor's choices.
       `./store`, `./upload`, `./handover`, `./entry`, `./outcomes` and
       `./book`, so the application and the tests use the same code through
       the package's interface.
+1074. **In the application, the page offers the whole command**
+      (`npx provared-connect <line>`) to copy, not the bare line, so that
+      one paste is the whole step; saving the file stays behind a fold
+      under it, for a recorder that offers no feed.
+1075. **In the application, the line is made by the page's own small
+      module** (`web/connect-line.js`), the same format written twice,
+      because the page is served from the application and does not load
+      this package; the application's test checks the line it makes
+      against this format.
 
 ## Working from a copy of the repository
 
