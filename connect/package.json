@@ -1,0 +1,65 @@
+{
+  "name": "provared-connect",
+  "version": "0.1.0",
+  "description": "Connects a Provared recorder to a book in the Provared application with one line copied from the book's page: the uploader beside the recorder sends each line of the agent's book, sealed, to the application's server, and hands the person's signed renewals and cancellations to the recorder. No file is saved or moved by the person.",
+  "author": "Pavel Izmaylov",
+  "license": "Apache-2.0 AND CC-BY-4.0",
+  "homepage": "https://prova.red",
+  "bugs": "https://github.com/provared/provared/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/provared/provared.git",
+    "directory": "connect"
+  },
+  "keywords": [
+    "ai-agent",
+    "agent",
+    "audit-trail",
+    "permission",
+    "receipt",
+    "tamper-evident",
+    "passkey",
+    "evidence",
+    "uploader"
+  ],
+  "type": "module",
+  "main": "./connect.mjs",
+  "exports": {
+    ".": "./connect.mjs",
+    "./line": "./line.mjs",
+    "./store": "./store.mjs",
+    "./upload": "./upload.mjs",
+    "./handover": "./handover.mjs",
+    "./entry": "./entry.mjs",
+    "./outcomes": "./outcomes.mjs",
+    "./book": "./book.mjs",
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "provared-connect": "bin.mjs"
+  },
+  "files": [
+    "bin.mjs",
+    "connect.mjs",
+    "line.mjs",
+    "store.mjs",
+    "upload.mjs",
+    "handover.mjs",
+    "entry.mjs",
+    "outcomes.mjs",
+    "book.mjs",
+    "CHANGELOG.md",
+    "LICENSE-CC-BY-4.0.txt"
+  ],
+  "engines": {
+    "node": ">=24.7"
+  },
+  "scripts": {
+    "test": "node --disable-warning=ExperimentalWarning --import ./test/local-library.mjs --test --test-timeout=180000 --test-force-exit test/*.test.mjs"
+  },
+  "dependencies": {
+    "@microtoll/access": "0.1.1",
+    "@microtoll/crypto-core": "0.1.1",
+    "@microtoll/identity": "0.1.1"
+  }
+}
