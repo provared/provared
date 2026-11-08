@@ -18,7 +18,7 @@
 // exactly these fields, every one a non-empty string:
 //
 //   version                1, the same as in the prefix
-//   server                 the application's WebSocket address (ws:// or wss://)
+//   server                 the application's WebSocket address (ws:// or wss://), with no user name or password in it
 //   origin                 the page's address (http:// or https://), sent when the uploader signs in
 //   namespace              the engine's namespace the sealing is bound to ("provared-app")
 //   objectId               the book's id, a UUID
@@ -28,6 +28,12 @@
 // Written to a file, the same fields with "about" added give the connection
 // file the uploader has always read, so a saved line and a saved file are
 // one thing.
+//
+// A REFUSAL NAMES NO VALUE FROM THE LINE: not a secret, not the book's id,
+// not a field name the line brought, not the version it claims. A line put
+// somewhere for a person to paste could otherwise print what it liked into
+// their terminal or a log. The field names in the messages are this file's
+// own.
 
 export const LINE_PREFIX = 'provared-connect:';
 export const LINE_VERSION = 1;
@@ -38,7 +44,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const BASE64URL = /^[A-Za-z0-9_-]+$/;
 const NAMESPACE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
-const COPY_AGAIN = `That is not a connection line: copy the whole line from the book's page on the application, from "${LINE_PREFIX}" to its end, and run the command again.`;
+const COPY_AGAIN = `copy the whole line from the book's page on the application, from "${LINE_PREFIX}" to its end, and run the command again.`;
 
 function refuse(message, code = 'bad-line') {
   return Object.assign(new Error(message), { code });
@@ -46,21 +52,24 @@ function refuse(message, code = 'bad-line') {
 
 /**
  * Checks the fields of a connection, from a line or from a file: every one a
- * non-empty string of the right shape. Gives back the connection with only
- * these fields (and "about"), or throws with code "bad-connection" and a
- * sentence saying what is wrong, naming no value.
+ * non-empty string of the right shape, and no field this version does not
+ * know. Gives back the connection with only these fields (and "about" and
+ * "version"), or throws with code "bad-connection" and a sentence saying
+ * what is wrong, naming no value from it.
  */
 export function checkConnection(c) {
   if (!c || typeof c !== 'object' || Array.isArray(c)) throw refuse('The connection is not an object.', 'bad-connection');
+  if ('version' in c && c.version !== LINE_VERSION) throw refuse('The connection is of a version this package does not know.', 'bad-connection');
   for (const k of FIELDS) {
     if (typeof c[k] !== 'string' || !c[k]) throw refuse(`The connection has no "${k}".`, 'bad-connection');
   }
   for (const k of Object.keys(c)) {
-    if (k !== 'about' && k !== 'version' && !FIELDS.includes(k)) throw refuse(`The connection has a field this version does not know ("${k}").`, 'bad-connection');
+    if (k !== 'about' && k !== 'version' && !FIELDS.includes(k)) throw refuse('The connection has a field this version does not know.', 'bad-connection');
   }
   let server;
   try { server = new URL(c.server); } catch { throw refuse('The connection\'s "server" is not an address.', 'bad-connection'); }
   if (server.protocol !== 'ws:' && server.protocol !== 'wss:') throw refuse('The connection\'s "server" is not a WebSocket address (ws:// or wss://).', 'bad-connection');
+  if (server.username || server.password) throw refuse('The connection\'s "server" carries a user name or a password, which it must not.', 'bad-connection');
   let origin;
   try { origin = new URL(c.origin); } catch { throw refuse('The connection\'s "origin" is not an address.', 'bad-connection'); }
   if ((origin.protocol !== 'http:' && origin.protocol !== 'https:') || origin.origin !== c.origin) throw refuse('The connection\'s "origin" is not a page\'s address (http:// or https://, with nothing after the host and port).', 'bad-connection');
@@ -90,22 +99,22 @@ export function encodeLine(connection) {
  */
 export function decodeLine(text) {
   const line = typeof text === 'string' ? text.trim() : '';
-  if (!line.startsWith(LINE_PREFIX)) throw refuse(COPY_AGAIN);
+  if (!line.startsWith(LINE_PREFIX)) throw refuse(`That is not a connection line: ${COPY_AGAIN}`);
   const rest = line.slice(LINE_PREFIX.length);
   const colon = rest.indexOf(':');
-  if (colon < 1) throw refuse(COPY_AGAIN);
+  if (colon < 1) throw refuse(`That is not a connection line: ${COPY_AGAIN}`);
   const version = rest.slice(0, colon);
   const body = rest.slice(colon + 1);
-  if (!/^[1-9][0-9]*$/.test(version)) throw refuse(COPY_AGAIN);
-  if (Number(version) !== LINE_VERSION) throw refuse(`This line was made for a newer version of provared-connect (version ${version} of the line): run it with "npx provared-connect@latest" instead.`, 'newer-line');
-  if (!body || !BASE64URL.test(body)) throw refuse(COPY_AGAIN);
+  if (!/^[1-9][0-9]*$/.test(version)) throw refuse(`That is not a connection line: ${COPY_AGAIN}`);
+  if (version !== String(LINE_VERSION)) throw refuse('This line was made for a newer version of provared-connect: run it with "npx provared-connect@latest" instead.', 'newer-line');
+  if (!body || !BASE64URL.test(body)) throw refuse(`That is not a whole connection line: ${COPY_AGAIN}`);
   let parsed;
-  try { parsed = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')); } catch { throw refuse(COPY_AGAIN); }
-  if (!parsed || typeof parsed !== 'object' || parsed.version !== LINE_VERSION) throw refuse(COPY_AGAIN);
+  try { parsed = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')); } catch { throw refuse(`That is not a whole connection line: ${COPY_AGAIN}`); }
+  if (!parsed || typeof parsed !== 'object' || parsed.version !== LINE_VERSION) throw refuse(`That is not a whole connection line: ${COPY_AGAIN}`);
   let c;
   try { c = checkConnection(parsed); } catch (e) {
     const detail = e.message.replace(/\.$/, '').replace(/^The/, 'the');
-    throw refuse(`That is not a whole connection line (${detail}): copy the whole line from the book's page on the application, from "${LINE_PREFIX}" to its end, and run the command again.`);
+    throw refuse(`That is not a whole connection line (${detail}): ${COPY_AGAIN}`);
   }
   return c;
 }

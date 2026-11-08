@@ -106,6 +106,7 @@ import { createCryptoCore } from '@microtoll/crypto-core';
 import { authenticateConnection, createEphemeralIdentity, sendAndAwait } from '@microtoll/identity';
 import { sealEntry } from './entry.mjs';
 import { HAND_OVER_AGAIN_MS, bookSide, createHandover } from './handover.mjs';
+import { checkConnection } from './line.mjs';
 import { homedir } from 'node:os';
 
 /** The recorder beside Claude Code, where it is unless another is named: its folder, its feed and the token in that folder. */
@@ -129,12 +130,11 @@ function sha256(text) {
 
 const escaped = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+/** The connection file, read as the command reads it (line.mjs: checkConnection), so the two agree on what a connection is. */
 export function readConnection(path) {
-  const c = JSON.parse(readFileSync(path, 'utf8'));
-  for (const k of ['server', 'origin', 'namespace', 'objectId', 'kObject', 'appendCapabilitySecret']) {
-    if (typeof c[k] !== 'string' || !c[k]) throw new Error(`the connection file has no "${k}"`);
-  }
-  return c;
+  let parsed;
+  try { parsed = JSON.parse(readFileSync(path, 'utf8')); } catch (e) { throw new Error(`the connection file ${path} could not be read: ${e.message}`); }
+  try { return checkConnection(parsed); } catch (e) { throw new Error(`the connection file ${path} is not a connection: ${e.message}`); }
 }
 
 // --- files and their identity ---

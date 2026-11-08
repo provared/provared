@@ -5,8 +5,12 @@ Provared application.** A person opens the book's page in the application,
 copies the line it shows, and runs it on the agent's computer:
 
 ```
-npx provared-connect provared-connect:1:eyJ2ZXJzaW9uIjoxLCJzZXJ2ZXIiOiJ3c3M6Ly9...
+npx --logs-max=0 provared-connect provared-connect:1:eyJ2ZXJzaW9uIjoxLCJzZXJ2ZXIiOiJ3c3M6Ly9...
 ```
+
+(`--logs-max=0` tells npm, which `npx` is, to keep no debug log of the
+run; it would otherwise hold the line. The page offers the command with
+it.)
 
 That checks the line, saves the connection beside the recorder where only
 that computer's user can read it, and starts the uploader in the
@@ -71,7 +75,10 @@ line, and to nothing else.
    `--ensure` does, unless one already runs for this recorder. The program
    it starts is given the file's name (`--connection <file>`), never the
    line or anything in it: the secret is in no command line of a
-   long-running program and in no log. Its output goes to
+   long-running program, and in no log this package writes. (npm keeps a
+   debug log of each `npx` run, with its arguments, unless told not to;
+   the page offers the command with `--logs-max=0`, which tells it not
+   to.) Its output goes to
    `book.jsonl.uploader.log` beside the recorder's book; its process
    number to `book.jsonl.uploader.pid`.
 
@@ -87,7 +94,8 @@ the other book and would be ahead of the new one.
 
 The line itself is on the command line of `npx provared-connect` while it
 runs, which is a moment, and it may be kept by the shell in its history
-file, which the command cannot prevent; see "What the line exposes".
+file, which the command cannot prevent, and by npm in its debug log where
+the command is run without `--logs-max=0`; see "What the line exposes".
 
 ## The uploader, as before
 
@@ -171,10 +179,20 @@ A line copied into a place others can read (a chat, a ticket, a shared
 note, a screenshot, a command's history) gives all of that to whoever reads
 it there, for as long as the book keeps that key. The way out is a new key
 for the book in the application, which stops every line and link given
-before; then run the new line beside the recorder. Note that the shells of
-most systems keep the commands typed into them in a history file, so the
-line may stay there after the command ran; how to keep a command out of
-the history, or to remove it, depends on the shell.
+before; then run the new line beside the recorder, and clear the two
+places below where the old line may still be.
+
+Two places on the agent's computer may keep the line after the command
+ran, both readable by the same user, administrators and the system. The
+shells of most systems keep the commands typed into them in a history
+file; how to keep a command out of the history, or to take it out,
+depends on the shell. And npm, which `npx` is, writes a debug log of
+each run with its arguments, and keeps the last ten, in `_logs/` under
+its cache folder (`~/.npm/_logs` on Linux and macOS,
+`%LOCALAPPDATA%\npm-cache\_logs` on Windows); `npx --logs-max=0 ...`,
+as the page offers the command, writes none. Where the line was run
+without it, that folder holds the line until ten later npm runs have
+pushed it out, or until the log is taken out of it.
 
 ## Choices this package makes that the design leaves open
 
@@ -195,14 +213,20 @@ Numbered on from the application's and the executor's choices.
       and on Windows the access list set with `icacls` (inheritance off,
       the user alone, full control); where `icacls` fails, the file is
       kept and the failure is said. The system's own tool, and the
-      plainest statement of what is done.
+      plainest statement of what is done. The file is made empty,
+      restricted, and only then written, so the secret is never on disk
+      under the folder's inherited list.
 1063. **The checks on each field** are shapes: `ws:`/`wss:` for the
       server; an `http:`/`https:` origin with nothing after the host and
       port; a namespace of letters, digits, dots, dashes and underscores;
       a UUID for the book's id; base64url of 22 to 128 characters for the
       two secrets (a key of 32 bytes is 43). The design does not fix the
       secrets' lengths, so a range rather than one number. A field this
-      version does not know is refused.
+      version does not know is refused; so is a `version` other than 1
+      where there is one, and a `server` that carries a user name or a
+      password. The uploader reads a connection file with the same
+      checks, so the command and the uploader agree on what a connection
+      is.
 1064. **The same line again** changes nothing where the uploader runs, and
       starts it where it does not.
 1065. **A line for the same book under a new key** (or at another server)
@@ -210,7 +234,9 @@ Numbered on from the application's and the executor's choices.
       uploader's state, which is of the same book.
 1066. **A line for another book** is refused where the uploader's state
       is beside the book, with what to do, and replaces the connection
-      where there is none yet.
+      where there is none yet. A connection file that is there but is not
+      one this version reads is treated the same way, never as if there
+      were none.
 1067. **The recorder beside Claude Code is the default** for the uploader's
       command line too: with neither `--feed` nor `--book`, where it used
       to refuse, it now takes `http://127.0.0.1:8794` and
@@ -226,7 +252,8 @@ Numbered on from the application's and the executor's choices.
       began `provared-app uploader:`.
 1071. **Any word on the command line that is not an option is taken for
       a line** and is never printed back, so that a half-copied line is
-      not echoed into a log.
+      not echoed into a log. One function (`bareWords`) decides what is a
+      word and what an option's value, for the command and for the flow.
 1072. **`provared` is not a dependency.** The uploader and hand-over never
       import it; the tests that run the real recorder resolve the name to
       the repository's own library (`test/local-library.mjs`).
@@ -243,6 +270,25 @@ Numbered on from the application's and the executor's choices.
       because the page is served from the application and does not load
       this package; the application's test checks the line it makes
       against this format.
+1076. **The page offers the command with `--logs-max=0`**
+      (`npx --logs-max=0 provared-connect <line>`), because npm writes a
+      debug log of each run with its arguments, and that option is the
+      one that stops it; `--loglevel=silent` does not. The line stays an
+      argument: one line to copy is the decision.
+1077. **A connection file that cannot be read as one is never taken for
+      none**: with the uploader's state beside the book it is refused, as
+      a line for another book is; without, it is replaced.
+1078. **An uploader that runs is stopped whenever the connection on disk
+      changes or there was none**, before the new one is started, so the
+      one that runs is always the one with the saved connection.
+1079. **A refusal names no field name and no version from the line**,
+      only the sentence; a line could otherwise print what it liked into
+      a terminal or a log.
+1080. **The page shows the line only after "Show the line"**, in the
+      first connection, after a new key and under sharing alike, so that
+      a screen shared or captured does not carry it.
+1081. **`--feed` without `--feed-token` is refused** by the command, as
+      the uploader refuses it, rather than paired with the default token.
 
 ## Working from a copy of the repository
 

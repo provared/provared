@@ -6,7 +6,10 @@
 // read it (store.mjs), beside the recorder, and starts the uploader in the
 // background, as --ensure does. The uploader is started with the file's
 // name, never with the line: the secret is in no command line of a
-// long-running program, and in no log; nothing here prints it.
+// long-running program, and in no log this package writes; nothing here
+// prints it. (npm itself writes a debug log of each npx run, with its
+// arguments, unless told not to: the page offers the command with
+// --logs-max=0 for that; see the README.)
 //
 //   - Run again with the same line, it changes nothing: where the uploader
 //     runs, it says so; where it does not, it starts it.
@@ -15,13 +18,19 @@
 //   - Run with a line for another book, where this recorder has sent lines
 //     of a book already (the uploader's state is beside the book), it
 //     refuses and says what to do: the state is of the other book, and
-//     would be ahead of the new one.
+//     would be ahead of the new one. A connection file that is there but
+//     cannot be read as a connection is treated the same way, never as if
+//     there were none.
+//   - Whenever the connection on disk changes, or there was none, an
+//     uploader that runs is stopped before the new one is started, so the
+//     one that runs is always the one with the connection saved.
 //
 // The recorder is the one beside Claude Code unless another is named: its
 // feed at http://127.0.0.1:8794 and its token in ~/.provared/claude-code
 // (upload.mjs: DEFAULT_FEED, DEFAULT_FEED_TOKEN); --feed and --feed-token
-// name another; --book <file> names a book file for a recorder that offers
-// no feed, and the connection is then kept beside that file.
+// name another, both together; --book <file> names a book file for a
+// recorder that offers no feed, and the connection is then kept beside
+// that file.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -35,19 +44,31 @@ export { DEFAULT_FEED, DEFAULT_FEED_TOKEN, DEFAULT_FOLDER, USAGE, createUploader
 
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/** The options that take a value. */
+const VALUED = Object.freeze(['--feed', '--feed-token', '--book', '--connection']);
+
+/** The value given after an option, or null where there is none (a word that starts with "--" is not a value). */
+export function optionValue(argv, name) {
+  const i = argv.indexOf(name);
+  return i >= 0 && argv[i + 1] && !argv[i + 1].startsWith('--') ? argv[i + 1] : null;
+}
+
+/** The words of a command line that are neither options nor an option's value: a line, or something taken for one. */
+export function bareWords(argv) {
+  const values = new Set(VALUED.map((name) => optionValue(argv, name)).filter(Boolean));
+  return argv.filter((a) => !a.startsWith('--') && !values.has(a));
+}
+
 /** The arguments of "npx provared-connect <line> ...": the line, and the recorder named. */
 export function readConnectArguments(argv) {
-  const value = (name) => {
-    const i = argv.indexOf(name);
-    return i >= 0 && argv[i + 1] && !argv[i + 1].startsWith('--') ? argv[i + 1] : null;
-  };
-  const values = new Set(['--feed', '--feed-token', '--book', '--connection'].map(value).filter(Boolean));
-  const bare = argv.filter((a) => !a.startsWith('--') && !values.has(a));
+  const bare = bareWords(argv);
   const line = bare[0] ?? null;
-  const book = value('--book');
-  const feedAddress = value('--feed');
-  const feedToken = value('--feed-token');
-  if (book && (feedAddress || feedToken)) return { error: 'give --feed or --book, not both: through the feed, the uploader opens no book file' };
+  const book = optionValue(argv, '--book');
+  const feedAddress = optionValue(argv, '--feed');
+  const feedToken = optionValue(argv, '--feed-token');
+  const feedNamed = feedAddress || feedToken || argv.includes('--feed') || argv.includes('--feed-token');
+  if (book && feedNamed) return { error: 'give --feed or --book, not both: through the feed, the uploader opens no book file' };
+  if (feedNamed && !(feedAddress && feedToken)) return { error: 'give both --feed <address> and --feed-token <file>' };
   if (bare.length > 1) return { error: 'one line only, and nothing after it but options: a line copied with a break in it is two words here' };
   if (book) return { line, book, base: book, folder: dirname(book) };
   const token = feedToken ?? DEFAULT_FEED_TOKEN;
@@ -91,9 +112,15 @@ export async function connect(argv, { log = console, start = ensure, stop = stop
   const file = connectionFile(said.folder);
   const pidFile = `${said.base}.uploader.pid`;
   const stateFile = `${said.base}.uploaded.json`;
+  // The connection on disk: one, none, or a file that is there but is not a
+  // connection to this package (never taken for none).
   let existing = null;
-  try { existing = readSaved(file); } catch { existing = null; /* not a connection: replaced */ }
+  let unreadable = false;
+  if (existsSync(file)) {
+    try { existing = readSaved(file); } catch { unreadable = true; }
+  }
   const forUploader = { connection: file, base: said.base, book: said.book, feedAddress: said.feedAddress, feedToken: said.feedToken };
+  const pid = () => { try { return readFileSync(pidFile, 'utf8').trim(); } catch { return '?'; } };
   const started = async (words) => {
     const code = await start(forUploader, pidFile);
     if (code !== 0) { log.error(`provared-connect: the connection is saved in ${file}, but the uploader did not start; see ${said.base}.uploader.log.`); return 1; }
@@ -101,19 +128,22 @@ export async function connect(argv, { log = console, start = ensure, stop = stop
     return 0;
   };
   if (existing && sameConnection(existing, connection)) {
-    if (uploaderRunning(pidFile)) { log.log(`provared-connect: already connected: the uploader is running (process ${readFileSync(pidFile, 'utf8').trim()}); nothing changed.`); return 0; }
+    if (uploaderRunning(pidFile)) { log.log(`provared-connect: already connected: the uploader is running (process ${pid()}); nothing changed.`); return 0; }
     return started(`already connected; the uploader was not running, and is started now (its connection is in ${file}).`);
   }
-  if (existing && existing.objectId !== connection.objectId && existsSync(stateFile)) {
-    log.error(`provared-connect: this recorder has sent its book to another book of the application (${existing.objectId}); to connect it to this one instead, stop the uploader and move ${file} and ${stateFile} away first, then run this command again.`);
+  if (existsSync(stateFile) && (unreadable || (existing && existing.objectId !== connection.objectId))) {
+    const whose = unreadable ? `the connection file beside the recorder (${file}) is not one this version reads, and this recorder has sent its book to a book of the application already` : `this recorder has sent its book to another book of the application (${existing.objectId})`;
+    log.error(`provared-connect: ${whose}; to connect it to this one instead, stop the uploader and move ${file} and ${stateFile} away first, then run this command again.`);
     return 1;
   }
   let saved;
   try { saved = saveConnection(file, connection); } catch (e) { log.error(`provared-connect: the connection could not be saved in ${file}: ${e.message}`); return 1; }
   const where = saved.restricted === true ? `kept in ${file}, readable by you only` : `kept in ${file} (${saved.restricted})`;
-  if (existing) {
-    if (!(await stop(pidFile))) { log.error(`provared-connect: the new connection is ${where}, but the uploader that ran with the old one did not stop (process ${readFileSync(pidFile, 'utf8').trim()}); stop it, then run this command again.`); return 1; }
-    return started(`connected again with the book's new key: the connection is ${where}, and the uploader was restarted.`);
-  }
-  return started(`connected: the connection is ${where}, and the uploader is running in the background.`);
+  // The connection on disk has changed (or there was none): an uploader that
+  // runs holds something else, and is stopped before the new one starts.
+  const wasRunning = uploaderRunning(pidFile);
+  if (wasRunning && !(await stop(pidFile))) { log.error(`provared-connect: the new connection is ${where}, but the uploader that ran before did not stop (process ${pid()}); stop it, then run this command again.`); return 1; }
+  if (existing) return started(`connected again with the book's new key: the connection is ${where}, and the uploader was restarted.`);
+  if (unreadable) return started(`connected: the connection is ${where}, in place of a file that was not one this version reads, and the uploader ${wasRunning ? 'was restarted' : 'is running in the background'}.`);
+  return started(`connected: the connection is ${where}, and the uploader ${wasRunning ? 'that ran before was stopped and started again with it' : 'is running in the background'}.`);
 }

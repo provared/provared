@@ -61,14 +61,23 @@ export function saveConnection(file, connection, { platform = process.platform, 
   const folder = join(file, '..');
   mkdirSync(folder, { recursive: true, mode: 0o700 });
   const temporary = `${file}.${process.pid}.new`;
-  const fd = openSync(temporary, 'wx', 0o600);
-  try {
-    writeSync(fd, text);
-    fsyncSync(fd);
-  } finally { closeSync(fd); }
+  // Made empty first, restricted, and only then written: on Windows the
+  // mode at creation means nothing, so the secret is never on disk under
+  // the folder's inherited access list.
+  closeSync(openSync(temporary, 'wx', 0o600));
   let restricted = true;
   if (platform === 'win32') restricted = restrict(temporary);
   else chmodSync(temporary, 0o600);
+  const fd = openSync(temporary, 'r+');
+  try {
+    writeSync(fd, text);
+    fsyncSync(fd);
+  } catch (e) {
+    closeSync(fd);
+    try { unlinkSync(temporary); } catch { /* gone */ }
+    throw e;
+  }
+  closeSync(fd);
   try {
     renameSync(temporary, file);
   } catch (e) {

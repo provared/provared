@@ -716,7 +716,7 @@ test('the command line: --feed with --feed-token keeps the uploader\'s files bes
 test('the command: a refused token stops it at once, with nothing sent to the server; --book says it is the fragile way', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'provared-app-feed-cli-'));
   const connection = join(dir, 'connection.json');
-  writeFileSync(connection, JSON.stringify({ server: 'ws://127.0.0.1:1', origin: 'http://nowhere', namespace: NAMESPACE, objectId: crypto.randomUUID(), kObject: cc.toBase64Url(cc.generateSymmetricKey()), appendCapabilitySecret: 'x' }));
+  writeFileSync(connection, JSON.stringify({ server: 'ws://127.0.0.1:1', origin: 'http://nowhere', namespace: NAMESPACE, objectId: crypto.randomUUID(), kObject: cc.toBase64Url(cc.generateSymmetricKey()), appendCapabilitySecret: cc.toBase64Url(cc.randomBytes(32)) }));
   writeFileSync(join(dir, 'feed-token'), `${'C'.repeat(43)}\n`);
   const server = createServer((req, res) => { res.writeHead(401, { 'Content-Type': 'application/json' }); res.end('{"error":"the feed needs the token"}'); });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
@@ -1064,7 +1064,7 @@ const command = (args, until = null) => new Promise((resolve) => {
 function commandFolder() {
   const dir = mkdtempSync(join(tmpdir(), 'provared-app-state-cli-'));
   const connection = join(dir, 'connection.json');
-  writeFileSync(connection, JSON.stringify({ server: 'ws://127.0.0.1:1', origin: 'http://nowhere', namespace: NAMESPACE, objectId: crypto.randomUUID(), kObject: cc.toBase64Url(cc.generateSymmetricKey()), appendCapabilitySecret: 'x' }));
+  writeFileSync(connection, JSON.stringify({ server: 'ws://127.0.0.1:1', origin: 'http://nowhere', namespace: NAMESPACE, objectId: crypto.randomUUID(), kObject: cc.toBase64Url(cc.generateSymmetricKey()), appendCapabilitySecret: cc.toBase64Url(cc.randomBytes(32)) }));
   writeFileSync(join(dir, 'feed-token'), `${'C'.repeat(43)}\n`);
   const book = join(dir, 'book.jsonl');
   writeFileSync(book, '{"a":0}\n');

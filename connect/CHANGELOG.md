@@ -34,3 +34,22 @@
   (its long-running process's command line and log hold no secret). 124
   tests, all passing, with the recorder beside Claude Code from the same
   repository.
+- **After the first review** (the same version, before publication):
+  npm's own debug log of each `npx` run holds the line, so the page
+  offers the command as `npx --logs-max=0 provared-connect <line>`, and
+  the README names that log beside the shell's history as a place the
+  line may stay, and says what to do. A connection file that is there but
+  is not one this version reads is never taken for none: refused where
+  the uploader's state is beside the book, replaced where not; and an
+  uploader that runs is stopped whenever the connection on disk changes or
+  there was none, including where only its process number is left. The
+  uploader reads the connection file with the command's checks, so the
+  two agree. A refusal names no field name and no version from the line,
+  whatever they hold. On Windows the file is restricted while still empty
+  and written only then. A `version` other than 1 in a file, and a
+  `server` with a user name or a password, are refused; `--feed` without
+  `--feed-token` is refused as the uploader refuses it; one function reads
+  the bare words of a command line for the command and the flow. Seven
+  tests added (`test/review.test.mjs`), each failing before its fix;
+  131 tests pass. Choices 1062, 1063, 1066 and 1071 updated; 1076 to
+  1081 added.

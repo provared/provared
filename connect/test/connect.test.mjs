@@ -78,7 +78,7 @@ test('a bad line: one sentence, no value from the line, nothing saved, nothing s
   const c = fresh();
   for (const bad of ['hello', encodeLine(c).slice(0, -3), `provared-connect:2:${encodeLine(c).slice(19)}`]) {
     const k = keep();
-    assert.equal(await connect([bad, '--feed-token', r.feedToken], { log: k, start: s.start }), 1);
+    assert.equal(await connect([bad, '--feed', 'http://127.0.0.1:1', '--feed-token', r.feedToken], { log: k, start: s.start }), 1);
     assert.equal(k.out.length, 1);
     assert.match(k.out[0], /^provared-connect: [A-Z].*\.$/);
     assert.ok(holdsNoSecret(k.text(), c) && !k.text().includes(encodeLine(c).slice(19, 40)));
@@ -91,7 +91,7 @@ test('no token where the recorder should be: one sentence saying to start the re
   const r = recorderFolder();
   const s = starter(r);
   const k = keep();
-  assert.equal(await connect([encodeLine(fresh()), '--feed-token', join(r.folder, 'elsewhere', 'feed-token')], { log: k, start: s.start }), 1);
+  assert.equal(await connect([encodeLine(fresh()), '--feed', 'http://127.0.0.1:1', '--feed-token', join(r.folder, 'elsewhere', 'feed-token')], { log: k, start: s.start }), 1);
   assert.equal(k.out.length, 1);
   assert.match(k.out[0], /no recorder's feed token at .*start the recorder once.*--feed-token/);
   assert.ok(!existsSync(join(r.folder, 'elsewhere', CONNECTION_FILE)));
@@ -254,7 +254,7 @@ test('the command as a program: --help, a bad line (one sentence, no value from 
   const r = recorderFolder();
   const c = fresh();
   const line = encodeLine(c);
-  const bad = run([line.slice(0, -2), '--feed-token', r.feedToken]);
+  const bad = run([line.slice(0, -2), '--feed', 'http://127.0.0.1:1', '--feed-token', r.feedToken]);
   assert.equal(bad.status, 1);
   assert.equal(bad.stdout, '');
   assert.equal(bad.stderr.trim().split('\n').length, 1);

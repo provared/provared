@@ -12,12 +12,11 @@
 // With neither --feed nor --book, the recorder beside Claude Code is taken.
 // A word that is not an option is taken for a line, and never printed back.
 
-import { connect } from './connect.mjs';
+import { bareWords, connect } from './connect.mjs';
 import { USAGE, main } from './upload.mjs';
 
 const argv = process.argv.slice(2);
-const values = new Set(['--feed', '--feed-token', '--book', '--connection'].map((name) => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : null; }));
-const bare = argv.filter((a) => !a.startsWith('--') && !values.has(a));
+const bare = bareWords(argv);
 
 let run;
 if (argv.includes('--help') || argv.includes('-h') || argv.length === 0) {
