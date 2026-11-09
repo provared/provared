@@ -260,7 +260,7 @@ Numbered on from the application's and the executor's choices.
       ends the process at once) and up to ten seconds are waited; where it
       does not stop, the new connection stays saved and the person is told
       to stop it and run the command again. The signal goes only to a
-      process whose command line shows it is this package's uploader
+      process whose command line has the marks of this package's uploader
       (`node`, `bin.mjs`, `--connection`), read by the system's own means:
       `Win32_Process` on Windows, `/proc/<pid>/cmdline` on Linux, and
       where there is no `/proc`, as on macOS, `ps -o command= -p <pid>`,
@@ -269,8 +269,8 @@ Numbered on from the application's and the executor's choices.
       themselves. A saved process number that now belongs to another
       program is a stale file: it is removed, nothing is signalled, and
       the command says so. The `ps` way has not been tried on a Mac; it
-      was tried on Linux in Docker with `/proc` made unreadable to the
-      code.
+      was tried on Linux in Docker, with the code pointed at a folder that
+      does not exist in place of `/proc`.
 1069. **Exit codes**: 0 connected (or already so), 1 refused or failed, 2
       the command line is wrong.
 1070. **The uploader's messages begin `provared-connect:`** where they
