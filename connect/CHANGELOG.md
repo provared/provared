@@ -1,6 +1,6 @@
 # Changelog: provared-connect
 
-## 0.1.0 (not yet published)
+## 0.1.0
 
 - **The connection by one line.** `npx provared-connect <line>` takes the
   line copied from a book's page in the Provared application, checks its
@@ -31,10 +31,10 @@
 - **Tests**: the uploader's and hand-over's tests moved with them, and new
   ones for the line's format, the command's flow, the saved file's
   protection (on Windows, `icacls` for real) and the command as a program
-  (its long-running process's command line and log hold no secret). 124
-  tests, all passing, with the recorder beside Claude Code from the same
-  repository.
-- **After the first review** (the same version, before publication):
+  (its long-running process's command line and log hold no secret). They
+  run with the recorder beside Claude Code from the same repository.
+- **After a first independent review by an AI reviewer** (the same
+  version, before publication):
   npm's own debug log of each `npx` run holds the line, so the page
   offers the command as `npx --logs-max=0 provared-connect <line>`, and
   the README names that log beside the shell's history as a place the

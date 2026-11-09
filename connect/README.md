@@ -1,14 +1,21 @@
 # provared-connect
 
+**Not yet usable by anyone else.** The Provared application, which gives
+the line, is not yet open to other people. What follows describes the package as
+built and tested. No person other than the author has reviewed its code.
+
 **One line connects the recorder beside an AI agent to a book in the
-Provared application.** A person opens the book's page in the application,
-copies the line it shows, and runs it on the agent's computer:
+Provared application** (a web application where a person reads an
+agent's book, the record of what the agent was allowed to do and what it
+then did, and from which they sign its renewals and cancellations). A
+person opens the book's page in the application, copies the line it
+shows, and runs it on the agent's computer:
 
 ```
 npx --logs-max=0 provared-connect provared-connect:1:eyJ2ZXJzaW9uIjoxLCJzZXJ2ZXIiOiJ3c3M6Ly9...
 ```
 
-(`--logs-max=0` tells npm, which `npx` is, to keep no debug log of the
+(`--logs-max=0` tells npm, of which `npx` is part, to keep no debug log of the
 run; it would otherwise hold the line. The page offers the command with
 it.)
 
@@ -16,7 +23,7 @@ That checks the line, saves the connection beside the recorder where only
 that computer's user can read it, and starts the uploader in the
 background. From then on the uploader sends each line of the agent's book,
 sealed under the book's key, to the application's server, which cannot read
-it; and it hands the renewals and cancellations the person signs in the
+it; and it hands the renewals and cancellations the person signs from the
 application to the recorder, through the recorder's feed. No file is saved
 or moved by the person.
 
@@ -30,9 +37,10 @@ stops every old line and link, and run the new line.
 
 The package holds the uploader and the hand-over that used to live in the
 application, and nothing else of the application. It needs Node.js 24.7 or
-later. Its only dependencies are the three engine packages the uploader
-has always used (`@microtoll/crypto-core`, `@microtoll/identity`,
-`@microtoll/access`, each pinned to 0.1.1). No telemetry: it speaks to the
+later. Its only dependencies are three packages by the same author, which the
+uploader has always used (`@microtoll/crypto-core`,
+`@microtoll/identity`, `@microtoll/access`, each pinned to exactly
+0.1.1). No telemetry: it speaks to the
 recorder on this computer and to the application's server named in the
 line, and to nothing else.
 
@@ -50,9 +58,14 @@ line, and to nothing else.
    in `~/.provared/claude-code/feed-token` (the folder and port the
    recorder itself takes from `PROVARED_CLAUDE_CODE_DIR` and
    `PROVARED_CLAUDE_CODE_PORT` are honoured). `--feed <address>` and
-   `--feed-token <file>` name another recorder's feed and token. Where the
+   `--feed-token <file>` name another recorder's feed and token: any
+   recorder that answers the feed set out in the README of the recorder
+   beside Claude Code ("A feed of the books, for an uploader on this
+   computer"). Where the
    token file is not there, it says to start the recorder once (which
-   writes the token), or to name the token file. For a recorder that
+   writes the token; the recorder beside Claude Code starts only once its
+   first permission is signed, as its README sets out), or to name the
+   token file. For a recorder that
    offers no feed, `--book <file>` names its book file instead: the fragile
    way, which reads the file.
 3. **Saves the connection** as `provared-app-connection.json` in the
@@ -121,12 +134,12 @@ opens no book file: it asks the recorder for the lines, over a conversation
 proved with the feed's token, and keeps its own files under the names the
 `--book` way gives them for `book.jsonl` in the recorder's folder.
 
-Records the person signed in the application (a renewal, a cancellation)
+Records the person signed from the application (a renewal, a cancellation)
 are kept with the book, sealed; the uploader opens them with the book's key
 and hands each to the recorder through the feed (`POST /hand-over`), as
 soon as the book's content changes and once a minute besides. The recorder
 checks each itself and takes it or refuses it; what it refuses or holds,
-the uploader says in one sealed note a book, which the page shows as an
+the uploader says in one sealed note for each book, which the page shows as an
 unproved hint. Through the feed only: with `--book`, nothing is handed
 over.
 
@@ -142,7 +155,8 @@ provared-connect:1:<base64url of the JSON>
 - `1` is the version of the format. A reader refuses a version it does not
   know, with a sentence saying to run a newer `provared-connect`.
 - The rest is base64url (RFC 4648 §5, no padding) of one JSON object with
-  exactly these fields, every one a non-empty string, and no other:
+  these fields and no other (an `about` sentence, where one is there, is
+  set aside), every one but `version` a non-empty string:
 
 | field | what it is |
 | --- | --- |
@@ -150,14 +164,14 @@ provared-connect:1:<base64url of the JSON>
 | `server` | the application's WebSocket address, `ws://` or `wss://` |
 | `origin` | the page's address, `http://` or `https://`, with nothing after the host and port; sent when the uploader signs in |
 | `namespace` | the engine's namespace the sealing is bound to (`provared-app`) |
-| `objectId` | the book's id, a UUID |
+| `objectId` | the book's id, a UUID (universally unique identifier) |
 | `kObject` | the key that opens the book, base64url |
 | `appendCapabilitySecret` | the capability that adds lines to the book, base64url |
 
 These are the fields of the connection file the application has saved
 until now, without its `about` sentence. Saved to a file, the same fields
 with `about` and `version` added give that connection file, so a saved
-line and a saved file are one thing. A line is about 390 characters. No
+line and a saved file are one thing. A line is about 400 characters. No
 new cryptography is involved: the line is the connection's fields written
 as text, and it is as secret as they are.
 
@@ -186,7 +200,7 @@ Two places on the agent's computer may keep the line after the command
 ran, both readable by the same user, administrators and the system. The
 shells of most systems keep the commands typed into them in a history
 file; how to keep a command out of the history, or to take it out,
-depends on the shell. And npm, which `npx` is, writes a debug log of
+depends on the shell. And npm, of which `npx` is part, writes a debug log of
 each run with its arguments, and keeps the last ten, in `_logs/` under
 its cache folder (`~/.npm/_logs` on Linux and macOS,
 `%LOCALAPPDATA%\npm-cache\_logs` on Windows); `npx --logs-max=0 ...`,
@@ -298,8 +312,10 @@ npm install
 npm test
 ```
 
-The tests use `node:test`, no framework, and run through the package's own
-interface (`import ... from 'provared-connect'`). They run the uploader
+The tests use `node:test`, no framework. Those of the line and the
+command run through the package's own interface
+(`import ... from 'provared-connect'`); those of the uploader and the
+hand-over, moved from the application, import its files directly. They run the uploader
 against stand-ins for the server and the recorder's feed, the command as a
 program (the uploader's command line never holds the secret, nor its log),
 and, with the recorder beside Claude Code from the same repository
