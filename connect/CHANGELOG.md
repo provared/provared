@@ -53,3 +53,4 @@
   tests added (`test/review.test.mjs`), each failing before its fix;
   131 tests pass. Choices 1062, 1063, 1066 and 1071 updated; 1076 to
   1081 added.
+- **Two fixes before publication**: a line for another book where nothing was sent, and a line for the same book at another address, each get their own true sentence (both said "connected again with the book's new key"); and the stop signal goes only to a process whose command line shows it is this package's uploader (`node`, `bin.mjs`, `--connection`), a stale pid file whose number another program now holds being removed and said so, with a test for each (`test/before-publication.test.mjs`).

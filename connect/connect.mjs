@@ -32,7 +32,8 @@
 // recorder that offers no feed, and the connection is then kept beside
 // that file.
 
-import { existsSync, readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, readFileSync, unlinkSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { decodeLine, sameConnection } from './line.mjs';
 import { connectionFile, readSaved, saveConnection } from './store.mjs';
@@ -76,12 +77,47 @@ export function readConnectArguments(argv) {
 }
 
 /**
- * Stops the uploader whose process number the file holds, and waits up to
- * ten seconds for it to be gone. true once gone.
+ * The command line of a running process, by the system's own means: on
+ * Windows from Win32_Process, on Linux from /proc. null where it cannot be
+ * read (the process gone, another system, no leave to look).
  */
-export async function stopUploader(pidFile, { kill = process.kill } = {}) {
+export function commandLineOf(pid) {
+  try {
+    if (process.platform === 'win32') {
+      const out = execFileSync('powershell', ['-NoProfile', '-Command', `(Get-CimInstance Win32_Process -Filter "ProcessId=${Number(pid)}").CommandLine`], { encoding: 'utf8', timeout: 15000, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
+      return out.trim() || null;
+    }
+    return readFileSync(`/proc/${Number(pid)}/cmdline`, 'utf8').split('\0').join(' ').trim() || null;
+  } catch { return null; }
+}
+
+/** Whether a command line is this package's uploader: node running bin.mjs with --connection. */
+export function isUploaderCommandLine(text) {
+  return typeof text === 'string'
+    && /(^|[\\/\s"'])node(\.exe)?["']?(\s|$)/i.test(text)
+    && /[\\/]bin\.mjs(["']|\s|$)/.test(text)
+    && /(^|\s)--connection(\s|$)/.test(text);
+}
+
+/**
+ * Stops the uploader whose process number the file holds, and waits up to
+ * ten seconds for it to be gone. true once gone. The signal goes only to a
+ * process that is this package's uploader (its command line says so): a
+ * stale pid file, whose number the system has given to another program
+ * since, is removed and said so in the log, nothing is signalled, and
+ * "stale" comes back. Where the process cannot be looked at, nothing is
+ * signalled and false comes back.
+ */
+export async function stopUploader(pidFile, { kill = process.kill, commandLine = commandLineOf, log = console } = {}) {
   if (!uploaderRunning(pidFile)) return true;
   const pid = Number(readFileSync(pidFile, 'utf8').trim());
+  const line = commandLine(pid);
+  if (line === null) { log.error(`provared-connect: process ${pid}, named in ${pidFile}, could not be looked at, so it was not stopped; stop it yourself if it is the uploader.`); return false; }
+  if (!isUploaderCommandLine(line)) {
+    log.error(`provared-connect: ${pidFile} names process ${pid}, which is not this package's uploader (the number has been given to another program): the stale file is removed, and nothing was signalled.`);
+    try { unlinkSync(pidFile); } catch { /* gone */ }
+    return 'stale';
+  }
   try { kill(pid, 'SIGTERM'); } catch { /* gone meanwhile */ }
   for (let i = 0; i < 40; i++) {
     if (!uploaderRunning(pidFile)) return true;
@@ -142,8 +178,14 @@ export async function connect(argv, { log = console, start = ensure, stop = stop
   // The connection on disk has changed (or there was none): an uploader that
   // runs holds something else, and is stopped before the new one starts.
   const wasRunning = uploaderRunning(pidFile);
-  if (wasRunning && !(await stop(pidFile))) { log.error(`provared-connect: the new connection is ${where}, but the uploader that ran before did not stop (process ${pid()}); stop it, then run this command again.`); return 1; }
-  if (existing) return started(`connected again with the book's new key: the connection is ${where}, and the uploader was restarted.`);
-  if (unreadable) return started(`connected: the connection is ${where}, in place of a file that was not one this version reads, and the uploader ${wasRunning ? 'was restarted' : 'is running in the background'}.`);
-  return started(`connected: the connection is ${where}, and the uploader ${wasRunning ? 'that ran before was stopped and started again with it' : 'is running in the background'}.`);
+  const stopped = wasRunning ? await stop(pidFile, { log }) : true;
+  if (!stopped) { log.error(`provared-connect: the new connection is ${where}, but the uploader that ran before did not stop (process ${pid()}); stop it, then run this command again.`); return 1; }
+  // "stale": the number was another program's, so no uploader ran.
+  const restarted = wasRunning && stopped !== 'stale';
+  const uploader = restarted ? 'was restarted' : 'is running in the background';
+  if (existing && existing.objectId !== connection.objectId) return started(`connected to another book of the application, in place of the one before (nothing had been sent to that one from this recorder): the connection is ${where}, and the uploader ${uploader}.`);
+  if (existing && existing.kObject !== connection.kObject) return started(`connected again with the book's new key: the connection is ${where}, and the uploader ${uploader}.`);
+  if (existing) return started(`connected again, to the same book at another address: the connection is ${where}, and the uploader ${uploader}.`);
+  if (unreadable) return started(`connected: the connection is ${where}, in place of a file that was not one this version reads, and the uploader ${uploader}.`);
+  return started(`connected: the connection is ${where}, and the uploader ${restarted ? 'that ran before was stopped and started again with it' : 'is running in the background'}.`);
 }

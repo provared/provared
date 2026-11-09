@@ -183,7 +183,7 @@ test('a line from a new key of the same book replaces the connection and restart
   assert.equal(await connect([encodeLine(c), '--feed', 'http://127.0.0.1:1', '--feed-token', r2.feedToken], { log: keep(), start: s2.start }), 0);
   const k4 = keep();
   assert.equal(await connect([encodeLine(other), '--feed', 'http://127.0.0.1:1', '--feed-token', r2.feedToken], { log: k4, start: s2.start, stop }), 0);
-  assert.match(k4.out[0], /connected again/);
+  assert.match(k4.out[0], /connected to another book of the application, in place of the one before/);
   assert.equal(readSaved(r2.file).objectId, other.objectId);
   // The uploader that does not start: the file is saved, and the log named.
   const r3 = recorderFolder();
