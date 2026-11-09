@@ -7,7 +7,9 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
 import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createCryptoCore } from '@microtoll/crypto-core';
@@ -84,6 +86,42 @@ test('a line for the same book at another address: its own sentence; a new key k
   assert.ok(namesNoValue(k2.text(), rekeyed));
   assert.equal(s.stopped, 1);
   assert.equal(s.started, 2);
+});
+
+test('where there is no /proc (macOS), the command line is read with ps, run without a shell; a process that is not there gives null', (t) => {
+  // A number that is not a process number: nothing is run.
+  assert.equal(commandLineOf('x'), null);
+  assert.equal(commandLineOf(0), null);
+  if (process.platform === 'win32') {
+    // ps is not the system's own tool here: the fallback cannot be tried for real. Forced onto that path, it answers null or a line, and never throws.
+    const forced = commandLineOf(process.pid, { platform: 'linux', proc: join(tmpdir(), 'no-proc-here') });
+    assert.ok(forced === null || typeof forced === 'string');
+    t.diagnostic('ps fallback not tried on Windows');
+    return;
+  }
+  // /proc kept from the code: the fallback reads this process's command line with ps.
+  const noProc = join(tmpdir(), `no-proc-${process.pid}`);
+  assert.ok(!existsSync(join(noProc, String(process.pid), 'cmdline')));
+  const viaPs = commandLineOf(process.pid, { proc: noProc });
+  assert.ok(viaPs && /node/i.test(viaPs), String(viaPs));
+  assert.ok(!isUploaderCommandLine(viaPs));
+  // The same as /proc says, where /proc is there.
+  if (existsSync(`/proc/${process.pid}/cmdline`)) {
+    const viaProc = commandLineOf(process.pid);
+    assert.ok(viaProc && /node/i.test(viaProc));
+    assert.ok(viaPs.includes('--test') === viaProc.includes('--test'));
+  }
+  // The uploader's own line through ps: a real uploader (its server not there, so it waits to try again), looked at with /proc kept from the code.
+  const r = recorderFolder();
+  saveConnection(r.file, fresh());
+  const bin = fileURLToPath(new URL('../bin.mjs', import.meta.url));
+  const child = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', bin, '--connection', r.file, '--feed', 'http://127.0.0.1:1', '--feed-token', r.feedToken], { stdio: 'ignore' });
+  t.after(() => { try { child.kill(); } catch { /* gone */ } });
+  const line = commandLineOf(child.pid, { proc: noProc });
+  assert.ok(line && isUploaderCommandLine(line), String(line));
+  assert.equal(child.exitCode, null, 'still running when looked at');
+  // A process that is not there: ps answers nothing, so null.
+  assert.equal(commandLineOf(2 ** 22 + 7, { proc: noProc }), null);
 });
 
 test('the stop signal goes only to this package\'s uploader; a stale pid file is removed and said so; a process that cannot be looked at is left alone', async () => {

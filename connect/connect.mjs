@@ -78,16 +78,24 @@ export function readConnectArguments(argv) {
 
 /**
  * The command line of a running process, by the system's own means: on
- * Windows from Win32_Process, on Linux from /proc. null where it cannot be
- * read (the process gone, another system, no leave to look).
+ * Windows from Win32_Process; elsewhere from /proc/<pid>/cmdline, and where
+ * that is not there (macOS has no /proc) from `ps -o command= -p <pid>`,
+ * run without a shell. null where it cannot be read (the process gone, no
+ * way to look, no leave to look). The platform and the /proc folder can be
+ * named, for the tests.
  */
-export function commandLineOf(pid) {
+export function commandLineOf(pid, { platform = process.platform, proc = '/proc' } = {}) {
+  const n = Number(pid);
+  if (!Number.isInteger(n) || n <= 0) return null;
   try {
-    if (process.platform === 'win32') {
-      const out = execFileSync('powershell', ['-NoProfile', '-Command', `(Get-CimInstance Win32_Process -Filter "ProcessId=${Number(pid)}").CommandLine`], { encoding: 'utf8', timeout: 15000, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
+    if (platform === 'win32') {
+      const out = execFileSync('powershell', ['-NoProfile', '-Command', `(Get-CimInstance Win32_Process -Filter "ProcessId=${n}").CommandLine`], { encoding: 'utf8', timeout: 15000, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
       return out.trim() || null;
     }
-    return readFileSync(`/proc/${Number(pid)}/cmdline`, 'utf8').split('\0').join(' ').trim() || null;
+    const file = `${proc}/${n}/cmdline`;
+    if (existsSync(file)) return readFileSync(file, 'utf8').split('\0').join(' ').trim() || null;
+    const out = execFileSync('ps', ['-o', 'command=', '-p', String(n)], { encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] });
+    return out.trim() || null;
   } catch { return null; }
 }
 
