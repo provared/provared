@@ -4,6 +4,9 @@
 //   provared-mcp-executor demo                             a demonstration with no passkey and no settings, in a
 //                                                          new temporary folder: one call let through, one
 //                                                          refused, and the book checked (demo.mjs)
+//   provared-mcp-executor demo --stdio                     the same set-up, then the executor over stdio in
+//                                                          front of the made-up server, as "stdio" runs, until
+//                                                          its input closes: for an MCP client or inspector
 //   provared-mcp-executor init    [--http]                 copy the example settings and rules into this folder,
 //                                                          as executor.json (or executor-http.json) and
 //                                                          content-rules.json; nothing is overwritten
@@ -52,7 +55,7 @@ const VERSION = JSON.parse(readFileSync(join(HERE, 'package.json'), 'utf8')).ver
 
 const USAGE = `provared-mcp-executor ${VERSION}: an executor for MCP tool servers. It holds the server's credentials, checks each tool call against a permission a person signed, sends on the calls the permission allows, and writes a signed, countersigned receipt for each. Evidence, not a verdict.
 
-  provared-mcp-executor demo                 try it with no passkey and no settings
+  provared-mcp-executor demo    [--stdio]    try it with no passkey and no settings
   provared-mcp-executor init    [--http]     copy the example settings into this folder
   provared-mcp-executor stdio   --config executor.json
   provared-mcp-executor http    --config executor-http.json
@@ -117,6 +120,16 @@ function readConfig(args) {
   return { config, root: dirname(full) };
 }
 
+/** "stdio" (and "demo --stdio"): run the executor over this process's standard input and output until the server ends. */
+async function runStdio({ config, root }) {
+  const executor = await openExecutor(config, { root });
+  const ended = await executor.attach(process.stdin, process.stdout);
+  // The server has ended and every receipt is written: the executor ends
+  // too, whether or not the client still holds its input open (the
+  // client restarts it, as the specification says).
+  process.exit(typeof ended.code === 'number' ? ended.code : 1);
+}
+
 async function main(args) {
   const command = args[0];
   if (!command || command === '--help' || command === '-h') {
@@ -128,8 +141,14 @@ async function main(args) {
     return 0;
   }
   if (command === 'demo') {
-    const { runDemo } = await import('./demo.mjs');
-    return (await runDemo()).ok ? 0 : 1;
+    const unknown = args.slice(1).filter((a) => a !== '--stdio');
+    if (unknown.length) throw new Error(`demo takes no ${unknown.map((a) => `"${a}"`).join(', ')}; only --stdio.`);
+    const { prepareStdioDemo, runDemo } = await import('./demo.mjs');
+    if (!args.includes('--stdio')) return (await runDemo()).ok ? 0 : 1;
+    // Nothing on the standard output but MCP messages.
+    const { settingsPath, notice } = await prepareStdioDemo();
+    process.stderr.write(`provared-mcp-executor: ${notice}\n`);
+    return runStdio(readConfig(['--config', settingsPath]));
   }
   if (command === 'init') {
     const http = args.includes('--http');
@@ -157,15 +176,7 @@ async function main(args) {
     process.stdout.write(`Wrote ${files.map(([, to]) => to).join(' and ')}, copied from the examples in ${HERE}.\nNext:\n${steps.map((s, i) => `  ${i + 1}. ${s}`).join('\n')}\n`);
     return 0;
   }
-  if (command === 'stdio') {
-    const { config, root } = readConfig(args);
-    const executor = await openExecutor(config, { root });
-    const ended = await executor.attach(process.stdin, process.stdout);
-    // The server has ended and every receipt is written: the executor ends
-    // too, whether or not the client still holds its input open (the
-    // client restarts it, as the specification says).
-    process.exit(typeof ended.code === 'number' ? ended.code : 1);
-  }
+  if (command === 'stdio') return runStdio(readConfig(args));
   if (command === 'http') {
     const { config, root } = readConfig(args);
     const executor = await openHttpExecutor(config, { root });

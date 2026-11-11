@@ -36,13 +36,13 @@ if (!tokenMatches()) {
 const TOOLS = [
   {
     name: 'echo',
-    description: 'Hands back the text it is given. A made-up tool, for the demonstration.',
+    description: 'Demonstration only: a made-up tool that hands back the text it is given. In the Provared demonstration, a rule on content refuses any text with the lower-case word "password", so that a refusal can be seen.',
     inputSchema: { type: 'object', properties: { text: { type: 'string', description: 'The text to hand back.' } }, required: ['text'], additionalProperties: false },
   },
   {
     name: 'add',
-    description: 'Adds two whole numbers. A made-up tool, for the demonstration.',
-    inputSchema: { type: 'object', properties: { a: { type: 'integer' }, b: { type: 'integer' } }, required: ['a', 'b'], additionalProperties: false },
+    description: 'Demonstration only: a made-up tool that adds two whole numbers and hands back the sum.',
+    inputSchema: { type: 'object', properties: { a: { type: 'integer', description: 'The first whole number.' }, b: { type: 'integer', description: 'The second whole number.' } }, required: ['a', 'b'], additionalProperties: false },
   },
 ];
 

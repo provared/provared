@@ -18,6 +18,14 @@ a person: its name ends with "(development)", and nothing the
 demonstration writes proves anything about anyone. It writes nothing
 outside that folder.
 
+`provared-mcp-executor demo --stdio` is for trying the executor from an MCP
+client or a directory's inspector. It makes the same folder, settings and
+stand-in permission (valid for one hour), then runs the executor over
+stdio in front of the made-up server, with its two tools `echo` and `add`,
+until its input closes. Its standard output carries MCP messages only; on
+its standard error it says, in one line, that this is a demonstration whose
+records prove nothing about anyone, and where the book is.
+
 For real use, in a folder of your own:
 
 ```
@@ -99,7 +107,7 @@ npm install -g provared-mcp-executor
 ```
 
 Or from a copy of the repository: in `mcp-executor`, `npm pack`, then
-`npm install -g ./provared-mcp-executor-0.4.0.tgz`.
+`npm install -g ./provared-mcp-executor-0.4.1.tgz`.
 
 It needs Node.js 24.7 or later, and depends only on the `provared` library,
 at version 0.7.0 or a later 0.7 version (`^0.7.0`): its receipts name

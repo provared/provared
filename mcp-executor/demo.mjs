@@ -25,6 +25,13 @@
 //   6. checks the book with the Provared checker.
 // It says what happened at each step, and ends with exit code 0 only where
 // each step went as it should.
+//
+// "provared-mcp-executor demo --stdio" takes steps 1 to 4 in the same way,
+// saying nothing, and then bin.mjs runs the executor over stdio in front of
+// the made-up server, exactly as "stdio" does, until its input closes: for
+// trying the executor from an MCP client or a directory's inspector. Its
+// standard output carries MCP messages only; it says on its standard error,
+// in one line, that this is a demonstration and where the book is.
 
 import { spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
@@ -103,18 +110,13 @@ function startExecutor(settingsPath) {
 }
 
 /**
- * Run the demonstration. "write" takes each line it says (by default, the
- * standard output). Gives {ok, folder, result}.
+ * Steps 1 to 4, for both "demo" and "demo --stdio": a new temporary folder,
+ * the settings, the keys, the permission signed by the stand-in, and the
+ * check. "say" takes each line said; "step" each step and whether it went
+ * as it should. Gives {folder, settingsPath, trusted, problems}: "problems"
+ * is null where the check found none.
  */
-export async function runDemo({ write = (line) => process.stdout.write(`${line}\n`) } = {}) {
-  const say = write;
-  let ok = true;
-  const step = (good, text) => {
-    if (!good) ok = false;
-    say(`${good ? 'ok  ' : 'FAIL'}  ${text}`);
-  };
-  say(DEMO_WARNING);
-  say('');
+async function prepareDemo({ say = () => {}, step = () => {} } = {}) {
   const folder = mkdtempSync(join(tmpdir(), 'provared-mcp-demo-'));
   say(`Everything is written in a new temporary folder, and nowhere else: ${folder}`);
 
@@ -151,8 +153,41 @@ export async function runDemo({ write = (line) => process.stdout.write(`${line}\
     }
   })();
   step(check.status === 0, `2. "check": ${check.status === 0 ? 'no problems' : 'problems'} in the settings, the keys, the permission and the credential.`);
-  if (check.status !== 0) {
-    say(`        ${report?.problems?.join('\n        ') ?? check.stderr.trim()}`);
+  const problems = check.status === 0 ? null : (report?.problems?.join('\n') ?? check.stderr.trim());
+  return { folder, settingsPath, trusted, problems };
+}
+
+/**
+ * "demo --stdio": steps 1 to 4 as "demo" takes them, saying nothing, so
+ * that an MCP client or a directory's inspector can start the executor in
+ * front of the made-up server. Gives {settingsPath, bookPath, notice},
+ * "notice" being the one line to say on the standard error; throws where
+ * the check found problems.
+ */
+export async function prepareStdioDemo() {
+  const { folder, settingsPath, problems } = await prepareDemo();
+  if (problems) throw new Error(`The demonstration's settings did not pass "check", in ${folder}:\n${problems}`);
+  const bookPath = join(folder, 'book.jsonl');
+  const notice = `DEMONSTRATION ONLY: the tools here are a made-up server's, behind the executor, under a permission signed by a development stand-in for a passkey, not by a person, so its records prove nothing about anyone. The book is ${bookPath}.`;
+  return { settingsPath, bookPath, notice };
+}
+
+/**
+ * Run the demonstration. "write" takes each line it says (by default, the
+ * standard output). Gives {ok, folder, result}.
+ */
+export async function runDemo({ write = (line) => process.stdout.write(`${line}\n`) } = {}) {
+  const say = write;
+  let ok = true;
+  const step = (good, text) => {
+    if (!good) ok = false;
+    say(`${good ? 'ok  ' : 'FAIL'}  ${text}`);
+  };
+  say(DEMO_WARNING);
+  say('');
+  const { folder, settingsPath, trusted, problems } = await prepareDemo({ say, step });
+  if (problems) {
+    say(`        ${problems.split('\n').join('\n        ')}`);
     return { ok: false, folder, result: null };
   }
 

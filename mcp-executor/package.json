@@ -1,6 +1,6 @@
 {
   "name": "provared-mcp-executor",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "mcpName": "io.github.provared/mcp-executor",
   "description": "An executor for MCP tool servers: it stands between agents and a tool server, holds the server's credential, checks each tool call against a permission a person signed with a passkey, sends on the calls the permission allows, and writes a signed, countersigned Provared receipt for each. Evidence, not a verdict.",
   "author": "Pavel Izmaylov",
