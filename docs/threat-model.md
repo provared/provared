@@ -276,8 +276,7 @@ disagree about. Totals are added as whole numbers of any size.
   (`dated-after-stamp`), an earlier date is not. An agent can write a
   false earlier time, back to the date of the stub before it in its
   chain, to stay inside a period. A total over the whole life of the
-  slip does not
-  have this weakness.
+  slip does not have this weakness.
 - **An approval shows that the passkey approved.** It does not show that
   the person read what they approved, and against A9 it shows nothing.
   An approval can be signed after the action: only an outside
