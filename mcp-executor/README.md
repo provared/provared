@@ -814,7 +814,7 @@ secret. Its records prove nothing about anyone; see `demo/README.md`. Of
 that folder, only `server.mjs` (the made-up server) and
 `content-rules.json` (its one rule) are in the npm package, for the `demo`
 command. `server.json` describes the package for the official MCP
-Registry, which lists 0.4.0. It is published there by the workflow
+Registry, which listed 0.4.0 on 11 November 2026. It is published there by the workflow
 `.github/workflows/mcp-registry.yml`, started by hand, which signs in
 with GitHub's identity token for the run. A version can be published to
 the registry only after the same version is on npm, because the registry
