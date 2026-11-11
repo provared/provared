@@ -38,7 +38,7 @@
 // (quiet.mjs, imported first); every other warning is printed.
 
 import './quiet.mjs';
-import { constants, copyFileSync, existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { constants, copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadCopyKey } from './copy.mjs';
@@ -70,6 +70,27 @@ const EXAMPLES = {
   stdio: [['executor.example.json', 'executor.json'], ['content-rules.example.json', 'content-rules.json']],
   http: [['executor-http.example.json', 'executor-http.json'], ['content-rules.example.json', 'content-rules.json']],
 };
+
+/** Whether a folder is there or can be made: the nearest part of its path that exists is a folder. */
+function canMakeFolder(folder) {
+  let at = folder;
+  while (!existsSync(at)) {
+    const up = dirname(at);
+    if (up === at) return false;
+    at = up;
+  }
+  try {
+    return statSync(at).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+/** Whether two paths name the same file (letter case aside on Windows). */
+function samePath(a, b) {
+  const [x, y] = [resolve(a), resolve(b)];
+  return process.platform === 'win32' ? x.toLowerCase() === y.toLowerCase() : x === y;
+}
 
 /** Whether the settings are the HTTP executor's (several agents, one upstream) rather than the stdio executor's. */
 const isHttp = (config) => config !== null && typeof config === 'object' && !Array.isArray(config) && Object.hasOwn(config, 'agents');
@@ -124,7 +145,7 @@ async function main(args) {
       ? [
           `In ${settings}, put in each value written <like this>: the upstream's credential file, and each agent's secret hash ("provared-mcp-executor secret" makes a secret and its hash); set "upstream.url" to your HTTP MCP server and "tools" to its tools; and change content-rules.json to rules of your own, or take "contentRules" out.`,
           `provared-mcp-executor keys --config ${settings}`,
-          'The person signs a permission for each agent with a passkey, holding what "keys" printed; save each where its "slip" says, and put the passkey\'s thumbprint in its "issuerKeys".',
+          'The person signs a permission for each agent with a passkey, holding what "keys" printed; save each where its "slip" says (in the folder slips/, which you make), and put the passkey\'s thumbprint in its "issuerKeys".',
           `provared-mcp-executor check --config ${settings}   (it lists every problem left)`,
         ]
       : [
@@ -176,21 +197,22 @@ async function main(args) {
     if (problems.length) throw new Error(`The settings have problems:\n- ${problems.join('\n- ')}`);
     const out = option(args, '--out');
     const outAt = out ? (isAbsolute(out) ? out : resolve(out)) : null;
-    // Everything "keys" needs is read before anything is written: the rules
-    // file, each key file already there, and the folder for --out. A
-    // problem with any of them leaves the disk as it was.
+    // Everything "keys" needs is read and checked before anything is
+    // written: the rules file, each key file already there, and that the
+    // folder of each file it would write can be made (its nearest folder
+    // that exists is a folder, not a file). A write can still fail after
+    // that (a full disk, a folder it may not write in).
     const software = settings.contentRules ? [softwareEntry(settings.name, (await loadRules(settings.contentRules)).fingerprint)] : undefined;
     const agents = http ? [...settings.agents].map(([name, paths]) => [name, paths.keys]) : [[null, settings.agent.keys]];
-    for (const path of [settings.executor.keys, ...agents.map(([, path]) => path)]) if (existsSync(path)) await loadKeyFile(path, 'agent');
+    const keyPaths = [settings.executor.keys, ...agents.map(([, path]) => path)];
+    for (const path of keyPaths) {
+      if (existsSync(path)) await loadKeyFile(path, 'agent');
+      else if (!canMakeFolder(dirname(path))) throw new Error(`Nothing was written: the key file ${path} cannot be made, since a file stands where its folder would be.`);
+    }
     if (outAt) {
+      if (keyPaths.some((path) => samePath(path, outAt))) throw new Error(`Nothing was written: ${outAt} (--out) is a key file of the settings. Name another file.`);
       if (existsSync(outAt)) throw new Error(`Nothing was written: ${outAt} (--out) already exists. Name a new file.`);
-      let folder = false;
-      try {
-        folder = statSync(dirname(outAt)).isDirectory();
-      } catch {
-        folder = false;
-      }
-      if (!folder) throw new Error(`Nothing was written: the folder ${dirname(outAt)} (--out) does not exist.`);
+      if (!canMakeFolder(dirname(outAt))) throw new Error(`Nothing was written: ${outAt} (--out) cannot be made, since a file stands where its folder would be.`);
     }
     const executor = await makeKeyFile(settings.executor.keys, 'agent');
     // The agent.software entry for the rules on content, where the settings name a rules file.
@@ -202,6 +224,7 @@ async function main(args) {
     } else result = entry(await makeKeyFile(agents[0][1], 'agent'), `An agent, through ${settings.name}`);
     const text = `${JSON.stringify(result, null, 2)}\n`;
     if (outAt) {
+      mkdirSync(dirname(outAt), { recursive: true });
       writeFileSync(outAt, text, { flag: 'wx' });
       process.stderr.write(`provared-mcp-executor: wrote ${outAt}. ${KEYS_NEXT}\n`);
     } else {

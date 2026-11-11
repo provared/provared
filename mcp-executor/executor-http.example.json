@@ -9,7 +9,7 @@
   },
   "agents": {
     "research": {
-      "secretHash": "<the hash provared-mcp-executor secret prints>",
+      "secretHash": "<hash that provared-mcp-executor secret prints>",
       "slip": "slips/research.json",
       "book": "books/research.jsonl",
       "keys": "keys/research.jwk",
@@ -18,7 +18,7 @@
       "copyKey": "copies/research.jsonl.key"
     },
     "ordering": {
-      "secretHash": "<the hash provared-mcp-executor secret prints>",
+      "secretHash": "<hash that provared-mcp-executor secret prints>",
       "slip": "slips/ordering.json",
       "book": "books/ordering.jsonl",
       "keys": "keys/ordering.jwk",

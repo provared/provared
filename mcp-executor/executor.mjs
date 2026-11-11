@@ -26,7 +26,7 @@
 
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, statSync } from 'node:fs';
-import { basename, delimiter, isAbsolute, resolve } from 'node:path';
+import { basename, delimiter, dirname, isAbsolute, resolve } from 'node:path';
 import { argumentsFingerprint, checkBook, countersign, denialCodes, entryLine, fingerprint, fromBase64url, identifierFingerprint, openRecorder, randomId, thumbprint } from 'provared';
 import { loadCopyKey, openCopy, readCopy, unfinished } from './copy.mjs';
 import { aboutSlip, bookFile, loadKeyFile, readIfThere, slipFrom, untilFree } from './files.mjs';
@@ -566,13 +566,22 @@ export async function checkConfig(config, root) {
 }
 
 /**
- * A text that is still one of the example's placeholders, such as
- * "<thumbprint of the person's passkey>": the whole text between angle
- * brackets, with a space in it, so that an argument such as "<json>" is not
- * taken for one.
+ * The placeholders of the two example settings files, word for word: what
+ * a person must put in before the settings can pass. Only these texts are
+ * taken for placeholders, so that no value of a person's own is.
  */
+export const PLACEHOLDERS = Object.freeze([
+  "<path of your MCP tool server's program>",
+  '<folder your tool server runs in>',
+  "<file that holds your tool server's credential>",
+  "<thumbprint of the person's passkey>",
+  "<file that holds the upstream's bearer token>",
+  '<hash that provared-mcp-executor secret prints>',
+]);
+
+/** A text that is still one of the example's placeholders (PLACEHOLDERS). */
 export function isPlaceholder(text) {
-  return typeof text === 'string' && /^<[^<>]*\s[^<>]*>$/.test(text);
+  return PLACEHOLDERS.includes(text);
 }
 
 function isFolder(path) {
@@ -632,7 +641,7 @@ export async function missingFiles(s, agents) {
   await keyFile(s.executor?.keys, 'executor.keys');
   for (const [prefix, paths] of agents) {
     await keyFile(paths.keys, `${prefix}.keys`);
-    if (paths.slip && !isPlaceholder(basename(paths.slip)) && readIfThere(paths.slip) === '') problems.push(`${prefix}.slip: the slip ${paths.slip} is missing. Sign the permission (at https://sign.prova.red) and save it there.`);
+    if (paths.slip && !isPlaceholder(basename(paths.slip)) && readIfThere(paths.slip) === '') problems.push(`${prefix}.slip: the slip ${paths.slip} is missing. Sign the permission (at https://sign.prova.red) and save it there${isFolder(dirname(paths.slip)) ? '' : `, in the folder ${dirname(paths.slip)}, which does not exist yet: make it first`}.`);
   }
   return problems;
 }

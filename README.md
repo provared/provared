@@ -68,9 +68,13 @@ settings are JSON:
 }
 ```
 
-To see it work first, [mcp-executor/demo/](mcp-executor/demo/) runs the
-guard in front of a made-up tool server, with no settings and no secret;
-its records prove nothing about anyone. The guard is listed in the
+To see it work first, with no passkey and no settings,
+`provared-mcp-executor demo` (from version 0.4.0) runs the guard in front
+of a made-up tool server in a new temporary folder, lets one call through,
+refuses one and checks the book, under a permission signed by a
+development stand-in whose records prove nothing about anyone; then
+`provared-mcp-executor init` copies the example settings into the current
+folder. The guard is listed in the
 official MCP Registry as `io.github.provared/mcp-executor`. "Executor"
 is the Internet-Draft's word for software, other than the agent, that
 acts for it and refuses what the permission does not allow.

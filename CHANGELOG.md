@@ -38,14 +38,18 @@
     command that makes it) and each slip. Only where none is found does it
     hold the slips against the keys and the rules, as a start does; that
     part stops at the first difference, as a start does.
-  - **`keys` writes nothing until it has read all it needs**: the
-    settings, the rules file, every key file already there and, with
-    `--out`, the folder to write to. 0.3.0 made the executor's key file
-    and then stopped on a missing rules file. It no longer needs the
+  - **`keys` reads and checks everything before it writes**: the
+    settings, the rules file, every key file already there, and that the
+    folder of each file it would write can be made (no file stands where a
+    folder would be); `--out` may not name a key file. 0.3.0 made the
+    executor's key file and then stopped on a missing rules file. A write
+    can still fail after these checks (a full disk, a folder it may not
+    write in), and leave the files written before it. It no longer needs the
     passkey's thumbprint or the agents' secret hashes, which are known only
     after it has run. It prints the same JSON as before, and one line on
     the standard error saying what to do with it; `--out <file>` writes the
-    JSON to a new file instead.
+    JSON to a new file instead, making its folder where needed, as it makes
+    the key folders.
   - **One warning set aside**: the command (`bin.mjs`, through
     `quiet.mjs`) does not print Node.js's notice that its ML-DSA-87
     signing is experimental, and prints every other warning, the notice
@@ -65,19 +69,24 @@
   - **Choices.** The demonstration's folder is left in place, so that the
     book can be looked at, and its permission lasts one hour, since it is
     used once. `init` copies into the current folder only and has no way
-    to overwrite. A placeholder is a whole text in angle brackets with a
-    space in it, so that an argument such as `<json>` is not taken for
-    one. The line from `keys` goes to the standard error, so that what it
+    to overwrite. A placeholder is one of the six texts in angle brackets
+    in the two example files, word for word, so that no value of a
+    person's own is taken for one. Where a slip's folder does not exist,
+    `check` says to make it (`init --http` writes no `slips/`), so that
+    `init` writes only its two files. The line from `keys` goes to the standard error, so that what it
     prints on the standard output stays JSON, which `demo/start.mjs`
     reads. `--out` makes a new file only. Only a warning of the type
     `ExperimentalWarning` whose text begins "The ML-DSA-87 Web Crypto API
     algorithm is an experimental feature" is set aside, by wrapping
     `process.emitWarning` in the command alone.
-  - **Tests**: `test/newcomer.test.mjs`, eleven tests: `demo`, `init`,
-    the examples agreeing with each other, `check` listing every problem
-    (stdio and HTTP), `keys` leaving no partial state and needing no
-    thumbprint, the warning set aside and no other, the version, and the
-    package holding every file the command loads.
+  - **Tests**: `test/newcomer.test.mjs`, thirteen tests: `demo`,
+    `init`, the examples agreeing with each other, `check` listing every
+    problem (stdio and HTTP), the placeholders and the wording of
+    `check`'s messages, `keys` reading and checking all it needs before
+    it writes and needing no thumbprint, `--out` making its folder, the
+    warning set aside and no other, the version, and the package holding
+    every file the command loads.
+  - A workflow, started by hand, publishes the guard's listing on the MCP Registry with GitHub's identity token for the run (.github/workflows/mcp-registry.yml).
 - **A new package, `provared-connect` 0.1.0 (`connect/`): the connection by one line.** A person copies one line from a book's page in the Provared application and runs `npx --logs-max=0 provared-connect <line>` on the agent's computer; the recorder beside the agent is connected, with no file saved or moved by the person. The command checks the line (its prefix, version and every field), saves the connection beside the recorder where only its owner can read it (mode 0600; on Windows the access list set with `icacls` to the user alone, before anything is written), and starts the uploader in the background with the file's name, never the line, so the secret is in no long-running command line and in no log the package writes (`--logs-max=0` keeps it out of npm's own debug log; the shell's history may still hold it, and the README says so). The same line again changes nothing; a line from a new key of the same book replaces the connection and restarts the uploader; a connection file that cannot be read as one is never taken for none; a refusal names no value from the line. The uploader and the hand-over that used to live in the application moved into the package, with their tests, and run as before with `--connection <file>`; the uploader reads the connection file with the command's checks. The line's format and the choices made (numbered 1059 to 1081) are in `connect/README.md`. 131 tests pass, with the recorder beside Claude Code from the same commit; the six findings of a first independent review by an AI reviewer are fixed, each held by a test.
 - **The recorder beside Claude Code, as a plugin, installs library 0.8.0.** `integrations/claude-code/package.json` asks for `provared` `^0.8.0` (0.8.0 or later, before 0.9.0), where it asked for `>=0.6.0 <0.8.0`, and its lockfile installs 0.8.0, where it installed 0.6.0. The published `provared-claude-code` 0.1.0 is unchanged. Its README says so. The plugin's 18 tests pass.
 - **The home page** says what is new in 0.8.0.

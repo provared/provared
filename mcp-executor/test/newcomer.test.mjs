@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 
 const { checkBook } = await import('provared');
 const { tempFolder } = await import('./world.mjs');
-const { isPlaceholder } = await import('../executor.mjs');
+const { isPlaceholder, PLACEHOLDERS } = await import('../executor.mjs');
 
 const HERE = fileURLToPath(new URL('../', import.meta.url));
 const BIN = join(HERE, 'bin.mjs');
@@ -140,11 +140,31 @@ test('check over HTTP lists every problem in one run too', () => {
   }
 });
 
-test('a placeholder is a whole text in angle brackets with a space in it, so that an argument such as "<json>" is not one', () => {
+test("a placeholder is one of the example files' own texts, word for word, and no other value", () => {
+  // Every text in angle brackets in the two example files is in the list, and the list holds nothing else.
+  const inExamples = new Set();
+  for (const file of ['executor.example.json', 'executor-http.example.json']) for (const [m] of readFileSync(join(HERE, file), 'utf8').matchAll(/"<[^"]*>"/g)) inExamples.add(JSON.parse(m));
+  assert.deepEqual([...inExamples].sort(), [...PLACEHOLDERS].sort());
   assert.equal(isPlaceholder("<thumbprint of the person's passkey>"), true);
-  assert.equal(isPlaceholder('<json>'), false);
-  assert.equal(isPlaceholder('a <b c> d'), false);
-  assert.equal(isPlaceholder('files-server.mjs'), false);
+  for (const v of ['<json>', '<a b>', 'a <b c> d', "<thumbprint of the person's passkey> ", 'files-server.mjs']) assert.equal(isPlaceholder(v), false, v);
+});
+
+test('check takes a value of a person\'s own in angle brackets for what it is, and its messages read as sentences', () => {
+  // A server argument "<a b>" is not a placeholder.
+  const folder = tempFolder();
+  const name = examples(folder);
+  const settings = JSON.parse(readFileSync(join(folder, name), 'utf8'));
+  writeFileSync(join(folder, name), JSON.stringify({ ...settings, server: { ...settings.server, args: ['server.mjs', '<a b>'] } }));
+  const { problems } = JSON.parse(run(['check', '--config', name], folder).stdout);
+  assert.ok(!problems.some((p) => p.startsWith('server.args')), problems.join('\n'));
+
+  // No word twice running, and the slip's missing folder is named.
+  const http = tempFolder();
+  examples(http, { http: true });
+  const all = JSON.parse(run(['check', '--config', 'executor-http.json'], http).stdout).problems;
+  assert.ok(all.some((p) => p.startsWith('agents.research.secretHash: ') && p.endsWith('Put in the hash that provared-mcp-executor secret prints.')), all.join('\n'));
+  for (const p of all) assert.doesNotMatch(p, /\b(\w+) \1\b/, p);
+  assert.ok(all.some((p) => /^agents\.research\.slip: .*in the folder .*slips, which does not exist yet: make it first\.$/.test(p)), all.join('\n'));
 });
 
 test('keys needs no passkey thumbprint yet, says in one line what to do with what it prints, and can write it to a new file', () => {
@@ -167,7 +187,7 @@ test('keys needs no passkey thumbprint yet, says in one line what to do with wha
   assert.match(twice.stderr, /already exists/);
 });
 
-test('keys writes nothing when something it needs is wrong: a missing rules file, a key file that cannot be read, a folder for --out that is not there', () => {
+test('keys writes nothing when something it needs is wrong: a missing rules file, a key file that cannot be read, a file where a folder would be, --out naming a key file', () => {
   const missingRules = tempFolder();
   examples(missingRules, { thumbprint: true });
   writeFileSync(join(missingRules, 'content-rules.json'), '');
@@ -185,12 +205,35 @@ test('keys writes nothing when something it needs is wrong: a missing rules file
   assert.match(b.stderr, /agent\.jwk could not be read as a key file/);
   assert.equal(existsSync(join(badKey, 'keys', 'executor.jwk')), false, "the executor's key file was not made");
 
-  const noFolder = tempFolder();
-  examples(noFolder, { thumbprint: true });
-  const c = run(['keys', '--config', 'executor.json', '--out', join('not-there', 'out.json')], noFolder);
+  // A file where a key file's folder would be: refused before the executor's key file is made.
+  const fileInTheWay = tempFolder();
+  const name = examples(fileInTheWay, { thumbprint: true });
+  const settings = JSON.parse(readFileSync(join(fileInTheWay, name), 'utf8'));
+  writeFileSync(join(fileInTheWay, name), JSON.stringify({ ...settings, agent: { ...settings.agent, keys: 'executor.json/agent.jwk' } }));
+  const c = run(['keys', '--config', 'executor.json'], fileInTheWay);
   assert.equal(c.status, 2);
-  assert.match(c.stderr, /Nothing was written/);
-  assert.deepEqual(tree(noFolder), ['content-rules.json', 'executor.json']);
+  assert.match(c.stderr, /Nothing was written: the key file .*agent\.jwk cannot be made/);
+  assert.deepEqual(tree(fileInTheWay), ['content-rules.json', 'executor.json'], "the executor's key file was not made");
+
+  // --out naming a key file, or a path under a file: refused, with nothing written.
+  const outIsKey = tempFolder();
+  examples(outIsKey, { thumbprint: true });
+  const d = run(['keys', '--config', 'executor.json', '--out', join('keys', 'agent.jwk')], outIsKey);
+  assert.equal(d.status, 2);
+  assert.match(d.stderr, /Nothing was written: .*\(--out\) is a key file of the settings/);
+  const e = run(['keys', '--config', 'executor.json', '--out', join('executor.json', 'out.json')], outIsKey);
+  assert.equal(e.status, 2);
+  assert.match(e.stderr, /Nothing was written/);
+  assert.deepEqual(tree(outIsKey), ['content-rules.json', 'executor.json']);
+});
+
+test('keys --out makes the folder it names, as it makes the key folders', () => {
+  const folder = tempFolder();
+  examples(folder);
+  const r = run(['keys', '--config', 'executor.json', '--out', join('keys', 'entries.json')], folder);
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(tree(folder), ['content-rules.json', 'executor.json', 'keys/', 'keys/agent.jwk', 'keys/entries.json', 'keys/executor.jwk']);
+  assert.equal(JSON.parse(readFileSync(join(folder, 'keys', 'entries.json'), 'utf8')).with.id, 'executor');
 });
 
 test("only Node.js's notice that ML-DSA-87 is experimental is set aside; every other warning is printed", () => {

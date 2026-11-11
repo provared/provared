@@ -138,10 +138,11 @@ error.
    provared-mcp-executor keys --config executor.json
    ```
 
-   It does not need the passkey's thumbprint yet, and it writes nothing
-   until it has read all it needs (the settings, the rules file and any key
-   file already there). With `--out <file>` it writes what it prints to a
-   new file instead. The printed `agent.keys` go into the permission as the
+   It does not need the passkey's thumbprint yet. It reads and checks
+   everything before it writes: the settings, the rules file, any key file
+   already there, and that the folder of each file it would write can be
+   made. With `--out <file>` it writes what it prints to a new file
+   instead (not one of the key files), making its folder where needed. The printed `agent.keys` go into the permission as the
    agent's keys; the printed `with` entry (the executor's id, name and
    keys) goes into the permission's `with`; and `requires` should hold
    `{"need": "countersignature"}`, so that a receipt without the executor's
