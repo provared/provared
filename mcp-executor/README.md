@@ -814,18 +814,12 @@ secret. Its records prove nothing about anyone; see `demo/README.md`. Of
 that folder, only `server.mjs` (the made-up server) and
 `content-rules.json` (its one rule) are in the npm package, for the `demo`
 command. `server.json` describes the package for the official MCP
-Registry, where, when the registry was looked at on 11 November 2026, the
-latest version listed as `io.github.provared/mcp-executor` was 0.2.0;
-0.3.0 was not listed. A version can be
-published to the registry only after the same version is on npm, because
-the registry reads that version's `package.json` from npm and compares its
-`mcpName` with the name in `server.json`. Publishing under
-`io.github.provared/` needs an Owner of the GitHub organisation
-`provared`, signed in with a personal access token that can read the
-organisation's members (a classic token with `read:org`, or a
-fine-grained one with Organization permissions, Members, Read-only) or
-from GitHub Actions; `mcp-publisher login github` without a token cannot
-publish to an organisation's names today.
+Registry, which listed 0.4.0 on 11 November 2026. It is published there by the workflow
+`.github/workflows/mcp-registry.yml`, started by hand, which signs in
+with GitHub's identity token for the run. A version can be published to
+the registry only after the same version is on npm, because the registry
+reads that version's `package.json` from npm and compares its `mcpName`
+with the name in `server.json`.
 
 ## Licences
 
