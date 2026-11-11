@@ -744,13 +744,15 @@ POST http://127.0.0.1:8794/hand-over      {"kind": "renewal", "slip": …} or {"
   with the right clock, does not stop it if the server holds the renewal back until at least
   two minutes after the cancellation and then hands it over. The signing
   page, as this repository holds it (`page/sign-page.js`), does not sign
-  a permission another page asks for where it starts more than 300
-  seconds after the clock of the device it runs on, so a faulty or
-  attacked application page cannot have a start further ahead signed by
-  asking for it. That limit is measured by the same clock, so the case of
-  a fast clock above stands, and a permission signed on the signing page
-  from a starting link, with no request, may start whenever the person
-  writes. A copy of the signing page from before that limit sets none
+  a permission asked for by a request (a link with `#request=`, as the
+  application opens it) where it starts more than 300 seconds after the
+  clock of the device it runs on. The limit covers such requests only. A
+  link with `#permission=` carries its own start, the page takes it as
+  the link gives it, and that way of signing has no limit on the start:
+  it is meant for a permission kept as a file, and a faulty or attacked
+  page could open the signing page by such a link. The limit is measured
+  by the same clock, so the case of a fast clock above stands. A copy of
+  the signing page from before that limit sets none
   (the page served at https://sign.prova.red is such a copy until it is
   brought up to date), and there the rule also rests on the
   application's page, which could ask for a start further ahead and hold

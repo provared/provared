@@ -142,6 +142,34 @@ test('the time of a receipt is read with its offset, and a time that cannot be r
   assert.equal(r.summary.notCompared, 1);
 });
 
+// JavaScript's Date.UTC reads a year from 0 to 99 as 1900 to 1999: read
+// through it, a time in those years did not come back as it went in, and
+// was taken for a time that cannot be read.
+test('a time in the years 0000 to 0099 is read as the year written, and a receipt dated so is compared', async () => {
+  for (const [text, same, more] of [
+    ['0000-01-01T00:00:00Z', '0000-01-01T00:00:00Z', 0],
+    ['0050-01-01T00:00:00+00:00', '0050-01-01T00:00:00Z', 0],
+    ['0050-01-01T02:00:00+02:00', '0050-01-01T00:00:00Z', 0],
+    ['0096-02-29T00:00:00Z', '0096-02-29T00:00:00Z', 0],
+    ['0099-12-31T23:59:59.5Z', '0099-12-31T23:59:59Z', 500],
+    ['0100-01-01T00:00:00Z', '0100-01-01T00:00:00Z', 0],
+  ]) {
+    assert.equal(parseAmwTime(text), Date.parse(same) + more, text);
+  }
+  assert.equal(parseAmwTime('0050-01-01T00:00:00Z'), -60589296000000);
+  assert.ok(parseAmwTime('0050-01-01T00:00:00Z') < Date.parse('1900-01-01T00:00:00Z'), 'not a moment in 1950');
+  // A date that does not exist is still not a time in those years: 0099 is not a leap year.
+  for (const bad of ['0099-02-29T00:00:00Z', '0050-02-30T00:00:00Z', '0050-13-01T00:00:00Z', '0050-01-01T24:00:00Z']) {
+    assert.ok(Number.isNaN(parseAmwTime(bad)), bad);
+  }
+  const gw = makeGateway();
+  const r = await judge(await slipWith({}), gw, [receipt(gw, { created_at: '0050-01-01T00:00:00Z' })]);
+  assert.equal(r.receipts[0].compared, true);
+  assert.equal(r.receipts[0].when, '0050-01-01T00:00:00.000Z');
+  assert.deepEqual(codes(r.receipts[0]), ['outside-valid-time']);
+  assert.equal(r.summary.notCompared, 0);
+});
+
 test('parseAmwTime reads RFC 3339 with an offset, and nothing else', () => {
   assert.equal(parseAmwTime('2026-09-14T17:00:00+00:00'), Date.UTC(2026, 8, 14, 17));
   assert.equal(parseAmwTime('2026-09-14T17:00:00Z'), Date.UTC(2026, 8, 14, 17));

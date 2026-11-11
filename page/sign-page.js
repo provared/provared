@@ -48,8 +48,9 @@
 // button. A permission another page asks for, new or a renewal, is not
 // signed where it starts more than 300 seconds after that clock
 // (startRefusal): the page's own limit, whatever the asking page allows.
-// A permission signed from a starting link, with no request, may start
-// whenever the person writes. And where a request carries an
+// The limit covers requests only: a link with "#permission=" carries its
+// own start, and that way of signing has no limit on it. And where a
+// request carries an
 // earlier permission that starts more than 300 seconds after that clock,
 // the page warns that the clock may be behind (clockWarning), and signs
 // only once the warning is confirmed. A clock that is ahead cannot be
@@ -245,10 +246,11 @@ export function readRequest(hash) {
  * allowance; any permission from the person's passkey for the agent's
  * keys can be handed over as a renewal, so the limit stands for both
  * kinds. The page that asks is expected to keep the same rule, and this
- * page does not take its word for it. A permission signed from a starting
- * link, with no request, and kept as a file, may start whenever the
- * person writes. A start that is not a time is left to the format's own
- * check, which refuses it.
+ * page does not take its word for it. The limit covers requests only: a
+ * link with "#permission=" carries its own start (readStartingPermission
+ * takes it as the link gives it), and a permission signed that way, with
+ * no request, has no limit on its start. A start that is not a time is
+ * left to the format's own check, which refuses it.
  * @param {string|null} kind what the request asks for ("permission" or "renewal"); null where no page asked, and then there is no limit
  * @param {unknown} validFrom the start of what is to be signed
  * @param {number} now this device's clock, in milliseconds

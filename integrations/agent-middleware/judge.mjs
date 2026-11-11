@@ -109,8 +109,13 @@ function amwTimeNs(text) {
     rest = rest.slice(end);
   }
   if (rest !== 'Z' && !AMW_OFFSET.test(rest)) return null;
-  const base = Date.UTC(y, mo - 1, d, h, mi, s);
-  const check = new Date(base);
+  // The year is the year written, the years 0000 to 0099 too. Date.UTC
+  // reads a year from 0 to 99 as 1900 to 1999, so the date is set with
+  // setUTCFullYear, which takes every year as it is given.
+  const check = new Date(0);
+  check.setUTCFullYear(y, mo - 1, d);
+  check.setUTCHours(h, mi, s, 0);
+  const base = check.getTime();
   // A date that does not exist (30 February, 25:00) does not come back as it went in.
   if (Number.isNaN(base) || check.getUTCFullYear() !== y || check.getUTCMonth() !== mo - 1 || check.getUTCDate() !== d || check.getUTCHours() !== h || check.getUTCMinutes() !== mi || check.getUTCSeconds() !== s) return null;
   const fractionNs = fraction ? BigInt(fraction[1].padEnd(9, '0')) : 0n;

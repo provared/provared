@@ -19,8 +19,9 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import { toBase64url, utf8 } from '../src/encoding.js';
 import { CLOCK_ALLOWANCE_MS } from '../src/seal.js';
-import { clockWarning, startRefusal } from '../page/sign-page.js';
+import { clockWarning, readStartingPermission, startRefusal } from '../page/sign-page.js';
 
 const NOW = Date.parse('2026-11-03T12:00:00Z');
 const refusal = (kind, start) => `This ${kind} starts at ${start}, more than 5 minutes after this device's clock, so it is not signed: the agent's software does not take a permission from the application that starts later than that. If the clock of this device is right, ask again from the page that opened this window; if it is not, set it first.`;
@@ -44,7 +45,9 @@ test('the limit is the one the agent\'s software keeps for a renewal handed over
   assert.equal(CLOCK_ALLOWANCE_MS, 300 * 1000);
 });
 
-test('the limit stands only where another page asks: a permission signed from a starting link may start whenever the person writes, and a cancellation has no start', () => {
+test('the limit covers requests only: a link with "#permission=" carries its own start, which the page takes as given and signs with no limit; a cancellation has no start', () => {
+  const link = `#permission=${toBase64url(utf8(JSON.stringify({ validFrom: '2027-01-01T00:00:00Z' })))}`;
+  assert.equal(readStartingPermission(link).permission.validFrom, '2027-01-01T00:00:00Z', 'the start the link carries');
   assert.equal(startRefusal(null, '2027-01-01T00:00:00Z', NOW), null);
   assert.equal(startRefusal(undefined, '2027-01-01T00:00:00Z', NOW), null);
   assert.equal(startRefusal('cancellation', '2027-01-01T00:00:00Z', NOW), null);

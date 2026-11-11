@@ -34,22 +34,23 @@
     test files, and no test here, has such a time-stamp pass: for that,
     a trusted service's certificates would have to be in force in those
     years.
-  - **Shared test files whose stored answers changed** (eight; each new
-    answer is the one the library gives):
-    `test-vectors/stamps.json`, case 59, "statement: a time in the year
-    50": refused `stamp-bad-data` before, refused `stamp-invalid` now,
-    with the words above. `test-vectors/der-times.json`, each refused
+  - **Shared test files whose stored answers changed** (five, against
+    the files before this change; each new answer is the one the library
+    gives): `test-vectors/stamps.json`, case 59, "statement: a time in
+    the year 50": refused `stamp-bad-data` before, refused
+    `stamp-invalid` now, with the words above.
+    `test-vectors/der-times.json`, four cases, each refused
     `stamp-bad-data` before and read now, in milliseconds since 1970:
     `00000101000000Z` -62167219200000; `00500101000000Z`
     -60589296000000; `00990101000000Z` -59042995200000;
-    `00991231235959Z` -59011459201000; `00010101000000Z`
+    `00991231235959Z` -59011459201000.
+  - **Shared test files with more cases.** `der-times.json` gains six
+    (61 before, 67 now). Three are read: `00010101000000Z`
     -62135596800000; `00960229000000Z` -59132592000000;
-    `00991231235959.5Z` -59011459200500 (the last three were added in
-    this change).
-  - **Shared test files with more cases.** `der-times.json` gains three
-    refusals in those years (67 cases in all): 29 February 0099, a
-    thirteenth month in 0050, and hour 24 in 0050.
-    `test-vectors/times.json` gains seven cases (25 in all) for a
+    `00991231235959.5Z` -59011459200500. Three are refused in those
+    years as in any other: 29 February 0099, a thirteenth month in 0050,
+    and hour 24 in 0050.
+    `test-vectors/times.json` gains seven cases (18 before, 25 now) for a
     record's own time (`parseTime`, `parse_time`; format description,
     section 3.6), which was and is the year it says in both libraries:
     the last second of 0000, the first of 0001, 0050, 29 February 0096
@@ -72,10 +73,12 @@
     handed over, `starts-later`) after this device's clock at the press
     of Sign. It is checked at every press, on what was read and is about
     to be signed, before any warning is shown or a passkey asked, and
-    the page says why. A permission signed from a starting link
-    (`#permission=`), with no request, and kept as a file, may still
-    start whenever the person writes. A start that is not a time is left
-    to the format's own check, as before.
+    the page says why. The limit covers such requests only. A link with
+    `#permission=` carries its own start, which the page takes as the
+    link gives it (`readStartingPermission`), and that way of signing
+    has no limit on the start, as before: it is meant for a permission
+    kept as a file. A start that is not a time is left to the format's
+    own check, as before.
   - **The signing page warns where this device's clock looks behind**
     (`clockWarning`). Where a request carries an earlier permission
     (a renewal or a cancellation), whose passkey signature the page has
@@ -87,10 +90,22 @@
   - **The recorder's README** (`integrations/claude-code/README.md`,
     "Limits") said that the signing page sets no limit of its own on the
     start. It now says what the page in this repository does, that the
-    limit is measured by the signing device's clock, that a permission
-    signed from a starting link has no such limit, and that a copy of
+    limit covers requests (`#request=`) only, that a link with
+    `#permission=` carries its own start and has no such limit, that the
+    limit is measured by the signing device's clock, and that a copy of
     the page from before this change (the one served at
     https://sign.prova.red, until it is brought up to date) sets none.
+  - **The reader of another project's receipts**
+    (`integrations/agent-middleware/judge.mjs`, `parseAmwTime`; not
+    published) reads a time in the years 0000 to 0099 as the year
+    written, for the same reason and in the same way (`setUTCFullYear`
+    in place of `Date.UTC`). **This changes what it answers:** a receipt
+    dated in those years was "Not compared: the receipt's time cannot be
+    read"; it is now compared, and one outside the permission's period
+    is found `outside-valid-time`. A date that does not exist in those
+    years is still a time that cannot be read. One test
+    (`integrations/agent-middleware/test/judge.test.mjs`), which fails
+    on the earlier code.
   - **What these two do not do.** Both read the same clock, the signing
     device's. A clock that is ahead is not noticed, and with such a
     clock a start that far ahead of the true time is still signed. A
