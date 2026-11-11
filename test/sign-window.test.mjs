@@ -505,3 +505,64 @@ test('at desktop width, a renewal and a cancellation with no window go back by a
   assert.deepEqual(outside, []);
   await context.close();
 });
+
+// The page's two checks on the clock of the device a person signs on
+// (page/sign-page.js: startRefusal, clockWarning; the plain functions are
+// tested in test/sign-start.test.mjs).
+test('a renewal that starts more than 300 seconds ahead is not signed and no passkey is asked; with a clock a day behind, a cancellation is signed only after the warning that the clock may be wrong', async (t) => {
+  if (skip(t)) return;
+  assert.ok(first, 'the first test signed');
+  const { context, problems } = await newContext();
+  const page = await context.newPage();
+  await page.goto(`${opener.origin}/opener.html`);
+  const ahead = new Date(Date.now() + 600e3).toISOString().slice(0, 19) + 'Z';
+  const fields = { ...permission(first.agent.keys), validFrom: ahead, purpose: 'Starts ten minutes from now.' };
+  const { popup, holder } = await openWindow(context, page, requestLink({ kind: 'renewal', fields, earlier: first.record, returnTo: `${opener.origin}/opener.html` }), [first.credential]);
+  await popup.click('#read');
+  await popup.waitForFunction(() => !document.getElementById('sign').disabled, null, { timeout: 20000 });
+  await popup.click('#sign');
+  await popup.waitForFunction(() => document.getElementById('sign-status').textContent !== '', null, { timeout: 20000 });
+  assert.equal(
+    await text(popup, '#sign-status'),
+    `This renewal starts at ${ahead}, more than 5 minutes after this device's clock, so it is not signed: the agent's software does not take a permission from the application that starts later than that. If the clock of this device is right, ask again from the page that opened this window; if it is not, set it first. You can try again.`,
+  );
+  assert.equal(await popup.isHidden('#warnings'), true, 'refused before any warning');
+  assert.equal(await popup.isHidden('#save-line'), true, 'nothing is offered to keep');
+  assert.equal(await page.evaluate(() => window.result), null, 'nothing went back');
+  assert.equal((await holder.credentials())[0].signCount, first.credential.signCount, 'the passkey was not asked');
+  // A second press is refused the same way: there is nothing to confirm.
+  await popup.click('#sign');
+  await popup.waitForFunction(() => !document.getElementById('sign').disabled, null, { timeout: 20000 });
+  assert.match(await text(popup, '#sign-status'), /^This renewal starts at .* so it is not signed/);
+  assert.equal(await page.evaluate(() => window.result), null);
+  assert.deepEqual(problems, []);
+  await context.close();
+
+  // A device whose clock is a day behind: by it, the permission to cancel has not started.
+  const behind = await newContext();
+  await behind.context.addInitScript(() => {
+    const real = Date.now.bind(Date);
+    Date.now = () => real() - 86400e3;
+  });
+  const page2 = await behind.context.newPage();
+  await page2.goto(`${opener.origin}/opener.html`);
+  const second = await openWindow(behind.context, page2, requestLink({ kind: 'cancellation', earlier: first.record, returnTo: `${opener.origin}/opener.html` }), [first.credential]);
+  await second.popup.click('#cancel');
+  await second.popup.waitForFunction(() => !document.getElementById('cancel-warnings').hidden && !document.getElementById('cancel').disabled, null, { timeout: 20000 });
+  const warnings = await second.popup.$$eval('#cancel-warnings li', (items) => items.map((li) => li.textContent));
+  assert.equal(warnings.length, 2, warnings.join('\n'));
+  assert.equal(
+    warnings[0],
+    `The clock of this device may be wrong: by it, the earlier permission (which starts at ${first.content.validFrom}) will not start for more than 5 minutes yet. What you sign here is dated and judged by this clock. Check the date and time of this device; go on only if they are right.`,
+  );
+  assert.match(warnings[1], /not a known address/);
+  assert.equal(await text(second.popup, '#cancel'), 'I have read the warnings: sign the cancellation');
+  assert.equal(await text(second.popup, '#cancel-status'), 'Read the warnings above, then press the button again to sign the cancellation.');
+  assert.equal(await page2.evaluate(() => window.result), null, 'the first press signs nothing');
+  // The second press confirms what the first showed, and signs.
+  await second.popup.click('#cancel');
+  const cancelled = await waitForResult(page2);
+  assert.equal(cancelled.result.kind, 'cancellation');
+  assert.deepEqual(behind.problems, []);
+  await behind.context.close();
+});

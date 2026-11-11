@@ -162,9 +162,9 @@ def time_of(data, element):
         raise bad_stamp('a time is not written in the form DER allows.')
     y, mo, d, h, mi, s = (int(g) for g in groups[:6])
     fraction = groups[6]
-    # JavaScript's Date.UTC reads a year from 0 to 99 as 1900 to 1999, so
-    # such a year never names the moment it says, and is refused there.
-    if y <= 99 or not (1 <= mo <= 12) or not (1 <= d <= _days_in_month(y, mo)) or h > 23 or mi > 59 or s > 59:
+    # The year is the year written, the years 0000 to 0099 too, as the
+    # JavaScript library reads it.
+    if not (1 <= mo <= 12) or not (1 <= d <= _days_in_month(y, mo)) or h > 23 or mi > 59 or s > 59:
         raise bad_stamp('a time names a moment that does not exist.')
     ms = ((_days_from_civil(y, mo, d) * 24 + h) * 60 + mi) * 60000 + s * 1000
     if fraction:
