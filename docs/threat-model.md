@@ -270,9 +270,10 @@ disagree about. Totals are added as whole numbers of any size.
 - **An agent that names its action falsely.** A stub says what the agent
   says it did. An agent that deletes data and writes "read" is caught
   only by the other side's records.
-- **Periods rest on the times in stubs**, which are the agent's own word
-  unless an outside time-stamp you trust covers them. An agent can write a false time to
-  stay inside a period. A total over the whole life of the slip does not
+- **Periods rest on the times in stubs**, which are the agent's own word.
+  An outside time-stamp you trust shows only that a stub existed by the
+  stamp's time: it stops a date later than that, not an earlier one. An
+  agent can write a false earlier time to stay inside a period. A total over the whole life of the slip does not
   have this weakness.
 - **An approval shows that the passkey approved.** It does not show that
   the person read what they approved, and against A9 it shows nothing.
@@ -311,8 +312,10 @@ disagree about. Totals are added as whole numbers of any size.
   seconds from that clock either way; nothing is written that is dated
   more than 300 seconds ahead of it. The clock is the device's own, or
   the one the caller gives. A wrong clock gives wrong dates, and `record`
-  writes any earlier date the caller states: until an outside time-stamp
-  covers a stub, its date is the agent's own word.
+  writes any earlier date the caller states: a stub's date is the
+  agent's own word. An outside time-stamp that covers it shows only that
+  the stub existed by the stamp's time, so it stops forward dating, not
+  back dating.
 - **What the stub writer is handed** (the request, an approval, what the
   other side hands back) is copied when it is handed over, and the copy
   is what is checked and written. `record` hands a stub to the other
