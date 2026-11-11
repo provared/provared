@@ -104,7 +104,9 @@ Docker containers on one computer, and its seven checks passed with
 Docker Desktop on Windows; on separate computers it has not been tried. The executor
 also keeps its own copy of every call, apart from the agent's log, which can
 be held against the log to find a receipt that was left out
-(`compare`).
+(`compare`). Where the settings name a recorder, the executor can seal the
+book with the recorder's keys, by command or on a timer (`seal`; see
+"Sealing, acknowledging, and what the executor says about itself").
 
 Evidence, not a verdict. The whole design, with every choice numbered for
 review, is in `DESIGN.md`. The format is described in the Provared format

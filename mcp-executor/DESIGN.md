@@ -626,8 +626,8 @@ Still to build:
 ## 13. The choices, numbered for review
 
 Each is what, why, and the other way. None changes a record or a rule of
-the format: the executor writes ordinary stubs, countersignatures and
-denials.
+the format: the executor writes ordinary stubs, countersignatures,
+denials and, from 0.5.0, seals.
 
 **X1. A package of its own, `mcp-executor/`, named `provared-mcp-executor`,
 depending on `provared` 0.7.0 (`^0.7.0`; it was `>0.6.0 <0.8.0` until
