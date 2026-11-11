@@ -40,13 +40,26 @@
 // The parts that need no page are plain functions, so that they can be
 // tested on their own: readStartingPermission, readRequest, returnAddress,
 // whatChanged, agentKeySet, serviceWords, shownByItself, signedMessage,
-// receivedReply, replyFrom. The rest runs only in a browser. A page shown
-// inside another page offers nothing to sign or cancel.
+// receivedReply, replyFrom, startRefusal, clockWarning. The rest runs only
+// in a browser. A page shown inside another page offers nothing to sign or
+// cancel.
+//
+// Two checks rest on this device's clock, read at each press of a signing
+// button. A permission another page asks for, new or a renewal, is not
+// signed where it starts more than 300 seconds after that clock
+// (startRefusal): the page's own limit, whatever the asking page allows.
+// A permission signed from a starting link, with no request, may start
+// whenever the person writes. And where a request carries an
+// earlier permission that starts more than 300 seconds after that clock,
+// the page warns that the clock may be behind (clockWarning), and signs
+// only once the warning is confirmed. A clock that is ahead cannot be
+// told from anything the page holds, and the page asks no one the time.
 
 import { checkBook, checkSlip, conditionWords, keySetFingerprint, limitWords, neverWords } from '../src/check.js';
 import { cancelWithPasskey, createPasskey, signChallengeWithChosenPasskey, signChallengeWithPasskey } from '../src/passkey-browser.js';
-import { fromBase64url, toBase64url, utf8 } from '../src/encoding.js';
+import { fromBase64url, parseTime, toBase64url, utf8 } from '../src/encoding.js';
 import { checkKeySet, thumbprint } from '../src/keys.js';
+import { CLOCK_ALLOWANCE_MS } from '../src/seal.js';
 import { assembleCancellation, prepareCancellation } from '../src/standing.js';
 import { assembleSlip, prepareSlip } from '../src/slip.js';
 import { entryLine } from '../src/book.js';
@@ -220,6 +233,49 @@ export function readRequest(hash) {
     request.state = value.state;
   }
   return { request, message: null };
+}
+
+/**
+ * The page's own limit on the start of a permission another page asks it
+ * to sign, new or a renewal: no more than 300 seconds (the allowance
+ * between clocks the format uses) after this device's clock at the press
+ * of Sign. The agent's software refuses a renewal handed over that starts
+ * further ahead of its own clock than that, and counts on one signed
+ * before a cancellation to start before the cancellation's date and that
+ * allowance; any permission from the person's passkey for the agent's
+ * keys can be handed over as a renewal, so the limit stands for both
+ * kinds. The page that asks is expected to keep the same rule, and this
+ * page does not take its word for it. A permission signed from a starting
+ * link, with no request, and kept as a file, may start whenever the
+ * person writes. A start that is not a time is left to the format's own
+ * check, which refuses it.
+ * @param {string|null} kind what the request asks for ("permission" or "renewal"); null where no page asked, and then there is no limit
+ * @param {unknown} validFrom the start of what is to be signed
+ * @param {number} now this device's clock, in milliseconds
+ * @returns {string|null} why it is not signed, or null where the limit does not stand in the way
+ */
+export function startRefusal(kind, validFrom, now) {
+  if (kind !== 'permission' && kind !== 'renewal') return null;
+  if (!(parseTime(validFrom) > now + CLOCK_ALLOWANCE_MS)) return null;
+  return `This ${kind} starts at ${validFrom}, more than ${CLOCK_ALLOWANCE_MS / 60000} minutes after this device's clock, so it is not signed: the agent's software does not take a permission from the application that starts later than that. If the clock of this device is right, ask again from the page that opened this window; if it is not, set it first.`;
+}
+
+/**
+ * A sign that this device's clock is behind, from the one dated thing this
+ * page can trust without asking anyone: the earlier permission a request
+ * carries, once its passkey signature has been checked here. Where that
+ * permission starts more than 300 seconds (the allowance between clocks
+ * the format uses) after this device's clock, either it has not started
+ * yet or the clock is behind, and the person is warned before signing.
+ * The words do not state the clock's reading, so that they stay the same
+ * from one press to the next. A clock that is ahead is not told by this.
+ * @param {unknown} earlierValidFrom the start of the earlier permission
+ * @param {number} now this device's clock, in milliseconds
+ * @returns {string|null} the warning, or null where there is none
+ */
+export function clockWarning(earlierValidFrom, now) {
+  if (!(parseTime(earlierValidFrom) > now + CLOCK_ALLOWANCE_MS)) return null;
+  return `The clock of this device may be wrong: by it, the earlier permission (which starts at ${earlierValidFrom}) will not start for more than ${CLOCK_ALLOWANCE_MS / 60000} minutes yet. What you sign here is dated and judged by this clock. Check the date and time of this device; go on only if they are right.`;
 }
 
 /**
@@ -745,8 +801,8 @@ function page() {
 
   // The warnings before the passkey is asked: a new passkey, an agent's key
   // set signed for the first time on this device, a passkey other than the
-  // one that signed the earlier permission, a return address that is not
-  // known. They are shown on the first press, and the second press signs.
+  // one that signed the earlier permission, a clock that may be behind, a
+  // return address that is not known. They are shown on the first press, and the second press signs.
   // Each warning has a code (what it is about) and its words.
   async function warningsBefore(f) {
     const list = [];
@@ -764,14 +820,18 @@ function page() {
       if (earlier) add('other-passkey', `The new permission is signed with a passkey other than the one that signed the earlier permission (${await thumbprint(earlier.content.issuer.key)}). The agent's software takes a permission from a passkey it does not yet trust only when it is told to.`);
       if (!rememberedPasskeys().length) add('new-passkey', 'A new passkey will be made for this website, on this device. Make one only if you have not signed here before on this device, or your earlier passkey is gone. The agent\'s software takes a permission from a passkey it does not yet trust only when it is told to.');
     }
+    const clock = earlier ? clockWarning(earlier.content.validFrom, Date.now()) : null;
+    if (clock) add('clock-behind', clock);
     if (request && request.returnTo && !request.returnTo.known) add('unknown-return', `The signed permission will be handed to ${request.returnTo.address}, which is not a known address of the Provared application. Go on only if you opened this window from that address yourself.`);
     return list;
   }
 
-  // The warnings before a cancellation is signed: a return address that is
-  // not known.
+  // The warnings before a cancellation is signed: a clock that may be
+  // behind, and a return address that is not known.
   function cancelWarningsBefore() {
     const list = [];
+    const clock = earlier ? clockWarning(earlier.content.validFrom, Date.now()) : null;
+    if (clock) list.push({ code: 'clock-behind', text: clock });
     if (request && request.returnTo && !request.returnTo.known) list.push({ code: 'unknown-return', text: `The signed cancellation will be handed to ${request.returnTo.address}, which is not a known address of the Provared application. Go on only if you opened this window from that address yourself.` });
     return list;
   }
@@ -847,6 +907,10 @@ function page() {
     const [what, name] = [fields, readName];
     $('sign').disabled = true;
     try {
+      // The page's own limit on the start of a permission another page
+      // asks for, by this device's clock at this press.
+      const late = startRefusal(request ? request.kind : null, what.validFrom, Date.now());
+      if (late) throw new Error(late);
       // The warnings are worked out at every press: a press signs only
       // where every warning that stands now was shown and confirmed.
       const list = await warningsBefore(what);
@@ -993,8 +1057,8 @@ function page() {
         if (!allConfirmed(list, cancelConfirmed)) {
           showWarnings('cancel-warnings', list);
           cancelConfirmed = new Set(list.map((w) => w.text));
-          $('cancel').textContent = 'I have read the warning: sign the cancellation';
-          say('cancel-status', 'Read the warning above, then press the button again to sign the cancellation.');
+          $('cancel').textContent = list.length > 1 ? 'I have read the warnings: sign the cancellation' : 'I have read the warning: sign the cancellation';
+          say('cancel-status', `Read the ${list.length > 1 ? 'warnings' : 'warning'} above, then press the button again to sign the cancellation.`);
           $('cancel').disabled = false;
           return;
         }

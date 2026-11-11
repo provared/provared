@@ -4,9 +4,10 @@
 
 - **`provared` 0.8.1 (not yet released; `package.json` and
   `python/pyproject.toml` still say 0.8.0): the years 0000 to 0099 in
-  times.** No signed byte, label or
-  field's meaning changes, and nothing is refused or accepted that was
-  not before.
+  times, and two checks on the signing page that rest on the clock of
+  the device a person signs on.** No signed byte, label or field's
+  meaning changes, and the checker refuses and accepts what it did
+  before.
   - **A time-stamp's time in the years 0000 to 0099** (`timeOf` in
     `src/der.js`) is refused by name, with the words and the code it had
     (`stamp-bad-data`, "a time names a moment that does not exist").
@@ -32,6 +33,48 @@
     (one test each), and `python/tests/test_small_years.py` (two), hold
     the same cases in each library. They pass without the change to
     `src/der.js`, which alters no answer.
+  - **The signing page sets its own limit on a start**
+    (`startRefusal` in `page/sign-page.js`). A review of the hand-over
+    (3 November 2026) found that the five-minute rule rests on the clock
+    of the device the person signs on, and that the signing page set no
+    limit of its own on a start: it signed whatever start the page that
+    asked gave it. Now a permission another page asks for (`#request=`,
+    kind `permission` or `renewal`) is not signed where it starts more
+    than 300 seconds (the allowance between clocks the format uses, and
+    the one by which the recorder beside Claude Code refuses a renewal
+    handed over, `starts-later`) after this device's clock at the press
+    of Sign. It is checked at every press, on what was read and is about
+    to be signed, before any warning is shown or a passkey asked, and
+    the page says why. A permission signed from a starting link
+    (`#permission=`), with no request, and kept as a file, may still
+    start whenever the person writes. A start that is not a time is left
+    to the format's own check, as before.
+  - **The signing page warns where this device's clock looks behind**
+    (`clockWarning`). Where a request carries an earlier permission
+    (a renewal or a cancellation), whose passkey signature the page has
+    checked, and by this device's clock that permission will not start
+    for more than 300 seconds yet, either it has not started or the
+    clock is behind: the page shows a warning with the others, and signs
+    only once the person presses again. Nothing signed changes: a
+    cancellation is dated by the same clock as before.
+  - **What these two do not do.** Both read the same clock, the signing
+    device's. A clock that is ahead is not noticed, and with such a
+    clock a start that far ahead of the true time is still signed. A
+    request with no earlier permission gives the page nothing to compare
+    the clock with. The page asks no one the time, and sends nothing
+    anywhere, as before.
+  - **Tests** (`test/sign-start.test.mjs`, seven): the limit at 300
+    seconds and one second past it, for both kinds; no limit with no
+    request; a start that is not a time; the warning at the same two
+    points, and with a clock a year behind; the warning's words the same
+    from one press to the next; and, read from the page's own text, that
+    the limit comes before the warnings and the passkey, and that both
+    signing buttons work the warning out. In a browser with a virtual
+    passkey (`test/sign-window.test.mjs`, one test, skipped where there
+    is no browser): a renewal that starts ten minutes ahead is not
+    signed, no warning is shown, nothing goes back and the passkey is
+    not asked; and with a clock a day behind, a cancellation's first
+    press shows the warning and signs nothing, and the second signs.
 
 - **`provared-mcp-executor` 0.4.1 (11 November 2026, not yet on npm):
   `demo --stdio`, for an MCP client or a directory's inspector.** A
