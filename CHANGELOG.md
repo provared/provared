@@ -125,7 +125,12 @@
     not asked; and with a clock a day behind, a cancellation's first
     press shows the warning and signs nothing, and the second signs.
 
-- **`provared-mcp-executor` 0.4.1 (11 November 2026, not yet on npm):
+- **The threat model, corrected on time-stamps.** Two places in
+  `docs/threat-model.md` said an outside time-stamp settles a stub's
+  date. It shows only that the stub existed by the stamp's time: it catches
+  forward dating, not back dating. No code changes.
+
+- **`provared-mcp-executor` 0.4.1 (11 November 2026, on npm and the MCP Registry):
   `demo --stdio`, for an MCP client or a directory's inspector.** A
   directory that builds the package in a container and lists its tools
   has no passkey and no settings to give it. What changes, in
