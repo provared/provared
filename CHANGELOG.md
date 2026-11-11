@@ -3,36 +3,63 @@
 ## Not yet released
 
 - **`provared` 0.8.1 (not yet released; `package.json` and
-  `python/pyproject.toml` still say 0.8.0): the years 0000 to 0099 in
-  times, and two checks on the signing page that rest on the clock of
-  the device a person signs on.** No signed byte, label or field's
-  meaning changes, and the checker refuses and accepts what it did
-  before.
-  - **A time-stamp's time in the years 0000 to 0099** (`timeOf` in
-    `src/der.js`) is refused by name, with the words and the code it had
-    (`stamp-bad-data`, "a time names a moment that does not exist").
-    Before, the refusal followed from JavaScript's `Date.UTC`, which
-    reads a year from 0 to 99 as 1900 to 1999, so that the date did not
-    come back as it went in; no such time was ever read as a moment in
-    the twentieth century. The Python library (`time_of` in
-    `python/src/provared/der.py`) already refused it by name, and the
-    shared test files require the refusal. The format description says
-    nothing of it.
-  - **A record's own time in those years** (`parseTime`, `parse_time`;
-    format description, section 3.6) is the year it says in both
-    libraries, as before: text with four digits for the year is not read
-    through `Date.UTC`.
-  - **Shared test files.** `test-vectors/times.json` gains seven cases
-    (25 in all): the last second of 0000, the first of 0001, 0050, 29
-    February 0096 (a leap year), 29 February 0099 (not one), the last
-    second of 0099 and the first of 0100. `test-vectors/der-times.json`
-    gains three refusals (64 cases in all): the year 0001, 29 February
-    0096, and the last second of 0099 with a fraction. Every answer both
-    files held before is unchanged.
-  - **Tests.** `test/timestamp.test.mjs` and `test/encoding.test.mjs`
-    (one test each), and `python/tests/test_small_years.py` (two), hold
-    the same cases in each library. They pass without the change to
-    `src/der.js`, which alters no answer.
+  `python/pyproject.toml` still say 0.8.0): a time-stamp's time in the
+  years 0000 to 0099 is read, where it was refused; and two checks on
+  the signing page that rest on the clock of the device a person signs
+  on.** No signed byte, label or field's meaning changes. **The first
+  change alters what a checker answers:** a checker of an earlier
+  version, in JavaScript or Python, answers differently on the records
+  named below.
+  - **A time in a time-stamp or in its service's certificates, written
+    in the long form (GeneralizedTime) with a year from 0000 to 0099, is
+    now read as the year written** (`timeOf` in `src/der.js`, `time_of`
+    in `python/src/provared/der.py`). Before, both libraries refused it
+    (`stamp-bad-data`, "a time names a moment that does not exist"): in
+    JavaScript because `Date.UTC` reads a year from 0 to 99 as 1900 to
+    1999, so that the date did not come back as it went in, and in
+    Python to match. The format description never stated that refusal,
+    and a checker written from it alone reads such a year; the
+    description is unchanged, and the libraries and the shared test
+    files now agree with it. JavaScript sets the date with
+    `setUTCFullYear`, which takes every year as given; Python no longer
+    refuses a year below 100. A date that does not exist in those years
+    (29 February 0099, a thirteenth month, hour 24) is refused as in any
+    other year. The short form (UTCTime) names 1950 to 2049, as before.
+  - **What a checker now answers.** Such a time goes on to the rules
+    that follow the reading of it (format description, section 21.2). A
+    time-stamp that states a time in the year 0050, under a certificate
+    in force from 2026 to 2036, was refused as `stamp-bad-data`; it is
+    now refused as `stamp-invalid`, "A time-stamp is dated outside the
+    time its service's certificate was in force." No case in the shared
+    test files, and no test here, has such a time-stamp pass: for that,
+    a trusted service's certificates would have to be in force in those
+    years.
+  - **Shared test files whose stored answers changed** (eight; each new
+    answer is the one the library gives):
+    `test-vectors/stamps.json`, case 59, "statement: a time in the year
+    50": refused `stamp-bad-data` before, refused `stamp-invalid` now,
+    with the words above. `test-vectors/der-times.json`, each refused
+    `stamp-bad-data` before and read now, in milliseconds since 1970:
+    `00000101000000Z` -62167219200000; `00500101000000Z`
+    -60589296000000; `00990101000000Z` -59042995200000;
+    `00991231235959Z` -59011459201000; `00010101000000Z`
+    -62135596800000; `00960229000000Z` -59132592000000;
+    `00991231235959.5Z` -59011459200500 (the last three were added in
+    this change).
+  - **Shared test files with more cases.** `der-times.json` gains three
+    refusals in those years (67 cases in all): 29 February 0099, a
+    thirteenth month in 0050, and hour 24 in 0050.
+    `test-vectors/times.json` gains seven cases (25 in all) for a
+    record's own time (`parseTime`, `parse_time`; format description,
+    section 3.6), which was and is the year it says in both libraries:
+    the last second of 0000, the first of 0001, 0050, 29 February 0096
+    (a leap year), 29 February 0099 (not one), the last second of 0099
+    and the first of 0100.
+  - **Tests.** `test/timestamp.test.mjs` (one test) and
+    `python/tests/test_small_years.py` (one) hold the reading of those
+    years and the dates still refused; both fail on the earlier code.
+    `test/encoding.test.mjs` (one) and the second test of the Python
+    file hold a record's own time, and pass on the earlier code too.
   - **The signing page sets its own limit on a start**
     (`startRefusal` in `page/sign-page.js`). A review of the hand-over
     (3 November 2026) found that the five-minute rule rests on the clock

@@ -273,55 +273,54 @@
    "name": "GeneralizedTime \"00000101000000Z\"",
    "bytes": "180f30303030303130313030303030305a",
    "expected": {
-    "refused": {
-     "code": "stamp-bad-data",
-     "message": "A time-stamp is not laid out as its standard sets out: a time names a moment that does not exist."
-    }
+    "ok": -62167219200000
    }
   },
   {
    "name": "GeneralizedTime \"00500101000000Z\"",
    "bytes": "180f30303530303130313030303030305a",
    "expected": {
-    "refused": {
-     "code": "stamp-bad-data",
-     "message": "A time-stamp is not laid out as its standard sets out: a time names a moment that does not exist."
-    }
+    "ok": -60589296000000
    }
   },
   {
    "name": "GeneralizedTime \"00990101000000Z\"",
    "bytes": "180f30303939303130313030303030305a",
    "expected": {
-    "refused": {
-     "code": "stamp-bad-data",
-     "message": "A time-stamp is not laid out as its standard sets out: a time names a moment that does not exist."
-    }
+    "ok": -59042995200000
    }
   },
   {
    "name": "GeneralizedTime \"00991231235959Z\"",
    "bytes": "180f30303939313233313233353935395a",
    "expected": {
-    "refused": {
-     "code": "stamp-bad-data",
-     "message": "A time-stamp is not laid out as its standard sets out: a time names a moment that does not exist."
-    }
+    "ok": -59011459201000
    }
   },
   {
    "name": "GeneralizedTime \"00010101000000Z\"",
    "bytes": "180f30303031303130313030303030305a",
    "expected": {
-    "refused": {
-     "code": "stamp-bad-data",
-     "message": "A time-stamp is not laid out as its standard sets out: a time names a moment that does not exist."
-    }
+    "ok": -62135596800000
    }
   },
   {
    "name": "GeneralizedTime \"00960229000000Z\"",
    "bytes": "180f30303936303232393030303030305a",
+   "expected": {
+    "ok": -59132592000000
+   }
+  },
+  {
+   "name": "GeneralizedTime \"00991231235959.5Z\"",
+   "bytes": "181130303939313233313233353935392e355a",
+   "expected": {
+    "ok": -59011459200500
+   }
+  },
+  {
+   "name": "GeneralizedTime \"00990229000000Z\"",
+   "bytes": "180f30303939303232393030303030305a",
    "expected": {
     "refused": {
      "code": "stamp-bad-data",
@@ -330,8 +329,18 @@
    }
   },
   {
-   "name": "GeneralizedTime \"00991231235959.5Z\"",
-   "bytes": "181130303939313233313233353935392e355a",
+   "name": "GeneralizedTime \"00501301000000Z\"",
+   "bytes": "180f30303530313330313030303030305a",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a time names a moment that does not exist."
+    }
+   }
+  },
+  {
+   "name": "GeneralizedTime \"00500101240000Z\"",
+   "bytes": "180f30303530303130313234303030305a",
    "expected": {
     "refused": {
      "code": "stamp-bad-data",

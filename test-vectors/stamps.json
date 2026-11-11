@@ -1035,8 +1035,8 @@
    },
    "expected": {
     "refused": {
-     "code": "stamp-bad-data",
-     "message": "A time-stamp is not laid out as its standard sets out: a time names a moment that does not exist."
+     "code": "stamp-invalid",
+     "message": "A time-stamp is dated outside the time its service's certificate was in force."
     }
    }
   },
