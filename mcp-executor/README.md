@@ -118,7 +118,7 @@ npm install -g provared-mcp-executor
 ```
 
 Or from a copy of the repository: in `mcp-executor`, `npm pack`, then
-`npm install -g ./provared-mcp-executor-0.4.1.tgz`.
+`npm install -g ./provared-mcp-executor-0.5.0.tgz`.
 
 It needs Node.js 24.7 or later, and depends only on the `provared` library,
 at version 0.7.0 or a later 0.7 version (`^0.7.0`): its receipts name
@@ -137,7 +137,9 @@ first used in a program. The executor signs every receipt with ML-DSA-87
 beside Ed25519, so the notice is expected; the command does not print that
 one notice, and prints every other warning. A program of your own that
 uses the executor's or the library's code sees the notice: it is not an
-error.
+error. When the executor seals a book it signs with SLH-DSA-SHA2-256s too,
+and Node.js then says once that SLH-DSA is experimental; the command
+prints that notice.
 
 ## Set it up
 
@@ -168,7 +170,11 @@ error.
    agent's keys; the printed `with` entry (the executor's id, name and
    keys) goes into the permission's `with`; and `requires` should hold
    `{"need": "countersignature"}`, so that a receipt without the executor's
-   countersignature is a finding.
+   countersignature is a finding. Where the settings name a recorder
+   (`recorder`, see "Sealing, acknowledging, and what the executor says
+   about itself"), `keys` also makes the recorder's key file, with the
+   three keys a seal is signed with, and says on its standard error the
+   fingerprint of that key set; those keys go into no permission.
 
 3. The person signs the permission with their passkey (on the signing page
    at https://sign.prova.red, or from a web page of your own with the
@@ -224,7 +230,7 @@ prints its hash; the hash goes into the settings as the agent's
 `secretHash`, the secret goes to the agent and is stored nowhere else.
 `init --http` copies the example settings (`executor-http.json`) and rules
 into the current folder. `keys` makes the executor's key file and one for
-each agent, and prints the entries for each agent's permission (it needs
+each agent (and the recorder's, where the settings name one), and prints the entries for each agent's permission (it needs
 no secret hash and no passkey's thumbprint yet); `check` reads every
 agent's slip;
 `compare --agent <name>` holds one agent's copy against its book.
@@ -335,7 +341,7 @@ connection that something else provides.
 
 The settings (`executor-http.example.json` is a start): `name`, `service`,
 `tools`, `contentRules`, `unlisted`, `hideUnlisted`, `timeout`,
-`denialsPerHour`, `callIdInMeta` and `maxWaiting` as below; and
+`denialsPerHour`, `callIdInMeta`, `maxWaiting` and `recorder` as below; and
 
 - `listen`: `host` (default `127.0.0.1`; another address is warned about)
   and `port` (default 8796). `path`: the endpoint (default `/mcp`).
@@ -349,6 +355,10 @@ The settings (`executor-http.example.json` is a start): `name`, `service`,
   `copies/<name>.jsonl` and `copies/<name>.jsonl.key`). No two agents may
   share a secret or a file.
 - `executor`: `keys`, the executor's own key file.
+- `admin`: `{"secretHash": <hash>}`, the hash of the administrator's
+  secret, for the executor's own addresses (status, seal, acknowledge; see
+  "Sealing, acknowledging, and what the executor says about itself").
+  Without it those addresses answer nothing. It may not be an agent's.
 - `bodyLimit`: the most a POST body may be, in bytes (default 10,485,760).
 - `allowedOrigins`: the origins (scheme, host and port) whose pages may
   call the executor. Default none.
@@ -377,6 +387,10 @@ The settings (`executor-http.example.json` is a start): `name`, `service`,
     "keys": "keys/executor.jwk",
     "copy": "copy.jsonl",
     "copyKey": "copy.jsonl.key"
+  },
+  "recorder": {
+    "keys": "keys/recorder.jwk",
+    "sealEvery": 3600000
   },
   "tools": {
     "read_file": { "action": "provared.data.read" },
@@ -422,6 +436,12 @@ The settings (`executor-http.example.json` is a start): `name`, `service`,
   first time). Put them, and the executor itself, under a user the agent's
   side cannot write as; the copy shows a receipt left out of the book only
   if the agent's side cannot change the copy.
+- `recorder`: optional; the recorder that seals the book: `keys`, its key
+  file; `name`, a label on each seal (the executor's `name` unless
+  given); and `sealEvery`, how often the book is sealed while the executor
+  runs, in milliseconds (no timer unless given). The example settings
+  name none. See "Sealing, acknowledging, and what the executor says
+  about itself".
 - `tools`: each tool the agent may call, by its exact name, with the action
   name the slip uses for it and, where it applies, its amount: a fixed
   `value`, the whole number at a JSON Pointer (RFC 6901) in the call's
@@ -738,8 +758,9 @@ its outcome is not known…". Such a receipt also names a document
 book itself says the executor wrote it at a restart: its date is the time
 the call was sent, and its countersignature is dated at the restart, so a
 reader sees the two times apart. Where the call was sent under another
-permission, the executor does not start, and says to put that permission
-back for one start.
+permission than the one now in force, the executor writes no receipt by
+itself: the call waits for the administrator (see "A call sent under a
+permission no longer in force").
 
 **The copy cannot be read** (its key is missing while it holds lines; no
 line checks under the key; a last line was cut by a stop; a line was taken
@@ -773,6 +794,197 @@ with `--book` must exist.
 It cannot find a call that never went through the executor, whether a tool
 did what its result says, or a copy changed by whoever holds the copy key.
 
+A call the administrator set aside (below) is listed under `setAside`: the
+executor sent it and wrote no receipt for it, so the copy and the book do
+not agree, and `compare` ends with code 1 from then on. Where the settings
+name a recorder and its key file is there, `compare` expects every seal in
+the book to be that recorder's.
+
+## Sealing, acknowledging, and what the executor says about itself
+
+Over stdio:
+
+```
+provared-mcp-executor seal        --config executor.json --offline
+provared-mcp-executor acknowledge --config executor.json --offline [--set-aside <call,…>]
+provared-mcp-executor status      --config executor.json
+```
+
+Over HTTP, to a running executor:
+
+```
+PROVARED_MCP_EXECUTOR_ADMIN_SECRET=<secret> provared-mcp-executor seal        --config executor-http.json --agent research
+PROVARED_MCP_EXECUTOR_ADMIN_SECRET=<secret> provared-mcp-executor acknowledge --config executor-http.json --agent research [--set-aside <call,…>]
+PROVARED_MCP_EXECUTOR_ADMIN_SECRET=<secret> provared-mcp-executor status      --config executor-http.json
+```
+
+and, on the files of an HTTP executor that is not running, the same three
+with `--offline` and no secret.
+
+**The recorder's keys.** A seal (format description, section 21) is signed
+by whoever keeps the book, the recorder, with three keys: Ed25519,
+ML-DSA-87 and SLH-DSA-SHA2-256s. It fixes everything in the book before
+it. The settings name the recorder:
+
+```json
+"recorder": { "keys": "keys/recorder.jwk", "name": "The recorder of the files executor", "sealEvery": 3600000 }
+```
+
+- `keys`: the recorder's key file. `provared-mcp-executor keys` makes it
+  where there is none, as it makes the other key files, and says on its
+  standard error the fingerprint of the key set. A person who checks a
+  book names that fingerprint as the recorder they expect (the checker's
+  `--sealer`); `check` and `status` show it too. The file may not be the
+  executor's key file or an agent's.
+- `name`: a label on each seal; the executor's `name` unless given.
+- `sealEvery`: see "On a timer". Left out, there is no timer.
+
+Without `recorder` the executor seals nothing, and `check` says so. Where
+the settings name a recorder, the executor expects every seal in a book to
+be that recorder's: on a book sealed with other keys it does not start,
+because the book does not pass its check.
+
+**`seal`** seals one book now. The executor asks the library for a seal
+over the book as it stands, naming the seal before it where there is one,
+and adds it to the book through the stub writer, which takes it only if
+the whole book still passes its check with it. Nothing is sealed while a
+call of that agent waits to be acknowledged, or where the book file is no
+longer as the executor left it. A seal waits its turn behind a tool call
+of the same agent that is in progress, and that agent's next call waits
+for the seal: on the computer this was built on, a seal took just under
+two seconds to sign and added about 52 KB to the book.
+
+Over HTTP, `seal --agent <name>` asks the running executor
+(`POST /provared/seal`, with the body `{"agent": "<name>"}`). Over stdio
+there is no address at which a running executor could be asked, so `seal`
+and `acknowledge` take `--offline` only. `--offline`, with either kind of
+settings, opens the files itself, for an executor that is not running, and
+needs no secret: whoever can write those files can do as much. Never use
+it while an executor is running on the same files. The running executor
+would find, at its next call, that the book file or its copy is not as it
+left it, take no more calls, and have to be started again.
+
+**On a timer.** With `recorder.sealEvery`, a whole number of milliseconds
+from 1,000 to 604,800,000 (seven days), the executor seals while it runs,
+over stdio and over HTTP. When it starts (over stdio, when the client
+starts it; over HTTP, when it begins to listen), a book that holds an
+entry after its last seal is sealed if that seal is at least `sealEvery`
+old by the executor's clock, or if the book holds no seal. After that,
+every `sealEvery` milliseconds, a book that holds an entry after its last
+seal is sealed. A book whose last entry is its last seal is left as it is,
+so an idle executor writes no seal over a seal. A seal that could not be
+written is noted in the log (`not-sealed`) and tried again at the next
+round. Over stdio the executor runs only while the client keeps it
+running: where a session is shorter than `sealEvery`, the entries written
+since the last seal have no seal until a later start writes one.
+
+**The executor's own addresses, over HTTP.** `GET /provared/status`,
+`POST /provared/seal` and `POST /provared/acknowledge` are for the
+administrator, who signs in with a secret of their own in one header,
+`Authorization: Bearer <secret>`. The settings hold its hash, as
+`"admin": {"secretHash": "<hash>"}`; `provared-mcp-executor secret` makes
+a secret and its hash. Without `admin` these addresses answer nothing
+(404), and `check` says so. An agent's secret is refused there (401); the
+administrator's secret is refused at the MCP endpoint; and settings in
+which an agent's hash is the administrator's are refused. A request that
+names an `Origin` (a web page's) is refused (403) whatever
+`allowedOrigins` says; a body over 64 KiB is refused (413); and the MCP
+endpoint (`path`) may not be `/provared` or under it. The commands read
+the secret from the environment variable
+`PROVARED_MCP_EXECUTOR_ADMIN_SECRET` and ask at `listen.host` and
+`listen.port`.
+
+**`status`**, asked of a running HTTP executor, gives the recorder's name,
+the fingerprint of its key set and the timer, and for each agent: the
+fingerprint of the permission in force, the number of entries and bytes in
+the book, the last seal (its entry, its fingerprint and its time), whether
+the book as it stands passes its check (`sound`) and is within its
+permissions (`withinSlips`), why the agent takes no call (`stopped`, or
+null), the calls waiting to be acknowledged (`receiptsMissing`) and the
+number of tool calls in progress or waiting their turn (`waiting`). While
+one of the agent's calls is with the upstream, the stub writer gives no
+check, so the check shown is the last one, with `checkedNow: false` and
+its time in `checkedAt`.
+
+Over stdio, and over HTTP with `--offline`, `status` reads the files
+instead, and writes nothing (`"from": "files"`). It gives the book file's
+entries and bytes, its last seal, whether it passes its check, the calls
+waiting to be acknowledged, and the number of calls that the next start
+will give a late receipt (`receiptsAtNextStart`). It cannot show what a
+running executor holds only in memory: whether it has stopped, or the
+calls in progress. Where the files cannot be opened as a start would open
+them, it gives the reason in `problem`.
+
+### A call sent under a permission no longer in force
+
+A call the executor was sending when it stopped is given its receipt at
+the next start, as "What the executor does with each call" says, where the
+permission in force is still the one the call was sent under. Where a new
+permission has been put in place since, the executor does not write that
+receipt by itself. The call waits for the administrator:
+
+- Over stdio the executor does not start while a call waits, and names
+  the command to run.
+- Over HTTP it starts. That agent's tool calls are refused (error 1001,
+  with the reason) until no call waits; the other agents' calls are
+  taken; the log says `receipt-missing`.
+
+`status` lists each waiting call under `receiptsMissing`: its `call`
+identifier, when it was sent, the permission it was sent under, its tool
+and its action, whether the copy holds its outcome (`outcomeKnown`), and,
+where no receipt can be written from its line, why (`usable: false`, with
+`problem`).
+
+`acknowledge` writes a receipt for each waiting call that can have one,
+from the call's line in the copy. A stub writer for the permission the
+call was sent under is opened on the book as it stands and writes the
+receipt, dated when the call was sent; the executor countersigns it,
+dated at the acknowledgement; and the agent's own writer takes the line
+into the book only if the book still passes its check with it. So the
+receipt names the permission the call was sent under, not the new one.
+It names what the copy holds of the outcome (the
+result's or the error's fingerprint, where the receipt had been made and
+the book could not be written), or else `provared.error` with the words
+"The executor stopped while this call was with the tool server, so its
+outcome is not known. The administrator acknowledged the call, and the
+receipt was then written from the executor's own copy of what it had
+sent." It also names `executor.written-late`, with the fingerprint of a
+second fixed text that says the receipt was written on acknowledgement.
+
+A receipt can be written from a line only if all of this holds; otherwise
+the call can only be set aside:
+
+- the line holds only what the executor writes before a call is sent, and
+  its documents are the ones the executor names, none twice, with the
+  tool's and the call's fingerprints matching the tool and the call the
+  line names;
+- the book holds the permission the call was sent under, and that
+  permission names the agent's keys and, in `with`, the executor's keys
+  as the executor holds them now;
+- its time is not after this start of the executor (where the clock is
+  behind, put it right and start again);
+- its service id is the one the settings give the executor now;
+- its amount is a unit and a whole number from 0 up, in the unit its rule
+  gives. Where no rule names the tool with that action any more, the line
+  can still be acknowledged, and the status shows a warning.
+
+A line of the copy whose tag does not check is never acted on: the
+executor does not start on a copy with such a line. The library makes its
+own checks when the receipt is written: a receipt with which the book
+would not pass its check (one dated before the receipt ahead of it, say)
+is not written, the command says why, and the call stays waiting. A call
+leaves the list once the line saying so is in the copy, and before each
+receipt is written the book is looked at again for a receipt that names
+the call, so trying again after a failure writes no receipt twice.
+
+**A call set aside gets no receipt** (`--set-aside`, with the `call`
+identifiers the status gives, separated by commas; over HTTP,
+`"setAside": [...]` in the body). The copy and the log say so. **Setting
+aside a call that was sent leaves it with no receipt**: the book then does
+not show it, and `compare` reports it from then on. It stays set aside: a
+later line for the same call is not taken up again. The agent takes calls
+again once no call waits.
+
 ## What it does not do, and what it does not prove
 
 - **Calls that do not go through it.** It proves nothing about them. Take
@@ -784,12 +996,33 @@ did what its result says, or a copy changed by whoever holds the copy key.
 - **Retries.** Each `tools/call` is one receipt, including each retry of a
   call that asked for more input (`resultType: "input_required"`), and
   each counts against totals and counts.
-- **Time.** Times are the executor's clock. No seal and no outside
-  time-stamp is written yet.
+- **Time.** Times are the executor's clock: a receipt's, a
+  countersignature's and a seal's. No outside time-stamp is put beside a
+  seal in this version, so a seal's time is the recorder's own word, and
+  nothing outside the executor shows when a book was sealed.
+- **What a seal shows.** That the recorder's keys signed the book as it
+  stood, so a later change to an entry before the seal no longer passes
+  the check. The recorder's sealing keys are in a file on the executor in
+  this version, beside the agent's keys and the executor's own: whoever
+  can read the executor's files can write a book of their own and seal
+  it. A central sealer away from the executor, seals held elsewhere and
+  witnesses are not built here. A book cut back to an earlier seal still
+  passes its check by itself.
+- **Sealing is off unless the settings name a recorder**, and there is no
+  timer unless they give `sealEvery`. Over stdio a book is sealed only
+  while the client runs the executor, or by `seal --offline` while it
+  does not.
+- **`--offline` beside a running executor.** `seal --offline` and
+  `acknowledge --offline` do not look for a running executor. Used beside
+  one, they leave it unable to write on (it stops at its next call), and
+  where both write at the same moment the book file can be left not
+  passing its check.
+- **A call set aside has no receipt**, and the book does not show it;
+  only the executor's copy and its log do.
 - **One server.** One executor stands in front of one tool server: on
   stdio for one agent, over HTTP for several, each with its own slip and
-  book. Sealing, an `acknowledge` command, shipping the copy elsewhere and
-  keys held in a key service are designed in `DESIGN.md` and not built.
+  book. Shipping the copy elsewhere and keys held in a key service are
+  designed in `DESIGN.md` and not built.
 - **Over HTTP, the agents' secrets** travel in the clear unless something
   else encrypts the connection; the executor listens on the local address
   by default. A session id the upstream gives is bound to the agent that

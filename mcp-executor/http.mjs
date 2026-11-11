@@ -16,12 +16,17 @@
 // file only carries messages. A tools/call is checked before anything goes
 // to the upstream; every other message passes through, the answer to a
 // tools/list filtered as on stdio.
+//
+// Beside the MCP endpoint the executor has three addresses of its own, as
+// the gateway has, for the administrator alone, who signs in with a secret
+// no agent holds: GET /provared/status, POST /provared/seal and POST
+// /provared/acknowledge. Nothing sent to them reaches the upstream.
 
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import http from 'node:http';
 import https from 'node:https';
 import { unfinished } from './copy.mjs';
-import { EXECUTOR_STOPPED, NOT_FOR_KEYS, SHARED_KEYS, SHORT_NAME, UNLISTED_FORWARD_WARNING, callCore, describeContentRules, describeRecorder, describeSlip, describeTools, filteredList, isObject, isPlaceholder, missingFiles, openAgent, pathFrom, placeholderProblems, prepareAgent, prepareShared, readAgentPaths, readCredentialFile, readIdentity, readKnobs, readRecorderSettings, readToolRules, reportFromFiles, sealTimer, serverIds } from './executor.mjs';
+import { EXECUTOR_STOPPED, NOT_FOR_KEYS, NO_RECORDER_WARNING, SHARED_KEYS, SHORT_NAME, UNLISTED_FORWARD_WARNING, callCore, describeContentRules, describeRecorder, describeSlip, describeTools, filteredList, isObject, isPlaceholder, missingFiles, openAgent, pathFrom, placeholderProblems, prepareAgent, prepareShared, readAgentPaths, readCredentialFile, readIdentity, readKnobs, readRecorderSettings, readToolRules, reportFromFiles, sealTimer, serverIds } from './executor.mjs';
 import { CODES, MAX_LINE_BYTES, idKey, isId, readMessage, responseText, spliceId, topLevelId, unsafeInteger } from './jsonrpc.mjs';
 
 /** The most a POST body may be, unless the settings say otherwise: 10 MiB, as the gateway takes. */
@@ -235,6 +240,7 @@ export async function checkHttpConfig(config, root) {
       warnings.push(...p.warnings.map((w) => `agents.${name}: ${w}`));
       agents[name] = { slip: describeSlip(p.about), contentRules: describeContentRules(settings, shared.content, p.about), unfinished: unfinished(p.read).length };
     }
+    if (!shared.sealer) warnings.push(NO_RECORDER_WARNING);
     if (!settings.admin) warnings.push('admin: no administrator\'s secret is named, so GET /provared/status, POST /provared/seal and POST /provared/acknowledge answer nothing; "seal", "acknowledge" and "status" then work only with --offline, on a stopped executor.');
     return { problems: [], warnings, tools, upstream: settings.upstream.url, credential: settings.upstream.credential !== null, listen: settings.listen, path: settings.path, agents, recorder: describeRecorder(settings, shared.sealer), admin: settings.admin !== null };
   } catch (e) {

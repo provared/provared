@@ -564,6 +564,9 @@ async function prepare(config, root, { now = Date.now, readOnly = false, offline
   return { settings, warnings, agent, agentKeys: agent.agentKeys, executorKeys: shared.executorKeys, about: agent.about, env, credentialNames, read: agent.read, content: shared.content, sealer: shared.sealer };
 }
 
+/** What "check" says where the settings name no recorder. */
+export const NO_RECORDER_WARNING = 'recorder: none is named, so the executor cannot seal its books. To seal, name its key file ("recorder": {"keys": "keys/recorder.jwk"}) and run "provared-mcp-executor keys".';
+
 /** The recorder, as "check" and "status" show it: its name, the fingerprint of its key set (what a person checking names as the recorder they expect) and the timer. Null where the settings name none. */
 export function describeRecorder(settings, sealer) {
   return sealer ? { name: sealer.name, fingerprint: sealer.fingerprint, sealEvery: settings.recorder.sealEvery } : null;
@@ -607,6 +610,7 @@ export async function checkConfig(config, root) {
   if (problems.length) return { problems, warnings, tools };
   try {
     const p = await prepare(config, root, { readOnly: true });
+    if (!p.sealer) p.warnings.push(NO_RECORDER_WARNING);
     return { problems: [], warnings: p.warnings, tools, program: p.settings.server.resolved, slip: describeSlip(p.about, p.content), credentials: p.credentialNames, contentRules: describeContentRules(p.settings, p.content, p.about), unfinished: unfinished(p.read).length, recorder: describeRecorder(p.settings, p.sealer) };
   } catch (e) {
     return { problems: [e.message], warnings, tools };

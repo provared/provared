@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 
 const { checkBook, identifierFingerprint, argumentsFingerprint, keySetFingerprint } = await import('provared');
 const { world, openWorld, signSlip, until, pause } = await import('./world.mjs');
-const { CALL_DOCUMENT, TOOL_DOCUMENT, RESULT_DOCUMENT, WRITTEN_LATE_DOCUMENT, OUTCOME_UNKNOWN_ACKNOWLEDGED, WRITTEN_ON_ACKNOWLEDGEMENT, openExecutor, readSettings, statusFromFiles } = await import('../executor.mjs');
+const { CALL_DOCUMENT, TOOL_DOCUMENT, RESULT_DOCUMENT, WRITTEN_LATE_DOCUMENT, OUTCOME_UNKNOWN_ACKNOWLEDGED, WRITTEN_ON_ACKNOWLEDGEMENT, checkConfig, openExecutor, readSettings, statusFromFiles } = await import('../executor.mjs');
 const { readCopy, loadCopyKey, openCopy } = await import('../copy.mjs');
 const { compareCopyWithBook } = await import('../compare.mjs');
 const { makeKeyFile } = await import('../files.mjs');
@@ -130,6 +130,10 @@ test('seal: without a recorder in the settings nothing is sealed; a settings fil
   await assert.rejects(async () => ex.seal(), /name no recorder/);
   assert.equal(ex.recorder, null);
   assert.ok(!bookText(w).includes('"seal"'));
+  const report = await checkConfig(w.settings, w.folder);
+  assert.deepEqual(report.problems, []);
+  assert.equal(report.recorder, null);
+  assert.ok(report.warnings.some((x) => /^recorder: none is named, so the executor cannot seal/.test(x)));
   for (const [recorder, words] of [
     [{}, /recorder\.keys/],
     [{ keys: 'r.jwk', sealEvery: 999 }, /recorder\.sealEvery/],

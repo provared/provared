@@ -222,8 +222,9 @@ first), `done` (once the stub is in the book, with the stub's and the
 countersignature's fingerprints and the documents added after the call;
 or, where the book could not be written, with those documents and no
 stub, so that the call stays unfinished), `refused` (with the reason, the
-codes and the denial's fingerprint) and `withdrawn` (cancelled before it
-was sent). Each line carries its number from 0 and HMAC-SHA-256 (RFC 2104)
+codes and the denial's fingerprint), `withdrawn` (cancelled before it
+was sent) and `set-aside` (a call that was sent and has no receipt, which
+the administrator set aside; X130). Each line carries its number from 0 and HMAC-SHA-256 (RFC 2104)
 of its text and the executor's name under the copy key, so that a line
 added or changed by someone without the key does not check, and a line
 taken out, put twice or moved is seen by the numbers. A copy cut at its
@@ -249,7 +250,8 @@ executor in `with` and the same `executor.call` fingerprint.
 | differs | the book holds a receipt for the call, but not the one the executor wrote |
 | missing | the executor sent the call and wrote its receipt, and the book has no receipt for it: whoever keeps the book left it out, or the book is older than the copy |
 | not written | the executor sent the call and could not write its receipt to the book (its own stop): told apart from an omission by the book's keeper; the next start of the executor writes it |
-| unfinished | the executor sent the call and stopped before the receipt; the next start writes it |
+| unfinished | the executor sent the call and stopped before the receipt; the next start writes it, or, where the permission has changed since, the administrator acknowledges it |
+| set aside | the executor sent the call, and the administrator set it aside: it has no receipt, and the copy and the book do not agree (X130) |
 | not in the copy | a receipt in the book names the executor, and the executor's copy does not know it: not written by this executor (its countersignature state says whether it was forged, which cannot succeed without the executor's keys, or left one-sided) |
 | denial missing | the executor wrote a denial that the book lacks |
 
@@ -274,13 +276,16 @@ itself has a problem.
   result's or the error's fingerprint where a `done` line without a stub
   holds it (the receipt was made and the book could not be written), or
   else naming `provared.error` with a fixed text saying the outcome is not
-  known. Where that permission is no longer the one in force, the executor
-  does not start and says what to do (put the old permission back for one
-  start). Such a receipt names `executor.written-late`, so that the book
+  known. Such a receipt names `executor.written-late`, so that the book
   itself says so: its `when` is the time the call was sent, and its
   countersignature is dated at the restart, so a reader sees both times.
-  The founder has kept this automatic late receipt (F-158). An
-  acknowledgement command, as the gateway has, is stage 2.
+  The founder has kept this automatic late receipt (F-158).
+- **The same, where the permission has changed since.** The executor
+  writes no receipt by itself under a permission that is no longer the
+  one in force: the call waits for the administrator, who acknowledges it
+  or sets it aside (`acknowledge`; section 12, X127 to X131). Over stdio
+  the executor does not start while a call waits; over HTTP it starts, and
+  that agent's calls are refused until none waits.
 - **The copy cannot be read** (its key missing with lines present; no line
   checks; a line cut by a stop): the executor does not start.
 - **The server ends.** The call in flight gets its receipt with
@@ -316,8 +321,13 @@ itself has a problem.
   that starts it. A credential read from that environment (`env`), or a
   program found through that `PATH`, is only as safe as the client; the
   settings can name the program by its path and the folders to look in.
-- The clocks: times in receipts are the executor's; a countersignature is
-  by the same clock. Seals and outside time-stamps are stage 2.
+- The clocks: times in receipts are the executor's; a countersignature
+  and a seal are by the same clock. No outside time-stamp is put beside a
+  seal (X135).
+- The recorder's sealing keys are in a file on the executor, beside the
+  agent's keys and the executor's own. Whoever can read the executor's
+  files can seal a book of their own making; a central sealer, seals held
+  elsewhere and witnesses are later steps (X134).
 - One tool call at a time: a long call delays the next.
 - A response from the server that is not a message (not JSON, not UTF-8,
   a batch or any line that is not one object, or `id` twice at the top
@@ -573,13 +583,39 @@ name the path is given, and which other tools reach the same file.
 ## 12. Stage 2 and later
 
 Built so far of stage 2: the rules on the content of a change (section
-11), and the HTTP transport with several agents on one executor (section
-10). Still to build:
+11); the HTTP transport with several agents on one executor (section
+10); and, in 0.5.0, sealing a book by command and on a timer,
+acknowledging a call sent under a permission no longer in force, and the
+status (below; X120 to X137).
 
-- An `acknowledge` command for a call sent under a permission no longer in
-  force, as the gateway has.
-- Sealing the book on a timer or by command, with the recorder's three
-  keys; seals held elsewhere and witnesses (library 0.6.0).
+**Sealing.** The settings name a recorder (`recorder`: its key file, a
+name, and `sealEvery`). A seal is the library's (format description,
+section 21.1), signed with the recorder's three keys, and goes into the
+book through the stub writer's `add`, in the agent's turn, so that it
+covers the book as it is and is added only if the whole book still passes
+its check with it. By command: `seal` asks the running HTTP executor
+(`POST /provared/seal`, the administrator's secret), or opens the files
+with `--offline`. On a timer, on both transports: at a start, and then
+every `sealEvery` milliseconds, a book that holds an entry after its last
+seal is sealed (at a start, only where that seal is at least `sealEvery`
+old, or there is none). `sealing.mjs` holds everything that touches the
+recorder's private keys.
+
+**Acknowledging.** A call the copy shows as sent, with no receipt in the
+book, under another permission than the one in force, waits for the
+administrator. `acknowledge` writes its receipt from the copy's line,
+through a stub writer opened for the permission it was sent under, or
+sets it aside (a `set-aside` line in the copy; no receipt).
+
+**Status.** `GET /provared/status` of a running HTTP executor, or the
+files read without writing: the last seal, whether the book as it stands
+passes its check, and the calls waiting to be acknowledged.
+
+Still to build:
+
+- An outside time-stamp beside a seal; seals held elsewhere and witnesses
+  (library 0.6.0); a central sealer that holds the recorder's keys away
+  from the executor (`sealer/`; X134 says where it fits).
 - The copy shipped line by line to a place the executor's operator cannot
   change (a sealer, a witness, an append-only store).
 - Content read in other forms than JSON (YAML, TOML, `key = value`
@@ -1757,3 +1793,194 @@ only until then. Why: a review showed an authenticated POST that stopped
 sending staying open for ever and holding a slot. `timeout` again rather
 than a knob of its own (as X113). The other way: Node's `requestTimeout`,
 which does not tell a body from a stream.
+
+**X120. The recorder is named in the settings as the gateway names it:
+`recorder.keys`, a file of three keys (Ed25519, ML-DSA-87,
+SLH-DSA-SHA2-256s), and `recorder.name`.** The name is a label on each
+seal and is the executor's `name` unless given. There is no `signers`
+module here, as there is none for the executor's other keys: keys held in
+a key service are a later step for all of them (section 12). Why: one
+shape for the same thing in both programs. The other way: a fixed default
+name, as the gateway's "Provared gateway", which would give every
+executor's seals the same label.
+
+**X121. `keys` makes the recorder's key file with the others, and prints
+the fingerprint of its key set on the standard error, not in the JSON.**
+The gateway has `keys --recorder`; here one run of `keys` makes every key
+file the settings name. What `keys` prints on its standard output is what
+goes into a permission, and the recorder's keys go into none; over HTTP
+the members of that JSON are the agents' names, so a member `recorder`
+could be read as an agent. The fingerprint is what a reader names as the
+recorder they expect; `check` and `status` give it too. The recorder's
+file may not be the executor's or an agent's. The other way: a
+`--recorder` flag, and a second run.
+
+**X122. Where the settings name a recorder, every check the executor
+makes of a book names that recorder as the one expected (`sealKeys`), as
+the gateway does.** A seal signed with other keys is then a problem
+(`sealer-not-expected`), and the executor does not start on such a book.
+Where the settings name none, a seal in the book is checked and its keys
+are compared with nothing, as the format description allows. `compare`
+does the same where the recorder's key file is there to be read. The
+other way: never name the recorder, which would let anyone who can write
+the book file add a seal of their own that the executor then builds on.
+
+**X123. A seal is added in the agent's turn, through the stub writer's
+`add`, and by no check of the executor's own.** The library's `add` takes
+an entry only if the whole book still passes its check with it; a second
+check here could not be shown to matter by any test. Before a seal is
+asked for, the agent must not be stopped (no seal while a call waits to
+be acknowledged, as the gateway) and the book file must be as the
+executor left it, which is the check made before a call is sent (section
+8). A seal waits behind a call in progress and holds up the next: about
+two seconds, most of it the SLH-DSA signature.
+
+**X124. Over stdio there is no administrator's address: `seal` and
+`acknowledge` take `--offline` only, and `status` reads the files.** The
+stdio executor is started by the agent's client and speaks on its
+standard streams alone. An address to ask it at would be a listener and a
+secret that stage 1 does not have, on a computer the agent's client
+controls. So the gateway's `--offline` is the only way by command, the
+timer (X125) is the way while it runs, and the executor does not start
+with a call waiting (X127), so that `acknowledge --offline` never runs
+beside it. `status` writes nothing and may be run at any time. The other
+way: a local socket or named pipe for the administrator.
+
+**X125. The timer: `recorder.sealEvery`, in milliseconds as the other
+times in the settings, from 1,000 to 604,800,000 (seven days); off unless
+given.** Two rules. At a start, a book that holds an entry after its last
+seal is sealed where that seal is at least `sealEvery` old, or there is
+none. Then, every `sealEvery` milliseconds after the round before has
+ended, a book that holds an entry after its last seal is sealed. Why the
+first rule: over stdio the executor lives only as long as the client's
+session, and a session shorter than `sealEvery` would never be sealed by
+a clock that starts again with each session. Why never a seal over a
+seal: a seal is about 52 KB, and an idle executor would otherwise grow
+its books for nothing. The gateway has no timer and leaves it to the
+system's scheduler; a stdio executor cannot be sealed from outside while
+it runs (X124), so the timer is in the program. The timer does not keep
+the program running, and is stopped when the executor ends. The other
+way: a fixed time of day.
+
+**X126. The executor's own addresses over HTTP are the gateway's, with
+four rules added.** `GET /provared/status`, `POST /provared/seal` and
+`POST /provared/acknowledge`, under the administrator's secret, kept as
+its SHA-256 in `admin.secretHash` and compared in constant time; without
+`admin` they answer 404; answers are JSON in the gateway's form
+(`{"taken": false, "code", "message"}` for a refusal; 401, 400, 409 as
+there). Added, because this executor listens for agents on the same
+port: a request that names an `Origin` is refused whatever
+`allowedOrigins` says (the administrator is never a web page); a body is
+64 KiB at most; `path` may not be `/provared` or under it; and
+`admin.secretHash` may not be an agent's, so that no agent is the
+administrator. The commands read the secret from
+`PROVARED_MCP_EXECUTOR_ADMIN_SECRET`, named after the program as the
+gateway's variable is. The other way: a second port for the
+administrator.
+
+**X127. A call sent under a permission no longer in force waits for the
+administrator; the automatic late receipt stays for a call sent under the
+permission in force (F-158).** Until 0.5.0 the executor did not start and
+asked for the old permission to be put back for one start. Now: over
+HTTP it starts and that agent's calls are refused (1001) until none
+waits, as the gateway stops one agent; over stdio it does not start
+(X124) and names `acknowledge --offline`. Why not write the receipt
+automatically under the old permission: a new permission in place means
+a person decided something between the two starts, and a receipt under
+the permission they replaced is theirs to allow.
+
+**X128. The acknowledged receipt.** As the gateway's: a stub writer for
+the permission the call was sent under is opened on the book as it stands
+and writes the stub, dated when the call was sent; the agent's own writer
+takes the line only if the book still passes its check with it. As this
+executor's late receipt: `with` is the executor, it is countersigned with
+the executor's keys (dated at the acknowledgement), and it names the
+outcome the copy holds, or `provared.error` with a fixed text
+(`OUTCOME_UNKNOWN_ACKNOWLEDGED`). It names `executor.written-late` with
+the fingerprint of a second fixed text (`WRITTEN_ON_ACKNOWLEDGEMENT`).
+Why the same label with another text: both are receipts written late from
+the copy, so a reader who looks for the label finds both, and the
+fingerprint says which of the two it is. Both are labels, not reserved
+names. The other way: a label of its own, `executor.acknowledged`.
+
+**X129. Which lines can have a receipt.** The gateway's rules, read for
+the copy: the line holds only the members and documents the executor
+writes before a call is sent, none twice, with the tool's and the call's
+fingerprints matching; it names a permission the book holds; its time is
+not after this start; its amount fits its rule's unit, or, where the rule
+has gone, is of the right form, with a warning. Three differences. (1) A
+line whose tag does not check never reaches the list: the executor does
+not start on a copy with such a line (section 8), where the gateway
+starts and names the line `line-<16 characters>` to be set aside. (2) The
+permission must name the agent's keys and, in `with`, the executor's keys
+as the executor holds them now, checked before anything is signed: under
+other executor keys the countersignature would not check, and the
+receipt would read as one the executor never saw. The other way: write
+it one-sided, as a call that was sent always gets its receipt (section
+5). (3) The library's own checks of a request's fields are left to the
+moment the receipt is written: the checks above are at least as strict,
+so no test could show a second check mattering; a receipt the library
+refuses (one dated before the receipt ahead of it) is not written, and
+the call stays waiting.
+
+**X130. A call set aside is a line in the copy (`set-aside`), not a file
+apart, and `compare` does not agree from then on.** The gateway keeps a
+file beside its journal because a clean start empties the journal; the
+copy is never emptied, and its numbered, tagged lines already hold. A
+later `sending` line for the same call is not taken up again. `compare`
+lists the call under `setAside` and ends with code 1: the executor sent a
+call the book does not show, which is what `compare` is for, whoever
+decided it. The other way: count a call set aside as settled, which
+would make setting aside a way to quiet `compare`.
+
+**X131. Never two receipts for one call.** At a start, a call whose
+receipt the book holds is finished, whatever the copy says (as before).
+On acknowledgement, the book is looked at again before each receipt is
+written, so a receipt that reached the book while its line did not reach
+the copy is found, not written twice.
+
+**X132. One program writes a copy at a time.** Before each line, the
+copy file must be the size this program left it; else nothing more is
+written. Why: `acknowledge --offline` is the first thing that writes a
+copy from a second program, and a running executor that wrote on after
+it would give a line a number already used, after which no start takes
+the copy. The other way: a lock file, which a stopped program leaves
+behind.
+
+**X133. What the status holds is the gateway's, by name**: `slip`,
+`entries`, `bytes`, `lastSeal`, `sound`, `withinSlips`, `checkedAt`,
+`checkedNow`, `stopped`, `receiptsMissing`, `waiting`, `fileHoldsBook`,
+with the seal's time added to `lastSeal`. Read from the files it is
+marked `"from": "files"`, has `slipInBook` and `receiptsAtNextStart`, and
+leaves out what only a running executor knows. In a program the method is
+`report()` on both transports, since the stdio executor already had a
+`status()` that counts its requests.
+
+**X134. Where a central sealer fits.** `sealing.mjs` gives the executor a
+sealer: an object with `fingerprint`, `name` and `seal(book, {previous,
+when})`, which hands back the seal record. It is the only code that reads
+the recorder's private keys. A later step puts in its place an object
+with the same `seal` that asks the central sealer in `sealer/`, which
+holds the keys elsewhere. The one place where every new line reaches a
+book file is `save()` in `openAgent` (`executor.mjs`), for a call, a late
+or acknowledged receipt, a denial and a seal alike: that is where each
+new line's leaf fingerprint would be sent as it is written. A book looks
+the same either way: the format description (section 21.7) says a seal
+made from fingerprints is the same record. Nothing of this is built.
+
+**X135. No outside time-stamp is written.** A seal's time is the
+recorder's own word. The README says so under its limits, as the
+gateway's does.
+
+**X136. The example settings name no recorder and no administrator.**
+`init`, `keys` and `check` on the examples do what they did in 0.4.1;
+`check` warns that the executor cannot seal, and over HTTP that its own
+addresses answer nothing, and says what to add. The other way: name both
+in the examples, which adds a key file and a secret to the first five
+minutes.
+
+**X137. `--offline` does not look for a running executor**, as the
+gateway's does not. The README says never to use it beside one, and what
+happens if it is: the running executor stops at its next call (the book
+file, X123; the copy, X132). The other way: try the settings' address
+first, which would say nothing of a stdio executor.

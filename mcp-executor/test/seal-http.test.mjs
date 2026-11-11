@@ -14,7 +14,7 @@ const { checkBook, identifierFingerprint, argumentsFingerprint, keySetFingerprin
 const { httpWorld, openHttpWorld, call, rawRequest } = await import('./http-world.mjs');
 const { signSlip, until, pause } = await import('./world.mjs');
 const { CALL_DOCUMENT, TOOL_DOCUMENT, WRITTEN_LATE_DOCUMENT, WRITTEN_ON_ACKNOWLEDGEMENT } = await import('../executor.mjs');
-const { ADMIN_BODY_LIMIT, newSecret, openHttpExecutor, readHttpSettings, secretHash, httpStatusFromFiles } = await import('../http.mjs');
+const { ADMIN_BODY_LIMIT, checkHttpConfig, newSecret, openHttpExecutor, readHttpSettings, secretHash, httpStatusFromFiles } = await import('../http.mjs');
 const { readCopy, loadCopyKey, openCopy } = await import('../copy.mjs');
 const { makeKeyFile } = await import('../files.mjs');
 
@@ -92,6 +92,11 @@ test('the executor\'s own addresses are for the administrator alone: no secret i
   } finally {
     await plain.close();
   }
+  // "check" says that such an executor cannot seal, and that its own addresses answer nothing.
+  const report = await checkHttpConfig(plain.settings, plain.folder);
+  assert.deepEqual(report.problems, []);
+  assert.deepEqual([report.recorder, report.admin], [null, false]);
+  assert.ok(report.warnings.some((x) => /^recorder: none is named/.test(x)) && report.warnings.some((x) => /^admin: no administrator's secret is named/.test(x)), report.warnings.join(' | '));
   const w = await adminWorld({ config: { allowedOrigins: ['http://localhost:3000'] } });
   try {
     await call(w, 'alpha', 'echo', {});
