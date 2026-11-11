@@ -72,7 +72,8 @@ To see it work first, with no passkey and no settings,
 `provared-mcp-executor demo` (from version 0.4.0) runs the guard in front
 of a made-up tool server in a new temporary folder, lets one call through,
 refuses one and checks the book, under a permission signed by a
-development stand-in whose records prove nothing about anyone; then
+development stand-in, not a person, so its records prove nothing about
+anyone; then
 `provared-mcp-executor init` copies the example settings into the current
 folder. The guard is listed in the
 official MCP Registry as `io.github.provared/mcp-executor`. "Executor"

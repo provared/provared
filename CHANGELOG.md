@@ -45,8 +45,8 @@
     executor's key file and then stopped on a missing rules file. A write
     can still fail after these checks (a full disk, a folder it may not
     write in), and leave the files written before it. It no longer needs the
-    passkey's thumbprint or the agents' secret hashes, which are known only
-    after it has run. It prints the same JSON as before, and one line on
+    passkey's thumbprint, which is known only once the person has signed,
+    or the agents' secret hashes, which it does not use. It prints the same JSON as before, and one line on
     the standard error saying what to do with it; `--out <file>` writes the
     JSON to a new file instead, making its folder where needed, as it makes
     the key folders.

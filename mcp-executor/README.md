@@ -31,6 +31,9 @@ provared-mcp-executor check --config executor.json
 `<like this>` but the passkey's thumbprint, then make the keys; a person
 signs the permission with a passkey, and its thumbprint goes in last;
 `check` lists every problem left. "Set it up" below gives each step.
+The executor holds the tool server's credential in place of the agent,
+and keeps it from the agent only if the agent cannot read the
+executor's files: see "What it is".
 
 ## What it is
 
