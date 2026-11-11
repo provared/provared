@@ -19,12 +19,15 @@ demonstration writes proves anything about anyone. It writes nothing
 outside that folder.
 
 `provared-mcp-executor demo --stdio` is for trying the executor from an MCP
-client or a directory's inspector. It makes the same folder, settings and
-stand-in permission (valid for one hour), then runs the executor over
-stdio in front of the made-up server, with its two tools `echo` and `add`,
-until its input closes. Its standard output carries MCP messages only; on
-its standard error it says, in one line, that this is a demonstration whose
-records prove nothing about anyone, and where the book is.
+client or a directory's inspector. Each start makes a new temporary
+folder, as `demo` does, and leaves it in place; in it go the settings and
+a stand-in permission valid for one hour, after which every call is
+refused until it is started again. It then runs the executor over stdio
+in front of the made-up server, with its two tools `echo` and `add`, until
+its input closes. Its standard output carries MCP messages only; on its
+standard error it says, in one line, that this is a demonstration whose
+records prove nothing about anyone, when the permission ends, and where
+the book is.
 
 For real use, in a folder of your own:
 

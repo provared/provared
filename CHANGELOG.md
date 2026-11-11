@@ -15,8 +15,9 @@
     which `stdio` now uses too), until its input closes. Its standard
     output carries MCP messages only. On its standard error it says, in
     one line, that this is a demonstration under a development stand-in
-    whose records prove nothing about anyone, and where the book is; the
-    executor's own JSON lines follow. It writes nothing outside that
+    whose records prove nothing about anyone, when its permission ends
+    (after which every call is refused until it is started again), and
+    where the book is; the executor's own JSON lines follow. It writes nothing outside that
     folder. `stdio` with settings of a person's own works as before.
   - **`demo` refuses any argument but `--stdio`**, and then writes
     nothing; 0.4.0 took no notice of one.
@@ -29,7 +30,8 @@
     "password" with the denial text, puts nothing but MCP messages on its
     standard output and one line for a person on its standard error,
     ends with code 0 when its input closes, and leaves a book that checks
-    clean in the folder it names; and `demo` with another argument is
+    clean (intact, fully checked, within the permission, no problem found)
+    in the folder it names; and `demo` with another argument is
     refused.
   - **The README** says what `demo --stdio` is for, under the paragraph
     on `demo`.

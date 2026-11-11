@@ -130,6 +130,7 @@ async function prepareDemo({ say = () => {}, step = () => {} } = {}) {
   if (keys.status !== 0) throw new Error(`"keys" failed: ${keys.stderr.trim()}`);
   const entries = JSON.parse(keys.stdout);
   const now = Date.now();
+  const validUntil = formatTime(now + 3600 * 1000);
   const prepared = await prepareSlip({
     issuer: { name: `Provared demonstration ${DEVELOPMENT_MARK}`, key: passkey.key, rpId: passkey.rpId, origin: passkey.origin },
     agent: { ...entries.agent, name: 'An agent, through the demonstration executor' },
@@ -139,7 +140,7 @@ async function prepareDemo({ say = () => {}, step = () => {} } = {}) {
     never: [],
     with: [entries.with],
     validFrom: formatTime(now - 60 * 1000),
-    validUntil: formatTime(now + 3600 * 1000),
+    validUntil,
     purpose: 'A demonstration of the Provared MCP executor in front of a made-up tool server. Signed by a development stand-in for a passkey, which no person signed: it proves nothing about anyone.',
   });
   writeFileSync(join(folder, 'slip.json'), `${JSON.stringify(assembleSlip(prepared, await passkey.sign(prepared.challenge)))}\n`);
@@ -154,7 +155,7 @@ async function prepareDemo({ say = () => {}, step = () => {} } = {}) {
   })();
   step(check.status === 0, `2. "check": ${check.status === 0 ? 'no problems' : 'problems'} in the settings, the keys, the permission and the credential.`);
   const problems = check.status === 0 ? null : (report?.problems?.join('\n') ?? check.stderr.trim());
-  return { folder, settingsPath, trusted, problems };
+  return { folder, settingsPath, trusted, problems, validUntil };
 }
 
 /**
@@ -165,10 +166,10 @@ async function prepareDemo({ say = () => {}, step = () => {} } = {}) {
  * the check found problems.
  */
 export async function prepareStdioDemo() {
-  const { folder, settingsPath, problems } = await prepareDemo();
+  const { folder, settingsPath, problems, validUntil } = await prepareDemo();
   if (problems) throw new Error(`The demonstration's settings did not pass "check", in ${folder}:\n${problems}`);
   const bookPath = join(folder, 'book.jsonl');
-  const notice = `DEMONSTRATION ONLY: the tools here are a made-up server's, behind the executor, under a permission signed by a development stand-in for a passkey, not by a person, so its records prove nothing about anyone. The book is ${bookPath}.`;
+  const notice = `DEMONSTRATION ONLY: the tools here are a made-up server's, behind the executor, under a permission signed by a development stand-in for a passkey, not by a person, so its records prove nothing about anyone. The permission ends at ${validUntil} (UTC); after that every call is refused; start it again. The book is ${bookPath}.`;
   return { settingsPath, bookPath, notice };
 }
 

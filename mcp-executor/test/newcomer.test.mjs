@@ -142,7 +142,7 @@ test('demo --stdio: as an MCP client starts it, it answers initialize and tools/
   const lines = said.trim().split('\n');
   const forPeople = lines.filter((l) => !l.startsWith('{'));
   assert.equal(forPeople.length, 1, said);
-  assert.match(forPeople[0], /^provared-mcp-executor: DEMONSTRATION ONLY: .*development stand-in for a passkey, not by a person, so its records prove nothing about anyone\. The book is .*book\.jsonl\.$/);
+  assert.match(forPeople[0], /^provared-mcp-executor: DEMONSTRATION ONLY: .*development stand-in for a passkey, not by a person, so its records prove nothing about anyone\. The permission ends at \d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?Z \(UTC\); after that every call is refused; start it again\. The book is .*book\.jsonl\.$/);
   assert.doesNotMatch(said, /ExperimentalWarning/);
 
   // Nothing in the folder it was run in; one new folder in the temporary folder, holding the book it named, which checks clean.
@@ -154,7 +154,9 @@ test('demo --stdio: as an MCP client starts it, it answers initialize and tools/
   const settings = JSON.parse(readFileSync(join(folder, 'executor.json'), 'utf8'));
   const result = await checkBook(readFileSync(join(folder, 'book.jsonl'), 'utf8'), { issuerKeys: settings.agent.issuerKeys });
   assert.equal(result.summary.intact, true);
+  assert.equal(result.summary.fullyChecked, true);
   assert.equal(result.summary.withinSlips, true);
+  assert.equal(result.summary.problemFound, false);
   assert.deepEqual(result.entries.map((e) => e.kind), ['slip', 'stub', 'denial']);
 });
 

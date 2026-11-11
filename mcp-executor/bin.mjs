@@ -35,7 +35,9 @@
 // executor's (with "server" and "agent") or the HTTP executor's (with
 // "upstream" and "agents"). "stdio" writes nothing to its standard output
 // but MCP messages; what it has to say goes to its standard error, one JSON
-// object to a line, as does "http".
+// object to a line, as does "http". "demo --stdio" first says one plain
+// line there: that it is a demonstration, when its permission ends, and
+// where the book is.
 //
 // Node.js's notice that its ML-DSA-87 signing is experimental is set aside
 // (quiet.mjs, imported first); every other warning is printed.
