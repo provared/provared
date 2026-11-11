@@ -1,14 +1,15 @@
 // The first minutes with the command: "demo" with no passkey and no
-// settings, "init", "check" listing every problem in one run, "keys"
+// settings, "demo --stdio" as an MCP client starts it, "init", "check" listing every problem in one run, "keys"
 // leaving the disk as it was when something it needs is wrong (and not
 // needing the passkey's thumbprint yet), the one warning set aside, and the
 // version in each place that carries it.
 
 import './local-library.mjs'; // first: "provared" is this repository's own library
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { createInterface } from 'node:readline';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
@@ -78,6 +79,94 @@ test('demo: with no passkey and no settings, one call is let through, one is ref
   assert.equal(result.entries[1].countersignature.state, 'valid');
   const slip = JSON.parse(readFileSync(join(folder, 'slip.json'), 'utf8'));
   assert.match(JSON.parse(Buffer.from(slip.payload, 'base64url').toString('utf8')).issuer.name, /\(development\)$/);
+});
+
+test('demo --stdio: as an MCP client starts it, it answers initialize and tools/list with the made-up tools, lets one call through, refuses one with the denial text, says one line on the standard error, and ends when its input closes', async () => {
+  const temporary = tempFolder();
+  const here = tempFolder();
+  const child = spawn(process.execPath, [BIN, 'demo', '--stdio'], { cwd: here, stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, TMPDIR: temporary, TEMP: temporary, TMP: temporary }, windowsHide: true });
+  let said = '';
+  child.stderr.setEncoding('utf8').on('data', (d) => {
+    said += d;
+  });
+  const notMcp = [];
+  const waiting = new Map();
+  createInterface({ input: child.stdout }).on('line', (line) => {
+    let m;
+    try {
+      m = JSON.parse(line);
+    } catch {
+      notMcp.push(line);
+      return;
+    }
+    if (m?.jsonrpc !== '2.0') notMcp.push(line);
+    waiting.get(m?.id)?.(m);
+  });
+  const exited = new Promise((done) => child.on('exit', done));
+  const killer = setTimeout(() => child.kill(), 80000);
+  let next = 0;
+  const ask = (method, params = {}) => {
+    const id = ++next;
+    return new Promise((done, fail) => {
+      waiting.set(id, done);
+      exited.then(() => fail(new Error(`demo --stdio ended before answering ${method}:\n${said}`)));
+      child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`);
+    });
+  };
+  try {
+    const init = await ask('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '1' } });
+    assert.equal(init.result.serverInfo.name, 'provared-demo-server');
+    assert.ok(init.result.capabilities.tools);
+    child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' })}\n`);
+    const { tools } = (await ask('tools/list')).result;
+    assert.deepEqual(tools.map((t) => t.name), ['echo', 'add']);
+    for (const t of tools) {
+      assert.match(t.description, /^Demonstration only: a made-up tool/, t.name);
+      for (const [name, schema] of Object.entries(t.inputSchema.properties)) assert.ok(schema.description, `${t.name}.${name} is described`);
+    }
+    const allowed = await ask('tools/call', { name: 'echo', arguments: { text: 'hello' } });
+    assert.deepEqual(allowed.result.content, [{ type: 'text', text: 'hello' }]);
+    const refused = await ask('tools/call', { name: 'echo', arguments: { text: 'my password is swordfish' } });
+    assert.equal(refused.result.isError, true);
+    assert.equal(refused.result._meta['red.prova/refused'], 'content-rule');
+    assert.equal(refused.result.content[0].text, 'Not taken by the Provared executor: Content rule "echo never repeats a text with the lower-case word password" does not allow this call to "echo". The call was not taken.');
+    child.stdin.end();
+    assert.equal(await exited, 0, said);
+  } finally {
+    clearTimeout(killer);
+    child.kill();
+  }
+
+  // The standard output held MCP messages only; the standard error one line for a person, and the executor's JSON lines.
+  assert.deepEqual(notMcp, []);
+  const lines = said.trim().split('\n');
+  const forPeople = lines.filter((l) => !l.startsWith('{'));
+  assert.equal(forPeople.length, 1, said);
+  assert.match(forPeople[0], /^provared-mcp-executor: DEMONSTRATION ONLY: .*development stand-in for a passkey, not by a person, so its records prove nothing about anyone\. The permission ends at \d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?Z \(UTC\); after that every call is refused; start it again\. The book is .*book\.jsonl\.$/);
+  assert.doesNotMatch(said, /ExperimentalWarning/);
+
+  // Nothing in the folder it was run in; one new folder in the temporary folder, holding the book it named, which checks clean.
+  assert.deepEqual(readdirSync(here), []);
+  const made = readdirSync(temporary);
+  assert.equal(made.length, 1);
+  const folder = join(temporary, made[0]);
+  assert.ok(forPeople[0].includes(join(folder, 'book.jsonl')), 'the book is named');
+  const settings = JSON.parse(readFileSync(join(folder, 'executor.json'), 'utf8'));
+  const result = await checkBook(readFileSync(join(folder, 'book.jsonl'), 'utf8'), { issuerKeys: settings.agent.issuerKeys });
+  assert.equal(result.summary.intact, true);
+  assert.equal(result.summary.fullyChecked, true);
+  assert.equal(result.summary.withinSlips, true);
+  assert.equal(result.summary.problemFound, false);
+  assert.deepEqual(result.entries.map((e) => e.kind), ['slip', 'stub', 'denial']);
+});
+
+test('demo takes no argument but --stdio, and then writes nothing', () => {
+  const temporary = tempFolder();
+  const r = run(['demo', '--stdoi'], tempFolder(), { TMPDIR: temporary, TEMP: temporary, TMP: temporary });
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /demo takes no "--stdoi"; only --stdio\./);
+  assert.equal(r.stdout, '');
+  assert.deepEqual(readdirSync(temporary), []);
 });
 
 test('init: copies the example settings and rules into the folder, byte for byte, and overwrites nothing', () => {

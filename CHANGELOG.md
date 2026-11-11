@@ -2,6 +2,50 @@
 
 ## Not yet released
 
+- **`provared-mcp-executor` 0.4.1 (11 November 2026, not yet on npm):
+  `demo --stdio`, for an MCP client or a directory's inspector.** A
+  directory that builds the package in a container and lists its tools
+  has no passkey and no settings to give it. What changes, in
+  `mcp-executor/`:
+  - **`provared-mcp-executor demo --stdio`** makes the same new
+    temporary folder, settings, keys and stand-in permission as `demo`,
+    with the same code (`prepareDemo` in `demo.mjs`, which `demo` now
+    uses too), runs `check`, and then runs the executor over stdio in
+    front of the made-up server, as `stdio` does (`runStdio` in `bin.mjs`,
+    which `stdio` now uses too), until its input closes. Its standard
+    output carries MCP messages only. On its standard error it says, in
+    one line, that this is a demonstration under a development stand-in
+    whose records prove nothing about anyone, when its permission ends
+    (after which every call is refused until it is started again), and
+    where the book is; the executor's own JSON lines follow. It writes nothing outside that
+    folder. `stdio` with settings of a person's own works as before.
+  - **`demo` refuses any argument but `--stdio`**, and then writes
+    nothing; 0.4.0 took no notice of one.
+  - **The made-up server's tools** (`demo/server.mjs`) begin their
+    descriptions with "Demonstration only: a made-up tool", and `add`
+    describes its two arguments.
+  - **Tests** (`test/newcomer.test.mjs`): `demo --stdio`, started as a
+    client starts it, answers `initialize` and `tools/list` with the two
+    tools, lets `echo "hello"` through, refuses `echo` with the word
+    "password" with the denial text, puts nothing but MCP messages on its
+    standard output and one line for a person on its standard error,
+    ends with code 0 when its input closes, and leaves a book that checks
+    clean (intact, fully checked, within the permission, no problem found)
+    in the folder it names; and `demo` with another argument is
+    refused.
+  - **The README** says what `demo --stdio` is for, under the paragraph
+    on `demo`.
+  - **Versions.** 0.4.1 in `package.json`, `server.json` (both fields)
+    and the command's `--version`; the `npm pack` file name in the README.
+    The library range stays `^0.7.0`.
+  - **Choices.** The permission lasts one hour, as for `demo`, since the
+    preparation is the same; a client that needs longer starts it again.
+    The line for a person is plain text, not JSON, since a person reads
+    it; it starts "provared-mcp-executor:", as the line
+    from `keys` does. `demo` refuses an unknown argument, as `init` does,
+    so that a mistyped `--stdio` does not run the other demonstration and
+    print text on the standard output.
+
 - **`provared-mcp-executor` 0.4.0 (11 November 2026): the
   first five minutes, with no passkey.** A trial from a fresh install of
   0.3.0, following only the README, found that nothing could be seen to
