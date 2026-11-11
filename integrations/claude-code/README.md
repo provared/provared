@@ -742,11 +742,19 @@ POST http://127.0.0.1:8794/hand-over      {"kind": "renewal", "slip": …} or {"
   be taken: signed on a phone ten minutes fast, it starts about nine
   minutes ahead, and a cancellation made two minutes later, on a computer
   with the right clock, does not stop it if the server holds the renewal back until at least
-  two minutes after the cancellation and then hands it over. The signing page
-  (https://sign.prova.red) sets no limit of its own on the start, so the
-  rule also rests on the application's page: a faulty or attacked
-  application page could ask for a start further ahead and hold the
-  renewal back. A start refused as `starts-later` is remembered in memory
+  two minutes after the cancellation and then hands it over. The signing
+  page, as this repository holds it (`page/sign-page.js`), does not sign
+  a permission another page asks for where it starts more than 300
+  seconds after the clock of the device it runs on, so a faulty or
+  attacked application page cannot have a start further ahead signed by
+  asking for it. That limit is measured by the same clock, so the case of
+  a fast clock above stands, and a permission signed on the signing page
+  from a starting link, with no request, may start whenever the person
+  writes. A copy of the signing page from before that limit sets none
+  (the page served at https://sign.prova.red is such a copy until it is
+  brought up to date), and there the rule also rests on the
+  application's page, which could ask for a start further ahead and hold
+  the renewal back. A start refused as `starts-later` is remembered in memory
   only, for the last 1,000 refused: after a restart of the recorder, or
   once others, signed or not, have pushed it out, the same renewal can be
   taken if it is handed over when its start has come near.

@@ -57,6 +57,13 @@
     clock is behind: the page shows a warning with the others, and signs
     only once the person presses again. Nothing signed changes: a
     cancellation is dated by the same clock as before.
+  - **The recorder's README** (`integrations/claude-code/README.md`,
+    "Limits") said that the signing page sets no limit of its own on the
+    start. It now says what the page in this repository does, that the
+    limit is measured by the signing device's clock, that a permission
+    signed from a starting link has no such limit, and that a copy of
+    the page from before this change (the one served at
+    https://sign.prova.red, until it is brought up to date) sets none.
   - **What these two do not do.** Both read the same clock, the signing
     device's. A clock that is ahead is not noticed, and with such a
     clock a start that far ahead of the true time is still signed. A
