@@ -3,10 +3,10 @@
   "service": "executor",
   "server": {
     "command": "node",
-    "args": ["files-server.mjs"],
-    "cwd": "servers/files",
+    "args": ["<path of your MCP tool server's program>"],
+    "cwd": "<folder your tool server runs in>",
     "env": {
-      "FILES_API_TOKEN": { "file": "secrets/files-token" }
+      "FILES_API_TOKEN": { "file": "<file that holds your tool server's credential>" }
     }
   },
   "agent": {
@@ -23,6 +23,8 @@
   "tools": {
     "read_file": { "action": "provared.data.read" },
     "write_file": { "action": "provared.data.change" },
+    "edit_file": { "action": "provared.data.change" },
+    "apply_patch": { "action": "provared.data.change" },
     "order_supplies": { "action": "supplies.order", "amount": { "unit": "GBP", "pointer": "/total" } },
     "send_messages": { "action": "provared.message.send", "amount": { "unit": "messages", "count": "/recipients" } }
   },

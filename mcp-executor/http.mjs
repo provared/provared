@@ -21,7 +21,7 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import http from 'node:http';
 import https from 'node:https';
 import { unfinished } from './copy.mjs';
-import { EXECUTOR_STOPPED, SHARED_KEYS, SHORT_NAME, UNLISTED_FORWARD_WARNING, callCore, describeContentRules, describeSlip, describeTools, filteredList, isObject, openAgent, pathFrom, prepareAgent, prepareShared, readAgentPaths, readCredentialFile, readIdentity, readKnobs, readToolRules, serverIds } from './executor.mjs';
+import { EXECUTOR_STOPPED, NOT_FOR_KEYS, SHARED_KEYS, SHORT_NAME, UNLISTED_FORWARD_WARNING, callCore, describeContentRules, describeSlip, describeTools, filteredList, isObject, isPlaceholder, missingFiles, openAgent, pathFrom, placeholderProblems, prepareAgent, prepareShared, readAgentPaths, readCredentialFile, readIdentity, readKnobs, readToolRules, serverIds } from './executor.mjs';
 import { CODES, MAX_LINE_BYTES, idKey, isId, readMessage, responseText, spliceId, topLevelId, unsafeInteger } from './jsonrpc.mjs';
 
 /** The most a POST body may be, unless the settings say otherwise: 10 MiB, as the gateway takes. */
@@ -74,14 +74,18 @@ export function newSecret() {
 /**
  * Read the settings of the HTTP executor and say what is wrong with them,
  * without opening any key, slip or credential. Gives
- * {settings, problems, warnings}; "settings" is complete only where there
- * are no problems.
+ * {settings, problems, warnings, partial}; "settings" is complete only
+ * where there are no problems, and "partial" is what could be read. With
+ * "keysOnly", the passkeys' thumbprints and the agents' secret hashes are
+ * not needed (readSettings).
  */
-export function readHttpSettings(config, root) {
+export function readHttpSettings(config, root, { keysOnly = false } = {}) {
   const problems = [];
   const warnings = [];
   const s = {};
-  const at = (what, text) => problems.push(`${what}: ${text}`);
+  const at = (what, text) => {
+    if (!(keysOnly && NOT_FOR_KEYS.test(what))) problems.push(`${what}: ${text}`);
+  };
   if (!isObject(config)) return { settings: null, problems: ['The settings must be a JSON object.'], warnings };
   readIdentity(config, s, at);
 
@@ -174,7 +178,7 @@ export function readHttpSettings(config, root) {
     if (![...SHARED_KEYS, 'listen', 'path', 'upstream', 'agents', 'executor', 'bodyLimit', 'allowedOrigins'].includes(k)) warnings.push(`${k}: not a setting; set aside.`);
   }
   if (s.unlisted === 'forward') warnings.push(UNLISTED_FORWARD_WARNING);
-  return { settings: problems.length ? null : s, problems, warnings };
+  return { settings: problems.length ? null : s, problems, warnings, partial: s };
 }
 
 /** The upstream's credential, read once at start and held in memory. Never logged. */
@@ -187,11 +191,24 @@ function readUpstreamCredential(settings) {
 
 /**
  * Check the settings, the keys, each agent's slip and the credential, as a
- * start would, without listening and without writing anything.
+ * start would, without listening and without writing anything. As with
+ * checkConfig, every problem that can be found on its own is listed in one
+ * run; the slips are held against the keys and the rules only where none is.
  */
 export async function checkHttpConfig(config, root) {
-  const { settings, problems, warnings } = readHttpSettings(config, root);
+  const { settings, problems: found, warnings, partial } = readHttpSettings(config, root);
   const tools = settings ? describeTools(settings) : [];
+  const problems = placeholderProblems(config, found);
+  if (partial) {
+    if (partial.upstream?.credential && !isPlaceholder(config.upstream?.credential?.file)) {
+      try {
+        readUpstreamCredential(partial);
+      } catch (e) {
+        problems.push(e.message);
+      }
+    }
+    problems.push(...(await missingFiles(partial, [...(partial.agents ?? new Map())].map(([name, paths]) => [`agents.${name}`, paths]))));
+  }
   if (problems.length) return { problems, warnings, tools };
   try {
     const shared = await prepareShared(settings);

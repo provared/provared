@@ -5,7 +5,7 @@
   "path": "/mcp",
   "upstream": {
     "url": "http://127.0.0.1:9000/mcp",
-    "credential": { "file": "secrets/files-token" }
+    "credential": { "file": "<file that holds the upstream's bearer token>" }
   },
   "agents": {
     "research": {
@@ -31,6 +31,8 @@
   "tools": {
     "read_file": { "action": "provared.data.read" },
     "write_file": { "action": "provared.data.change" },
+    "edit_file": { "action": "provared.data.change" },
+    "apply_patch": { "action": "provared.data.change" },
     "order_supplies": { "action": "supplies.order", "amount": { "unit": "GBP", "pointer": "/total" } },
     "send_messages": { "action": "provared.message.send", "amount": { "unit": "messages", "count": "/recipients" } }
   },

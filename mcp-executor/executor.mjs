@@ -26,7 +26,7 @@
 
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, statSync } from 'node:fs';
-import { delimiter, isAbsolute, resolve } from 'node:path';
+import { basename, delimiter, isAbsolute, resolve } from 'node:path';
 import { argumentsFingerprint, checkBook, countersign, denialCodes, entryLine, fingerprint, fromBase64url, identifierFingerprint, openRecorder, randomId, thumbprint } from 'provared';
 import { loadCopyKey, openCopy, readCopy, unfinished } from './copy.mjs';
 import { aboutSlip, bookFile, loadKeyFile, readIfThere, slipFrom, untilFree } from './files.mjs';
@@ -67,6 +67,8 @@ const UNIT = /^[A-Za-z0-9][A-Za-z0-9._-]{0,15}$/;
 const TRACEPARENT = /^[0-9a-f]{2}-([0-9a-f]{32})-[0-9a-f]{16}-[0-9a-f]{2}$/;
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,255}$/;
 const MAX_SAFE = Number.MAX_SAFE_INTEGER;
+/** The settings "keys" does not need: the passkeys' thumbprints and, over HTTP, the agents' secret hashes. */
+const NOT_FOR_KEYS = /(^|\.)(issuerKeys|secretHash)$/;
 
 /** The error thrown where a call was never made, so that the stub writer writes nothing. */
 class NotSent extends Error {
@@ -88,14 +90,20 @@ function isObject(v) {
 
 /**
  * Read the settings and say what is wrong with them, without opening any
- * key, slip or credential. Gives {settings, problems, warnings}. "settings"
- * is complete only where there are no problems.
+ * key, slip or credential. Gives {settings, problems, warnings, partial}.
+ * "settings" is complete only where there are no problems; "partial" is what
+ * could be read, problems or not (checkConfig looks at its files). With
+ * "keysOnly", the settings are read as the "keys" command needs them: the
+ * passkeys' thumbprints (issuerKeys) are not needed yet, since they are known
+ * only once the permission is signed.
  */
-export function readSettings(config, root) {
+export function readSettings(config, root, { keysOnly = false } = {}) {
   const problems = [];
   const warnings = [];
   const s = {};
-  const at = (what, text) => problems.push(`${what}: ${text}`);
+  const at = (what, text) => {
+    if (!(keysOnly && NOT_FOR_KEYS.test(what))) problems.push(`${what}: ${text}`);
+  };
   if (!isObject(config)) return { settings: null, problems: ['The settings must be a JSON object.'], warnings };
   readIdentity(config, s, at);
 
@@ -170,7 +178,7 @@ export function readSettings(config, root) {
     if (![...SHARED_KEYS, 'server', 'agent', 'executor', 'shutdownWait'].includes(k)) warnings.push(`${k}: not a setting; set aside.`);
   }
   if (s.unlisted === 'forward') warnings.push(UNLISTED_FORWARD_WARNING);
-  return { settings: problems.length ? null : s, problems, warnings };
+  return { settings: problems.length ? null : s, problems, warnings, partial: s };
 }
 
 /** The settings both ways of running share: the name, the service id, the tool rules and the knobs of readKnobs. */
@@ -186,7 +194,7 @@ export function readIdentity(config, s, at) {
 }
 
 /** Whether a value is a JSON object (not null, not a list). */
-export { isObject, pathFrom, SHORT_NAME };
+export { isObject, pathFrom, SHORT_NAME, NOT_FOR_KEYS };
 
 /** An agent's paths and issuer keys, as the settings give them under "prefix" (agent, or agents.<name>). */
 export function readAgentPaths(agent, root, at, prefix) {
@@ -516,12 +524,38 @@ async function prepare(config, root, { now = Date.now, readOnly = false } = {}) 
 /**
  * Check the settings, the keys, the slip and the credentials, as a start
  * would, without starting the server and without writing anything. Gives
- * {problems, warnings, tools, slip}: "problems" holds the one error a start
- * would stop with, if any.
+ * {problems, warnings, tools, slip}. Every problem that can be found on its
+ * own is listed in one run: the settings, a placeholder of the example
+ * still in place, the server's program and folder, each credential, the
+ * rules file, each key file and the slip (missingFiles). Only where none is
+ * found are the slip, the keys and the rules held against each other, as a
+ * start does; that part stops at the first difference, since a start stops
+ * there too.
  */
 export async function checkConfig(config, root) {
-  const { settings, problems, warnings } = readSettings(config, root);
+  const { settings, problems: found, warnings, partial } = readSettings(config, root);
   const tools = settings ? describeTools(settings) : [];
+  const problems = placeholderProblems(config, found);
+  if (partial) {
+    const s = partial;
+    if (s.server?.command && s.server.path !== undefined && !isPlaceholder(s.server.command)) {
+      try {
+        resolveCommand(s.server.command, { root, path: s.server.path });
+      } catch (e) {
+        problems.push(e.message);
+      }
+    }
+    if (typeof config.server?.cwd === 'string' && !isPlaceholder(config.server.cwd) && !isFolder(s.server.cwd)) problems.push(`server.cwd: the folder ${s.server.cwd} does not exist.`);
+    for (const [name, from] of Object.entries(s.server?.env ?? {})) {
+      if (from.file !== undefined && isPlaceholder(config.server.env[name].file)) continue;
+      try {
+        credentialValue(name, from);
+      } catch (e) {
+        problems.push(e.message);
+      }
+    }
+    problems.push(...(await missingFiles(s, s.agent ? [['agent', s.agent]] : [])));
+  }
   if (problems.length) return { problems, warnings, tools };
   try {
     const p = await prepare(config, root, { readOnly: true });
@@ -529,6 +563,78 @@ export async function checkConfig(config, root) {
   } catch (e) {
     return { problems: [e.message], warnings, tools };
   }
+}
+
+/**
+ * A text that is still one of the example's placeholders, such as
+ * "<thumbprint of the person's passkey>": the whole text between angle
+ * brackets, with a space in it, so that an argument such as "<json>" is not
+ * taken for one.
+ */
+export function isPlaceholder(text) {
+  return typeof text === 'string' && /^<[^<>]*\s[^<>]*>$/.test(text);
+}
+
+function isFolder(path) {
+  try {
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Each placeholder of the example still in the settings, as a problem of
+ * its own, and the problems the settings gave, less those about a setting
+ * that holds a placeholder (the placeholder says it better).
+ */
+export function placeholderProblems(config, problems) {
+  const out = [];
+  const fields = new Set();
+  const walk = (v, path) => {
+    if (isPlaceholder(v)) {
+      out.push(`${path}: still holds the example's placeholder ${JSON.stringify(v)}. Put in the ${v.slice(1, -1)}.`);
+      fields.add(path.replace(/\[\d+\]$/, ''));
+    } else if (Array.isArray(v)) v.forEach((x, i) => walk(x, `${path}[${i}]`));
+    else if (isObject(v)) for (const [k, x] of Object.entries(v)) walk(x, path ? `${path}.${k}` : k);
+  };
+  walk(config, '');
+  return [...out, ...problems.filter((p) => ![...fields].some((f) => p.startsWith(`${f}: `)))];
+}
+
+/**
+ * The problems with the files the settings name that can be found each on
+ * its own: the rules file, the executor's key file and, for each agent
+ * ([prefix of its settings, paths]), its key file and its slip. A missing key file is named
+ * with the command that makes it. Paths that hold a placeholder are left to
+ * placeholderProblems.
+ */
+export async function missingFiles(s, agents) {
+  const problems = [];
+  const keyFile = async (path, what) => {
+    if (!path || isPlaceholder(basename(path))) return;
+    if (!existsSync(path)) problems.push(`${what}: the key file ${path} does not exist yet. Make it with "provared-mcp-executor keys --config <this settings file>".`);
+    else {
+      try {
+        await loadKeyFile(path, 'agent');
+      } catch (e) {
+        problems.push(`${what}: ${e.message}`);
+      }
+    }
+  };
+  if (s.contentRules && !isPlaceholder(basename(s.contentRules))) {
+    try {
+      await loadRules(s.contentRules);
+    } catch (e) {
+      problems.push(e.message);
+    }
+  }
+  await keyFile(s.executor?.keys, 'executor.keys');
+  for (const [prefix, paths] of agents) {
+    await keyFile(paths.keys, `${prefix}.keys`);
+    if (paths.slip && !isPlaceholder(basename(paths.slip)) && readIfThere(paths.slip) === '') problems.push(`${prefix}.slip: the slip ${paths.slip} is missing. Sign the permission (at https://sign.prova.red) and save it there.`);
+  }
+  return problems;
 }
 
 /** The tool rules, as "check" shows them. */
