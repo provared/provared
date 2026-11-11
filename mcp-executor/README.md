@@ -1,5 +1,13 @@
 # provared-mcp-executor
 
+A guard in front of an MCP tool server. It holds the server's credential
+in place of the agent, checks each tool call against a permission a
+person signed with a passkey, refuses calls outside it with a signed
+denial, and writes a receipt, countersigned with its own keys, for each
+call it lets through. The credential is kept from the agent only where
+the agent cannot read the guard's files or reach the server another way
+([What it is](#what-it-is) says when). Evidence, not a verdict.
+
 ## Quick start
 
 With Node.js 24.7 or later:
