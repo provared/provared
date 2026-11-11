@@ -2,7 +2,7 @@
 
 ## Not yet released
 
-- **`provared-mcp-executor` 0.4.0 (11 November 2026; not yet on npm): the
+- **`provared-mcp-executor` 0.4.0 (11 November 2026): the
   first five minutes, with no passkey.** A trial from a fresh install of
   0.3.0, following only the README, found that nothing could be seen to
   work without a passkey. What changes, in `mcp-executor/`:
