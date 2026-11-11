@@ -310,6 +310,36 @@
    }
   },
   {
+   "name": "GeneralizedTime \"00010101000000Z\"",
+   "bytes": "180f30303031303130313030303030305a",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a time names a moment that does not exist."
+    }
+   }
+  },
+  {
+   "name": "GeneralizedTime \"00960229000000Z\"",
+   "bytes": "180f30303936303232393030303030305a",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a time names a moment that does not exist."
+    }
+   }
+  },
+  {
+   "name": "GeneralizedTime \"00991231235959.5Z\"",
+   "bytes": "181130303939313233313233353935392e355a",
+   "expected": {
+    "refused": {
+     "code": "stamp-bad-data",
+     "message": "A time-stamp is not laid out as its standard sets out: a time names a moment that does not exist."
+    }
+   }
+  },
+  {
    "name": "GeneralizedTime \"01000101000000Z\"",
    "bytes": "180f30313030303130313030303030305a",
    "expected": {

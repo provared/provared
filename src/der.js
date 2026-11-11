@@ -137,6 +137,10 @@ export function timeOf(bytes, element) {
   }
   if (!m) throw badStamp('a time is not written in the form DER allows.');
   const [, y, mo, d, h, mi, s] = m.map(Number);
+  // Date.UTC reads a year from 0 to 99 as 1900 to 1999, so such a year
+  // would never name the moment it says. It is refused here by name, as
+  // the Python library refuses it, and not left to the comparison below.
+  if (y <= 99) throw badStamp('a time names a moment that does not exist.');
   const ms = Date.UTC(y, mo - 1, d, h, mi, s) + (m[7] ? Math.floor(Number('0.' + m[7]) * 1000) : 0);
   const check = new Date(ms);
   if (check.getUTCFullYear() !== y || check.getUTCMonth() !== mo - 1 || check.getUTCDate() !== d || h > 23 || mi > 59 || s > 59) {

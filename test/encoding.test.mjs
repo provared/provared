@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Refusal, canonicalJson, fromBase64url, parseCanonical, parseTime, toBase64url, utf8 } from '../src/encoding.js';
+import { Refusal, canonicalJson, formatTime, fromBase64url, parseCanonical, parseTime, toBase64url, utf8 } from '../src/encoding.js';
 
 const refused = (fn, code) =>
   assert.throws(fn, (e) => e instanceof Refusal && e.code === code, `expected a refusal with code ${code}`);
@@ -105,6 +105,24 @@ test('very deep nesting is refused, not crashed on', () => {
 
 test('a line that is not JSON at all is named as such', () => {
   refused(() => parseCanonical('hello', 'line-not-canonical'), 'not-json');
+});
+
+// A record's time is text with four digits for the year, and the years
+// 0000 to 0099 are the years they say (format description, section 3.6):
+// none is read as 1900 to 1999, and each is written back as it was read.
+test('times: the years 0000 to 0099 are read as they are written', () => {
+  const DAY = 86400000;
+  assert.equal(parseTime('0000-01-01T00:00:00Z'), -62167219200000);
+  assert.equal(parseTime('0001-01-01T00:00:00Z'), -62167219200000 + 366 * DAY, 'the year 0000 is a leap year');
+  assert.equal(parseTime('0050-01-01T00:00:00Z'), -60589296000000);
+  assert.equal(parseTime('0099-12-31T23:59:59Z'), -59011459201000);
+  assert.equal(parseTime('0100-01-01T00:00:00Z'), -59011459200000);
+  assert.equal(parseTime('0096-02-29T00:00:00Z'), parseTime('0096-03-01T00:00:00Z') - DAY);
+  assert.ok(Number.isNaN(parseTime('0099-02-29T00:00:00Z')), '0099 is not a leap year, as 1999 is not');
+  for (const text of ['0000-01-01T00:00:00Z', '0050-01-01T00:00:00Z', '0099-12-31T23:59:59Z']) {
+    assert.equal(formatTime(parseTime(text)), text);
+    assert.ok(parseTime(text) < parseTime('1900-01-01T00:00:00Z'), text);
+  }
 });
 
 test('times: one form only', () => {

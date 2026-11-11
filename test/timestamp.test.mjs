@@ -164,6 +164,26 @@ test('times are read only in the forms DER allows', () => {
   }
 });
 
+// JavaScript's Date.UTC reads a year from 0 to 99 as 1900 to 1999. A
+// time-stamp's time in such a year is refused, never read as a moment in
+// the twentieth century; the Python library and the shared test files
+// (test-vectors/der-times.json) require the same.
+test('a time in the years 0000 to 0099 is refused, not read as 1900 to 1999; the year 0100 is read as it is written', () => {
+  const time = (tag, text) => {
+    const bytes = new Uint8Array([tag, text.length, ...Buffer.from(text)]);
+    return timeOf(bytes, readElement(bytes, 0));
+  };
+  for (const text of ['00000101000000Z', '00010101000000Z', '00500101000000Z', '00700101000000Z', '00960229000000Z', '00990101000000Z', '00991231235959Z', '00991231235959.5Z']) {
+    assert.throws(() => time(0x18, text), (e) => e.code === 'stamp-bad-data' && e.message === 'A time-stamp is not laid out as its standard sets out: a time names a moment that does not exist.', text);
+  }
+  assert.equal(time(0x18, '01000101000000Z'), -59011459200000);
+  assert.equal(time(0x18, '01000101000000Z'), Date.parse('0100-01-01T00:00:00Z'));
+  assert.equal(time(0x18, '19700101000000Z'), 0);
+  // The short form has two digits for the year, and names 1950 to 2049.
+  assert.equal(time(0x17, '500101000000Z'), Date.parse('1950-01-01T00:00:00Z'));
+  assert.equal(time(0x17, '491231235959Z'), Date.parse('2049-12-31T23:59:59Z'));
+});
+
 test('an ECDSA signature is read only in its one strict form', () => {
   const good = new Uint8Array([0x30, 0x06, 0x02, 0x01, 0x05, 0x02, 0x01, 0x07]);
   const raw = ecdsaToRaw(good, 32);

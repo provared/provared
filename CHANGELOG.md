@@ -2,6 +2,37 @@
 
 ## Not yet released
 
+- **`provared` 0.8.1 (not yet released; `package.json` and
+  `python/pyproject.toml` still say 0.8.0): the years 0000 to 0099 in
+  times.** No signed byte, label or
+  field's meaning changes, and nothing is refused or accepted that was
+  not before.
+  - **A time-stamp's time in the years 0000 to 0099** (`timeOf` in
+    `src/der.js`) is refused by name, with the words and the code it had
+    (`stamp-bad-data`, "a time names a moment that does not exist").
+    Before, the refusal followed from JavaScript's `Date.UTC`, which
+    reads a year from 0 to 99 as 1900 to 1999, so that the date did not
+    come back as it went in; no such time was ever read as a moment in
+    the twentieth century. The Python library (`time_of` in
+    `python/src/provared/der.py`) already refused it by name, and the
+    shared test files require the refusal. The format description says
+    nothing of it.
+  - **A record's own time in those years** (`parseTime`, `parse_time`;
+    format description, section 3.6) is the year it says in both
+    libraries, as before: text with four digits for the year is not read
+    through `Date.UTC`.
+  - **Shared test files.** `test-vectors/times.json` gains seven cases
+    (25 in all): the last second of 0000, the first of 0001, 0050, 29
+    February 0096 (a leap year), 29 February 0099 (not one), the last
+    second of 0099 and the first of 0100. `test-vectors/der-times.json`
+    gains three refusals (64 cases in all): the year 0001, 29 February
+    0096, and the last second of 0099 with a fraction. Every answer both
+    files held before is unchanged.
+  - **Tests.** `test/timestamp.test.mjs` and `test/encoding.test.mjs`
+    (one test each), and `python/tests/test_small_years.py` (two), hold
+    the same cases in each library. They pass without the change to
+    `src/der.js`, which alters no answer.
+
 - **`provared-mcp-executor` 0.4.1 (11 November 2026, not yet on npm):
   `demo --stdio`, for an MCP client or a directory's inspector.** A
   directory that builds the package in a container and lists its tools
