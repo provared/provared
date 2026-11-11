@@ -142,7 +142,12 @@ test('demo --stdio: as an MCP client starts it, it answers initialize and tools/
   const lines = said.trim().split('\n');
   const forPeople = lines.filter((l) => !l.startsWith('{'));
   assert.equal(forPeople.length, 1, said);
-  assert.match(forPeople[0], /^provared-mcp-executor: DEMONSTRATION ONLY: .*development stand-in for a passkey, not by a person, so its records prove nothing about anyone\. The permission ends at \d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?Z \(UTC\); after that every call is refused; start it again\. The book is .*book\.jsonl\.$/);
+  const person = forPeople[0];
+  assert.ok(person.startsWith('provared-mcp-executor: DEMONSTRATION ONLY: '), person);
+  assert.ok(person.includes('development stand-in for a passkey, not by a person, so its records prove nothing about anyone. The permission ends at '), person);
+  assert.match(person, /ends at \d{4}-\d\d-\d\dT\d\d:\d\d:\d\d/);
+  assert.ok(person.includes('Z (UTC); after that every call is refused; start it again. The book is '), person);
+  assert.ok(person.endsWith('book.jsonl.'), person);
   assert.doesNotMatch(said, /ExperimentalWarning/);
 
   // Nothing in the folder it was run in; one new folder in the temporary folder, holding the book it named, which checks clean.
