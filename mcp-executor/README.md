@@ -1,7 +1,7 @@
 # provared-mcp-executor
 
-A guard in front of an MCP tool server. It holds the server's credential
-in place of the agent, checks each tool call against a permission a
+A guard, called the executor below, in front of an MCP tool server. It
+holds the server's credential in place of the agent, checks each tool call against a permission a
 person signed with a passkey, refuses calls outside it with a signed
 denial, and writes a receipt, countersigned with its own keys, for each
 call it lets through. The credential is kept from the agent only where
