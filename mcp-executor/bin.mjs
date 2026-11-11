@@ -1,6 +1,12 @@
 #!/usr/bin/env node
 // provared-mcp-executor: the command.
 //
+//   provared-mcp-executor demo                             a demonstration with no passkey and no settings, in a
+//                                                          new temporary folder: one call let through, one
+//                                                          refused, and the book checked (demo.mjs)
+//   provared-mcp-executor init    [--http]                 copy the example settings and rules into this folder,
+//                                                          as executor.json (or executor-http.json) and
+//                                                          content-rules.json; nothing is overwritten
 //   provared-mcp-executor stdio   --config executor.json   run as the tool server the agent's client starts:
 //                                                          start the real server, check and receipt each call
 //   provared-mcp-executor http    --config executor-http.json
@@ -10,10 +16,14 @@
 //   provared-mcp-executor secret                           make a new secret for an agent, and print it with
 //                                                          its hash (the hash goes into the settings)
 //   provared-mcp-executor check   --config executor.json   say what each rule maps to, and what is wrong
-//   provared-mcp-executor keys    --config executor.json   make the key files, if there are none, and print
+//   provared-mcp-executor keys    --config executor.json [--out <file>]
+//                                                          make the key files, if there are none, and print
 //                                                          what goes into the permission: agent.keys, the
 //                                                          executor's entry for "with", and the agent.software
 //                                                          entry for the rules on content, where there are any
+//                                                          (or write it to a new file, with --out). It needs no
+//                                                          passkey's thumbprint and no secret hash yet, and
+//                                                          writes nothing until all it needs has been read
 //   provared-mcp-executor compare --config executor.json [--book <file>] [--agent <name>]
 //                                                          hold the executor's copy against a book (over HTTP,
 //                                                          the named agent's copy and book)
@@ -23,23 +33,64 @@
 // "upstream" and "agents"). "stdio" writes nothing to its standard output
 // but MCP messages; what it has to say goes to its standard error, one JSON
 // object to a line, as does "http".
+//
+// Node.js's notice that its ML-DSA-87 signing is experimental is set aside
+// (quiet.mjs, imported first); every other warning is printed.
 
-import { existsSync, readFileSync } from 'node:fs';
-import { dirname, isAbsolute, resolve } from 'node:path';
+import './quiet.mjs';
+import { constants, copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { loadCopyKey } from './copy.mjs';
 import { compareCopyWithBook } from './compare.mjs';
 import { checkConfig, loadRules, openExecutor, readSettings, softwareEntry } from './executor.mjs';
-import { makeKeyFile, readIfThere } from './files.mjs';
+import { loadKeyFile, makeKeyFile, readIfThere } from './files.mjs';
 import { checkHttpConfig, newSecret, openHttpExecutor, readHttpSettings, secretHash } from './http.mjs';
 
-const USAGE = `provared-mcp-executor: an executor for MCP tool servers. It holds the server's credentials, checks each tool call against a permission a person signed, sends on the calls the permission allows, and writes a signed, countersigned receipt for each. Evidence, not a verdict.
+const HERE = dirname(fileURLToPath(import.meta.url));
+const VERSION = JSON.parse(readFileSync(join(HERE, 'package.json'), 'utf8')).version;
 
+const USAGE = `provared-mcp-executor ${VERSION}: an executor for MCP tool servers. It holds the server's credentials, checks each tool call against a permission a person signed, sends on the calls the permission allows, and writes a signed, countersigned receipt for each. Evidence, not a verdict.
+
+  provared-mcp-executor demo                 try it with no passkey and no settings
+  provared-mcp-executor init    [--http]     copy the example settings into this folder
   provared-mcp-executor stdio   --config executor.json
   provared-mcp-executor http    --config executor-http.json
   provared-mcp-executor secret
   provared-mcp-executor check   --config <settings>
-  provared-mcp-executor keys    --config <settings>
-  provared-mcp-executor compare --config <settings> [--book <file>] [--agent <name>]`;
+  provared-mcp-executor keys    --config <settings> [--out <file>]
+  provared-mcp-executor compare --config <settings> [--book <file>] [--agent <name>]
+  provared-mcp-executor --version`;
+
+/** What to do with what "keys" prints, said in one line on the standard error. */
+const KEYS_NEXT = 'What to do with this: it goes into the permission the person signs with a passkey: "agent" as the permission\'s agent (over HTTP, one for each agent), the "with" entry in its "with", and "requires" as it is. Then put the passkey\'s thumbprint in issuerKeys and run "check" (README, "Set it up").';
+
+/** The example files "init" copies into the current folder: [file in the package, name in the folder]. */
+const EXAMPLES = {
+  stdio: [['executor.example.json', 'executor.json'], ['content-rules.example.json', 'content-rules.json']],
+  http: [['executor-http.example.json', 'executor-http.json'], ['content-rules.example.json', 'content-rules.json']],
+};
+
+/** Whether a folder is there or can be made: the nearest part of its path that exists is a folder. */
+function canMakeFolder(folder) {
+  let at = folder;
+  while (!existsSync(at)) {
+    const up = dirname(at);
+    if (up === at) return false;
+    at = up;
+  }
+  try {
+    return statSync(at).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+/** Whether two paths name the same file (letter case aside on Windows). */
+function samePath(a, b) {
+  const [x, y] = [resolve(a), resolve(b)];
+  return process.platform === 'win32' ? x.toLowerCase() === y.toLowerCase() : x === y;
+}
 
 /** Whether the settings are the HTTP executor's (several agents, one upstream) rather than the stdio executor's. */
 const isHttp = (config) => config !== null && typeof config === 'object' && !Array.isArray(config) && Object.hasOwn(config, 'agents');
@@ -70,6 +121,40 @@ async function main(args) {
   const command = args[0];
   if (!command || command === '--help' || command === '-h') {
     process.stdout.write(`${USAGE}\n`);
+    return 0;
+  }
+  if (command === '--version' || command === '-v') {
+    process.stdout.write(`provared-mcp-executor ${VERSION}\n`);
+    return 0;
+  }
+  if (command === 'demo') {
+    const { runDemo } = await import('./demo.mjs');
+    return (await runDemo()).ok ? 0 : 1;
+  }
+  if (command === 'init') {
+    const http = args.includes('--http');
+    const unknown = args.slice(1).filter((a) => a !== '--http');
+    if (unknown.length) throw new Error(`init takes no ${unknown.map((a) => `"${a}"`).join(', ')}; only --http.`);
+    const files = EXAMPLES[http ? 'http' : 'stdio'].map(([from, to]) => [join(HERE, from), resolve(to)]);
+    // Nothing is written unless every file can be: none is overwritten.
+    const there = files.filter(([, to]) => existsSync(to)).map(([, to]) => to);
+    if (there.length) throw new Error(`Nothing was written: ${there.join(' and ')} already ${there.length > 1 ? 'exist' : 'exists'}. Move ${there.length > 1 ? 'them' : 'it'}, or run init in another folder.`);
+    for (const [from, to] of files) copyFileSync(from, to, constants.COPYFILE_EXCL);
+    const settings = basename(files[0][1]);
+    const steps = http
+      ? [
+          `In ${settings}, put in each value written <like this>: the upstream's credential file, and each agent's secret hash ("provared-mcp-executor secret" makes a secret and its hash); set "upstream.url" to your HTTP MCP server and "tools" to its tools; and change content-rules.json to rules of your own, or take "contentRules" out.`,
+          `provared-mcp-executor keys --config ${settings}`,
+          'The person signs a permission for each agent with a passkey, holding what "keys" printed; save each where its "slip" says (in the folder slips/, which you make), and put the passkey\'s thumbprint in its "issuerKeys".',
+          `provared-mcp-executor check --config ${settings}   (it lists every problem left)`,
+        ]
+      : [
+          `In ${settings}, put in each value written <like this>: your MCP tool server's program, the folder it runs in and the file that holds its credential; set "tools" to its tools; and change content-rules.json to rules of your own, or take "contentRules" out.`,
+          `provared-mcp-executor keys --config ${settings}`,
+          'The person signs the permission with a passkey, holding what "keys" printed; save it as slip.json, and put the passkey\'s thumbprint in "agent.issuerKeys".',
+          `provared-mcp-executor check --config ${settings}   (it lists every problem left)`,
+        ];
+    process.stdout.write(`Wrote ${files.map(([, to]) => to).join(' and ')}, copied from the examples in ${HERE}.\nNext:\n${steps.map((s, i) => `  ${i + 1}. ${s}`).join('\n')}\n`);
     return 0;
   }
   if (command === 'stdio') {
@@ -106,19 +191,46 @@ async function main(args) {
   }
   if (command === 'keys') {
     const { config, root } = readConfig(args);
-    const { settings, problems } = isHttp(config) ? readHttpSettings(config, root) : readSettings(config, root);
+    const http = isHttp(config);
+    // The passkeys' thumbprints and the secret hashes are not needed yet: they come after.
+    const { settings, problems } = http ? readHttpSettings(config, root, { keysOnly: true }) : readSettings(config, root, { keysOnly: true });
     if (problems.length) throw new Error(`The settings have problems:\n- ${problems.join('\n- ')}`);
+    const out = option(args, '--out');
+    const outAt = out ? (isAbsolute(out) ? out : resolve(out)) : null;
+    // Everything "keys" needs is read and checked before anything is
+    // written: the rules file, each key file already there, and that the
+    // folder of each file it would write can be made (its nearest folder
+    // that exists is a folder, not a file). A write can still fail after
+    // that (a full disk, a folder it may not write in).
+    const software = settings.contentRules ? [softwareEntry(settings.name, (await loadRules(settings.contentRules)).fingerprint)] : undefined;
+    const agents = http ? [...settings.agents].map(([name, paths]) => [name, paths.keys]) : [[null, settings.agent.keys]];
+    const keyPaths = [settings.executor.keys, ...agents.map(([, path]) => path)];
+    for (const path of keyPaths) {
+      if (existsSync(path)) await loadKeyFile(path, 'agent');
+      else if (!canMakeFolder(dirname(path))) throw new Error(`Nothing was written: the key file ${path} cannot be made, since a file stands where its folder would be.`);
+    }
+    if (outAt) {
+      if (keyPaths.some((path) => samePath(path, outAt))) throw new Error(`Nothing was written: ${outAt} (--out) is a key file of the settings. Name another file.`);
+      if (existsSync(outAt)) throw new Error(`Nothing was written: ${outAt} (--out) already exists. Name a new file.`);
+      if (!canMakeFolder(dirname(outAt))) throw new Error(`Nothing was written: ${outAt} (--out) cannot be made, since a file stands where its folder would be.`);
+    }
     const executor = await makeKeyFile(settings.executor.keys, 'agent');
     // The agent.software entry for the rules on content, where the settings name a rules file.
-    const software = settings.contentRules ? [softwareEntry(settings.name, (await loadRules(settings.contentRules)).fingerprint)] : undefined;
     const entry = (agent, who) => ({ agent: { name: who, keys: agent, ...(software ? { software } : {}) }, with: { id: settings.service, name: settings.name, keys: executor }, requires: [{ need: 'countersignature' }] });
-    if (isHttp(config)) {
-      const out = {};
-      for (const [name, paths] of settings.agents) out[name] = entry(await makeKeyFile(paths.keys, 'agent'), `${name}, through ${settings.name}`);
-      process.stdout.write(`${JSON.stringify(out, null, 2)}\n`);
-      return 0;
+    let result;
+    if (http) {
+      result = {};
+      for (const [name, path] of agents) result[name] = entry(await makeKeyFile(path, 'agent'), `${name}, through ${settings.name}`);
+    } else result = entry(await makeKeyFile(agents[0][1], 'agent'), `An agent, through ${settings.name}`);
+    const text = `${JSON.stringify(result, null, 2)}\n`;
+    if (outAt) {
+      mkdirSync(dirname(outAt), { recursive: true });
+      writeFileSync(outAt, text, { flag: 'wx' });
+      process.stderr.write(`provared-mcp-executor: wrote ${outAt}. ${KEYS_NEXT}\n`);
+    } else {
+      process.stdout.write(text);
+      process.stderr.write(`provared-mcp-executor: ${KEYS_NEXT}\n`);
     }
-    process.stdout.write(`${JSON.stringify(entry(await makeKeyFile(settings.agent.keys, 'agent'), `An agent, through ${settings.name}`), null, 2)}\n`);
     return 0;
   }
   if (command === 'compare') {

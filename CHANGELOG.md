@@ -2,6 +2,91 @@
 
 ## Not yet released
 
+- **`provared-mcp-executor` 0.4.0 (11 November 2026): the
+  first five minutes, with no passkey.** A trial from a fresh install of
+  0.3.0, following only the README, found that nothing could be seen to
+  work without a passkey. What changes, in `mcp-executor/`:
+  - **`provared-mcp-executor demo`** (`demo.mjs`): in a new folder of its
+    own in the system's temporary folder, which it names at the start and
+    leaves in place, it writes settings, makes the keys with the
+    executor's own `keys` command, has the library's development
+    stand-in for a passkey sign a permission (its issuer's name ends with
+    "(development)"; it proves nothing about anyone, and the output says
+    so at the start and the end), runs `check`, starts `stdio` in front of
+    the made-up tool server, sends `echo "hello"`, which is let through,
+    and `echo` with the word "password", which a rule on content refuses,
+    and checks the book with the library's checker. It writes nothing
+    anywhere else, and ends with exit code 0 only where each step went as
+    it should. `demo/server.mjs` and `demo/content-rules.json` are now in
+    the npm package, for this command; the rest of `demo/` is not.
+  - **`provared-mcp-executor init`** copies `executor.example.json` and
+    `content-rules.example.json` into the current folder as
+    `executor.json` and `content-rules.json` (`init --http`: the HTTP
+    executor's, as `executor-http.json`), says what to fill in next, and
+    writes nothing if either file is already there.
+  - **The example settings** mark what a person must fill in as a text
+    wholly in angle brackets: the server's program, its folder and its
+    credential file (they named a `files-server.mjs` and a
+    `secrets/files-token` that no one has), the upstream's credential
+    file, the passkey's thumbprint and the agents' secret hashes. They
+    give `edit_file` and `apply_patch` a rule in `tools`, since the
+    example rules on content name them.
+  - **`check` lists every problem it can find on its own in one run**:
+    the settings, each placeholder left, the server's program and folder
+    (a `server.cwd` that does not exist is now a problem), each
+    credential, the rules file, each key file (a missing one with the
+    command that makes it) and each slip. Only where none is found does it
+    hold the slips against the keys and the rules, as a start does; that
+    part stops at the first difference, as a start does.
+  - **`keys` reads and checks everything before it writes**: the
+    settings, the rules file, every key file already there, and that the
+    folder of each file it would write can be made (no file stands where a
+    folder would be); `--out` may not name a key file. 0.3.0 made the
+    executor's key file and then stopped on a missing rules file. A write
+    can still fail after these checks (a full disk, a folder it may not
+    write in), and leave the files written before it. It no longer needs the
+    passkey's thumbprint, which is known only once the person has signed,
+    or the agents' secret hashes, which it does not use. It prints the same JSON as before, and one line on
+    the standard error saying what to do with it; `--out <file>` writes the
+    JSON to a new file instead, making its folder where needed, as it makes
+    the key folders.
+  - **One warning set aside**: the command (`bin.mjs`, through
+    `quiet.mjs`) does not print Node.js's notice that its ML-DSA-87
+    signing is experimental, and prints every other warning, the notice
+    about SLH-DSA included. The library and code that imports the
+    executor set nothing aside.
+  - **`provared-mcp-executor --version`** prints the version.
+  - **The README** opens with a quick start (`demo` first, then `init`,
+    `keys` and `check`), says where the example files are and why the
+    ML-DSA-87 notice appears, gives the steps in an order that works,
+    marks what is only in the repository, and says that the MCP Registry
+    listed 0.2.0 as its latest version when it was looked at on
+    11 November 2026.
+  - **Versions.** 0.4.0 in `package.json`, `server.json` and the
+    command's `--version`. The library range stays `^0.7.0`.
+    `demo/package.json`, which installs the published 0.2.0 for the
+    repository's other demonstration, is unchanged.
+  - **Choices.** The demonstration's folder is left in place, so that the
+    book can be looked at, and its permission lasts one hour, since it is
+    used once. `init` copies into the current folder only and has no way
+    to overwrite. A placeholder is one of the six texts in angle brackets
+    in the two example files, word for word, so that no value of a
+    person's own is taken for one. Where a slip's folder does not exist,
+    `check` says to make it (`init --http` writes no `slips/`), so that
+    `init` writes only its two files. The line from `keys` goes to the standard error, so that what it
+    prints on the standard output stays JSON, which `demo/start.mjs`
+    reads. `--out` makes a new file only. Only a warning of the type
+    `ExperimentalWarning` whose text begins "The ML-DSA-87 Web Crypto API
+    algorithm is an experimental feature" is set aside, by wrapping
+    `process.emitWarning` in the command alone.
+  - **Tests**: `test/newcomer.test.mjs`, thirteen tests: `demo`,
+    `init`, the examples agreeing with each other, `check` listing every
+    problem (stdio and HTTP), the placeholders and the wording of
+    `check`'s messages, `keys` reading and checking all it needs before
+    it writes and needing no thumbprint, `--out` making its folder, the
+    warning set aside and no other, the version, and the package holding
+    every file the command loads.
+  - A workflow, started by hand, publishes the guard's listing on the MCP Registry with GitHub's identity token for the run (.github/workflows/mcp-registry.yml).
 - **A new package, `provared-connect` 0.1.0 (`connect/`): the connection by one line.** A person copies one line from a book's page in the Provared application and runs `npx --logs-max=0 provared-connect <line>` on the agent's computer; the recorder beside the agent is connected, with no file saved or moved by the person. The command checks the line (its prefix, version and every field), saves the connection beside the recorder where only its owner can read it (mode 0600; on Windows the access list set with `icacls` to the user alone, before anything is written), and starts the uploader in the background with the file's name, never the line, so the secret is in no long-running command line and in no log the package writes (`--logs-max=0` keeps it out of npm's own debug log; the shell's history may still hold it, and the README says so). The same line again changes nothing; a line from a new key of the same book replaces the connection and restarts the uploader; a connection file that cannot be read as one is never taken for none; a refusal names no value from the line. The uploader and the hand-over that used to live in the application moved into the package, with their tests, and run as before with `--connection <file>`; the uploader reads the connection file with the command's checks. The line's format and the choices made (numbered 1059 to 1081) are in `connect/README.md`. 131 tests pass, with the recorder beside Claude Code from the same commit; the six findings of a first independent review by an AI reviewer are fixed, each held by a test.
 - **The recorder beside Claude Code, as a plugin, installs library 0.8.0.** `integrations/claude-code/package.json` asks for `provared` `^0.8.0` (0.8.0 or later, before 0.9.0), where it asked for `>=0.6.0 <0.8.0`, and its lockfile installs 0.8.0, where it installed 0.6.0. The published `provared-claude-code` 0.1.0 is unchanged. Its README says so. The plugin's 18 tests pass.
 - **The home page** says what is new in 0.8.0.

@@ -1,5 +1,42 @@
 # provared-mcp-executor
 
+## Quick start
+
+With Node.js 24.7 or later:
+
+```
+npm install -g provared-mcp-executor
+provared-mcp-executor demo
+```
+
+`demo` needs no passkey and no settings. In a new temporary folder, which
+it names and leaves in place, it puts the executor in front of a made-up
+tool server, under a permission signed by a development stand-in for a
+passkey, sends it one tool call that is let through and one that a rule
+refuses, and checks the book with the Provared checker. The stand-in is not
+a person: its name ends with "(development)", and nothing the
+demonstration writes proves anything about anyone. It writes nothing
+outside that folder.
+
+For real use, in a folder of your own:
+
+```
+provared-mcp-executor init
+provared-mcp-executor keys --config executor.json
+provared-mcp-executor check --config executor.json
+```
+
+`init` copies the example settings and rules into the folder, as
+`executor.json` and `content-rules.json`. Put in each value written
+`<like this>` but the passkey's thumbprint, then make the keys; a person
+signs the permission with a passkey, and its thumbprint goes in last;
+`check` lists every problem left. "Set it up" below gives each step.
+The executor holds the tool server's credential in place of the agent,
+and keeps it from the agent only if the agent cannot read the
+executor's files: see "What it is".
+
+## What it is
+
 **This is the executor's record of what an agent asked for through it, and
 what the executor did with each call. It proves nothing about calls that do
 not go through it.** It counts only if the agent has no other way to the
@@ -42,7 +79,8 @@ runs as the same computer user can read them, and then the copy, the keys
 and the credential are all in its reach. Run the executor under a separate user account that the agent cannot use,
 or give the agent no shell or file tools. Over HTTP it can also run apart from
 the agent, where the agent cannot read the executor's files:
-[an example](recipes/agent-with-a-shell/README.md) puts them in separate
+[an example](recipes/agent-with-a-shell/README.md) (in the repository, not
+in the npm package) puts them in separate
 Docker containers on one computer, and its seven checks passed with
 Docker Desktop on Windows; on separate computers it has not been tried. The executor
 also keeps its own copy of every call, apart from the agent's log, which can
@@ -61,20 +99,40 @@ npm install -g provared-mcp-executor
 ```
 
 Or from a copy of the repository: in `mcp-executor`, `npm pack`, then
-`npm install -g ./provared-mcp-executor-0.3.0.tgz`.
+`npm install -g ./provared-mcp-executor-0.4.0.tgz`.
 
 It needs Node.js 24.7 or later, and depends only on the `provared` library,
 at version 0.7.0 or a later 0.7 version (`^0.7.0`): its receipts name
 `provared.tool-name` and `provared.tool-result`, which the format reserved
 in 0.7.0 and which a checker of 0.5.0 or 0.6.0 refuses (0.4.0 and
-earlier read them as labels).
+earlier read them as labels). `provared-mcp-executor --version` prints the
+version installed.
+
+The example files (`executor.example.json`, `executor-http.example.json`
+and `content-rules.example.json`) are in the installed package's folder,
+`provared-mcp-executor` inside the folder that `npm root -g` prints;
+`provared-mcp-executor init` copies them into the current folder.
+
+Node.js says that its ML-DSA-87 signing is experimental each time it is
+first used in a program. The executor signs every receipt with ML-DSA-87
+beside Ed25519, so the notice is expected; the command does not print that
+one notice, and prints every other warning. A program of your own that
+uses the executor's or the library's code sees the notice: it is not an
+error.
 
 ## Set it up
 
-1. Write the settings (`executor.example.json` is a start): the server to
-   start and where its credential is read from; the paths of the agent's
-   keys, slip and book; the executor's keys and copy; the tools and the
-   action each is. Paths are read from the settings file's folder.
+1. Write the settings. `provared-mcp-executor init` copies the example
+   settings and rules into the current folder as `executor.json` and
+   `content-rules.json` (`init --http` copies the HTTP executor's as
+   `executor-http.json`), and overwrites nothing. Then put in each value
+   written `<like this>`: the server to start, the folder it runs in and
+   the file its credential is read from. Set `tools` to the server's tools
+   and the action each is, and change `content-rules.json` to rules of
+   your own, or take `contentRules` out. The paths of the agent's keys,
+   slip and book and of the executor's keys and copy can stay as they are.
+   Paths are read from the settings file's folder. Leave the passkey's
+   thumbprint (`agent.issuerKeys`) for step 3.
 
 2. Make the keys. This makes the two key files if there are none, and
    prints what goes into the permission:
@@ -83,15 +141,20 @@ earlier read them as labels).
    provared-mcp-executor keys --config executor.json
    ```
 
-   The printed `agent.keys` go into the permission as the agent's keys; the
-   printed `with` entry (the executor's id, name and keys) goes into the
-   permission's `with`; and `requires` should hold
+   It does not need the passkey's thumbprint yet. It reads and checks
+   everything before it writes: the settings, the rules file, any key file
+   already there, and that the folder of each file it would write can be
+   made. With `--out <file>` it writes what it prints to a new file
+   instead (not one of the key files), making its folder where needed. The printed `agent.keys` go into the permission as the
+   agent's keys; the printed `with` entry (the executor's id, name and
+   keys) goes into the permission's `with`; and `requires` should hold
    `{"need": "countersignature"}`, so that a receipt without the executor's
    countersignature is a finding.
 
 3. The person signs the permission with their passkey (on the signing page
-   at https://sign.prova.red, or with the library) and saves it where the
-   settings say (`agent.slip`). The thumbprint of the passkey goes into
+   at https://sign.prova.red, or from a web page of your own with the
+   library's browser part, `provared/passkey-browser`) and saves it where
+   the settings say (`agent.slip`). The thumbprint of the passkey goes into
    `agent.issuerKeys`.
 
 4. Check the settings. This reads every rule, the keys, the slip and the
@@ -101,7 +164,12 @@ earlier read them as labels).
    provared-mcp-executor check --config executor.json
    ```
 
-   It writes nothing: no line to the book, no copy key.
+   It writes nothing: no line to the book, no copy key. It lists in one run
+   every problem it can find on its own: each value still written
+   `<like this>`, the server's program and folder, each credential, the
+   rules file, each key file and the slip. Once none is left, it holds the
+   slip against the keys and the rules, as a start does, and stops at the
+   first difference there.
 
 5. Point the agent's MCP client at the executor where it named the server.
    For a client whose settings are JSON:
@@ -135,8 +203,11 @@ otherwise) in front of one upstream HTTP MCP server named in
 under `agents.<name>`. `provared-mcp-executor secret` makes a secret and
 prints its hash; the hash goes into the settings as the agent's
 `secretHash`, the secret goes to the agent and is stored nowhere else.
-`keys` makes the executor's key file and one for each agent, and prints the
-entries for each agent's permission; `check` reads every agent's slip;
+`init --http` copies the example settings (`executor-http.json`) and rules
+into the current folder. `keys` makes the executor's key file and one for
+each agent, and prints the entries for each agent's permission (it needs
+no secret hash and no passkey's thumbprint yet); `check` reads every
+agent's slip;
 `compare --agent <name>` holds one agent's copy against its book.
 
 What the executor does with each request:
@@ -707,7 +778,7 @@ did what its result says, or a copy changed by whoever holds the copy key.
 - **Tried with.** Over HTTP the executor has been tried with the official
   MCP software on protocol version 2025-11-25 only, with every program on
   one computer; on 2026-07-28 it has met only a test server of its own
-  (`test/fake-http-server.mjs`).
+  (`test/fake-http-server.mjs`, in the repository).
 - **The rules on content** test only what a call carries, and prove
   nothing about calls that do not go through the executor; see "What the
   rules can never promise" above.
@@ -715,6 +786,11 @@ did what its result says, or a copy changed by whoever holds the copy key.
   the copy key can write lines that check.
 
 ## Working from a copy of the repository
+
+This part is for a copy of the repository
+(https://github.com/provared/provared): the tests, the `demo/` folder
+but for the two files `demo` uses, and `server.json` are not in the npm
+package.
 
 ```
 cd mcp-executor
@@ -729,13 +805,18 @@ which the HTTP executor is tested; nothing leaves the computer. The name
 library (`test/local-library.mjs`), so the tests run against the library
 as it is in the same commit.
 
-`demo/` holds a demonstration: the executor in front of a made-up tool
-server, set up on its first start with a permission signed by the
-library's development stand-in for a passkey, so that it can be started
-with no settings and no secret. Its records prove nothing about anyone;
-see `demo/README.md`. `server.json` describes the package for the
-official MCP Registry, where version 0.2.0 is listed as
-`io.github.provared/mcp-executor`; it is not in the npm package. A version can be
+`demo/` holds a second demonstration, `start.mjs`, which is not the `demo`
+command: the executor in front of the same made-up tool server, run as an
+MCP server that a client or a directory of MCP servers can start, set up
+on its first start with a permission signed by the library's development
+stand-in for a passkey, so that it can be started with no settings and no
+secret. Its records prove nothing about anyone; see `demo/README.md`. Of
+that folder, only `server.mjs` (the made-up server) and
+`content-rules.json` (its one rule) are in the npm package, for the `demo`
+command. `server.json` describes the package for the official MCP
+Registry, where, when the registry was looked at on 11 November 2026, the
+latest version listed as `io.github.provared/mcp-executor` was 0.2.0;
+0.3.0 was not listed. A version can be
 published to the registry only after the same version is on npm, because
 the registry reads that version's `package.json` from npm and compares its
 `mcpName` with the name in `server.json`. Publishing under

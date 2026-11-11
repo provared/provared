@@ -1,0 +1,78 @@
+# Updates the guard's listing on the official MCP Registry
+# (registry.modelcontextprotocol.io) to the version in mcp-executor/server.json.
+#
+# When: only when started by hand ("Run workflow" on the Actions page, or
+# `gh workflow run mcp-registry.yml`), after that version is on npm.
+# Nothing else starts it.
+#
+# What it does, in order:
+#   1. checks that server.json and mcp-executor/package.json carry the same
+#      version, and that npm already holds provared-mcp-executor at that
+#      version with the matching mcpName (the registry checks this too);
+#   2. downloads the registry's own publisher tool at a pinned version and
+#      checks its SHA-256 against the value in this file, taken from the
+#      tool's published checksums (registry_1.8.1_checksums.txt);
+#   3. signs in with GitHub's identity token for this run (no password or
+#      token is stored anywhere) and publishes server.json.
+#
+# Permissions: read the repository, and ask for an identity token. Only
+# someone with write access to the repository can start it. It does not use
+# the environment "release", which accepts only version tags of the library.
+
+name: mcp-registry
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      MCP_PUBLISHER_VERSION: v1.8.1
+      MCP_PUBLISHER_SHA256: a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Check the versions agree and the package is on npm
+        working-directory: mcp-executor
+        run: |
+          set -eu
+          pkg=$(node -p "require('./package.json').version")
+          srv=$(node -p "require('./server.json').version")
+          srvpkg=$(node -p "require('./server.json').packages[0].version")
+          name=$(node -p "require('./server.json').name")
+          echo "package.json $pkg, server.json $srv (package entry $srvpkg), name $name"
+          test "$pkg" = "$srv"
+          test "$pkg" = "$srvpkg"
+          published=$(npm view "provared-mcp-executor@$pkg" version)
+          test "$published" = "$pkg"
+          mcpname=$(npm view "provared-mcp-executor@$pkg" mcpName)
+          test "$mcpname" = "$name"
+
+      - name: Download and check the publisher tool
+        run: |
+          set -eu
+          curl -fsSL -o mcp-publisher.tar.gz \
+            "https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}/mcp-publisher_linux_amd64.tar.gz"
+          echo "${MCP_PUBLISHER_SHA256}  mcp-publisher.tar.gz" | sha256sum -c -
+          tar -xzf mcp-publisher.tar.gz mcp-publisher
+          rm mcp-publisher.tar.gz
+          ./mcp-publisher --help > /dev/null
+
+      - name: Sign in with this run's identity and publish
+        working-directory: mcp-executor
+        run: |
+          set -eu
+          ../mcp-publisher login github-oidc
+          ../mcp-publisher publish

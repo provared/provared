@@ -6,7 +6,8 @@
 //
 // It will not start unless DEMO_TOKEN in its environment equals the
 // made-up credential in the file "demo-token" of the folder it is started
-// in. start.mjs writes that file into each set-up's folder; the executor's
+// in. start.mjs writes that file into each set-up's folder, and
+// ../demo.mjs (the command "provared-mcp-executor demo") into its own; the executor's
 // settings name it, and the executor starts the server in that folder with
 // the value. The agent's client is never handed the value. This shows
 // where a credential lives; it is not a protection: anything that can read

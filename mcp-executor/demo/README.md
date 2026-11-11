@@ -14,6 +14,11 @@ of MCP servers that starts each server and asks it what it offers.
 
 ## What is in it
 
+`server.mjs` and `content-rules.json` are also used by the command
+`provared-mcp-executor demo` (the file `demo.mjs` one folder up), which
+runs once in a new temporary folder and ends; those two files are in the
+npm package, and the rest of this folder is not.
+
 - `server.mjs`: a made-up tool server over stdio, with no dependencies. It
   has two harmless tools: `echo` hands back a text, and `add` adds two
   whole numbers. It reaches no network. It will not start unless
