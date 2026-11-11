@@ -21,7 +21,7 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import http from 'node:http';
 import https from 'node:https';
 import { unfinished } from './copy.mjs';
-import { EXECUTOR_STOPPED, NOT_FOR_KEYS, SHARED_KEYS, SHORT_NAME, UNLISTED_FORWARD_WARNING, callCore, describeContentRules, describeSlip, describeTools, filteredList, isObject, isPlaceholder, missingFiles, openAgent, pathFrom, placeholderProblems, prepareAgent, prepareShared, readAgentPaths, readCredentialFile, readIdentity, readKnobs, readToolRules, serverIds } from './executor.mjs';
+import { EXECUTOR_STOPPED, NOT_FOR_KEYS, SHARED_KEYS, SHORT_NAME, UNLISTED_FORWARD_WARNING, callCore, describeContentRules, describeRecorder, describeSlip, describeTools, filteredList, isObject, isPlaceholder, missingFiles, openAgent, pathFrom, placeholderProblems, prepareAgent, prepareShared, readAgentPaths, readCredentialFile, readIdentity, readKnobs, readRecorderSettings, readToolRules, reportFromFiles, sealTimer, serverIds } from './executor.mjs';
 import { CODES, MAX_LINE_BYTES, idKey, isId, readMessage, responseText, spliceId, topLevelId, unsafeInteger } from './jsonrpc.mjs';
 
 /** The most a POST body may be, unless the settings say otherwise: 10 MiB, as the gateway takes. */
@@ -44,6 +44,10 @@ export const HEADER_MISMATCH = -32020;
 export const MAX_ANNOTATED_TOOLS = 1000;
 /** What stands in place of the upstream's credential wherever it would have reached an agent. */
 export const CREDENTIAL_REMOVED = '[a credential was removed by the Provared executor]';
+/** The executor's own addresses, for the administrator, are this path and those under it: GET /provared/status, POST /provared/seal and POST /provared/acknowledge (the gateway's). */
+export const ADMIN_PATH = '/provared';
+/** The most a body sent to one of the executor's own addresses may be: 64 KiB. */
+export const ADMIN_BODY_LIMIT = 64 * 1024;
 
 /** The agent's headers that go on to the upstream. Every other is dropped: a header is a way to carry a token, and the upstream must get none but the executor's. */
 const FORWARDED_HEADERS = ['accept', 'accept-language', 'content-type', 'mcp-session-id', 'last-event-id'];
@@ -99,6 +103,15 @@ export function readHttpSettings(config, root, { keysOnly = false } = {}) {
   }
   s.path = config.path ?? '/mcp';
   if (typeof s.path !== 'string' || !/^\/[A-Za-z0-9._~\-/]*$/.test(s.path) || s.path.includes('//')) at('path', 'must be the path of the MCP endpoint, beginning with "/", such as "/mcp".');
+  else if (s.path === ADMIN_PATH || s.path.startsWith(`${ADMIN_PATH}/`)) at('path', `must not be ${ADMIN_PATH} or under it: those are the executor's own addresses, for the administrator.`);
+
+  // The administrator's secret, kept as its hash: without one, the executor's own addresses (status, seal, acknowledge) answer nothing.
+  s.admin = null;
+  if (config.admin !== undefined) {
+    if (!isObject(config.admin) || typeof config.admin.secretHash !== 'string' || !SECRET_HASH.test(config.admin.secretHash)) at('admin.secretHash', 'must be the hash of the administrator\'s secret (provared-mcp-executor secret makes one).');
+    else s.admin = { secretHash: config.admin.secretHash };
+    if (isObject(config.admin)) for (const k of Object.keys(config.admin)) if (k !== 'secretHash') warnings.push(`admin.${k}: not a setting; set aside.`);
+  }
 
   const up = config.upstream;
   if (!isObject(up)) at('upstream', 'must be an object: url, credential.');
@@ -140,6 +153,7 @@ export function readHttpSettings(config, root, { keysOnly = false } = {}) {
       const paths = readAgentPaths(a, root, at, prefix);
       paths.name = name;
       if (typeof a.secretHash !== 'string' || !SECRET_HASH.test(a.secretHash)) at(`${prefix}.secretHash`, 'must be the hash of the agent\'s secret (provared-mcp-executor secret makes one).');
+      else if (s.admin && a.secretHash === s.admin.secretHash) at(`${prefix}.secretHash`, 'is also admin.secretHash: an agent must not hold the administrator\'s secret.');
       else paths.secretHash = a.secretHash;
       const copy = a.copy ?? `copies/${name}.jsonl`;
       if (typeof copy !== 'string' || copy === '') at(`${prefix}.copy`, 'must be a path.');
@@ -170,12 +184,13 @@ export function readHttpSettings(config, root, { keysOnly = false } = {}) {
 
   readToolRules(config, s, at);
   readKnobs(config, s, at, root);
+  readRecorderSettings(config, s, at, root, warnings);
   s.bodyLimit = config.bodyLimit ?? BODY_LIMIT;
   if (!Number.isInteger(s.bodyLimit) || s.bodyLimit < 1024 || s.bodyLimit > 1024 * 1024 * 1024) at('bodyLimit', 'must be a whole number of bytes from 1,024 to 1,073,741,824.');
   s.allowedOrigins = config.allowedOrigins ?? [];
   if (!Array.isArray(s.allowedOrigins) || !s.allowedOrigins.every((o) => typeof o === 'string' && /^https?:\/\/[^/\s]+$/.test(o))) at('allowedOrigins', 'must be a list of origins (scheme, host and port, such as "http://localhost:3000") whose pages may call the executor; with none, a call that names an Origin is refused.');
   for (const k of Object.keys(config)) {
-    if (![...SHARED_KEYS, 'listen', 'path', 'upstream', 'agents', 'executor', 'bodyLimit', 'allowedOrigins'].includes(k)) warnings.push(`${k}: not a setting; set aside.`);
+    if (![...SHARED_KEYS, 'listen', 'path', 'upstream', 'agents', 'executor', 'bodyLimit', 'allowedOrigins', 'admin'].includes(k)) warnings.push(`${k}: not a setting; set aside.`);
   }
   if (s.unlisted === 'forward') warnings.push(UNLISTED_FORWARD_WARNING);
   return { settings: problems.length ? null : s, problems, warnings, partial: s };
@@ -220,10 +235,21 @@ export async function checkHttpConfig(config, root) {
       warnings.push(...p.warnings.map((w) => `agents.${name}: ${w}`));
       agents[name] = { slip: describeSlip(p.about), contentRules: describeContentRules(settings, shared.content, p.about), unfinished: unfinished(p.read).length };
     }
-    return { problems: [], warnings, tools, upstream: settings.upstream.url, credential: settings.upstream.credential !== null, listen: settings.listen, path: settings.path, agents };
+    if (!settings.admin) warnings.push('admin: no administrator\'s secret is named, so GET /provared/status, POST /provared/seal and POST /provared/acknowledge answer nothing; "seal", "acknowledge" and "status" then work only with --offline, on a stopped executor.');
+    return { problems: [], warnings, tools, upstream: settings.upstream.url, credential: settings.upstream.credential !== null, listen: settings.listen, path: settings.path, agents, recorder: describeRecorder(settings, shared.sealer), admin: settings.admin !== null };
   } catch (e) {
     return { problems: [e.message], warnings, tools };
   }
+}
+
+/** The "status" of an HTTP executor from its files, where it is not running to be asked (reportFromFiles): {executor, from: 'files', recorder, agents}. Nothing is written. */
+export async function httpStatusFromFiles(config, root, { now = Date.now } = {}) {
+  const { settings, problems } = readHttpSettings(config, root);
+  if (problems.length) throw new Error(`The settings have problems:\n- ${problems.join('\n- ')}`);
+  const shared = await prepareShared(settings);
+  const agents = {};
+  for (const [name, paths] of settings.agents) agents[name] = await reportFromFiles(paths, settings, shared, { now });
+  return { executor: 'provared-mcp-executor', from: 'files', recorder: describeRecorder(settings, shared.sealer), agents };
 }
 
 // --- server-sent events ---
@@ -303,13 +329,16 @@ export async function openHttpExecutor(config, more = {}) {
   if (problems.length) throw new Error(`The settings have problems:\n- ${problems.join('\n- ')}`);
   const shared = await prepareShared(settings);
   warnings.push(...shared.warnings);
-  const credential = readUpstreamCredential(settings);
+  // Opened to work on the files of an executor that is not running ("seal", "acknowledge" with --offline): the upstream's credential is not read, and it does not listen.
+  const offline = more.offline === true;
+  const credential = offline ? null : readUpstreamCredential(settings);
   if (credential && credential.token.length < 16) warnings.push('upstream.credential: the token is shorter than 16 characters, so any text of the upstream\'s that happens to hold it is replaced on its way to an agent.');
+  const admin = settings.admin ? Buffer.from(settings.admin.secretHash) : null;
   const agents = new Map();
   for (const [name, paths] of settings.agents) {
     const prepared = await prepareAgent(paths, settings, shared, { now });
     warnings.push(...prepared.warnings.map((w) => `agents.${name}: ${w}`));
-    const agent = await openAgent(prepared, { settings, executorKeys: shared.executorKeys, now, log, name });
+    const agent = await openAgent(prepared, { settings, executorKeys: shared.executorKeys, now, log, name, sealer: shared.sealer });
     agent.hash = Buffer.from(paths.secretHash);
     agent.open = 0;
     /** The sessions this agent opened, oldest first. */
@@ -791,8 +820,95 @@ export async function openHttpExecutor(config, more = {}) {
     }
   }
 
+  // --- the executor's own addresses, for the administrator ---
+
+  const isAdmin = (secret) => {
+    const given = Buffer.from(secretHash(secret));
+    return admin !== null && given.length === admin.length && timingSafeEqual(given, admin);
+  };
+  /** An answer of one of the executor's own addresses: JSON, in the gateway's form. Nothing of the upstream's is in it; it passes through the scrub all the same. */
+  const adminJson = (res, status, value, extra = {}) => json(res, status, scrub(JSON.stringify(value)), extra);
+  const adminRefuse = (res, status, code, message, extra = {}) => adminJson(res, status, { taken: false, code, message }, extra);
+
+  /**
+   * GET /provared/status, POST /provared/seal and POST /provared/acknowledge,
+   * as the gateway's: for the administrator alone, by a secret of the
+   * administrator's own, which no agent holds. Without an administrator's
+   * secret in the settings they answer nothing. A request that names an
+   * Origin (a web page's) is refused whatever "allowedOrigins" says.
+   */
+  async function adminAddress(req, res, path) {
+    if (req.headers.origin !== undefined) {
+      log({ event: 'refused', code: 'origin-refused', address: path });
+      return adminRefuse(res, 403, 'origin-refused', 'The executor\'s own addresses take no request from a web page (a request that names an Origin).', { connection: 'close' });
+    }
+    if (admin === null) return adminRefuse(res, 404, 'not-found', 'This executor has no administrator\'s secret ("admin"), so its own addresses answer nothing.');
+    const secret = bearer(req);
+    if (!secret || !isAdmin(secret)) {
+      log({ event: 'not-signed-in', address: path });
+      return adminRefuse(res, 401, 'not-signed-in', 'The executor\'s own addresses need the administrator\'s secret, in one header: Authorization: Bearer <secret>.', { 'www-authenticate': 'Bearer' });
+    }
+    if (stopping) return adminRefuse(res, 503, 'stopping', 'The executor is stopping and takes no request.', { connection: 'close' });
+    if (req.method === 'GET' && path === `${ADMIN_PATH}/status`) return adminJson(res, 200, await report());
+    const posted = req.method === 'POST' && [`${ADMIN_PATH}/seal`, `${ADMIN_PATH}/acknowledge`].includes(path);
+    if (!posted) return adminRefuse(res, 404, 'not-found', 'The executor\'s own addresses are GET /provared/status, POST /provared/seal and POST /provared/acknowledge.');
+    let body;
+    try {
+      body = await readBody(req);
+    } catch (e) {
+      return adminRefuse(res, e.code === 'BODY_TIMEOUT' ? 408 : 400, 'bad-request', 'The body did not arrive whole.', { connection: 'close' });
+    }
+    if (body === null || body.length > ADMIN_BODY_LIMIT) return adminRefuse(res, 413, 'too-large', `A body sent to the executor's own addresses may be ${ADMIN_BODY_LIMIT} bytes at most.`, { connection: 'close' });
+    let asked;
+    try {
+      asked = JSON.parse(body.toString('utf8'));
+    } catch {
+      asked = null;
+    }
+    const name = isObject(asked) ? asked.agent : undefined;
+    if (path === `${ADMIN_PATH}/seal`) {
+      if (typeof name !== 'string' || !agents.has(name)) return adminRefuse(res, 400, 'bad-request', 'Name the agent whose book to seal: {"agent": "<name>"}.');
+      try {
+        return adminJson(res, 200, await seal(name));
+      } catch (e) {
+        return adminRefuse(res, 409, 'not-sealed', e.message);
+      }
+    }
+    if (typeof name !== 'string' || !agents.has(name)) return adminRefuse(res, 400, 'bad-request', 'Name the agent whose calls to acknowledge: {"agent": "<name>"}.');
+    try {
+      return adminJson(res, 200, await acknowledge(name, { setAside: asked.setAside }));
+    } catch (e) {
+      return adminRefuse(res, 409, 'not-acknowledged', e.message);
+    }
+  }
+
+  /** Seal an agent's book now, with the recorder's keys: {agent, entry, fingerprint}. */
+  async function seal(name) {
+    const agent = agents.get(name);
+    if (!agent) throw new Error(`The executor has no agent named "${name}".`);
+    const { entry, fingerprint } = await agent.seal();
+    return { agent: name, entry, fingerprint };
+  }
+
+  /** The administrator acknowledges an agent's calls sent under a permission no longer in force, and may set some aside (openAgent's "acknowledge"): {agent, written, setAside, remaining}. */
+  async function acknowledge(name, o = {}) {
+    const agent = agents.get(name);
+    if (!agent) throw new Error(`The executor has no agent named "${name}".`);
+    return { agent: name, ...(await agent.acknowledge(o)) };
+  }
+
+  /** What the executor says about itself: the recorder, and for each agent its book, its last seal, whether the book passes its check and the calls waiting to be acknowledged. */
+  async function report() {
+    const out = {};
+    for (const [name, agent] of agents) out[name] = await agent.report();
+    return { executor: 'provared-mcp-executor', from: 'running', recorder: describeRecorder(settings, shared.sealer), agents: out };
+  }
+
+  const timer = settings.recorder?.sealEvery ? sealTimer([...agents.values()], settings.recorder.sealEvery) : null;
+
   async function take(req, res) {
     const path = (req.url ?? '').split('?')[0];
+    if (path === ADMIN_PATH || path.startsWith(`${ADMIN_PATH}/`)) return adminAddress(req, res, path);
     if (path !== settings.path) return refuse(res, 404, null, CODES.invalidRequest, `The MCP endpoint is ${settings.path}.`);
     // A browser page's request names its Origin; none may call unless the settings name it (the transport's rule against DNS rebinding).
     const origin = req.headers.origin;
@@ -988,10 +1104,17 @@ export async function openHttpExecutor(config, more = {}) {
       return a ? { writer: a.writer, stopped: a.stopped, slip: { fingerprint: a.about.fingerprint }, calls: () => a.calls.size, open: () => a.open } : null;
     },
     executorKeys: shared.executorKeys.keys,
+    /** The recorder that seals: its name, the fingerprint of its key set and the timer; null where the settings name none. */
+    recorder: describeRecorder(settings, shared.sealer),
     handle,
-    /** Start listening as the settings say (or on "port", for tests). Gives {address, port}. */
+    seal,
+    acknowledge,
+    report,
+    /** Start listening as the settings say (or on "port", for tests). Gives {address, port}. The books are sealed on a timer from now, where the settings say so. */
     listen({ port = settings.listen.port, host = settings.listen.host } = {}) {
       if (server) throw new Error('The executor is already listening.');
+      if (offline) throw new Error('The executor was opened to work on its files (offline), and does not listen.');
+      timer?.start();
       // No request timeout of the server's own, which would cut a long GET stream; the headers have a minute, and the body's reading its own limit (readBody).
       server = http.createServer({ requestTimeout: 0, headersTimeout: 60000 }, handle);
       server.on('clientError', (e, socket) => {
@@ -1015,6 +1138,7 @@ export async function openHttpExecutor(config, more = {}) {
      */
     async close() {
       stopping = true;
+      timer?.stop();
       const s = server;
       server = null;
       for (const a of agents.values()) {

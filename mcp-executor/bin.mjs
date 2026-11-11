@@ -30,6 +30,22 @@
 //   provared-mcp-executor compare --config executor.json [--book <file>] [--agent <name>]
 //                                                          hold the executor's copy against a book (over HTTP,
 //                                                          the named agent's copy and book)
+//   provared-mcp-executor seal    --config <settings> [--agent <name>] [--offline]
+//                                                          seal a book now, with the recorder's three keys
+//   provared-mcp-executor acknowledge --config <settings> [--agent <name>] [--set-aside <call,…>] [--offline]
+//                                                          acknowledge the calls sent under a permission no
+//                                                          longer in force that have no receipt, and set
+//                                                          aside those named
+//   provared-mcp-executor status  --config <settings> [--offline]
+//                                                          the last seal, whether each book passes its check,
+//                                                          and the calls waiting to be acknowledged
+//
+// Over HTTP, "seal", "acknowledge" and "status" ask the running executor,
+// with the administrator's secret from the environment
+// (PROVARED_MCP_EXECUTOR_ADMIN_SECRET); with --offline they work on the
+// files of an executor that is not running, and need no secret. Over stdio
+// there is no address to ask: "seal" and "acknowledge" take --offline
+// only, and "status" reads the files.
 //
 // "check", "keys" and "compare" read either kind of settings: the stdio
 // executor's (with "server" and "agent") or the HTTP executor's (with
@@ -44,16 +60,20 @@
 
 import './quiet.mjs';
 import { constants, copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import nodeHttp from 'node:http';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadCopyKey } from './copy.mjs';
 import { compareCopyWithBook } from './compare.mjs';
-import { checkConfig, loadRules, openExecutor, readSettings, softwareEntry } from './executor.mjs';
+import { checkConfig, loadRules, openExecutor, readSettings, softwareEntry, statusFromFiles } from './executor.mjs';
 import { loadKeyFile, makeKeyFile, readIfThere } from './files.mjs';
-import { checkHttpConfig, newSecret, openHttpExecutor, readHttpSettings, secretHash } from './http.mjs';
+import { ADMIN_PATH, checkHttpConfig, httpStatusFromFiles, newSecret, openHttpExecutor, readHttpSettings, secretHash } from './http.mjs';
+import { loadRecorder } from './sealing.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const VERSION = JSON.parse(readFileSync(join(HERE, 'package.json'), 'utf8')).version;
+/** The variable of the environment that holds the administrator's secret, for the commands that ask a running HTTP executor. */
+const ADMIN_SECRET_ENV = 'PROVARED_MCP_EXECUTOR_ADMIN_SECRET';
 
 const USAGE = `provared-mcp-executor ${VERSION}: an executor for MCP tool servers. It holds the server's credentials, checks each tool call against a permission a person signed, sends on the calls the permission allows, and writes a signed, countersigned receipt for each. Evidence, not a verdict.
 
@@ -65,7 +85,18 @@ const USAGE = `provared-mcp-executor ${VERSION}: an executor for MCP tool server
   provared-mcp-executor check   --config <settings>
   provared-mcp-executor keys    --config <settings> [--out <file>]
   provared-mcp-executor compare --config <settings> [--book <file>] [--agent <name>]
-  provared-mcp-executor --version`;
+  provared-mcp-executor seal    --config <settings> [--agent <name>] [--offline]
+  provared-mcp-executor acknowledge --config <settings> [--agent <name>] [--set-aside <call,…>] [--offline]
+  provared-mcp-executor status  --config <settings> [--offline]
+  provared-mcp-executor --version
+
+Over HTTP, "seal", "acknowledge" and "status" ask the running executor, with the administrator's secret in
+${ADMIN_SECRET_ENV}; with --offline they work on the files of an executor that is not running, and need
+no secret. Over stdio there is no address to ask: "seal" and "acknowledge" take --offline only, and "status"
+reads the files.`;
+
+/** What the commands that work on the files say first, on the standard error. */
+const OFFLINE_NOTICE = 'the files were opened here; no executor may be running on them.';
 
 /** What to do with what "keys" prints, said in one line on the standard error. */
 const KEYS_NEXT = 'What to do with this: it goes into the permission the person signs with a passkey: "agent" as the permission\'s agent (over HTTP, one for each agent), the "with" entry in its "with", and "requires" as it is. Then put the passkey\'s thumbprint in issuerKeys and run "check" (README, "Set it up").';
@@ -120,6 +151,58 @@ function readConfig(args) {
     throw new Error(`The settings file ${full} could not be read as JSON (${e.code ?? e.message}).`);
   }
   return { config, root: dirname(full) };
+}
+
+/** The agent a command is for: over HTTP, the one --agent names; over stdio, the only one (null), and --agent is not taken. */
+function agentOf(config, args, what) {
+  const name = option(args, '--agent');
+  if (!isHttp(config)) {
+    if (name !== undefined) throw new Error('These settings are the stdio executor\'s, which has one agent: --agent is not taken.');
+    return null;
+  }
+  const names = config.agents !== null && typeof config.agents === 'object' ? Object.keys(config.agents) : [];
+  if (!name) throw new Error(`Name the agent ${what}: --agent <name> (one of ${names.join(', ')}).`);
+  if (!names.includes(name)) throw new Error(`The settings name no agent "${name}" (they name ${names.join(', ')}).`);
+  return name;
+}
+
+/** Open the executor on its files, for a command run with --offline: no server is started, nothing listens, no credential is read. */
+function openOffline(config, root) {
+  return isHttp(config) ? openHttpExecutor(config, { root, offline: true }) : openExecutor(config, { root, offline: true });
+}
+
+/**
+ * Ask the running HTTP executor at one of its own addresses, with the
+ * administrator's secret from the environment. Gives {status, value}. The
+ * answer is waited for as long as a call may take ("timeout") and half a
+ * minute more: a seal waits its turn behind a call in progress.
+ */
+function askRunning(config, method, path, body, hint) {
+  const secret = process.env[ADMIN_SECRET_ENV];
+  if (!secret) throw new Error(`Put the administrator's secret in the environment: ${ADMIN_SECRET_ENV}.`);
+  const listen = config.listen ?? {};
+  // An executor that listens on every address is asked at the local one.
+  const host = listen.host === undefined || listen.host === '0.0.0.0' ? '127.0.0.1' : listen.host === '::' ? '::1' : listen.host;
+  const port = listen.port ?? 8796;
+  const wait = (Number.isInteger(config.timeout) ? config.timeout : 300000) + 30000;
+  return new Promise((done, failed) => {
+    const data = body === undefined ? undefined : Buffer.from(JSON.stringify(body));
+    const req = nodeHttp.request({ host, port, method, path, agent: false, headers: { authorization: `Bearer ${secret}`, connection: 'close', ...(data ? { 'content-type': 'application/json', 'content-length': data.length } : {}) } }, (res) => {
+      const chunks = [];
+      res.on('data', (c) => chunks.push(c));
+      res.on('error', failed);
+      res.on('end', () => {
+        try {
+          done({ status: res.statusCode, value: JSON.parse(Buffer.concat(chunks).toString('utf8')) });
+        } catch {
+          failed(new Error('The executor gave an answer that is not JSON.'));
+        }
+      });
+    });
+    req.setTimeout(wait, () => req.destroy(new Error(`The executor at ${host}:${port} gave no answer within ${wait} ms.`)));
+    req.on('error', (e) => failed(e.code === 'ECONNREFUSED' ? new Error(`The executor is not running at ${host}:${port}. ${hint}`) : e));
+    req.end(data);
+  });
 }
 
 /** "stdio" (and "demo --stdio"): run the executor over this process's standard input and output until the server ends. */
@@ -222,8 +305,15 @@ async function main(args) {
       if (existsSync(path)) await loadKeyFile(path, 'agent');
       else if (!canMakeFolder(dirname(path))) throw new Error(`Nothing was written: the key file ${path} cannot be made, since a file stands where its folder would be.`);
     }
+    // The recorder's three keys for sealing, where the settings name a recorder: a file of its own.
+    const recorderAt = settings.recorder?.keys ?? null;
+    if (recorderAt) {
+      if (keyPaths.some((path) => samePath(path, recorderAt))) throw new Error(`Nothing was written: recorder.keys (${recorderAt}) is also the key file of the executor or of an agent. The recorder has a key file of its own.`);
+      if (existsSync(recorderAt)) await loadKeyFile(recorderAt, 'recorder');
+      else if (!canMakeFolder(dirname(recorderAt))) throw new Error(`Nothing was written: the key file ${recorderAt} cannot be made, since a file stands where its folder would be.`);
+    }
     if (outAt) {
-      if (keyPaths.some((path) => samePath(path, outAt))) throw new Error(`Nothing was written: ${outAt} (--out) is a key file of the settings. Name another file.`);
+      if ([...keyPaths, ...(recorderAt ? [recorderAt] : [])].some((path) => samePath(path, outAt))) throw new Error(`Nothing was written: ${outAt} (--out) is a key file of the settings. Name another file.`);
       if (existsSync(outAt)) throw new Error(`Nothing was written: ${outAt} (--out) already exists. Name a new file.`);
       if (!canMakeFolder(dirname(outAt))) throw new Error(`Nothing was written: ${outAt} (--out) cannot be made, since a file stands where its folder would be.`);
     }
@@ -244,6 +334,12 @@ async function main(args) {
       process.stdout.write(text);
       process.stderr.write(`provared-mcp-executor: ${KEYS_NEXT}\n`);
     }
+    if (recorderAt) {
+      // The recorder's keys go into no permission: what a reader needs is the fingerprint of the key set.
+      await makeKeyFile(recorderAt, 'recorder');
+      const recorder = await loadRecorder(settings.recorder);
+      process.stderr.write(`provared-mcp-executor: the recorder's keys, with which the books are sealed, are in ${recorderAt}. The fingerprint of its key set is ${recorder.fingerprint}: whoever checks a book names it as the recorder they expect (the checker's --sealer).\n`);
+    }
     return 0;
   }
   if (command === 'compare') {
@@ -262,9 +358,84 @@ async function main(args) {
     if (!existsSync(bookAt)) throw new Error(`The book ${bookAt} does not exist.`);
     const copyKey = loadCopyKey(paths.copyKey, { create: false });
     if (!copyKey) throw new Error(`The copy key ${paths.copyKey} does not exist: the executor has not run yet, or the key was moved. Nothing to compare.`);
-    const result = await compareCopyWithBook({ copyPath: paths.copy, copyKey, name: settings.name, service: settings.service, book: readIfThere(bookAt), options: { issuerKeys: paths.issuerKeys } });
+    // Where the settings name a recorder and its key file is here, a seal in the book must be that recorder's.
+    const sealKeys = settings.recorder && existsSync(settings.recorder.keys) ? [(await loadRecorder(settings.recorder)).fingerprint] : null;
+    const result = await compareCopyWithBook({ copyPath: paths.copy, copyKey, name: settings.name, service: settings.service, book: readIfThere(bookAt), options: { issuerKeys: paths.issuerKeys, ...(sealKeys ? { sealKeys } : {}) } });
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     return result.summary.agree ? 0 : 1;
+  }
+  if (command === 'status') {
+    const { config, root } = readConfig(args);
+    let value;
+    if (!isHttp(config)) value = await statusFromFiles(config, root);
+    else if (args.includes('--offline')) value = await httpStatusFromFiles(config, root);
+    else {
+      const answer = await askRunning(config, 'GET', `${ADMIN_PATH}/status`, undefined, 'To read the files of an executor that is not running, add --offline.');
+      process.stdout.write(`${JSON.stringify(answer.value, null, 2)}\n`);
+      return answer.status === 200 ? 0 : 1;
+    }
+    process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
+    return 0;
+  }
+  if (command === 'seal') {
+    const { config, root } = readConfig(args);
+    const offline = args.includes('--offline');
+    const name = agentOf(config, args, 'whose book to seal');
+    const whose = name === null ? 'the book' : `${name}'s book`;
+    if (offline) {
+      process.stderr.write(`provared-mcp-executor: ${OFFLINE_NOTICE}\n`);
+      const executor = await openOffline(config, root);
+      try {
+        const sealed = await (name === null ? executor.seal() : executor.seal(name));
+        process.stdout.write(`Sealed: entry ${sealed.entry} of ${whose} is the seal ${sealed.fingerprint}.\n`);
+      } finally {
+        await executor.close();
+      }
+      return 0;
+    }
+    if (name === null) throw new Error(`Over stdio there is no running executor to ask. Seal the book while the executor is not running, with --offline; or set "recorder.sealEvery" in the settings, and the executor seals it on a timer while it runs.`);
+    const answer = await askRunning(config, 'POST', `${ADMIN_PATH}/seal`, { agent: name }, 'To seal a book while it is stopped, add --offline.');
+    if (answer.status !== 200) {
+      process.stderr.write(`provared-mcp-executor: the book was not sealed: ${answer.value?.message ?? answer.status}\n`);
+      return 1;
+    }
+    process.stdout.write(`Sealed: entry ${answer.value.entry} of ${whose} is the seal ${answer.value.fingerprint}.\n`);
+    return 0;
+  }
+  if (command === 'acknowledge') {
+    const { config, root } = readConfig(args);
+    const offline = args.includes('--offline');
+    const name = agentOf(config, args, 'whose calls to acknowledge');
+    const aside = option(args, '--set-aside');
+    const setAside = aside === undefined ? [] : aside.split(',').map((s) => s.trim()).filter(Boolean);
+    let value;
+    if (offline) {
+      process.stderr.write(`provared-mcp-executor: ${OFFLINE_NOTICE}\n`);
+      const executor = await openOffline(config, root);
+      try {
+        value = await (name === null ? executor.acknowledge({ setAside }) : executor.acknowledge(name, { setAside }));
+      } finally {
+        await executor.close();
+      }
+    } else {
+      if (name === null) throw new Error('Over stdio there is no running executor to ask, and the executor does not start while a call waits to be acknowledged. Run the command with --offline.');
+      const answer = await askRunning(config, 'POST', `${ADMIN_PATH}/acknowledge`, { agent: name, setAside }, 'To acknowledge while it is stopped, add --offline.');
+      if (answer.status !== 200) {
+        process.stderr.write(`provared-mcp-executor: nothing was acknowledged: ${answer.value?.message ?? answer.status}\n`);
+        return 1;
+      }
+      value = answer.value;
+    }
+    const who = name ?? 'The executor';
+    for (const l of value.setAside) process.stdout.write(`Set aside, with no receipt: ${l.call} (${l.problem ?? 'by the administrator'}).\n`);
+    for (const w of value.written) process.stdout.write(w.found ? `Sent at ${w.when} (${w.tool}): the book already held its receipt, ${w.stub}; none was written.\n` : `Sent at ${w.when} (${w.tool}): its receipt, written under the permission it was sent under, is ${w.stub}.\n`);
+    if (value.remaining.length) {
+      for (const l of value.remaining) process.stdout.write(`Still waiting: ${l.call}: ${l.problem ?? 'can be acknowledged'}\n`);
+      process.stdout.write(`${who} still takes no calls.\n`);
+      return 1;
+    }
+    process.stdout.write(`${who} takes calls again${offline ? ', once it is started' : ''}.\n`);
+    return 0;
   }
   throw new Error(`Unknown command "${command}".\n\n${USAGE}`);
 }

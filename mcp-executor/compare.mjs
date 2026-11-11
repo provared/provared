@@ -10,7 +10,9 @@
 // ("differs"); a receipt in the book that names the executor but that the
 // executor's copy does not know ("notInCopy"); a denial the executor wrote
 // that the book lacks; a call the executor sent and never gave a receipt
-// ("unfinished"). Beside these it reports the executor's receipts and
+// ("unfinished"); a call the executor sent that the administrator set
+// aside, which has no receipt ("setAside": the copy and the book then do
+// not agree, since the book does not show a call that was sent). Beside these it reports the executor's receipts and
 // denials under a slip that states rules on content (an agent.software
 // entry named "Content rules of ...") that name no rules file
 // ("withoutRules"): records of an executor that ran without the rules the
@@ -83,6 +85,7 @@ export async function compareCopyWithBook({ copyPath, copyKey, name, service, bo
     missing: [],
     notWritten: [],
     unfinished: [],
+    setAside: [],
     refused: [],
     denialsMissing: [],
     notInCopy: [],
@@ -107,6 +110,11 @@ export async function compareCopyWithBook({ copyPath, copyKey, name, service, bo
     const inBook = stubsByCall.get(key);
     if (inBook) seen.add(key);
     const about = { call: c.call, when: c.sending.when, tool: c.sending.tool, action: c.sending.action };
+    if (c['set-aside'] && typeof c.done?.stub !== 'string') {
+      // Sent, and set aside by the administrator: the executor wrote no receipt for it, and writes none.
+      result.setAside.push({ ...about, setAsideAt: c['set-aside'].when, inBook: inBook ? inBook.stub : null });
+      continue;
+    }
     if (!c.done) {
       result.unfinished.push({ ...about, inBook: inBook ? inBook.stub : null });
       continue;
@@ -131,8 +139,9 @@ export async function compareCopyWithBook({ copyPath, copyKey, name, service, bo
   result.withoutRules = withoutRules;
   result.notInCopy.push(...stubsWithoutCall);
   result.summary = {
-    sent: result.matched.length + result.differs.length + result.missing.length + result.notWritten.length + result.unfinished.length,
+    sent: result.matched.length + result.differs.length + result.missing.length + result.notWritten.length + result.unfinished.length + result.setAside.length,
     matched: result.matched.length,
+    setAside: result.setAside.length,
     missingFromBook: result.missing.length,
     notWrittenByExecutor: result.notWritten.length,
     differ: result.differs.length,
@@ -146,6 +155,7 @@ export async function compareCopyWithBook({ copyPath, copyKey, name, service, bo
       result.differs.length === 0 &&
       result.notWritten.length === 0 &&
       result.unfinished.length === 0 &&
+      result.setAside.length === 0 &&
       result.notInCopy.length === 0 &&
       result.denialsMissing.length === 0 &&
       copy.refused === 0 &&

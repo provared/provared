@@ -48,6 +48,7 @@
     "jsonrpc.mjs",
     "files.mjs",
     "rules.mjs",
+    "sealing.mjs",
     "bin.mjs",
     "quiet.mjs",
     "demo.mjs",

@@ -32,6 +32,7 @@ import { loadCopyKey, openCopy, readCopy, unfinished } from './copy.mjs';
 import { aboutSlip, bookFile, loadKeyFile, readIfThere, slipFrom, untilFree } from './files.mjs';
 import { CODES, MAX_LINE_BYTES, idKey, isId, notificationLine, readLines, readMessage, repeatedName, responseLine, responseText, spliceId, topLevelId, unsafeInteger } from './jsonrpc.mjs';
 import { RULES_DOCUMENT, RULE_DOCUMENT, RULES_ENTRY_PREFIX, TOOL_NAME, lookUp, readPointer, readRules, rulesFingerprint, statesContentRules, testCall } from './rules.mjs';
+import { loadRecorder, localSealer } from './sealing.mjs';
 
 /** The document, in each stub and denial, whose fingerprint is that of the executor's own identifier for the call (a label, not a reserved name). */
 export const CALL_DOCUMENT = 'executor.call';
@@ -54,6 +55,14 @@ export const UNREADABLE_ANSWER = 'The tool server answered with a line the execu
 /** The document a receipt written at a restart names, and the text its fingerprint is of. */
 export const WRITTEN_LATE_DOCUMENT = 'executor.written-late';
 export const WRITTEN_LATE = 'This receipt was written when the executor next started, from its own copy of what it had sent: the executor stopped before the receipt could be written. Its date is the time the call was sent; the countersignature is dated at the restart.';
+/** The error text a receipt names where the administrator acknowledged a call sent under a permission no longer in force, and the copy does not hold its outcome. */
+export const OUTCOME_UNKNOWN_ACKNOWLEDGED = `${EXECUTOR_STOPPED} The administrator acknowledged the call, and the receipt was then written from the executor's own copy of what it had sent.`;
+/** The text whose fingerprint a receipt written on acknowledgement names under "executor.written-late" (WRITTEN_LATE_DOCUMENT), in place of WRITTEN_LATE. */
+export const WRITTEN_ON_ACKNOWLEDGEMENT = 'This receipt was written when the administrator acknowledged the call, from the executor\'s own copy of what it had sent: the executor stopped before the receipt could be written, and started again under another permission. Its date is the time the call was sent; the countersignature is dated at the acknowledgement.';
+
+/** The least and the most "recorder.sealEvery" may be, in milliseconds: a second, and seven days. */
+export const SEAL_EVERY_MIN = 1000;
+export const SEAL_EVERY_MAX = 7 * 86400000;
 
 /** The most requests other than tool calls kept waiting for the server's answer; past it the oldest is forgotten. */
 export const MAX_MAPPED = 1000;
@@ -172,6 +181,7 @@ export function readSettings(config, root, { keysOnly = false } = {}) {
 
   readToolRules(config, s, at);
   readKnobs(config, s, at, root);
+  readRecorderSettings(config, s, at, root, warnings);
   s.shutdownWait = config.shutdownWait ?? 5000;
   if (!Number.isInteger(s.shutdownWait) || s.shutdownWait < 100 || s.shutdownWait > 600000) at('shutdownWait', 'must be a whole number of milliseconds from 100 to 600,000.');
   for (const k of Object.keys(config)) {
@@ -182,8 +192,29 @@ export function readSettings(config, root, { keysOnly = false } = {}) {
 }
 
 /** The settings both ways of running share: the name, the service id, the tool rules and the knobs of readKnobs. */
-export const SHARED_KEYS = ['name', 'service', 'tools', 'unlisted', 'hideUnlisted', 'timeout', 'denialsPerHour', 'callIdInMeta', 'maxWaiting', 'contentRules'];
+export const SHARED_KEYS = ['name', 'service', 'tools', 'unlisted', 'hideUnlisted', 'timeout', 'denialsPerHour', 'callIdInMeta', 'maxWaiting', 'contentRules', 'recorder'];
 export const UNLISTED_FORWARD_WARNING = 'unlisted is "forward": a call to a tool that no rule names is sent on with no receipt and no denial. The record then leaves those calls out.';
+
+/**
+ * The recorder that seals the books, as "recorder" names it: its key file
+ * ("keys"), its name (a label on each seal; the executor's name unless
+ * given) and, where the books are to be sealed on a timer, "sealEvery" in
+ * milliseconds. Into s.recorder; null where the settings name none, and
+ * the executor then cannot seal.
+ */
+export function readRecorderSettings(config, s, at, root, warnings) {
+  s.recorder = null;
+  const r = config.recorder;
+  if (r === undefined) return;
+  if (!isObject(r)) return at('recorder', 'must be an object: keys and, where wanted, name and sealEvery.');
+  const out = { keys: null, name: r.name ?? s.name, sealEvery: r.sealEvery ?? null };
+  if (typeof r.keys !== 'string' || r.keys === '') at('recorder.keys', 'must be the path of the recorder\'s key file (provared-mcp-executor keys makes it).');
+  else out.keys = pathFrom(root, r.keys);
+  if (typeof out.name !== 'string' || out.name.length < 1 || out.name.length > 200) at('recorder.name', 'must be text of 1 to 200 characters.');
+  if (out.sealEvery !== null && (!Number.isInteger(out.sealEvery) || out.sealEvery < SEAL_EVERY_MIN || out.sealEvery > SEAL_EVERY_MAX)) at('recorder.sealEvery', 'must be a whole number of milliseconds from 1,000 to 604,800,000 (seven days): how often each book is sealed while the executor runs. Leave it out for no timer.');
+  for (const k of Object.keys(r)) if (!['keys', 'name', 'sealEvery'].includes(k)) warnings.push(`recorder.${k}: not a setting; set aside.`);
+  s.recorder = out;
+}
 
 /** The executor's name and its service id (the id the slip gives it in "with"). Into s. */
 export function readIdentity(config, s, at) {
@@ -406,7 +437,9 @@ export async function prepareShared(settings) {
       }
     }
   }
-  return { executorKeys, content, warnings };
+  // The recorder that seals, where the settings name one: its keys are read here and nowhere else (sealing.mjs).
+  const sealer = settings.recorder ? localSealer(await loadRecorder(settings.recorder)) : null;
+  return { executorKeys, content, warnings, sealer };
 }
 
 /**
@@ -462,7 +495,9 @@ export async function prepareAgent(paths, settings, shared, { now = Date.now, re
   // where the book does not hold it yet: a new book, or a new slip.
   const onDisk = readIfThere(paths.book);
   let text = onDisk;
-  const checkOptions = { issuerKeys: paths.issuerKeys };
+  // Where the settings name a recorder, a seal in the book must be that recorder's: one signed with other keys is a problem (sealer-not-expected).
+  const options = shared.sealer ? { sealKeys: [shared.sealer.fingerprint] } : {};
+  const checkOptions = { ...options, issuerKeys: paths.issuerKeys };
   let result = text ? await checkBook(text, checkOptions) : null;
   if (result && result.summary.problemFound) throw new Error(`The book file ${paths.book} does not pass its check, so the executor does not write to it.`);
   if (!result || !result.entries.some((e) => e.kind === 'slip' && e.fingerprint === about.fingerprint)) {
@@ -476,6 +511,7 @@ export async function prepareAgent(paths, settings, shared, { now = Date.now, re
     slip: about.fingerprint,
     privateKeys: agentKeys.privateKeys,
     issuerKeys: paths.issuerKeys,
+    options,
     now,
     denials: true,
     denialsPerHour: settings.denialsPerHour,
@@ -488,37 +524,49 @@ export async function prepareAgent(paths, settings, shared, { now = Date.now, re
   if (read.lines.length > 0 && read.checked === 0) throw new Error(`No line of the copy ${paths.copy} checks under the copy key ${paths.copyKey}: the key is not the one the copy was written with. Put back the key the copy was written with.`);
   if (!read.sequence.ok) throw new Error(`The copy ${paths.copy} is not whole: ${read.sequence.problem} The executor does not start on a copy with a line missing, moved or put twice; look at it, and keep what it shows.`);
   const copy = copyKey ? openCopy(paths.copy, copyKey, settings.name, read.next) : null;
-  return { paths, warnings, agentKeys, about, file, writer, copy, read };
+  return { paths, warnings, agentKeys, about, file, writer, copy, read, options, checkOptions };
 }
 
 /**
  * Open everything the stdio executor needs but the server: the keys, the
  * slip, the book, the copy, the stub writer and the credentials. Says what
  * is wrong in one error. With "readOnly" nothing is written (checkConfig).
+ * With "offline" (the commands that work on the files of an executor that
+ * is not running) the server's program and its credentials are not read:
+ * no server is started.
  */
-async function prepare(config, root, { now = Date.now, readOnly = false } = {}) {
+async function prepare(config, root, { now = Date.now, readOnly = false, offline = false } = {}) {
   const { settings, problems, warnings } = readSettings(config, root);
   if (problems.length) throw new Error(`The settings have problems:\n- ${problems.join('\n- ')}`);
-  const program = resolveCommand(settings.server.command, { root, path: settings.server.path });
-  if (program.warning) warnings.push(program.warning);
-  settings.server.resolved = program.path;
+  const env = {};
+  const credentialNames = [];
+  if (!offline) {
+    const program = resolveCommand(settings.server.command, { root, path: settings.server.path });
+    if (program.warning) warnings.push(program.warning);
+    settings.server.resolved = program.path;
+  }
   const shared = await prepareShared(settings);
   warnings.push(...shared.warnings);
-  // The credentials: read now, so that a missing one stops the start, and
-  // kept in memory for the server's environment alone.
-  const env = {};
-  for (const name of settings.server.passEnv) {
-    const v = process.env[name];
-    if (v !== undefined) env[name] = v;
-  }
-  const credentialNames = [];
-  for (const [name, from] of Object.entries(settings.server.env)) {
-    env[name] = credentialValue(name, from);
-    credentialNames.push(name);
+  if (!offline) {
+    // The credentials: read now, so that a missing one stops the start, and
+    // kept in memory for the server's environment alone.
+    for (const name of settings.server.passEnv) {
+      const v = process.env[name];
+      if (v !== undefined) env[name] = v;
+    }
+    for (const [name, from] of Object.entries(settings.server.env)) {
+      env[name] = credentialValue(name, from);
+      credentialNames.push(name);
+    }
   }
   const agent = await prepareAgent({ ...settings.agent, copy: settings.executor.copy, copyKey: settings.executor.copyKey }, settings, shared, { now, readOnly });
   warnings.push(...agent.warnings);
-  return { settings, warnings, agent, agentKeys: agent.agentKeys, executorKeys: shared.executorKeys, about: agent.about, env, credentialNames, read: agent.read, content: shared.content };
+  return { settings, warnings, agent, agentKeys: agent.agentKeys, executorKeys: shared.executorKeys, about: agent.about, env, credentialNames, read: agent.read, content: shared.content, sealer: shared.sealer };
+}
+
+/** The recorder, as "check" and "status" show it: its name, the fingerprint of its key set (what a person checking names as the recorder they expect) and the timer. Null where the settings name none. */
+export function describeRecorder(settings, sealer) {
+  return sealer ? { name: sealer.name, fingerprint: sealer.fingerprint, sealEvery: settings.recorder.sealEvery } : null;
 }
 
 /**
@@ -559,7 +607,7 @@ export async function checkConfig(config, root) {
   if (problems.length) return { problems, warnings, tools };
   try {
     const p = await prepare(config, root, { readOnly: true });
-    return { problems: [], warnings: p.warnings, tools, program: p.settings.server.resolved, slip: describeSlip(p.about, p.content), credentials: p.credentialNames, contentRules: describeContentRules(p.settings, p.content, p.about), unfinished: unfinished(p.read).length };
+    return { problems: [], warnings: p.warnings, tools, program: p.settings.server.resolved, slip: describeSlip(p.about, p.content), credentials: p.credentialNames, contentRules: describeContentRules(p.settings, p.content, p.about), unfinished: unfinished(p.read).length, recorder: describeRecorder(p.settings, p.sealer) };
   } catch (e) {
     return { problems: [e.message], warnings, tools };
   }
@@ -620,12 +668,12 @@ export function placeholderProblems(config, problems) {
  */
 export async function missingFiles(s, agents) {
   const problems = [];
-  const keyFile = async (path, what) => {
+  const keyFile = async (path, what, kind = 'agent') => {
     if (!path || isPlaceholder(basename(path))) return;
     if (!existsSync(path)) problems.push(`${what}: the key file ${path} does not exist yet. Make it with "provared-mcp-executor keys --config <this settings file>".`);
     else {
       try {
-        await loadKeyFile(path, 'agent');
+        await loadKeyFile(path, kind);
       } catch (e) {
         problems.push(`${what}: ${e.message}`);
       }
@@ -639,6 +687,7 @@ export async function missingFiles(s, agents) {
     }
   }
   await keyFile(s.executor?.keys, 'executor.keys');
+  await keyFile(s.recorder?.keys, 'recorder.keys', 'recorder');
   for (const [prefix, paths] of agents) {
     await keyFile(paths.keys, `${prefix}.keys`);
     if (paths.slip && !isPlaceholder(basename(paths.slip)) && readIfThere(paths.slip) === '') problems.push(`${prefix}.slip: the slip ${paths.slip} is missing. Sign the permission (at https://sign.prova.red) and save it there${isFolder(dirname(paths.slip)) ? '' : `, in the folder ${dirname(paths.slip)}, which does not exist yet: make it first`}.`);
@@ -681,11 +730,14 @@ export function describeContentRules(settings, content, about) {
  * receipt (the executor stopped meanwhile) is given one now, under the slip
  * it was sent under: with what the executor knew of the outcome where the
  * copy holds that, or naming "provared.error" with OUTCOME_UNKNOWN. Where
- * that slip is not the one in force, this throws and the executor does not
- * open. With "name" (several agents) every log event names the agent.
+ * that slip is not the one in force, the call waits for the administrator
+ * ("pending"): the agent takes no call until each such call has been
+ * acknowledged or set aside ("acknowledge"). With "name" (several agents)
+ * every log event names the agent. With "sealer" (sealing.mjs) the agent's
+ * book can be sealed ("seal").
  */
-export async function openAgent(prepared, { settings, executorKeys, now, log, name = null }) {
-  const { about, file, writer, copy, paths } = prepared;
+export async function openAgent(prepared, { settings, executorKeys, now, log, name = null, sealer = null }) {
+  const { about, file, writer, copy, paths, options } = prepared;
   const agentLog = name === null ? log : (event) => log({ agent: name, ...event });
   for (const l of prepared.read.lines) if (!l.valid) agentLog({ event: 'copy-line-refused', line: l.raw.slice(0, 80) });
 
@@ -694,6 +746,10 @@ export async function openAgent(prepared, { settings, executorKeys, now, log, na
     stopped ??= why;
     agentLog({ event, reason: why });
   };
+  /** The calls sent under a permission no longer in force that have no receipt: while there are any, the agent takes no call. */
+  let pending = [];
+  /** Why the agent takes no call: something it could not write, or calls that wait for the administrator. Null where it takes calls. */
+  const stoppedNow = () => stopped ?? (pending.length ? waitingWords(pending) : null);
 
   /** Append what the book gained to its file. False, and the agent stopped, where that failed. */
   function save() {
@@ -707,26 +763,14 @@ export async function openAgent(prepared, { settings, executorKeys, now, log, na
   }
 
   // Calls the copy shows as sent and not finished.
-  const stubsByCall = async () => {
-    const held = new Map();
-    for (const e of (await writer.check()).entries) {
-      if (e.kind !== 'stub' || !Array.isArray(e.content?.details)) continue;
-      for (const d of e.content.details) if (d.name === CALL_DOCUMENT) held.set(d.sha256, e.fingerprint);
-    }
-    return held;
-  };
   const open = unfinished(prepared.read);
   if (open.length) {
-    const held = await stubsByCall();
-    for (const { sending: s, done: d } of open) {
-      const inBook = held.get(await identifierFingerprint(s.call));
-      if (inBook) {
-        copy.note({ kind: 'done', call: s.call, when: new Date(now()).toISOString(), outcome: 'found-in-book', stub: inBook });
-        continue;
-      }
-      if (s.slip !== about.fingerprint) {
-        throw new Error(`The copy ${paths.copy} shows call ${s.call} sent under permission ${s.slip}, which is not the one in force (${about.fingerprint}), and the book holds no receipt for it. The executor cannot write that receipt under the permission in force. Put back the permission it was sent under and start again, so that the receipt is written; then put the new permission in place.`);
-      }
+    const sorted = await sortUnfinished(open, await writer.check(), { settings, about, agentKeys: prepared.agentKeys.keys, executorKeys: executorKeys.keys, writer, startedAt: now() });
+    for (const f of sorted.found) copy.note({ kind: 'done', call: f.call, when: new Date(now()).toISOString(), outcome: 'found-in-book', stub: f.stub });
+    // Sent under a permission that is no longer the one in force: these wait for the administrator.
+    pending = sorted.pending;
+    if (pending.length) agentLog({ event: 'receipt-missing', calls: pending.map(shownCall) });
+    for (const { sending: s, done: d } of sorted.late) {
       // What the copy knows of the outcome, where the receipt was made and could not be written; else the fixed text.
       const known = Array.isArray(d?.documents) && d.documents.length ? d.documents : null;
       const details = [...(Array.isArray(s.details) ? s.details : []), ...(known ?? [{ name: 'provared.error', sha256: await identifierFingerprint(OUTCOME_UNKNOWN) }]), { name: WRITTEN_LATE_DOCUMENT, sha256: await identifierFingerprint(WRITTEN_LATE) }];
@@ -742,10 +786,21 @@ export async function openAgent(prepared, { settings, executorKeys, now, log, na
     }
   }
 
-  // One tool call at a time goes through the writer; this is its queue.
+  // One tool call at a time goes through the writer; this is its queue. A
+  // seal and an acknowledgement take their turn in it too: a seal must
+  // cover the book as it is.
   let turn = Promise.resolve();
+  let busy = 0;
   const inTurn = (work) => {
-    const mine = turn.then(work, work);
+    const counted = async () => {
+      busy += 1;
+      try {
+        return await work();
+      } finally {
+        busy -= 1;
+      }
+    };
+    const mine = turn.then(counted, counted);
     turn = mine.then(
       () => {},
       () => {},
@@ -753,6 +808,147 @@ export async function openAgent(prepared, { settings, executorKeys, now, log, na
     return mine;
   };
 
+  /** Before a seal or an acknowledged receipt is written: the book file must hold the book, as the executor left it. Throws, and stops the agent, where it does not. */
+  const fileAsLeft = () => {
+    if (!file.holds(writer.book()) && !save()) throw new Error(`The book file could not be written: ${stopped}`);
+    let intact;
+    try {
+      intact = file.intact();
+    } catch {
+      intact = false;
+    }
+    if (!intact) {
+      stop('the book file is not as the executor left it: something else changed it.', 'book-changed');
+      throw new Error(`The agent is stopped: ${stopped}`);
+    }
+  };
+
+  /**
+   * Seal the book now, with the recorder's keys. The seal goes into the
+   * book only if the whole book still passes its check with it (the stub
+   * writer's "add"). With "onlyIfNew", nothing is sealed where the book's
+   * last entry is its last seal; with "olderThan" (milliseconds), nothing
+   * where its last seal is younger than that. Gives {sealed: true, entry,
+   * fingerprint}, or {sealed: false, reason}.
+   */
+  function seal({ onlyIfNew = false, olderThan = null } = {}) {
+    if (!sealer) throw new Error('The settings name no recorder ("recorder"), so the executor cannot seal.');
+    return inTurn(async () => {
+      if (stoppedNow()) throw new Error(`The agent is stopped: ${stoppedNow()}`);
+      fileAsLeft();
+      const result = await writer.check();
+      const last = result.entries.filter((e) => e.kind === 'seal' && e.problems.length === 0).at(-1);
+      if (onlyIfNew && last && last.index === result.size - 1) return { sealed: false, reason: 'nothing-new' };
+      if (olderThan !== null && last && now() - Date.parse(last.content.when) < olderThan) return { sealed: false, reason: 'not-due' };
+      const sealed = await sealer.seal(writer.book(), { previous: last?.fingerprint, when: now() });
+      await writer.add({ seal: sealed.record });
+      if (!save()) throw new Error(`The seal is in the executor's memory, and the book file could not be written: ${stopped}`);
+      agentLog({ event: 'sealed', entry: result.size, seal: sealed.fingerprint });
+      return { sealed: true, entry: result.size, fingerprint: sealed.fingerprint };
+    });
+  }
+
+  /**
+   * The administrator acknowledges the calls sent under a permission no
+   * longer in force that have no receipt, and may set aside calls (by the
+   * "call" the status gives them). A call set aside is noted in the copy
+   * and in the log, and gets no receipt. Each call acknowledged gets a
+   * receipt, written from its line in the copy by a stub writer opened for
+   * the permission it was sent under, on the book as it stands, dated
+   * when it was sent, countersigned now; the agent's own writer takes the
+   * line into the book only if the book still passes its check with it. It
+   * names what the copy holds of the outcome, or "provared.error" with
+   * OUTCOME_UNKNOWN_ACKNOWLEDGED, and "executor.written-late" with
+   * WRITTEN_ON_ACKNOWLEDGEMENT. A call leaves the list once the line
+   * saying so is in the copy; a call whose receipt the book already holds
+   * gets no second one. The agent takes calls again once none is waiting.
+   * @param {{setAside?: string[]}} [o]
+   */
+  function acknowledge(o = {}) {
+    const setAside = o.setAside ?? [];
+    if (!Array.isArray(setAside) || !setAside.every((c) => typeof c === 'string')) throw new Error('setAside: must be a list of the calls to set aside, as the status names them.');
+    return inTurn(async () => {
+      if (pending.length === 0) throw new Error('This agent has no call without a receipt to acknowledge.');
+      for (const c of setAside) if (!pending.some((p) => p.call === c)) throw new Error(`No call "${c}" is waiting to be acknowledged.`);
+      if (stopped) throw new Error(`The agent is stopped: ${stopped}`);
+      fileAsLeft();
+      const at = () => new Date(now()).toISOString();
+      const asideNow = [];
+      for (const c of new Set(setAside)) {
+        const p = pending.find((x) => x.call === c);
+        copy.note({ kind: 'set-aside', call: c, when: at() });
+        pending = pending.filter((x) => x !== p);
+        asideNow.push(shownCall(p));
+        agentLog({ event: 'call-set-aside', call: shownCall(p) });
+      }
+      const usable = pending.filter((p) => p.problem === null).sort((x, y) => Date.parse(x.sending.when) - Date.parse(y.sending.when));
+      if (usable.length === 0 && asideNow.length === 0) throw new Error('No call waiting can have a receipt written from its line; set aside those you have looked at (setAside).');
+      const written = [];
+      for (const p of usable) {
+        const s = p.sending;
+        // Never two receipts for one call: the book is looked at again before each is written.
+        const inBook = stubsByCall(await writer.check()).get(await identifierFingerprint(p.call));
+        if (inBook) {
+          copy.note({ kind: 'done', call: p.call, when: at(), outcome: 'found-in-book', stub: inBook });
+          pending = pending.filter((x) => x !== p);
+          written.push({ call: p.call, when: s.when, tool: s.tool, action: s.action, slip: s.slip, stub: inBook, found: true });
+          continue;
+        }
+        const details = [...s.details, ...(p.known ?? [{ name: 'provared.error', sha256: await identifierFingerprint(OUTCOME_UNKNOWN_ACKNOWLEDGED) }]), { name: WRITTEN_LATE_DOCUMENT, sha256: await identifierFingerprint(WRITTEN_ON_ACKNOWLEDGEMENT) }];
+        const other = await openRecorder({ book: writer.book(), slip: s.slip, privateKeys: prepared.agentKeys.privateKeys, issuerKeys: paths.issuerKeys, options, now });
+        const made = await other.record({ action: s.action, ...(s.amount ? { amount: s.amount } : {}), with: settings.service, details }, { when: Date.parse(s.when), countersign: (stub) => countersign(stub, executorKeys.privateKeys, now()) });
+        if (!made.countersignature.accepted) throw new Error(`The receipt of call ${p.call} was not written: the executor's countersignature was not taken under the permission the call was sent under (${made.countersignature.problem?.code ?? 'none was given'}).`);
+        await writer.add(JSON.parse(made.line));
+        if (!save()) throw new Error(`The receipt is in the executor's memory, and the book file could not be written: ${stopped}`);
+        copy.note({ kind: 'done', call: p.call, when: at(), outcome: p.known ? 'acknowledged' : 'acknowledged-outcome-unknown', stub: made.fingerprint, countersigned: true });
+        pending = pending.filter((x) => x !== p);
+        written.push({ call: p.call, when: s.when, tool: s.tool, action: s.action, slip: s.slip, stub: made.fingerprint });
+        agentLog({ event: 'acknowledged', call: p.call, stub: made.fingerprint, outcome: p.known ? 'as the copy knew it' : 'not known' });
+      }
+      return { written, setAside: asideNow, remaining: pending.map(shownCall) };
+    });
+  }
+
+  let lastCheck = null;
+  /**
+   * What the agent's record shows now: the slip in force, the entries and
+   * bytes of the book, its last seal, whether the book as it stands passes
+   * its check, why the agent takes no call (or null), and the calls
+   * waiting to be acknowledged. The stub writer answers a check only
+   * between calls: while a call is with the server, the check shown is the
+   * last one, with "checkedNow" false and its time in "checkedAt".
+   */
+  async function report() {
+    let checked = null;
+    if (busy === 0) {
+      let timer;
+      const late = new Promise((done) => (timer = setTimeout(() => done(null), 2000)));
+      const result = await Promise.race([writer.check(), late]);
+      clearTimeout(timer);
+      if (result) {
+        checked = { ...bookSummary(result), at: new Date(now()).toISOString() };
+        lastCheck = checked;
+      }
+    }
+    const shown = checked ?? lastCheck;
+    return {
+      slip: about.fingerprint,
+      entries: shown?.entries ?? null,
+      bytes: Buffer.byteLength(writer.book()),
+      lastSeal: shown?.lastSeal ?? null,
+      sound: shown?.sound ?? null,
+      withinSlips: shown?.withinSlips ?? null,
+      checkedAt: shown?.at ?? null,
+      checkedNow: checked !== null,
+      stopped: stoppedNow(),
+      receiptsMissing: pending.map(shownCall),
+      waiting: calls.size,
+      fileHoldsBook: file.holds(writer.book()),
+    };
+  }
+
+  /** The tool calls in progress or waiting their turn, by the client's id. @type {Map<string, object>} */
+  const calls = new Map();
   return {
     name,
     paths,
@@ -763,11 +959,238 @@ export async function openAgent(prepared, { settings, executorKeys, now, log, na
     agentKeys: prepared.agentKeys,
     log: agentLog,
     stop,
-    stopped: () => stopped,
+    stopped: stoppedNow,
     save,
     inTurn,
-    /** The tool calls in progress or waiting their turn, by the client's id. @type {Map<string, object>} */
-    calls: new Map(),
+    seal,
+    acknowledge,
+    report,
+    /** The calls that wait for the administrator, as the status shows them. */
+    pending: () => pending.map(shownCall),
+    calls,
+  };
+}
+
+// --- calls that wait for the administrator ---
+
+const FINGERPRINT = /^[A-Za-z0-9_-]{43}$/;
+const CALL_ID = /^[A-Za-z0-9_-]{1,64}$/;
+/** The members of a "sending" line of the copy, and the documents it may name: what the executor writes before a call is sent. */
+const SENDING_MEMBERS = ['seq', 'kind', 'call', 'when', 'slip', 'tool', 'action', 'amount', 'with', 'details'];
+const SENT_DOCUMENTS = ['provared.arguments', TOOL_DOCUMENT, CALL_DOCUMENT, RULES_DOCUMENT, 'provared.trace-id', 'provared.request-id'];
+const OUTCOME_DOCUMENTS = [RESULT_DOCUMENT, 'provared.error'];
+const isDocument = (d, names) => isObject(d) && Object.keys(d).length === 2 && names.includes(d.name) && typeof d.sha256 === 'string' && FINGERPRINT.test(d.sha256);
+
+/** The book's stubs that name a call of the executor's: the fingerprint of each "executor.call" document, with its stub's. */
+function stubsByCall(checked) {
+  const held = new Map();
+  for (const e of checked.entries) {
+    if (e.kind !== 'stub' || !Array.isArray(e.content?.details)) continue;
+    for (const d of e.content.details) if (d.name === CALL_DOCUMENT) held.set(d.sha256, e.fingerprint);
+  }
+  return held;
+}
+
+/** What a whole check of a book shows of it, for the status: its entries, its last seal, and whether it passes. */
+function bookSummary(result) {
+  const last = result.entries.filter((e) => e.kind === 'seal' && e.problems.length === 0).at(-1);
+  return { entries: result.size, lastSeal: last ? { entry: last.index, fingerprint: last.fingerprint, when: last.content.when } : null, sound: !result.summary.problemFound, withinSlips: result.summary.withinSlips };
+}
+
+/**
+ * The calls a copy shows as sent and not finished (unfinished), held
+ * against a check of the book: "found", those whose receipt the book
+ * already holds ({call, stub}); "late", those sent under the slip in force,
+ * which the next start gives a receipt; and "pending", those sent under
+ * another slip, which wait for the administrator, each with whether a
+ * receipt can be written from its line (lineProblem).
+ */
+export async function sortUnfinished(open, checked, { settings, about, agentKeys, executorKeys, writer, startedAt }) {
+  const held = stubsByCall(checked);
+  // The slips the book holds, sound: a call may be acknowledged under any of them.
+  const slips = new Map(checked.entries.filter((e) => e.kind === 'slip' && e.problems.length === 0).map((e) => [e.fingerprint, e.content]));
+  const out = { found: [], late: [], pending: [] };
+  for (const { sending, done } of open) {
+    const stub = held.get(await identifierFingerprint(sending.call));
+    if (stub) out.found.push({ call: sending.call, stub });
+    else if (sending.slip === about.fingerprint) out.late.push({ sending, done });
+    else out.pending.push({ call: sending.call, sending, done, ...(await lineProblem(sending, done, { settings, slips, agentKeys, executorKeys, writer, startedAt })) });
+  }
+  return out;
+}
+
+/**
+ * Whether a receipt can be written from a "sending" line of the copy
+ * (whose tag checked) for a call sent under another slip than the one in
+ * force: {problem: null, warning, known} where it can, or a sentence
+ * saying why not. The line must hold only what the executor writes; name a
+ * slip the book holds, which names the agent's and the executor's keys as
+ * the executor holds them now; give a time not after this start; give an
+ * amount and documents of the forms the executor writes; and pass the
+ * library's own checks of a request's fields. "known" is what a later line
+ * of the copy holds of the outcome (one document), or null. "warning" says
+ * where a rule has changed since: the line can still be acknowledged.
+ */
+async function lineProblem(s, done, { settings, slips, agentKeys, executorKeys, writer, startedAt }) {
+  const no = (problem) => ({ problem, warning: null, known: null });
+  if (Object.keys(s).some((k) => !SENDING_MEMBERS.includes(k))) return no('It holds a member the executor does not write.');
+  if (!CALL_ID.test(s.call)) return no('Its call identifier is not one the executor makes.');
+  if (typeof s.slip !== 'string' || !FINGERPRINT.test(s.slip)) return no('It does not say which permission its call was sent under.');
+  const slip = slips.get(s.slip);
+  if (!slip) return no('The book does not hold the permission its call was sent under, so no receipt can be written under that permission. Set it aside, or put back the book that holds that permission.');
+  if (!sameKeys(slip.agent?.keys, agentKeys)) return no('The permission its call was sent under names other agent keys than the executor now holds, so the executor cannot sign a receipt under it.');
+  const named = Array.isArray(slip.with) ? slip.with.find((w) => w?.id === settings.service) : undefined;
+  if (!named || !sameKeys(named.keys, executorKeys)) return no(`The permission its call was sent under does not name the executor in "with" as "${settings.service}" with the keys the executor now holds, so its countersignature would not check.`);
+  const when = typeof s.when === 'string' ? Date.parse(s.when) : NaN;
+  if (!Number.isFinite(when) || new Date(when).toISOString() !== s.when) return no('Its time is not a time written as the executor writes it.');
+  if (when > startedAt) return no("Its time is after this start of the executor: the executor's clock is behind the time the call was sent. Put the clock right and start the executor again; nothing dated ahead of the clock is written.");
+  if (typeof s.action !== 'string' || !SHORT_NAME.test(s.action)) return no('Its action is not an action name.');
+  if (s.with !== settings.service) return no(`It names another service id than the settings now give the executor ("${settings.service}").`);
+  if (typeof s.tool !== 'string' || !TOOL_NAME.test(s.tool)) return no('Its tool name is not a tool name.');
+  const amountForm = (a) => isObject(a) && Object.keys(a).length === 2 && Number.isSafeInteger(a.value) && a.value >= 0 && typeof a.unit === 'string' && UNIT.test(a.unit);
+  let warning = null;
+  const rule = settings.tools.get(s.tool);
+  if (!rule || rule.action !== s.action) {
+    // The tag shows the executor wrote this line; the rule that named the call has since been taken out of the settings, or changed.
+    warning = 'No rule names this tool with this action now (a rule was taken out, or changed, since the call was sent). Its tag shows the executor wrote the line, so it can be acknowledged.';
+    if (s.amount !== undefined && !amountForm(s.amount)) return no('Its amount is not a unit and a whole number from 0 up.');
+  } else if (s.amount === undefined) {
+    if (rule.amount) return no('Its rule gives an amount, and the line has none.');
+  } else {
+    if (!amountForm(s.amount)) return no('Its amount is not a unit and a whole number from 0 up.');
+    if (!rule.amount || rule.amount.unit !== s.amount.unit) return no('Its amount is not in the unit its rule gives.');
+  }
+  const d = s.details;
+  if (!Array.isArray(d) || d.length < 3 || d.length > SENT_DOCUMENTS.length || !d.every((x) => isDocument(x, SENT_DOCUMENTS))) return no('Its documents are not the ones the executor names.');
+  for (const n of SENT_DOCUMENTS) if (d.filter((x) => x.name === n).length > 1) return no('It names one document twice.');
+  const of = (n) => d.find((x) => x.name === n)?.sha256;
+  if (!of('provared.arguments')) return no('It names no arguments.');
+  if (of(TOOL_DOCUMENT) !== (await identifierFingerprint(s.tool))) return no('Its tool document does not match its tool name.');
+  if (of(CALL_DOCUMENT) !== (await identifierFingerprint(s.call))) return no('Its call document does not match its call identifier.');
+  if (of('provared.request-id') !== undefined && of('provared.request-id') !== of(CALL_DOCUMENT)) return no('Its request identifier does not match its call identifier.');
+  // What a later line holds of the outcome, where the receipt was made and the book could not be written: one document.
+  let known = null;
+  if (done && done.documents !== undefined && !(Array.isArray(done.documents) && done.documents.length === 0)) {
+    if (!Array.isArray(done.documents) || done.documents.length !== 1 || !isDocument(done.documents[0], OUTCOME_DOCUMENTS)) return no('What the copy holds of its outcome is not of the form the executor writes.');
+    known = [done.documents[0]];
+  }
+  // The library's own checks of a request's fields, as the stub writer will make them.
+  const request = { action: s.action, ...(s.amount ? { amount: s.amount } : {}), with: settings.service, details: [...d, ...(known ?? [{ name: 'provared.error', sha256: await identifierFingerprint(OUTCOME_UNKNOWN_ACKNOWLEDGED) }]), { name: WRITTEN_LATE_DOCUMENT, sha256: await identifierFingerprint(WRITTEN_ON_ACKNOWLEDGEMENT) }] };
+  let answer;
+  try {
+    answer = await writer.before(request, { when });
+  } catch (e) {
+    return no(`The library refuses it: ${e.message}`);
+  }
+  const field = answer.problems.find((f) => f.code === 'bad-field' || f.code === 'too-large');
+  if (field) return no(`The library refuses it: ${field.message}`);
+  return { problem: null, warning, known };
+}
+
+/** A waiting call as the administrator is shown it: names, times and fingerprints from its line of the copy. */
+function shownCall(p) {
+  const s = p.sending;
+  return { call: p.call, usable: p.problem === null, problem: p.problem, warning: p.warning, when: s.when, slip: s.slip, tool: s.tool, action: s.action, ...(s.amount !== undefined ? { amount: s.amount } : {}), outcomeKnown: p.known !== null };
+}
+
+function waitingWords(pending) {
+  const first = pending[0].sending;
+  return `${pending.length} call(s) sent before the executor last stopped, under a permission that is not the one in force, have no receipt in the book (the first: ${String(first.when).slice(0, 40)}, ${String(first.tool).slice(0, 128)}). The administrator acknowledges them with "provared-mcp-executor acknowledge" (over HTTP, also POST /provared/acknowledge), and sets aside any that cannot have a receipt ("--set-aside", "setAside"); a receipt is written for each call acknowledged, under the permission it was sent under.`;
+}
+
+/**
+ * What one agent's files show, read without writing anything: for the
+ * "status" command where there is no running executor to ask (over stdio
+ * there is no address to ask at). Gives the slip in force and whether the
+ * book holds it yet, the entries and bytes of the book file, its last
+ * seal, whether it passes its check, the calls that wait for the
+ * administrator ("receiptsMissing") and how many calls the next start will
+ * give a late receipt ("receiptsAtNextStart"); or {problem} where the
+ * files cannot be opened as a start would open them. What a running
+ * executor holds in memory (whether it has stopped, calls in progress) is
+ * not in the files.
+ */
+export async function reportFromFiles(paths, settings, shared, { now = Date.now } = {}) {
+  let prepared;
+  try {
+    prepared = await prepareAgent(paths, settings, shared, { now, readOnly: true });
+  } catch (e) {
+    // The book by itself, where it can be read: whether it passes its check.
+    let sound = null;
+    try {
+      const text = readIfThere(paths.book);
+      if (text) sound = !(await checkBook(text, { ...(shared.sealer ? { sealKeys: [shared.sealer.fingerprint] } : {}), issuerKeys: paths.issuerKeys })).summary.problemFound;
+    } catch {
+      sound = null;
+    }
+    return { problem: e.message, sound };
+  }
+  const onDisk = readIfThere(paths.book);
+  const checked = onDisk ? await checkBook(onDisk, prepared.checkOptions) : null;
+  const shown = checked ? bookSummary(checked) : { entries: 0, lastSeal: null, sound: null, withinSlips: null };
+  const sorted = await sortUnfinished(unfinished(prepared.read), await prepared.writer.check(), { settings, about: prepared.about, agentKeys: prepared.agentKeys.keys, executorKeys: shared.executorKeys.keys, writer: prepared.writer, startedAt: now() });
+  return {
+    slip: prepared.about.fingerprint,
+    slipInBook: checked ? checked.entries.some((e) => e.kind === 'slip' && e.fingerprint === prepared.about.fingerprint) : false,
+    entries: shown.entries,
+    bytes: Buffer.byteLength(onDisk),
+    lastSeal: shown.lastSeal,
+    sound: shown.sound,
+    withinSlips: shown.withinSlips,
+    checkedAt: new Date(now()).toISOString(),
+    receiptsMissing: sorted.pending.map(shownCall),
+    receiptsAtNextStart: sorted.late.length,
+  };
+}
+
+/** The "status" of a stdio executor, from its files (reportFromFiles): {executor, from: 'files', recorder, agent}. */
+export async function statusFromFiles(config, root, { now = Date.now } = {}) {
+  const { settings, problems } = readSettings(config, root);
+  if (problems.length) throw new Error(`The settings have problems:\n- ${problems.join('\n- ')}`);
+  const shared = await prepareShared(settings);
+  return { executor: 'provared-mcp-executor', from: 'files', recorder: describeRecorder(settings, shared.sealer), agent: await reportFromFiles({ ...settings.agent, copy: settings.executor.copy, copyKey: settings.executor.copyKey }, settings, shared, { now }) };
+}
+
+// --- sealing on a timer ---
+
+/**
+ * Seal each agent's book on a timer, where the settings give
+ * "recorder.sealEvery". At "start": a book that holds an entry after its
+ * last seal is sealed where that seal is at least "every" old, or there is
+ * none. Then every "every" milliseconds: a book that holds an entry after
+ * its last seal is sealed. A book whose last entry is its last seal is
+ * left as it is, so an idle executor writes no seal over a seal. A seal
+ * that cannot be written is logged ("not-sealed") and tried again at the
+ * next round. The timer does not keep the program running.
+ * @param {object[]} agents as openAgent gives them
+ * @param {number} every milliseconds
+ */
+export function sealTimer(agents, every) {
+  let timer = null;
+  let ended = false;
+  const round = async (first) => {
+    for (const agent of agents) {
+      if (ended) return;
+      try {
+        await agent.seal({ onlyIfNew: true, ...(first ? { olderThan: every } : {}) });
+      } catch (e) {
+        agent.log({ event: 'not-sealed', reason: e.message });
+      }
+    }
+  };
+  const arm = () => {
+    if (ended) return;
+    timer = setTimeout(() => round(false).then(arm), every);
+    timer.unref();
+  };
+  return {
+    start() {
+      round(true).then(arm);
+    },
+    stop() {
+      ended = true;
+      clearTimeout(timer);
+    },
   };
 }
 
@@ -1052,18 +1475,32 @@ export function callCore({ settings, content, executorKeys, now }) {
  * shows as sent and never given its receipt (the executor stopped
  * meanwhile) is given one now (openAgent).
  *
+ * A call sent under a permission that is no longer the one in force, with
+ * no receipt in the book, waits for the administrator: the executor then
+ * does not open, and says so, unless it is opened with "offline", as the
+ * commands "acknowledge", "seal" and "status" open it to work on the files
+ * of an executor that is not running. Opened so, it reads no credential
+ * and cannot be attached.
+ *
  * @param {object} config the settings, as in executor.example.json
- * @param {{root?: string, now?: () => number, log?: (event: object) => void, serverStderr?: NodeJS.WritableStream|null}} [more]
+ * @param {{root?: string, now?: () => number, log?: (event: object) => void, serverStderr?: NodeJS.WritableStream|null, offline?: boolean}} [more]
  */
 export async function openExecutor(config, more = {}) {
   const root = more.root ?? process.cwd();
   const now = more.now ?? Date.now;
   const log = more.log ?? ((event) => process.stderr.write(`${JSON.stringify({ provared: 'mcp-executor', ...event })}\n`));
-  const p = await prepare(config, root, { now });
+  const offline = more.offline === true;
+  const p = await prepare(config, root, { now, offline });
   const { settings, about, content } = p;
   for (const w of p.warnings) log({ event: 'warning', message: w });
-  const agent = await openAgent(p.agent, { settings, executorKeys: p.executorKeys, now, log });
+  const agent = await openAgent(p.agent, { settings, executorKeys: p.executorKeys, now, log, sealer: p.sealer });
+  if (!offline && agent.pending().length) {
+    // Over stdio there is no address at which a running executor could be asked to acknowledge, so it does not start with a call waiting.
+    const waiting = agent.pending();
+    throw new Error(`The copy ${p.agent.paths.copy} shows ${waiting.length} call(s) sent under a permission that is not the one in force (${about.fingerprint}), with no receipt in the book (the first: call ${waiting[0].call}, sent at ${waiting[0].when} under permission ${waiting[0].slip}). The executor does not start until each has been acknowledged or set aside: run "provared-mcp-executor acknowledge --config <settings> --offline", which writes each receipt under the permission its call was sent under (README, "A call sent under a permission no longer in force").`);
+  }
   const core = callCore({ settings, content, executorKeys: p.executorKeys, now });
+  const timer = settings.recorder?.sealEvery ? sealTimer([agent], settings.recorder.sealEvery) : null;
 
   let attached = null;
   // How many requests the executor holds for the server's answer: tool calls, and all others (for status and for tests).
@@ -1076,6 +1513,7 @@ export async function openExecutor(config, more = {}) {
    */
   function attach(input, output, { serverStderr = more.serverStderr === undefined ? process.stderr : more.serverStderr } = {}) {
     if (attached) throw new Error('The executor is already attached.');
+    if (offline) throw new Error('The executor was opened to work on its files (offline), and starts no server.');
     const child = spawn(settings.server.resolved, settings.server.args, { cwd: settings.server.cwd, env: p.env, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, shell: false });
     log({ event: 'server-started', command: settings.server.resolved, credentials: p.credentialNames });
     if (serverStderr) child.stderr.pipe(serverStderr, { end: false });
@@ -1335,12 +1773,15 @@ export async function openExecutor(config, more = {}) {
 
     const closed = serverEnded.then(async (ended) => {
       if (killTimer) clearTimeout(killTimer);
-      // Every call that was sent has settled; let the writer finish writing their stubs.
+      timer?.stop();
+      // Every call that was sent has settled; let the writer finish writing their stubs (and a seal that has begun).
       await agent.inTurn(() => {});
       outputOpen = false;
       return ended;
     });
     attached = { child, closed };
+    // The book is sealed on a timer while the executor runs, where the settings say so.
+    timer?.start();
     return closed;
   }
 
@@ -1348,7 +1789,18 @@ export async function openExecutor(config, more = {}) {
     settings,
     slip: { fingerprint: about.fingerprint, issuerKey: about.issuerKey },
     executorKeys: p.executorKeys.keys,
+    /** The recorder that seals: its name, the fingerprint of its key set and the timer; null where the settings name none. */
+    recorder: describeRecorder(settings, p.sealer),
     attach,
+    /** Seal the book now, with the recorder's keys: {entry, fingerprint}. */
+    async seal() {
+      const { entry, fingerprint: seal } = await agent.seal();
+      return { entry, fingerprint: seal };
+    },
+    /** The administrator acknowledges the calls sent under a permission no longer in force, and may set some aside: {written, setAside, remaining}. */
+    acknowledge: (o) => agent.acknowledge(o),
+    /** What the executor says about itself: the recorder, and the agent's book, last seal and waiting calls (openAgent's "report"). */
+    report: async () => ({ executor: 'provared-mcp-executor', recorder: describeRecorder(settings, p.sealer), agent: await agent.report() }),
     /** The stub writer: its "check()" is the book as the executor holds it. */
     writer: agent.writer,
     /** Why the executor takes no more calls, or null. */

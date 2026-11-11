@@ -15,11 +15,13 @@
 //            ("documents") and no "stub": such a call is still unfinished
 //   refused: a call that was not sent, with why, and the denial's fingerprint where one was written
 //   withdrawn: a call the agent cancelled before it was sent
+//   set-aside: a call that was sent and has no receipt, which the administrator set aside
+//            ("acknowledge --set-aside"): no receipt is written for it, then or later
 // Nothing in a line is a credential, an argument or a result: only names,
 // times, codes and fingerprints.
 
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
-import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, writeFileSync, writeSync } from 'node:fs';
+import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, statSync, writeFileSync, writeSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { untilFree } from './files.mjs';
 
@@ -45,24 +47,40 @@ export function loadCopyKey(path, { create = true } = {}) {
 
 /**
  * Open the copy file: append lines, each numbered from "next", tagged, and
- * made sure to be on the disk before the call returns.
+ * made sure to be on the disk before the call returns. One program writes a
+ * copy at a time: where the file is no longer the size this one left it
+ * (another program wrote to it, as a command run with --offline beside a
+ * running executor would), nothing more is written, since the next line
+ * would carry a number already used.
  */
 export function openCopy(path, key, name, next = 0) {
   mkdirSync(dirname(path), { recursive: true });
   let seq = next;
+  const sizeNow = () => {
+    try {
+      return statSync(path).size;
+    } catch (e) {
+      if (e.code === 'ENOENT') return 0;
+      throw e;
+    }
+  };
+  let size = sizeNow();
   return {
     path,
     /** Append one line. Throws if the line could not be written to the disk. */
     note(entry) {
       const text = JSON.stringify({ seq, ...entry });
       if (text.includes('\n')) throw new Error('A line of the copy holds a line break.');
+      if (sizeNow() !== size) throw new Error(`The copy ${path} is not as the executor left it: something else wrote to it. The executor writes no more to it.`);
+      const line = Buffer.from(`${tagOf(key, name, text)} ${text}\n`);
       const fd = untilFree(() => openSync(path, 'a'));
       try {
-        writeSync(fd, `${tagOf(key, name, text)} ${text}\n`);
+        writeSync(fd, line);
         fsyncSync(fd);
       } finally {
         closeSync(fd);
       }
+      size += line.length;
       seq++;
     },
   };
@@ -131,16 +149,22 @@ export function readCopy(path, key, name) {
  * "sending" line and no "done" line that names a stub. Each is given as
  * {sending, done}: "done" is the last "done" line without a stub, if any,
  * which holds what the executor knew of the outcome. Only lines whose tags
- * check count.
+ * check count. A call the administrator set aside ("set-aside") is not
+ * among them, then or later: it gets no receipt.
  */
 export function unfinished(read) {
   const open = new Map();
+  const aside = new Set();
   for (const l of read.lines) {
     if (!l.valid) continue;
     const e = l.entry;
     if (typeof e.call !== 'string') continue;
-    if (e.kind === 'sending') open.set(e.call, { sending: e, done: null });
-    else if (e.kind === 'done') {
+    if (e.kind === 'set-aside') {
+      aside.add(e.call);
+      open.delete(e.call);
+    } else if (e.kind === 'sending') {
+      if (!aside.has(e.call)) open.set(e.call, { sending: e, done: null });
+    } else if (e.kind === 'done') {
       if (typeof e.stub === 'string') open.delete(e.call);
       else if (open.has(e.call)) open.get(e.call).done = e;
     }
