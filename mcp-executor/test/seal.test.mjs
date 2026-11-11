@@ -195,15 +195,29 @@ test('seal on a timer: off unless set; at a start a book with entries after its 
     assert.equal(c.summary.problemFound, false);
     assert.deepEqual(c.entries.map((e) => e.kind), ['slip', 'seal', 'stub', 'seal']);
     assert.equal(c.entries[3].content.previous, c.entries[1].fingerprint);
-    // Idle: two more rounds pass, and no seal is written over a seal.
-    await pause(2500);
+    // Idle: more rounds pass, with time enough to sign a seal, and no seal is written over a seal.
+    await pause(8000);
     assert.equal(sealsOf(await checked(w)).length, 2);
+    assert.equal(w.logs.filter((e) => e.event === 'sealed').length, 2);
+    assert.equal(w.logs.filter((e) => e.event === 'not-sealed').length, 0);
   } finally {
     await w.close();
   }
-  // After the executor has ended, its timer writes nothing more.
+});
+
+test('seal on a timer: once the executor has ended, its timer seals nothing more, though the book holds something new', async () => {
+  const w = await sealedWorld({ config: { recorder: { ...RECORDER, sealEvery: 4000 } } });
+  try {
+    // The round at the start has ended; the next is four seconds away.
+    await until(() => w.logs.some((e) => e.event === 'sealed'), { timeout: 20000 });
+    await w.client.call('echo', {});
+  } finally {
+    await w.close();
+  }
   const size = statSync(join(w.folder, 'book.jsonl')).size;
-  await pause(1500);
+  assert.deepEqual((await checked(w)).entries.map((e) => e.kind), ['slip', 'seal', 'stub']);
+  // Time enough for the next round, and for a seal to be signed.
+  await pause(10000);
   assert.equal(statSync(join(w.folder, 'book.jsonl')).size, size);
 });
 

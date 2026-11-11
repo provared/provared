@@ -256,7 +256,7 @@ test('a timer over HTTP seals each agent\'s book that has something new, and sto
     await until(async () => sealsOf(await checked(w, 'alpha')).length === 1 && sealsOf(await checked(w, 'beta')).length === 1, { timeout: 20000 });
     await call(w, 'alpha', 'echo', {});
     await until(async () => sealsOf(await checked(w, 'alpha')).length === 2, { timeout: 20000 });
-    await pause(2500);
+    await pause(8000);
     assert.equal(sealsOf(await checked(w, 'alpha')).length, 2, 'no seal over a seal');
     assert.equal(sealsOf(await checked(w, 'beta')).length, 1, 'nothing new in the other book');
     assert.equal((await checked(w, 'alpha')).summary.problemFound, false);
@@ -265,8 +265,21 @@ test('a timer over HTTP seals each agent\'s book that has something new, and sto
   } finally {
     await w.close();
   }
+});
+
+test('a timer over HTTP: once the executor has closed, its timer seals nothing more, though a book holds something new', async () => {
+  const w = await adminWorld({ agents: ['alpha'], recorder: { keys: 'keys/recorder.jwk', sealEvery: 4000 } });
+  try {
+    // The round at the start has ended; the next is four seconds away.
+    await until(() => w.logs.some((e) => e.event === 'sealed'), { timeout: 20000 });
+    await call(w, 'alpha', 'echo', {});
+  } finally {
+    await w.close();
+  }
   const text = bookText(w, 'alpha');
-  await pause(1500);
+  assert.deepEqual((await checked(w, 'alpha')).entries.map((e) => e.kind), ['slip', 'seal', 'stub']);
+  // Time enough for the next round, and for a seal to be signed.
+  await pause(10000);
   assert.equal(bookText(w, 'alpha'), text);
 });
 
