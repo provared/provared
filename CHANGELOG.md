@@ -4,7 +4,7 @@
 
 - **The threat model, corrected on time-stamps.** Two places in
   `docs/threat-model.md` said an outside time-stamp settles a stub's
-  date. It shows only that the stub existed by the stamp's time: it stops
+  date. It shows only that the stub existed by the stamp's time: it catches
   forward dating, not back dating. No code changes.
 
 - **`provared-mcp-executor` 0.4.1 (11 November 2026, on npm and the MCP Registry):
