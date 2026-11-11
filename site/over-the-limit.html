@@ -104,6 +104,8 @@ Entry 8: STUB GgqxEq7aSnEOANaRyxNaK048_7dUavxh4ClBn8RX3xY
 
 <p>The same rules run before an action. The library's stub writer asks "would this action be within the slip?" and takes the action only if the answer is yes. In the example, the second toner cartridge would have been stopped at step 5: with it the total passes 200 GBP, and the person had not approved it. The sample was written with that check switched off, so that the record shows what going outside looks like. The check before acting is a help to the agent's software. The record afterwards is the evidence.</p>
 
+<p>For an agent that reaches its tools through the Model Context Protocol (MCP), the guard, <a href="https://www.npmjs.com/package/provared-mcp-executor">provared-mcp-executor</a> on npm, makes that check binding for the calls that go through it. It stands between the agent and the tool server, holds the tool server's credential in place of the agent, and refuses a call the slip does not allow before the call reaches the tool. For each call it lets through, it writes the receipt and countersigns it with keys of its own; for a call it refuses, a signed note of the refusal. It keeps the credential, and its own keys, from the agent only where the agent cannot read the guard's files: run it under a separate user account that the agent cannot use, or give the agent no shell or file tools. Over HTTP the guard can also run apart from the agent: <a href="https://github.com/provared/provared/tree/main/mcp-executor/recipes/agent-with-a-shell">an example</a> puts them in separate Docker containers on one computer; on separate computers it has not been tried.</p>
+
 <h2>The code that made the record</h2>
 
 <p>The sample is written by <a href="https://github.com/provared/provared/blob/main/tools/make-sample.mjs">one tool in the repository</a>, from the scenario the demonstration uses. The permission is these fields, handed to <code>prepareSlip</code> and signed by the person's passkey (in the sample, a software stand-in for one). The action names beginning <code>provared.</code> come from the format's shared list, so another organisation's checker knows what they mean; <code>destroys</code> is a kind of action, and <code>impersonate</code> and <code>bypass</code> are rules of conduct.</p>
@@ -147,7 +149,7 @@ recorder.book();     // the book, one entry to a line</pre>
 
 <h2>What it does not show</h2>
 
-<p>The checker says this itself, at the end of every answer. It shows what was recorded, not what was left out: an agent that acts and writes no stub leaves no trace. A one-sided stub shows what the agent's side said. A refusal shows what the service's side said. It does not show that an action was wise, lawful or wanted. A rule of conduct, such as "never claim to be a human being", is the person's signed instruction, and no check can show that the agent kept it. It does not show who was holding the device when the passkey signed. A name in a record is a label; only keys are checked. What a record does not prove is stated beside what it does.</p>
+<p>The checker says this itself, at the end of every answer. It shows what was recorded, not what was left out: an agent that acts and writes no stub leaves no trace. A one-sided stub shows what the agent's side said. A refusal shows what the service's side said. A stub's time is the agent's own word: an outside time-stamp shows only that the stub existed by the stamp's time, so a stub dated more than 300 seconds later than that is reported, and one dated earlier than it was really written is not. It does not show that an action was wise, lawful or wanted. A rule of conduct, such as "never claim to be a human being", is the person's signed instruction, and no check can show that the agent kept it. It does not show who was holding the device when the passkey signed. A name in a record is a label; only keys are checked. What a record does not prove is stated beside what it does.</p>
 
 <h2>Try it</h2>
 
@@ -162,7 +164,13 @@ npx provared-check --sample</pre>
 node first-record.mjs
 npx provared-check book.jsonl --issuer &lt;the thumbprint it prints&gt;</pre>
 
-<p>The Python version (<code>pip install provared</code>) gives the same answers, with <code>provared.dev</code> for the stand-in, and <code>provared-langchain</code> and <code>pydantic-ai-provared</code> put every tool call of a LangChain or Pydantic AI agent behind the stub writer. The <a href="check/">checking page</a> checks a record in a browser, loading nothing from anywhere, with the signing methods the browser has built in. Tried on the author's computer on 13 October 2026: Chrome 155, Edge 155 and Brave 155 each check ML-DSA. None of the three has SLH-DSA, so a seal's third signature is not checked in a browser, and a book with a seal is never a pass there; the command-line checker checks all three.</p>
+<p>The guard, in front of a made-up tool server, with no passkey and no settings:</p>
+
+<pre>npx provared-mcp-executor demo</pre>
+
+<p>It sends one tool call that is let through and one that a rule refuses, then checks the book with the checker. The permission is signed by the development stand-in, so nothing it writes proves anything about anyone. <a href="https://github.com/provared/provared/blob/main/mcp-executor/README.md">The guard's README</a> sets it up for real use.</p>
+
+<p>The Python version (<code>pip install provared</code>) gives the same answers, with <code>provared.dev</code> for the stand-in, and <code>provared-langchain</code> and <code>pydantic-ai-provared</code> put every tool call of a LangChain or Pydantic AI agent behind the stub writer. <a href="https://www.npmjs.com/package/provared-claude-code">provared-claude-code</a> checks Claude Code's tool calls against the slip before they run, through its hooks, and writes a stub for each one taken. The <a href="check/">checking page</a> checks a record in a browser, loading nothing from anywhere, with the signing methods the browser has built in. Tried on the author's computer on 13 October 2026: Chrome 155, Edge 155 and Brave 155 each check ML-DSA. None of the three has SLH-DSA, so a seal's third signature is not checked in a browser, and a book with a seal is never a pass there; the command-line checker checks all three.</p>
 
 <h2>How it is built</h2>
 
