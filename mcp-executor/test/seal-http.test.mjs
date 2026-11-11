@@ -138,6 +138,10 @@ test('the executor\'s own addresses are for the administrator alone: no secret i
     assert.ok(readHttpSettings({ ...w.settings, path }, w.folder).problems.some((p) => /^path: must not be \/provared/.test(p)), path);
   }
   assert.ok(readHttpSettings({ ...w.settings, admin: { secretHash: 'short' } }, w.folder).problems.some((p) => /^admin\.secretHash/.test(p)));
+  // Opened to work on its files, the executor does not listen.
+  const off = await openHttpExecutor(w.settings, { root: w.folder, offline: true, log: () => {} });
+  assert.throws(() => off.listen(), /does not listen/);
+  await off.close();
 });
 
 test('POST /provared/seal seals one agent\'s book with the recorder\'s keys; GET /provared/status shows the last seal, the check and no call waiting', async () => {

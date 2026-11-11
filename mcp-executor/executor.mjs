@@ -765,7 +765,7 @@ export async function openAgent(prepared, { settings, executorKeys, now, log, na
   // Calls the copy shows as sent and not finished.
   const open = unfinished(prepared.read);
   if (open.length) {
-    const sorted = await sortUnfinished(open, await writer.check(), { settings, about, agentKeys: prepared.agentKeys.keys, executorKeys: executorKeys.keys, writer, startedAt: now() });
+    const sorted = await sortUnfinished(open, await writer.check(), { settings, about, agentKeys: prepared.agentKeys.keys, executorKeys: executorKeys.keys, startedAt: now() });
     for (const f of sorted.found) copy.note({ kind: 'done', call: f.call, when: new Date(now()).toISOString(), outcome: 'found-in-book', stub: f.stub });
     // Sent under a permission that is no longer the one in force: these wait for the administrator.
     pending = sorted.pending;
@@ -870,7 +870,6 @@ export async function openAgent(prepared, { settings, executorKeys, now, log, na
     return inTurn(async () => {
       if (pending.length === 0) throw new Error('This agent has no call without a receipt to acknowledge.');
       for (const c of setAside) if (!pending.some((p) => p.call === c)) throw new Error(`No call "${c}" is waiting to be acknowledged.`);
-      if (stopped) throw new Error(`The agent is stopped: ${stopped}`);
       fileAsLeft();
       const at = () => new Date(now()).toISOString();
       const asideNow = [];
@@ -897,10 +896,9 @@ export async function openAgent(prepared, { settings, executorKeys, now, log, na
         const details = [...s.details, ...(p.known ?? [{ name: 'provared.error', sha256: await identifierFingerprint(OUTCOME_UNKNOWN_ACKNOWLEDGED) }]), { name: WRITTEN_LATE_DOCUMENT, sha256: await identifierFingerprint(WRITTEN_ON_ACKNOWLEDGEMENT) }];
         const other = await openRecorder({ book: writer.book(), slip: s.slip, privateKeys: prepared.agentKeys.privateKeys, issuerKeys: paths.issuerKeys, options, now });
         const made = await other.record({ action: s.action, ...(s.amount ? { amount: s.amount } : {}), with: settings.service, details }, { when: Date.parse(s.when), countersign: (stub) => countersign(stub, executorKeys.privateKeys, now()) });
-        if (!made.countersignature.accepted) throw new Error(`The receipt of call ${p.call} was not written: the executor's countersignature was not taken under the permission the call was sent under (${made.countersignature.problem?.code ?? 'none was given'}).`);
         await writer.add(JSON.parse(made.line));
         if (!save()) throw new Error(`The receipt is in the executor's memory, and the book file could not be written: ${stopped}`);
-        copy.note({ kind: 'done', call: p.call, when: at(), outcome: p.known ? 'acknowledged' : 'acknowledged-outcome-unknown', stub: made.fingerprint, countersigned: true });
+        copy.note({ kind: 'done', call: p.call, when: at(), outcome: p.known ? 'acknowledged' : 'acknowledged-outcome-unknown', stub: made.fingerprint, countersigned: made.countersignature.accepted });
         pending = pending.filter((x) => x !== p);
         written.push({ call: p.call, when: s.when, tool: s.tool, action: s.action, slip: s.slip, stub: made.fingerprint });
         agentLog({ event: 'acknowledged', call: p.call, stub: made.fingerprint, outcome: p.known ? 'as the copy knew it' : 'not known' });
@@ -1005,7 +1003,7 @@ function bookSummary(result) {
  * another slip, which wait for the administrator, each with whether a
  * receipt can be written from its line (lineProblem).
  */
-export async function sortUnfinished(open, checked, { settings, about, agentKeys, executorKeys, writer, startedAt }) {
+export async function sortUnfinished(open, checked, { settings, about, agentKeys, executorKeys, startedAt }) {
   const held = stubsByCall(checked);
   // The slips the book holds, sound: a call may be acknowledged under any of them.
   const slips = new Map(checked.entries.filter((e) => e.kind === 'slip' && e.problems.length === 0).map((e) => [e.fingerprint, e.content]));
@@ -1014,7 +1012,7 @@ export async function sortUnfinished(open, checked, { settings, about, agentKeys
     const stub = held.get(await identifierFingerprint(sending.call));
     if (stub) out.found.push({ call: sending.call, stub });
     else if (sending.slip === about.fingerprint) out.late.push({ sending, done });
-    else out.pending.push({ call: sending.call, sending, done, ...(await lineProblem(sending, done, { settings, slips, agentKeys, executorKeys, writer, startedAt })) });
+    else out.pending.push({ call: sending.call, sending, done, ...(await lineProblem(sending, done, { settings, slips, agentKeys, executorKeys, startedAt })) });
   }
   return out;
 }
@@ -1025,13 +1023,15 @@ export async function sortUnfinished(open, checked, { settings, about, agentKeys
  * force: {problem: null, warning, known} where it can, or a sentence
  * saying why not. The line must hold only what the executor writes; name a
  * slip the book holds, which names the agent's and the executor's keys as
- * the executor holds them now; give a time not after this start; give an
- * amount and documents of the forms the executor writes; and pass the
- * library's own checks of a request's fields. "known" is what a later line
- * of the copy holds of the outcome (one document), or null. "warning" says
- * where a rule has changed since: the line can still be acknowledged.
+ * the executor holds them now; give a time not after this start; and give
+ * an amount and documents of the forms the executor writes. (The library
+ * makes its own checks when the receipt is written: a receipt the book
+ * would not pass its check with is not written, and the call stays
+ * waiting.) "known" is what a later line of the copy holds of the outcome
+ * (one document), or null. "warning" says where a rule has changed since:
+ * the line can still be acknowledged.
  */
-async function lineProblem(s, done, { settings, slips, agentKeys, executorKeys, writer, startedAt }) {
+async function lineProblem(s, done, { settings, slips, agentKeys, executorKeys, startedAt }) {
   const no = (problem) => ({ problem, warning: null, known: null });
   if (Object.keys(s).some((k) => !SENDING_MEMBERS.includes(k))) return no('It holds a member the executor does not write.');
   if (!CALL_ID.test(s.call)) return no('Its call identifier is not one the executor makes.');
@@ -1074,16 +1074,6 @@ async function lineProblem(s, done, { settings, slips, agentKeys, executorKeys, 
     if (!Array.isArray(done.documents) || done.documents.length !== 1 || !isDocument(done.documents[0], OUTCOME_DOCUMENTS)) return no('What the copy holds of its outcome is not of the form the executor writes.');
     known = [done.documents[0]];
   }
-  // The library's own checks of a request's fields, as the stub writer will make them.
-  const request = { action: s.action, ...(s.amount ? { amount: s.amount } : {}), with: settings.service, details: [...d, ...(known ?? [{ name: 'provared.error', sha256: await identifierFingerprint(OUTCOME_UNKNOWN_ACKNOWLEDGED) }]), { name: WRITTEN_LATE_DOCUMENT, sha256: await identifierFingerprint(WRITTEN_ON_ACKNOWLEDGEMENT) }] };
-  let answer;
-  try {
-    answer = await writer.before(request, { when });
-  } catch (e) {
-    return no(`The library refuses it: ${e.message}`);
-  }
-  const field = answer.problems.find((f) => f.code === 'bad-field' || f.code === 'too-large');
-  if (field) return no(`The library refuses it: ${field.message}`);
   return { problem: null, warning, known };
 }
 
@@ -1128,7 +1118,7 @@ export async function reportFromFiles(paths, settings, shared, { now = Date.now 
   const onDisk = readIfThere(paths.book);
   const checked = onDisk ? await checkBook(onDisk, prepared.checkOptions) : null;
   const shown = checked ? bookSummary(checked) : { entries: 0, lastSeal: null, sound: null, withinSlips: null };
-  const sorted = await sortUnfinished(unfinished(prepared.read), await prepared.writer.check(), { settings, about: prepared.about, agentKeys: prepared.agentKeys.keys, executorKeys: shared.executorKeys.keys, writer: prepared.writer, startedAt: now() });
+  const sorted = await sortUnfinished(unfinished(prepared.read), await prepared.writer.check(), { settings, about: prepared.about, agentKeys: prepared.agentKeys.keys, executorKeys: shared.executorKeys.keys, startedAt: now() });
   return {
     slip: prepared.about.fingerprint,
     slipInBook: checked ? checked.entries.some((e) => e.kind === 'slip' && e.fingerprint === prepared.about.fingerprint) : false,

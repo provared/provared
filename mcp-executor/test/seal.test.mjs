@@ -338,13 +338,28 @@ test('acknowledge: never two receipts for one call, also where the copy could no
 });
 
 test('acknowledge: a line from which no receipt can be written gets none, and can only be set aside', async () => {
+  const B = 'B'.repeat(43);
+  const order = await identifierFingerprint('order');
+  const asOrder = (l) => ({ ...l, tool: 'order', action: 'supplies.order', details: l.details.map((d) => (d.name === TOOL_DOCUMENT ? { ...d, sha256: order } : d)) });
   const cases = [
     ['a member the executor does not write', (l) => ({ ...l, extra: 1 }), /a member the executor does not write/],
-    ['a call document that does not match the call', (l) => ({ ...l, details: l.details.map((d) => (d.name === CALL_DOCUMENT ? { ...d, sha256: 'B'.repeat(43) } : d)) }), /call document does not match/],
-    ['a document the executor does not name', (l) => ({ ...l, details: [...l.details, { name: 'provared.tool-result', sha256: 'B'.repeat(43) }] }), /documents are not the ones/],
+    ['a call identifier of another form', (l) => ({ ...l, call: 'not an identifier!' }), /call identifier is not one the executor makes/],
+    ['no permission named', (l) => ({ ...l, slip: 'short' }), /does not say which permission/],
+    ['a time of another form', (l) => ({ ...l, when: 'yesterday' }), /not a time written as the executor writes it/],
     ['a time after this start', (l) => ({ ...l, when: new Date(Date.now() + 3600000).toISOString() }), /after this start/],
-    ['an amount where its rule gives none', (l) => ({ ...l, amount: { value: 5, unit: 'GBP' } }), /not in the unit its rule gives/],
+    ['an action that is not an action name', (l) => ({ ...l, action: 'Not An Action' }), /not an action name/],
     ['another service id', (l) => ({ ...l, with: 'someone-else' }), /another service id/],
+    ['a tool name that is not one', (l) => ({ ...l, tool: 'not a tool' }), /not a tool name/],
+    ['an amount where its rule gives none', (l) => ({ ...l, amount: { value: 5, unit: 'GBP' } }), /not in the unit its rule gives/],
+    ['no amount where its rule gives one', asOrder, /rule gives an amount, and the line has none/],
+    ['an amount below 0', (l) => ({ ...asOrder(l), amount: { value: -1, unit: 'GBP' } }), /not a unit and a whole number from 0 up/],
+    ['an amount that is not whole, under a rule that has changed', (l) => ({ ...l, action: 'other.work', amount: { value: 1.5, unit: 'GBP' } }), /not a unit and a whole number from 0 up/],
+    ['a document the executor does not name', (l) => ({ ...l, details: [...l.details, { name: 'provared.tool-result', sha256: B }] }), /documents are not the ones/],
+    ['one document twice', (l) => ({ ...l, details: [...l.details, { name: 'provared.trace-id', sha256: B }, { name: 'provared.trace-id', sha256: B }] }), /names one document twice/],
+    ['no arguments', (l) => ({ ...l, details: l.details.map((d) => (d.name === 'provared.arguments' ? { name: 'provared.trace-id', sha256: B } : d)) }), /names no arguments/],
+    ['a tool document that does not match the tool', (l) => ({ ...l, tool: 'crash' }), /tool document does not match/],
+    ['a call document that does not match the call', (l) => ({ ...l, details: l.details.map((d) => (d.name === CALL_DOCUMENT ? { ...d, sha256: B } : d)) }), /call document does not match/],
+    ['a request identifier that does not match the call', (l) => ({ ...l, details: [...l.details, { name: 'provared.request-id', sha256: B }] }), /request identifier does not match/],
   ];
   for (const [what, change, words] of cases) {
     const { w } = await worldWithCallUnderOldSlip({}, change);
@@ -381,7 +396,8 @@ test('acknowledge: a call sent under a permission the book does not hold, or one
   assert.equal(ex.stopped(), null);
   assert.equal(copyOf(w).lines.at(-1).entry.kind, 'set-aside');
   assert.ok(w.logs.some((e) => e.event === 'call-set-aside' && e.call.call === 'stray-call'));
-  // It stays set aside at the next start, which takes calls.
+  // It stays set aside at the next start, which takes calls: also where a line for the same call is added to the copy afterwards.
+  await leaveCall(w, 'stray-call', 'A'.repeat(43));
   await openWorld(w);
   try {
     assert.equal(w.executor.stopped(), null);
@@ -409,6 +425,79 @@ test('acknowledge: a call sent under a permission the book does not hold, or one
   waiting = (await vx.report()).agent.receiptsMissing;
   assert.match(waiting[0].problem, /does not name the executor in "with" as "executor" with the keys the executor now holds/);
   await assert.rejects(vx.acknowledge(), /No call waiting can have a receipt written/);
+
+  // A permission the book holds, which names other keys for the agent than the executor now holds.
+  const u = await sealedWorld();
+  await u.client.call('echo', {});
+  const earlier = u.executor.slip.fingerprint;
+  await u.close();
+  await leaveCall(u, 'old-agent-keys-call', earlier);
+  rmSync(join(u.folder, 'keys', 'agent.jwk'));
+  u.agentKeys = await makeKeyFile(join(u.folder, 'keys', 'agent.jwk'), 'agent');
+  await renewSlip(u);
+  const ux = await offline(u);
+  waiting = (await ux.report()).agent.receiptsMissing;
+  assert.match(waiting[0].problem, /names other agent keys than the executor now holds/);
+  const held = bookText(u);
+  await assert.rejects(ux.acknowledge(), /No call waiting can have a receipt written/);
+  assert.equal(bookText(u), held);
+});
+
+test('acknowledge: a rule taken out since the call was sent is a warning, not a refusal; what the copy holds of the outcome must be of the executor\'s form', async () => {
+  const { w } = await worldWithCallUnderOldSlip();
+  const { slow, ...others } = w.settings.tools;
+  assert.ok(slow);
+  w.settings.tools = others;
+  const ex = await offline(w);
+  const waiting = (await ex.report()).agent.receiptsMissing;
+  assert.equal(waiting[0].usable, true);
+  assert.match(waiting[0].warning, /No rule names this tool with this action now/);
+  const done = await ex.acknowledge();
+  assert.equal(done.written.length, 1);
+  assert.equal((await checked(w)).summary.problemFound, false);
+
+  const v = await sealedWorld();
+  await v.client.call('echo', {});
+  const first = v.executor.slip.fingerprint;
+  await v.close();
+  const copy = await leaveCall(v, 'odd-outcome', first);
+  copy.note({ kind: 'done', call: 'odd-outcome', when: new Date().toISOString(), outcome: 'answer', documents: [{ name: RESULT_DOCUMENT, sha256: 'B'.repeat(43) }, { name: 'provared.error', sha256: 'B'.repeat(43) }] });
+  await renewSlip(v);
+  const vx = await offline(v);
+  const odd = (await vx.report()).agent.receiptsMissing;
+  assert.equal(odd[0].usable, false);
+  assert.match(odd[0].problem, /holds of its outcome is not of the form/);
+});
+
+test('acknowledge: nothing is written where something else changed the book file, or where the library refuses the receipt; the call stays waiting', async () => {
+  const { w } = await worldWithCallUnderOldSlip();
+  const ex = await offline(w);
+  assert.throws(() => ex.attach(), /starts no server/);
+  appendFileSync(join(w.folder, 'book.jsonl'), '{"not":"a line of the executor\'s"}\n');
+  const changed = bookText(w);
+  await assert.rejects(ex.acknowledge(), /not as the executor left it/);
+  await assert.rejects(ex.acknowledge(), /The agent is stopped/);
+  assert.equal(bookText(w), changed);
+  assert.equal((await ex.report()).agent.receiptsMissing.length, 1);
+
+  // A receipt dated before the receipt ahead of it: the library does not write it.
+  const v = await sealedWorld();
+  await v.client.call('echo', {});
+  const first = v.executor.slip.fingerprint;
+  await v.close();
+  await leaveCall(v, 'early-call', first, (l) => ({ ...l, when: new Date(Date.now() - 30000).toISOString() }));
+  await renewSlip(v);
+  const vx = await offline(v);
+  assert.equal((await vx.report()).agent.receiptsMissing[0].usable, true);
+  const before = bookText(v);
+  await assert.rejects(vx.acknowledge(), /would not pass its check/);
+  assert.equal(bookText(v), before, 'nothing was written');
+  assert.equal(copyOf(v).lines.at(-1).entry.kind, 'sending');
+  assert.equal((await vx.report()).agent.receiptsMissing.length, 1);
+  // It can be set aside.
+  const aside = await vx.acknowledge({ setAside: ['early-call'] });
+  assert.deepEqual(aside.remaining, []);
+  assert.equal(bookText(v), before);
 });
 
 test('status from the files writes nothing, and shows the last seal, whether the book passes its check, and the calls waiting', async () => {
