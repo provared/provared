@@ -627,8 +627,21 @@ test('a second executor on the same files is refused before it reads them, and a
   } finally {
     await w.close();
   }
-  // Closed, the executor has given the files up.
-  const again = await openHttpExecutor(w.settings, { root: w.folder, log: () => {}, offline: true });
+  // Closed, the executor has given the files up. A command at work on them is not a start: it writes no late receipt for
+  // a call the copy shows as sent, and does not seal that agent's book while one is due.
+  const b = w.agents.beta;
+  const key = loadCopyKey(b.copyKey);
+  const copy = openCopy(b.copy, key, w.settings.name, readCopy(b.copy, key, w.settings.name).next);
+  const details = [{ name: 'provared.arguments', sha256: await argumentsFingerprint({}) }, { name: TOOL_DOCUMENT, sha256: await identifierFingerprint('slow') }, { name: CALL_DOCUMENT, sha256: await identifierFingerprint('late-call') }];
+  copy.note({ kind: 'sending', call: 'late-call', when: new Date().toISOString(), slip: w.executor.agent('beta').slip.fingerprint, tool: 'slow', action: 'slow.work', with: 'executor', details });
+  await pause(5);
+  const logs = [];
+  const book = bookText(w, 'beta');
+  const again = await openHttpExecutor(w.settings, { root: w.folder, log: (e) => logs.push(e), offline: true });
+  assert.ok(!logs.some((e) => e.event === 'receipt-written-late'));
+  assert.equal((await again.report()).agents.beta.receiptsAtNextStart, 1);
+  await assert.rejects(again.seal('beta'), /next start will give one/);
+  assert.equal(bookText(w, 'beta'), book);
   await again.close();
 });
 
@@ -650,5 +663,38 @@ test('a held agent\'s book is not sealed by the timer, and the log says so once,
     await until(async () => sealsOf(await checked(w, 'alpha')).length === 3, { timeout: 20000 });
   } finally {
     await w.close();
+  }
+});
+
+test('the secret goes on the connection the executor proved itself on, and on no other', async () => {
+  const w = await adminWorld({ agents: ['alpha'], open: false });
+  await w.upstream.close();
+  const { loadKeyFile } = await import('../files.mjs');
+  const { identify } = await import('../identity.mjs');
+  const { privateKeys } = await loadKeyFile(join(w.folder, 'keys', 'executor.jwk'), 'agent');
+  const seen = [];
+  // A stand-in that, for this test, holds the executor's keys: it proves itself, and closes the connection it did so on.
+  const standIn = http.createServer((req, res) => {
+    const chunks = [];
+    req.on('data', (c) => chunks.push(c));
+    req.on('end', async () => {
+      seen.push({ url: req.url, authorization: req.headers.authorization ?? null });
+      if (req.url !== '/provared/hello') {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        return res.end('{"agents":{}}');
+      }
+      const signatures = await identify(privateKeys, JSON.parse(Buffer.concat(chunks).toString('utf8')).challenge, req.socket.localAddress, req.socket.localPort);
+      res.writeHead(200, { 'content-type': 'application/json', connection: 'close' });
+      res.end(JSON.stringify({ signatures }));
+    });
+  });
+  try {
+    const r = await run(['status', '--config', settingsAt(w, 'at-stand-in.json', await listenOn(standIn))], { env: { [ENV]: w.admin } });
+    assert.equal(r.code, 2, r.stdout + r.stderr);
+    assert.match(r.stderr, /was closed before the administrator's secret could be sent on it\. The secret was not sent\./);
+    assert.deepEqual(seen, [{ url: '/provared/hello', authorization: null }]);
+  } finally {
+    standIn.close();
+    standIn.closeAllConnections();
   }
 });

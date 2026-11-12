@@ -351,7 +351,9 @@ test('acknowledge: where the copy holds the outcome, the receipt names it', asyn
 });
 
 test('acknowledge: never two receipts for one call, also where the copy could not be written after the receipt was', async () => {
-  const { w } = await worldWithCallUnderOldSlip();
+  const { w, first: old } = await worldWithCallUnderOldSlip();
+  // A second call waits behind the first.
+  await leaveCall(w, 'second-call', old);
   const ex = await offline(w);
   // The copy cannot be written: the receipt goes into the book, and the line saying so does not go into the copy.
   const at = join(w.folder, 'copy.jsonl');
@@ -359,21 +361,24 @@ test('acknowledge: never two receipts for one call, also where the copy could no
   mkdirSync(at);
   const first = await ex.acknowledge();
   assert.deepEqual(first.written, []);
-  assert.deepEqual(first.failed.map((f) => f.call), ['lost-call']);
+  assert.deepEqual(first.failed.map((f) => f.call), ['lost-call'], 'once the copy cannot be written, the next call is not tried');
   assert.match(first.failed[0].problem, /copy .* is not as the executor left it/);
-  assert.equal(first.remaining.length, 1);
+  assert.equal(first.remaining.length, 2);
   rmdirSync(at);
   renameSync(`${at}.away`, at);
   const call = await identifierFingerprint('lost-call');
-  const named = async () => stubsOf(await checked(w)).filter((s) => docs(s)[CALL_DOCUMENT] === call);
+  const second = await identifierFingerprint('second-call');
+  const named = async (which = call) => stubsOf(await checked(w)).filter((s) => docs(s)[CALL_DOCUMENT] === which);
   assert.equal((await named()).length, 1, 'the receipt is in the book');
-  assert.equal((await ex.report()).agent.receiptsMissing.length, 1, 'and the call still waits');
-  // Trying again finds the receipt in the book, and writes no second one.
+  assert.equal((await named(second)).length, 0, 'no receipt was written that the copy could not have been told of');
+  assert.equal((await ex.report()).agent.receiptsMissing.length, 2, 'and the calls still wait');
+  // Trying again finds the first receipt in the book, and writes no second one; the other call gets its receipt.
   const again = await ex.acknowledge();
-  assert.deepEqual(again.written.map((x) => [x.call, x.found]), [['lost-call', true]]);
+  assert.deepEqual(again.written.map((x) => [x.call, x.found ?? false]), [['lost-call', true], ['second-call', false]]);
   assert.equal((await named()).length, 1);
+  assert.equal((await named(second)).length, 1);
   assert.equal(again.written[0].stub, (await named())[0].fingerprint);
-  assert.equal(copyOf(w).lines.at(-1).entry.outcome, 'found-in-book');
+  assert.deepEqual(copyOf(w).lines.slice(-2).map((l) => l.entry.outcome), ['found-in-book', 'acknowledged-outcome-unknown']);
   // And so does a new start: the call is finished.
   await ex.close();
   const next = await offline(w);
@@ -926,8 +931,9 @@ test('seal on a timer: a stop that comes while a seal waits its turn leaves no t
   } finally {
     await w.close();
   }
-  assert.equal(old.filter((e) => e.event === 'sealed').length, sealsThen, 'the executor that ended sealed nothing more');
-  assert.deepEqual(old.filter((e) => ['not-sealed', 'book-changed', 'book-not-written'].includes(e.event)), [], 'and asked for no seal');
+  assert.equal(old.filter((e) => e.event === 'sealed').length, sealsThen);
+  // The first executor's log goes where the second's does: neither asked for a seal it could not have.
+  assert.deepEqual([...old, ...w.logs].filter((e) => ['not-sealed', 'book-changed', 'book-not-written'].includes(e.event)), [], 'the executor that ended asked for no further seal');
   assert.equal((await checked(w)).summary.problemFound, false);
 });
 
