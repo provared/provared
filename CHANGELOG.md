@@ -144,8 +144,10 @@
     recorder they expect; its standard output is unchanged. The name on a
     seal is the executor's `name` unless given. `check` shows the
     recorder, names a missing recorder key file as a problem, and warns
-    where the settings name none. All that reads the recorder's private
-    keys is in a new file, `sealing.mjs`.
+    where the settings name none. Every use of the recorder's key file
+    goes through a new file, `sealing.mjs`; the third key signs outside
+    the program's own thread, so that a seal, which takes a second or
+    two to sign, holds up no other agent.
   - **A seal in a book must be the recorder's.** Where the settings name
     a recorder, every check the executor makes of a book names it as the
     recorder expected, so on a book sealed with other keys the executor
@@ -159,13 +161,30 @@
     (`POST /provared/seal`); with `--offline` the files are opened, for an
     executor that is not running. Over stdio there is no address to ask,
     so `seal` takes `--offline` only.
+  - **One program at a time.** A book and its copy are locked for the
+    program that opens them to write (`stdio`, `http`, a command with
+    `--offline`), before it reads them, by a lock the operating system
+    takes away when the program ends: a named pipe on Windows, a socket
+    in the abstract namespace on Linux, a socket file in `/tmp`
+    elsewhere (`lock.mjs`). A second program is refused, having read and
+    written nothing; 0.4.1 let a second `http` on the same settings
+    write a late receipt for a call the first had in flight before it
+    failed to listen. A command with `--offline` is not a start: it
+    writes no late receipt by itself, and `seal --offline` does not seal
+    a book while a call waits for one. The lock has been tried on
+    Windows only.
   - **A seal on a timer**, on both transports, where the settings give
     `recorder.sealEvery` (1,000 to 604,800,000 milliseconds; off unless
-    given). At a start a book that holds an entry after its last seal is
-    sealed where that seal is at least `sealEvery` old, or there is none;
-    then, every `sealEvery`, a book that holds an entry after its last
-    seal is sealed. No seal is written over a seal, and none once the
-    executor has ended.
+    given; under a minute is warned about). At a start a book that holds
+    an entry after its last seal is sealed where that seal is at least
+    `sealEvery` old, or there is none; then, every `sealEvery`, a book
+    that holds an entry after its last seal is sealed. Each agent's book
+    has its round to itself, so one agent's long call holds back no
+    other agent's seal. No seal is written over a seal. Over HTTP the
+    timer starts once the executor is listening. Once the executor has
+    ended no seal is asked for; one already waiting its turn is written.
+    A seal that cannot be written is logged once for as long as the
+    reason stays the same.
   - **The executor's own addresses over HTTP**: `GET /provared/status`,
     `POST /provared/seal` and `POST /provared/acknowledge`, for the
     administrator, whose secret the settings hold as a hash
@@ -174,38 +193,69 @@
     404. An agent's secret is refused there, the administrator's is
     refused at the MCP endpoint, and settings in which the two are the
     same are refused; a request that names an `Origin` is refused
-    whatever `allowedOrigins` says; a body may be 64 KiB at most; and
-    `path` may not be `/provared` or under it.
+    whatever `allowedOrigins` says; a body is read up to 64 KiB and no
+    further, whatever `bodyLimit` is; an executor that is stopping
+    answers 503; and `path` may not be `/provared` or under it.
+  - **The commands send the secret to the executor alone.** Before a
+    command sends the administrator's secret it sends a fresh challenge
+    to a fourth address, `POST /provared/hello`, with no secret; the
+    executor answers with the signatures of its own two keys over the
+    challenge and the address and port it was asked at; the command
+    checks them against the public keys in `executor.keys` and against
+    the address it connected to, and sends the secret on that same
+    connection (`identity.mjs`; `DESIGN.md`, X138). Another listener at
+    that address, or one that passes the challenge on, is sent no
+    secret. The connection is still plain HTTP.
   - **`acknowledge`**, for a call the copy shows as sent, with no receipt
     in the book, under another permission than the one in force. **This
     changes what a start does:** over HTTP the executor now starts, and
-    that agent's calls are refused (error 1001) until none waits, where
+    that agent's calls to tools that have a rule are refused (error
+    1001) until none waits (a call to a tool no rule names is answered
+    as it always is), where
     0.4.1 did not start at all; over stdio it still does not start, and
     names `acknowledge --offline` where it named putting the old
     permission back. A call sent under the permission in force is given
     its late receipt at the start, as before. For each call acknowledged
     a receipt is written from its line in the copy by a stub writer
-    opened for the permission it was sent under, dated when it was sent,
-    countersigned by the executor at the acknowledgement, and taken into
-    the book only if the book still passes its check with it. It names
-    the outcome the copy holds, or `provared.error` with a new fixed
-    text, and `executor.written-late` with the fingerprint of a second
-    fixed text. A receipt is written only from a line that holds what
-    the executor writes, under a permission the book holds that names
-    the agent's and the executor's keys as held now, dated not after
-    this start; any other can only be set aside (`--set-aside`), which
-    leaves the call with no receipt and is noted in the copy
-    (`set-aside`) and the log. The book is looked at again before each
-    receipt is written, so trying again writes none twice.
+    opened for the permission it was sent under, dated with the time the
+    copy gives for the call, countersigned by the executor at the
+    acknowledgement, and taken into the book only if the book still
+    passes its check with it. It names the outcome the copy holds, or
+    `provared.error` with a new fixed text ("The executor recorded that
+    it was sending this call, and has no record of its outcome."); a
+    new label, `executor.acknowledged`; and `executor.written-late` with
+    a second new text. The three texts and their fingerprints are in the
+    README and in `DESIGN.md` (X140), and a test holds them letter for
+    letter. A receipt is written only from a line that holds what the
+    executor writes, under a permission the book holds that names the
+    agent's keys as held now and the executor's keys as held now or as
+    held in a key file the settings name under `executor.formerKeys`
+    (new: the key files the executor held before, used only to
+    countersign such a receipt), dated not after this start; any other
+    can only be set aside (`--set-aside`), which leaves the call with no
+    receipt and is noted in the copy (`set-aside`) and the log. The book
+    is looked at again before each receipt is written, so trying again
+    writes none twice. `acknowledge` says what it did and what it did
+    not, call by call, and goes on after a call that fails.
   - **`status`**: asked of a running HTTP executor, for each agent the
     permission in force, the book's entries and bytes, its last seal,
     whether it passes its check, why the agent takes no call, and the
     calls waiting to be acknowledged. Over stdio, and with `--offline`,
     it reads the files, writes nothing, and says so
-    (`"from": "files"`).
+    (`"from": "files"`). It ends with code 1 where a book does not pass
+    its check, a call waits or an agent has stopped.
   - **`compare`** lists a call set aside under `setAside`, and does not
     agree where there is one: the executor sent a call the book does not
-    show.
+    show. Where the calls set aside are the only disagreement the answer
+    says `onlySetAside: true` and the command ends with code 3, so that
+    this known state can be told from a new one (code 1).
+    `compare --sealer <fingerprint>` names the recorder a seal must be
+    signed by, for whoever compares without the recorder's key file, and
+    the answer says which recorder was expected
+    (`book.sealersExpected`), or `null` where none was.
+  - **`seal`, `acknowledge`, `status` and `compare` refuse an option
+    they do not know.** `secret` says that the secret it makes may be an
+    agent's or the administrator's.
   - **The copy is written by one program at a time.** Before each line
     the copy file must be the size the executor left it; a line added by
     another program (a command run with `--offline` beside a running
@@ -216,32 +266,59 @@
     executor; a central sealer, seals held elsewhere and witnesses are
     later steps (`DESIGN.md`, X134, says where a central sealer fits).
     The example settings name no recorder and no administrator.
-  - **Tests** (`test/seal.test.mjs`, `test/seal-http.test.mjs`; 25
+  - **For those who run 0.4.1.** A `recorder` or `admin` member already
+    in a settings file (copied from a gateway's, say) was set aside with
+    a warning, and is now acted on. `check` warns everyone whose
+    settings name no recorder, and `check` and `compare` give new
+    members in their JSON. Going back to 0.4.1 after a call was set
+    aside: 0.4.1 does not know a `set-aside` line in the copy, and takes
+    the call for unfinished again.
+  - **Tests** (`test/seal.test.mjs`, `test/seal-http.test.mjs`; 41
     tests): the seal checks under the recorder's keys with the library's
     checker, chains to the seal before, and a reader who names another
     recorder is told; other keys in the recorder's file stop the start;
-    a changed book file is not sealed; the timer's two rules, no seal
-    over a seal, and none after the end, on both transports; a waiting
-    call stops a stdio start and holds one agent over HTTP; the
-    acknowledged receipt's permission, date, documents and
-    countersignature; eighteen lines from which no receipt is written,
-    each with its reason; other agent keys, other executor keys and a
-    permission the book does not hold; a receipt the library refuses; no
-    second receipt after the copy could not be written; a call set aside
-    stays so, and `compare` reports it; the addresses refuse no secret,
-    an agent's secret, a web page, a large body and a wrong address; and
-    the commands, run as real processes, over stdio and over HTTP. Each
-    of these defences was taken out in turn, and its test then failed.
+    a changed book file is not sealed; the timer's rules, on both
+    transports, with a stop that comes while a seal waits its turn, one
+    agent's long call beside another's seal, and a start that cannot
+    listen; a seal that does not hold up the program; a command with
+    `--offline` beside a running executor with a call in flight, which
+    is refused, and the call's true receipt; a waiting call stops a
+    stdio start and holds one agent over HTTP; the acknowledged
+    receipt's permission, date, documents and countersignature, with
+    the fixed texts and their fingerprints written out; a former key
+    file; eighteen lines from which no receipt is written, each with its
+    reason; other agent keys, other executor keys and a permission the
+    book does not hold; a receipt the library refuses, and the calls
+    after it; no second receipt after the copy could not be written; a
+    call set aside stays so, and `compare` reports it, with its exit
+    codes and the recorder it expected; the addresses refuse no secret,
+    an agent's secret, a web page, a body that goes on past 64 KiB and
+    a wrong address, and answer 503 while stopping; the challenge the
+    executor signs, and the commands sending no secret to another
+    listener, to one that passes the challenge on, or on another
+    connection; unknown options; and the commands, run as real
+    processes, over stdio and over HTTP. 72 defences were taken out one
+    at a time, each with the test named for it run after: every one then
+    failed. An independent review had taken out 33 and found five that
+    no test held (two checks of the timer at its end and both together,
+    the 503 while stopping, and `compare` naming its recorder); the
+    timer now has one such check, and each of the three is held by a
+    test.
   - **The README** has a new part, "Sealing, acknowledging, and what the
-    executor says about itself", the settings `recorder` and `admin`,
-    and, under what it does not do: no outside time-stamp, where the
-    recorder's keys are, what `--offline` does beside a running
-    executor, and that a call set aside has no receipt.
+    executor says about itself", the settings `recorder`, `admin` and
+    `executor.formerKeys`, and, under what it does not do: no outside
+    time-stamp, where the recorder's keys are, where the lock does not
+    reach, that the administrator's secret travels in the clear, and
+    that a call set aside has no receipt.
   - **Versions.** 0.5.0 in `package.json`, `server.json` (both fields)
     and the command's `--version`; the `npm pack` file name in the
-    README; `sealing.mjs` in the package's files. The library range
-    stays `^0.7.0`.
-  - **Choices** are X120 to X137 in `DESIGN.md`.
+    README; `sealing.mjs`, `lock.mjs` and `identity.mjs` in the
+    package's files. The library range stays `^0.7.0`.
+  - **Choices** are X120 to X146 in `DESIGN.md`. X138 (how a command
+    knows the executor), X140 (the label and the three texts of an
+    acknowledged receipt), X141 (former key files) and X142 (`compare`
+    after a call is set aside) wait for the founder's review, and the
+    texts are not to change once 0.5.0 is published.
 
 - **`provared-mcp-executor` 0.4.1 (11 November 2026, on npm and the MCP Registry):
   `demo --stdio`, for an MCP client or a directory's inspector.** A
