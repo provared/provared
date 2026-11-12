@@ -8,25 +8,47 @@
 // the stub writer's "add", which takes it only if the whole book still
 // passes its check with it.
 //
-// Everything that touches the recorder's private keys is in this file. The
-// executor asks a "sealer" for a seal over a book and is handed the record;
-// it never sees the keys. That is the place where a later step can hand
-// the signing to a central sealer (section 21.7), which holds the keys away
-// from the executor and is sent each line's leaf fingerprint: an object
-// with the same "seal" takes this one's place, and a book looks the same.
+// Every use of the recorder's key file by the executor goes through this
+// file: making it ("keys"), reading it to see that it is whole ("check"),
+// and reading it to seal. The file itself is read and written by files.mjs,
+// as every key file is. The executor asks a "sealer" for a seal over a book
+// and is handed the record; it never holds the keys. That is the place
+// where a later step can hand the signing to a central sealer (section
+// 21.7), which holds the keys away from the executor: an object with the
+// same "seal" takes this one's place, and a book looks the same.
 
+import nodeCrypto from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { keySetFingerprint, writeSeal } from 'provared';
-import { loadKeyFile } from './files.mjs';
+import { loadKeyFile, makeKeyFile } from './files.mjs';
+
+/** Make the recorder's key file where there is none (three keys), and give its public keys. */
+export function makeRecorderKeyFile(path) {
+  return makeKeyFile(path, 'recorder');
+}
+
+/** Read the recorder's key file to see that it is a recorder's: its public keys. Throws where it is not. */
+export async function readRecorderKeyFile(path) {
+  return (await loadKeyFile(path, 'recorder')).keys;
+}
 
 /**
  * The recorder as the settings name it: its key file read, with the
  * fingerprint of its key set (how a person checking says which recorder
- * they expect).
+ * they expect). The third key signs through Node.js's thread pool, not in
+ * the program's own thread, where the library's signer for a key in memory
+ * would hold up every agent for the second or so that an SLH-DSA signature
+ * takes: the same Node.js function, in its form with a callback.
  * @param {{keys: string, name: string}} recorder the path of its key file, and its name (a label on each seal)
  */
 export async function loadRecorder(recorder) {
   const { keys, privateKeys } = await loadKeyFile(recorder.keys, 'recorder');
-  return { name: recorder.name, keys, privateKeys, fingerprint: await keySetFingerprint(keys) };
+  const slh = nodeCrypto.createPrivateKey({ key: JSON.parse(readFileSync(recorder.keys, 'utf8')).keys[2], format: 'jwk' });
+  const third = Object.freeze({
+    key: keys[2],
+    sign: (data) => new Promise((done, failed) => nodeCrypto.sign(null, data, slh, (e, signature) => (e ? failed(e) : done(new Uint8Array(signature))))),
+  });
+  return { name: recorder.name, keys, privateKeys: [privateKeys[0], privateKeys[1], third], fingerprint: await keySetFingerprint(keys) };
 }
 
 /**

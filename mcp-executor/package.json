@@ -49,6 +49,8 @@
     "files.mjs",
     "rules.mjs",
     "sealing.mjs",
+    "lock.mjs",
+    "identity.mjs",
     "bin.mjs",
     "quiet.mjs",
     "demo.mjs",

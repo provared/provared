@@ -26,7 +26,8 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import http from 'node:http';
 import https from 'node:https';
 import { unfinished } from './copy.mjs';
-import { EXECUTOR_STOPPED, NOT_FOR_KEYS, NO_RECORDER_WARNING, SHARED_KEYS, SHORT_NAME, UNLISTED_FORWARD_WARNING, callCore, describeContentRules, describeRecorder, describeSlip, describeTools, filteredList, isObject, isPlaceholder, missingFiles, openAgent, pathFrom, placeholderProblems, prepareAgent, prepareShared, readAgentPaths, readCredentialFile, readIdentity, readKnobs, readRecorderSettings, readToolRules, reportFromFiles, sealTimer, serverIds } from './executor.mjs';
+import { EXECUTOR_STOPPED, NOT_FOR_KEYS, NO_RECORDER_WARNING, SHARED_KEYS, SHORT_NAME, UNLISTED_FORWARD_WARNING, callCore, describeContentRules, describeRecorder, describeSlip, describeTools, filteredList, isObject, isPlaceholder, missingFiles, openAgent, pathFrom, placeholderProblems, prepareAgent, prepareShared, readAgentPaths, readCredentialFile, readIdentity, readFormerKeys, readKnobs, readRecorderSettings, readToolRules, reportFromFiles, sealTimer, serverIds } from './executor.mjs';
+import { CHALLENGE, identify, plainAddress } from './identity.mjs';
 import { CODES, MAX_LINE_BYTES, idKey, isId, readMessage, responseText, spliceId, topLevelId, unsafeInteger } from './jsonrpc.mjs';
 
 /** The most a POST body may be, unless the settings say otherwise: 10 MiB, as the gateway takes. */
@@ -184,7 +185,8 @@ export function readHttpSettings(config, root, { keysOnly = false } = {}) {
     s.executor = {};
     if (typeof ex.keys !== 'string' || ex.keys === '') at('executor.keys', 'must be a path.');
     else s.executor.keys = pathFrom(root, ex.keys);
-    for (const k of Object.keys(ex)) if (k !== 'keys') warnings.push(`executor.${k}: not a setting here (each agent has its own copy and copyKey); set aside.`);
+    readFormerKeys(ex, s, at, root);
+    for (const k of Object.keys(ex)) if (k !== 'keys' && k !== 'formerKeys') warnings.push(`executor.${k}: not a setting here (each agent has its own copy and copyKey); set aside.`);
   }
 
   readToolRules(config, s, at);
@@ -341,15 +343,28 @@ export async function openHttpExecutor(config, more = {}) {
   if (credential && credential.token.length < 16) warnings.push('upstream.credential: the token is shorter than 16 characters, so any text of the upstream\'s that happens to hold it is replaced on its way to an agent.');
   const admin = settings.admin ? Buffer.from(settings.admin.secretHash) : null;
   const agents = new Map();
-  for (const [name, paths] of settings.agents) {
-    const prepared = await prepareAgent(paths, settings, shared, { now });
-    warnings.push(...prepared.warnings.map((w) => `agents.${name}: ${w}`));
-    const agent = await openAgent(prepared, { settings, executorKeys: shared.executorKeys, now, log, name, sealer: shared.sealer });
-    agent.hash = Buffer.from(paths.secretHash);
-    agent.open = 0;
-    /** The sessions this agent opened, oldest first. */
-    agent.sessions = new Set();
-    agents.set(name, agent);
+  /** Give up every lock taken so far: at close, and where the opening fails part-way. */
+  const releases = [];
+  const releaseAll = async () => {
+    for (const release of releases.splice(0)) await release();
+  };
+  try {
+    for (const [name, paths] of settings.agents) {
+      // Each agent's book and copy are locked for this program before anything of theirs is read (lock.mjs).
+      const prepared = await prepareAgent(paths, settings, shared, { now });
+      releases.push(prepared.release);
+      warnings.push(...prepared.warnings.map((w) => `agents.${name}: ${w}`));
+      // A command at work on the files (offline) is not a start: it writes no late receipt by itself.
+      const agent = await openAgent(prepared, { settings, executorKeys: shared.executorKeys, now, log, name, sealer: shared.sealer, late: !offline, formerKeys: shared.formerKeys });
+      agent.hash = Buffer.from(paths.secretHash);
+      agent.open = 0;
+      /** The sessions this agent opened, oldest first. */
+      agent.sessions = new Set();
+      agents.set(name, agent);
+    }
+  } catch (e) {
+    await releaseAll();
+    throw e;
   }
   for (const w of warnings) log({ event: 'warning', message: w });
   const core = callCore({ settings, content: shared.content, executorKeys: shared.executorKeys, now });
@@ -782,9 +797,9 @@ export async function openHttpExecutor(config, more = {}) {
    * GET stream or a long answer must not be cut, so the body's reading has
    * a limit of its own (X119).
    */
-  function readBody(req) {
+  function readBody(req, limit = settings.bodyLimit) {
     const declared = Number(req.headers['content-length']);
-    if (Number.isFinite(declared) && declared > settings.bodyLimit) return Promise.resolve(null);
+    if (Number.isFinite(declared) && declared > limit) return Promise.resolve(null);
     return new Promise((done, failed) => {
       const chunks = [];
       let size = 0;
@@ -798,7 +813,7 @@ export async function openHttpExecutor(config, more = {}) {
       req.on('data', (chunk) => {
         if (over) return;
         size += chunk.length;
-        if (size > settings.bodyLimit) {
+        if (size > limit) {
           over = true;
           chunks.length = 0;
           return settle(done)(null);
@@ -849,6 +864,19 @@ export async function openHttpExecutor(config, more = {}) {
       return adminRefuse(res, 403, 'origin-refused', 'The executor\'s own addresses take no request from a web page (a request that names an Origin).', { connection: 'close' });
     }
     if (admin === null) return adminRefuse(res, 404, 'not-found', 'This executor has no administrator\'s secret ("admin"), so its own addresses answer nothing.');
+    // Before a command sends the secret it asks the executor to show that it is the executor (identity.mjs). No secret is needed, and none should be sent.
+    if (req.method === 'POST' && path === `${ADMIN_PATH}/hello`) {
+      let asked;
+      try {
+        asked = JSON.parse((await readBody(req, ADMIN_BODY_LIMIT))?.toString('utf8') ?? '');
+      } catch {
+        asked = null;
+      }
+      if (!isObject(asked) || typeof asked.challenge !== 'string' || !CHALLENGE.test(asked.challenge)) return adminRefuse(res, 400, 'bad-request', 'Send a challenge of 32 random bytes in base64url: {"challenge": "<43 characters>"}.', { connection: 'close' });
+      const address = plainAddress(req.socket.localAddress);
+      const port = req.socket.localPort;
+      return adminJson(res, 200, { executor: 'provared-mcp-executor', address, port, signatures: await identify(shared.executorKeys.privateKeys, asked.challenge, address, port) });
+    }
     const secret = bearer(req);
     if (!secret || !isAdmin(secret)) {
       log({ event: 'not-signed-in', address: path });
@@ -857,14 +885,15 @@ export async function openHttpExecutor(config, more = {}) {
     if (stopping) return adminRefuse(res, 503, 'stopping', 'The executor is stopping and takes no request.', { connection: 'close' });
     if (req.method === 'GET' && path === `${ADMIN_PATH}/status`) return adminJson(res, 200, await report());
     const posted = req.method === 'POST' && [`${ADMIN_PATH}/seal`, `${ADMIN_PATH}/acknowledge`].includes(path);
-    if (!posted) return adminRefuse(res, 404, 'not-found', 'The executor\'s own addresses are GET /provared/status, POST /provared/seal and POST /provared/acknowledge.');
+    if (!posted) return adminRefuse(res, 404, 'not-found', 'The executor\'s own addresses are GET /provared/status, POST /provared/seal, POST /provared/acknowledge and POST /provared/hello.');
     let body;
     try {
-      body = await readBody(req);
+      // Read up to the limit of these addresses and no further.
+      body = await readBody(req, ADMIN_BODY_LIMIT);
     } catch (e) {
       return adminRefuse(res, e.code === 'BODY_TIMEOUT' ? 408 : 400, 'bad-request', 'The body did not arrive whole.', { connection: 'close' });
     }
-    if (body === null || body.length > ADMIN_BODY_LIMIT) return adminRefuse(res, 413, 'too-large', `A body sent to the executor's own addresses may be ${ADMIN_BODY_LIMIT} bytes at most.`, { connection: 'close' });
+    if (body === null) return adminRefuse(res, 413, 'too-large', `A body sent to the executor's own addresses may be ${ADMIN_BODY_LIMIT} bytes at most.`, { connection: 'close' });
     let asked;
     try {
       asked = JSON.parse(body.toString('utf8'));
@@ -1120,7 +1149,6 @@ export async function openHttpExecutor(config, more = {}) {
     listen({ port = settings.listen.port, host = settings.listen.host } = {}) {
       if (server) throw new Error('The executor is already listening.');
       if (offline) throw new Error('The executor was opened to work on its files (offline), and does not listen.');
-      timer?.start();
       // No request timeout of the server's own, which would cut a long GET stream; the headers have a minute, and the body's reading its own limit (readBody).
       server = http.createServer({ requestTimeout: 0, headersTimeout: 60000 }, handle);
       server.on('clientError', (e, socket) => {
@@ -1131,6 +1159,8 @@ export async function openHttpExecutor(config, more = {}) {
         server.listen(port, host, () => {
           const at = server.address();
           log({ event: 'listening', address: at.address, port: at.port, path: settings.path, upstream: settings.upstream.url, credential: credential !== null, agents: [...agents.keys()] });
+          // The timer starts only once the executor is listening: a start that cannot listen seals nothing.
+          timer?.start();
           done({ address: at.address, port: at.port });
         });
       });
@@ -1164,6 +1194,8 @@ export async function openHttpExecutor(config, more = {}) {
         });
       }
       for (const a of agents.values()) await a.inTurn(() => {});
+      // Nothing more is written: another program may now open the files.
+      await releaseAll();
     },
   };
 }

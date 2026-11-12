@@ -5,16 +5,24 @@
 import './local-library.mjs'; // first: "provared" is this repository's own library
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import http from 'node:http';
+import net from 'node:net';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-const { checkBook, identifierFingerprint, argumentsFingerprint, keySetFingerprint } = await import('provared');
+const { checkBook, identifierFingerprint, argumentsFingerprint, keySetFingerprint, utf8, fromBase64url } = await import('provared');
 const { httpWorld, openHttpWorld, call, rawRequest } = await import('./http-world.mjs');
 const { signSlip, until, pause } = await import('./world.mjs');
-const { CALL_DOCUMENT, TOOL_DOCUMENT, WRITTEN_LATE_DOCUMENT, WRITTEN_ON_ACKNOWLEDGEMENT } = await import('../executor.mjs');
+const { CALL_DOCUMENT, TOOL_DOCUMENT, RESULT_DOCUMENT, WRITTEN_LATE_DOCUMENT, ACKNOWLEDGED_DOCUMENT } = await import('../executor.mjs');
 const { ADMIN_BODY_LIMIT, checkHttpConfig, newSecret, openHttpExecutor, readHttpSettings, secretHash, httpStatusFromFiles } = await import('../http.mjs');
+const { checkIdentity } = await import('../identity.mjs');
+
+// The fixed texts of an acknowledged receipt, by their fingerprints written out (seal.test.mjs holds the texts).
+const ACKNOWLEDGED_FINGERPRINT = 'poJcnPoQB6EyH2Pvp2ZPgD6_2XrDua1XAOpPHBaUezI';
+const WRITTEN_LATER_FINGERPRINT = 'L_sk-qfojehaePxOm8pV-04nhqDY78T5E040ZwBKtho';
 const { readCopy, loadCopyKey, openCopy } = await import('../copy.mjs');
 const { makeKeyFile } = await import('../files.mjs');
 
@@ -143,6 +151,15 @@ test('the executor\'s own addresses are for the administrator alone: no secret i
     assert.ok(readHttpSettings({ ...w.settings, path }, w.folder).problems.some((p) => /^path: must not be \/provared/.test(p)), path);
   }
   assert.ok(readHttpSettings({ ...w.settings, admin: { secretHash: 'short' } }, w.folder).problems.some((p) => /^admin\.secretHash/.test(p)));
+  // An executor that is stopping, or has stopped, takes nothing at its own addresses: the administrator is told so, and nothing is sealed.
+  const sealedBefore = bookText(w, 'alpha');
+  for (const [method, url] of [['POST', '/provared/seal'], ['GET', '/provared/status'], ['POST', '/provared/acknowledge']]) {
+    const res = { headersSent: false, writableEnded: false, destroyed: false, writeHead(status) { this.status = status; this.headersSent = true; }, end(body) { this.body = String(body); this.writableEnded = true; } };
+    await w.executor.handle({ url, method, headers: { authorization: `Bearer ${w.admin}` }, headersDistinct: { authorization: [`Bearer ${w.admin}`] }, socket: {} }, res);
+    assert.equal(res.status, 503, url);
+    assert.equal(JSON.parse(res.body).code, 'stopping');
+  }
+  assert.equal(bookText(w, 'alpha'), sealedBefore);
   // Opened to work on its files, the executor does not listen.
   const off = await openHttpExecutor(w.settings, { root: w.folder, offline: true, log: () => {} });
   assert.throws(() => off.listen(), /does not listen/);
@@ -240,7 +257,9 @@ test('a call sent under a permission no longer in force holds that agent alone; 
     const stub = stubsOf(c).at(-1);
     assert.equal(stub.fingerprint, done.json.written[0].stub);
     assert.equal(stub.content.slip, first);
-    assert.equal(docs(stub)[WRITTEN_LATE_DOCUMENT], await identifierFingerprint(WRITTEN_ON_ACKNOWLEDGEMENT));
+    assert.equal(docs(stub)[WRITTEN_LATE_DOCUMENT], WRITTEN_LATER_FINGERPRINT);
+    assert.equal(docs(stub)[ACKNOWLEDGED_DOCUMENT], ACKNOWLEDGED_FINGERPRINT);
+    assert.deepEqual(done.json.failed, []);
     assert.equal(stub.countersignature.state, 'valid');
     // alpha takes calls again, under the permission in force; a second acknowledgement finds nothing.
     const again = await call(w, 'alpha', 'echo', {});
@@ -324,7 +343,7 @@ test('the command over HTTP: seal, status and acknowledge ask the running execut
     assert.equal((await run(['status', ...config])).code, 2);
     const nothing = await run(['acknowledge', ...config, '--agent', 'alpha'], secret);
     assert.equal(nothing.code, 1);
-    assert.match(nothing.stderr, /nothing was acknowledged: This agent has no call without a receipt/);
+    assert.match(nothing.stderr, /nothing was acknowledged or set aside: This agent has no call without a receipt/);
   } finally {
     await w.closeExecutor();
   }
@@ -376,4 +395,260 @@ test('the command over HTTP: keys makes the recorder\'s key file beside the othe
   writeFileSync(w.configPath, JSON.stringify({ ...w.settings, recorder: { keys: 'sealing/none.jwk' } }));
   const missing = JSON.parse((await run(['check', '--config', w.configPath])).stdout);
   assert.ok(missing.problems.some((p) => /^recorder\.keys: the key file .* does not exist yet/.test(p)), missing.problems.join(' | '));
+});
+
+// --- after the review of 0.5.0 ---
+
+/** A settings file like the world's, with the address to ask at changed: what a command reads. */
+function settingsAt(w, name, port, change = (s) => s) {
+  const path = join(w.folder, name);
+  writeFileSync(path, JSON.stringify(change({ ...w.settings, listen: { host: '127.0.0.1', port } })));
+  return path;
+}
+function listenOn(server) {
+  return new Promise((done) => server.listen(0, '127.0.0.1', () => done(server.address().port)));
+}
+
+test('POST /provared/hello: the executor signs a fresh challenge and the address it was asked at, and nothing that could be a record', async () => {
+  const w = await adminWorld({ agents: ['alpha'] });
+  try {
+    const challenge = randomBytes(32).toString('base64url');
+    // No secret is needed, and none is sent.
+    const r = await ask(w, 'POST', '/provared/hello', { secret: null, body: { challenge } });
+    assert.equal(r.status, 200, r.body);
+    assert.deepEqual(Object.keys(r.json), ['executor', 'address', 'port', 'signatures']);
+    assert.deepEqual([r.json.executor, r.json.address, r.json.port, r.json.signatures.length], ['provared-mcp-executor', '127.0.0.1', w.address.port, 2]);
+    const port = w.address.port;
+    assert.equal(await checkIdentity(w.executorKeys, challenge, '127.0.0.1', port, r.json.signatures), true);
+    assert.equal(await checkIdentity(w.executorKeys, challenge, '::ffff:127.0.0.1', port, r.json.signatures), true, 'the same address, as IPv6 writes it');
+    // What is signed is this text and no other, by the executor's Ed25519 key (and by its ML-DSA-87 key).
+    const text = utf8(`provared-mcp-executor hello v1\n${challenge}\n127.0.0.1\n${port}\n`);
+    const ed = await globalThis.crypto.subtle.importKey('jwk', w.executorKeys[0], { name: 'Ed25519' }, false, ['verify']);
+    assert.equal(await globalThis.crypto.subtle.verify({ name: 'Ed25519' }, ed, fromBase64url(r.json.signatures[0]), text), true);
+    // Anything else does not check: another challenge, another port, another address, one signature alone, another executor's keys.
+    assert.equal(await checkIdentity(w.executorKeys, randomBytes(32).toString('base64url'), '127.0.0.1', port, r.json.signatures), false);
+    assert.equal(await checkIdentity(w.executorKeys, challenge, '127.0.0.1', port + 1, r.json.signatures), false);
+    assert.equal(await checkIdentity(w.executorKeys, challenge, '127.0.0.2', port, r.json.signatures), false);
+    assert.equal(await checkIdentity(w.executorKeys, challenge, '127.0.0.1', port, [r.json.signatures[0]]), false);
+    assert.equal(await checkIdentity(w.executorKeys, challenge, '127.0.0.1', port, [r.json.signatures[0], r.json.signatures[0]]), false);
+    assert.equal(await checkIdentity(w.executorKeys, challenge, '127.0.0.1', port, [r.json.signatures[1], r.json.signatures[0]]), false);
+    assert.equal(await checkIdentity(w.executorKeys, challenge, '127.0.0.1', port, undefined), false);
+    assert.equal(await checkIdentity(w.agents.alpha.agentKeys, challenge, '127.0.0.1', port, r.json.signatures), false);
+    // A challenge is 43 characters of base64url. What a record is signed over (two runs of base64url and a full stop) is not one.
+    for (const body of [{}, { challenge: 'short' }, { challenge: 'x'.repeat(44) }, { challenge: `${'a'.repeat(21)}.${'b'.repeat(21)}` }, { challenge: ['x'.repeat(43)] }, 'not json']) {
+      const bad = await ask(w, 'POST', '/provared/hello', { secret: null, body });
+      assert.equal(bad.status, 400, JSON.stringify(body));
+      assert.equal(bad.json.signatures, undefined);
+    }
+    // A web page is refused here as at the other addresses.
+    assert.equal((await ask(w, 'POST', '/provared/hello', { secret: null, body: { challenge }, headers: { origin: 'http://localhost:3000' } })).status, 403);
+    assert.equal((await ask(w, 'GET', '/provared/hello', { secret: null })).status, 401);
+  } finally {
+    await w.close();
+  }
+  // Without an administrator's secret in the settings this address answers nothing either.
+  const plain = await httpWorld({ agents: ['alpha'] });
+  try {
+    plain.admin = 'x';
+    const r = await ask(plain, 'POST', '/provared/hello', { secret: null, body: { challenge: randomBytes(32).toString('base64url') } });
+    assert.equal(r.status, 404);
+    assert.equal(r.json.signatures, undefined);
+  } finally {
+    await plain.close();
+  }
+});
+
+test('the commands send the administrator\'s secret to the executor of their settings alone: not to another listener at that address, and not through one that passes the challenge on', async () => {
+  const w = await adminWorld({ agents: ['alpha'] });
+  const secret = { env: { [ENV]: w.admin } };
+  const seen = [];
+  const body = (req) => new Promise((done) => {
+    const chunks = [];
+    req.on('data', (c) => chunks.push(c));
+    req.on('end', () => done(Buffer.concat(chunks).toString('utf8')));
+  });
+  // A listener that is not the executor, and answers as if it were.
+  const pretender = http.createServer(async (req, res) => {
+    seen.push({ to: 'pretender', url: req.url, authorization: req.headers.authorization ?? null, body: await body(req) });
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ executor: 'provared-mcp-executor', from: 'running', recorder: null, agents: {}, address: '127.0.0.1', port: 1, signatures: ['AAAA', 'BBBB'], entry: 1, fingerprint: 'x', written: [], setAside: [], remaining: [] }));
+  });
+  // A listener in the middle: it passes the challenge on to the executor and hands back the executor's own answer.
+  const middle = http.createServer(async (req, res) => {
+    const sent = await body(req);
+    seen.push({ to: 'middle', url: req.url, authorization: req.headers.authorization ?? null, body: sent });
+    if (req.url !== '/provared/hello') {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      return res.end('{}');
+    }
+    const answer = await fetch(`http://127.0.0.1:${w.address.port}/provared/hello`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: sent });
+    res.writeHead(answer.status, { 'content-type': 'application/json' });
+    res.end(await answer.text());
+  });
+  try {
+    const atPretender = settingsAt(w, 'at-pretender.json', await listenOn(pretender));
+    for (const args of [['status'], ['seal', '--agent', 'alpha'], ['acknowledge', '--agent', 'alpha']]) {
+      const r = await run([...args, '--config', atPretender], secret);
+      assert.equal(r.code, 2, args.join(' '));
+      assert.match(r.stderr, /did not show that it is the executor of these settings: its signatures do not check .* The administrator's secret was not sent\./, args.join(' '));
+      assert.equal(r.stdout, '', 'what the listener made up is not printed');
+    }
+    const atMiddle = settingsAt(w, 'at-middle.json', await listenOn(middle));
+    const through = await run(['status', '--config', atMiddle], secret);
+    assert.equal(through.code, 2);
+    assert.match(through.stderr, /its signatures do not check .* The administrator's secret was not sent\./);
+    assert.equal(seen.filter((s) => s.to === 'middle').length, 1, 'the executor did sign for the listener in the middle');
+    // Neither listener was sent the secret, in a header or anywhere else; each was sent a challenge and no more.
+    assert.equal(seen.length, 4);
+    for (const s of seen) {
+      assert.equal(s.url, '/provared/hello');
+      assert.equal(s.authorization, null);
+      assert.ok(!s.body.includes(w.admin));
+      assert.deepEqual(Object.keys(JSON.parse(s.body)), ['challenge']);
+    }
+    assert.equal(new Set(seen.map((s) => JSON.parse(s.body).challenge)).size, 4, 'a fresh challenge each time');
+    // The executor itself: the command works.
+    const direct = settingsAt(w, 'direct.json', w.address.port);
+    const ok = await run(['status', '--config', direct], secret);
+    assert.equal(ok.code, 0, ok.stderr);
+    assert.deepEqual(Object.keys(JSON.parse(ok.stdout).agents), ['alpha']);
+    // The command checks against the executor's key file: another key file, and it does not trust the executor it reaches; none, and it sends nothing.
+    await makeKeyFile(join(w.folder, 'keys', 'other.jwk'), 'agent');
+    const otherKeys = settingsAt(w, 'other-keys.json', w.address.port, (s) => ({ ...s, executor: { keys: 'keys/other.jwk' } }));
+    const distrusted = await run(['status', '--config', otherKeys], secret);
+    assert.equal(distrusted.code, 2);
+    assert.match(distrusted.stderr, /its signatures do not check/);
+    const noKeys = settingsAt(w, 'no-keys.json', w.address.port, (s) => ({ ...s, executor: { keys: 'keys/none.jwk' } }));
+    const unread = await run(['status', '--config', noKeys], secret);
+    assert.equal(unread.code, 2);
+    assert.match(unread.stderr, /key file .*none\.jwk could not be read/);
+  } finally {
+    pretender.close();
+    middle.close();
+    pretender.closeAllConnections();
+    middle.closeAllConnections();
+    await w.close();
+  }
+});
+
+test('a body sent to the executor\'s own addresses is read up to 64 KiB and no further, whatever bodyLimit is', async () => {
+  // bodyLimit as it comes (10 MiB): a body that never ends is cut off once it passes 64 KiB, not read on.
+  const w = await adminWorld({ agents: ['alpha'] });
+  try {
+    const req = http.request({ host: '127.0.0.1', port: w.address.port, path: '/provared/seal', method: 'POST', agent: false, headers: { authorization: `Bearer ${w.admin}`, 'content-type': 'application/json', 'transfer-encoding': 'chunked' } });
+    const answered = new Promise((done) => {
+      req.on('response', (res) => {
+        res.resume();
+        done(res.statusCode);
+      });
+      req.on('error', () => done('the connection failed'));
+    });
+    req.write('{"agent":"alpha","filler":"');
+    req.write('x'.repeat(ADMIN_BODY_LIMIT + 1024));
+    // The body is not ended.
+    const status = await Promise.race([answered, pause(4000).then(() => 'no answer while the body goes on')]);
+    req.destroy();
+    assert.equal(status, 413);
+    assert.ok(!bookText(w, 'alpha').includes('"seal"'));
+  } finally {
+    await w.close();
+  }
+  // A small bodyLimit is the agents' limit, not the administrator's: a body under 64 KiB is taken.
+  const small = await adminWorld({ agents: ['alpha'], config: { bodyLimit: 1024 } });
+  try {
+    const r = await ask(small, 'POST', '/provared/seal', { body: { agent: 'alpha', filler: 'x'.repeat(4000) } });
+    assert.equal(r.status, 200, r.body);
+  } finally {
+    await small.close();
+  }
+});
+
+test('a timer over HTTP: one agent\'s long call does not hold back the seal of another agent\'s book', async () => {
+  const w = await adminWorld({ recorder: { keys: 'keys/recorder.jwk', sealEvery: 1000 }, config: { timeout: 30000 } });
+  try {
+    await until(async () => sealsOf(await checked(w, 'alpha')).length === 1 && sealsOf(await checked(w, 'beta')).length === 1, { timeout: 20000 });
+    // alpha keeps one call with the upstream for ten seconds.
+    const long = call(w, 'alpha', 'slow', { ms: 10000 });
+    await until(() => w.executor.agent('alpha').calls() === 1);
+    await pause(300);
+    await call(w, 'beta', 'echo', {});
+    // beta's new entry is sealed at its next round, while alpha's call is still out.
+    await until(async () => sealsOf(await checked(w, 'beta')).length === 2, { timeout: 6500 });
+    assert.equal(w.executor.agent('alpha').calls(), 1, 'alpha\'s call is still with the upstream');
+    assert.deepEqual((await checked(w, 'beta')).entries.map((e) => e.kind), ['slip', 'seal', 'stub', 'seal']);
+    assert.ok((await long).json.result);
+  } finally {
+    await w.close();
+  }
+});
+
+test('a start that cannot listen seals nothing', async () => {
+  const taken = net.createServer();
+  const port = await listenOn(taken);
+  const w = await adminWorld({ agents: ['alpha'], open: false, recorder: { keys: 'keys/recorder.jwk', sealEvery: 1000 } });
+  const logs = [];
+  const executor = await openHttpExecutor(w.settings, { root: w.folder, log: (e) => logs.push(e) });
+  try {
+    await assert.rejects(executor.listen({ port }), /EADDRINUSE/);
+    await pause(3500);
+    assert.deepEqual(logs.filter((e) => e.event === 'sealed' || e.event === 'not-sealed'), []);
+    assert.equal(sealsOf(await checked(w, 'alpha')).length, 0);
+  } finally {
+    await executor.close();
+    taken.close();
+    await w.upstream.close();
+  }
+});
+
+test('a second executor on the same files is refused before it reads them, and a call in flight gets its true receipt', async () => {
+  const w = await adminWorld({ config: { timeout: 20000 } });
+  try {
+    await call(w, 'alpha', 'echo', {});
+    const long = call(w, 'alpha', 'slow', { ms: 2500, tag: 'REAL-ANSWER' });
+    await until(() => w.executor.agent('alpha').calls() === 1);
+    await pause(300);
+    const book = bookText(w, 'alpha');
+    // A second start on the same settings, and the files opened as a command with --offline opens them: of either agent.
+    for (const more of [{}, { offline: true }]) {
+      const logs = [];
+      await assert.rejects(openHttpExecutor(w.settings, { root: w.folder, log: (e) => logs.push(e), ...more }), (e) => e.code === 'LOCKED');
+      assert.deepEqual(logs.filter((e) => e.event !== 'warning'), [], 'it wrote no receipt for the call in flight');
+    }
+    const sealed = await run(['seal', '--config', w.configPath, '--agent', 'beta', '--offline']);
+    assert.equal(sealed.code, 2);
+    assert.match(sealed.stderr, /An executor is running on the book/);
+    assert.equal(bookText(w, 'alpha'), book);
+    const answer = await long;
+    assert.match(JSON.stringify(answer.json.result), /REAL-ANSWER/);
+    const stub = stubsOf(await checked(w, 'alpha')).at(-1);
+    assert.ok(docs(stub)[RESULT_DOCUMENT], 'the receipt names what came back');
+    assert.equal(docs(stub)['provared.error'], undefined);
+    assert.equal(w.executor.agent('alpha').stopped(), null);
+  } finally {
+    await w.close();
+  }
+  // Closed, the executor has given the files up.
+  const again = await openHttpExecutor(w.settings, { root: w.folder, log: () => {}, offline: true });
+  await again.close();
+});
+
+test('a held agent\'s book is not sealed by the timer, and the log says so once, not at every round', async () => {
+  const w = await adminWorld({ agents: ['alpha'], recorder: { keys: 'keys/recorder.jwk', sealEvery: 1000 } });
+  await until(() => w.logs.some((e) => e.event === 'sealed'), { timeout: 20000 });
+  await call(w, 'alpha', 'echo', {});
+  await until(async () => sealsOf(await checked(w, 'alpha')).length === 2, { timeout: 20000 });
+  await leaveCallUnderOldSlip(w, 'alpha');
+  await openHttpWorld(w);
+  try {
+    await pause(4500);
+    const said = w.logs.filter((e) => e.event === 'not-sealed');
+    assert.equal(said.length, 1, 'once, though four rounds have passed');
+    assert.match(said[0].reason, /The agent is stopped/);
+    assert.equal(sealsOf(await checked(w, 'alpha')).length, 2);
+    // Acknowledged, the book is sealed again at the next round.
+    assert.equal((await ask(w, 'POST', '/provared/acknowledge', { body: { agent: 'alpha' } })).status, 200);
+    await until(async () => sealsOf(await checked(w, 'alpha')).length === 3, { timeout: 20000 });
+  } finally {
+    await w.close();
+  }
 });

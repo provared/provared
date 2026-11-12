@@ -12,7 +12,14 @@ import { fileURLToPath } from 'node:url';
 
 const { checkBook, identifierFingerprint, argumentsFingerprint, keySetFingerprint } = await import('provared');
 const { world, openWorld, signSlip, until, pause } = await import('./world.mjs');
-const { CALL_DOCUMENT, TOOL_DOCUMENT, RESULT_DOCUMENT, WRITTEN_LATE_DOCUMENT, OUTCOME_UNKNOWN_ACKNOWLEDGED, WRITTEN_ON_ACKNOWLEDGEMENT, checkConfig, openExecutor, readSettings, statusFromFiles } = await import('../executor.mjs');
+const { CALL_DOCUMENT, TOOL_DOCUMENT, RESULT_DOCUMENT, WRITTEN_LATE_DOCUMENT, WRITTEN_LATE, OUTCOME_UNKNOWN, ACKNOWLEDGED_DOCUMENT, ACKNOWLEDGED, WRITTEN_LATER, NO_RECORD_OF_OUTCOME, checkConfig, openExecutor, readSettings, statusFromFiles } = await import('../executor.mjs');
+
+// The fixed texts a receipt names, with their fingerprints written out: a
+// receipt already in a book names the fingerprint, so a change of one
+// letter would make it unrecognisable.
+const ACKNOWLEDGED_FINGERPRINT = 'poJcnPoQB6EyH2Pvp2ZPgD6_2XrDua1XAOpPHBaUezI';
+const WRITTEN_LATER_FINGERPRINT = 'L_sk-qfojehaePxOm8pV-04nhqDY78T5E040ZwBKtho';
+const NO_RECORD_OF_OUTCOME_FINGERPRINT = 'pOqSHPh3dRwENnfo2e8cGdYHpsYRvvGW2CUyBeGaGiU';
 const { readCopy, loadCopyKey, openCopy } = await import('../copy.mjs');
 const { compareCopyWithBook } = await import('../compare.mjs');
 const { makeKeyFile } = await import('../files.mjs');
@@ -112,7 +119,9 @@ test('seal: the book is sealed with the recorder\'s three keys, the seal is the 
   // The copy agrees with a sealed book.
   const compared = await compareCopyWithBook({ copyPath: join(w.folder, 'copy.jsonl'), copyKey: copyKeyOf(w), name: w.settings.name, service: 'executor', book: bookText(w), options: { issuerKeys: w.settings.agent.issuerKeys, sealKeys: w.sealKeys } });
   assert.equal(compared.summary.agree, true);
+  assert.deepEqual([compared.book.seals, compared.book.sealersExpected], [2, w.sealKeys]);
   // The executor starts on a sealed book, and writes on after the seal.
+  await ex.close();
   await openWorld(w);
   try {
     const r = await w.client.call('echo', {});
@@ -149,12 +158,17 @@ test('seal: without a recorder in the settings nothing is sealed; a settings fil
   assert.deepEqual(fine.problems, []);
   assert.equal(fine.settings.recorder.name, w.settings.name, 'the recorder is named as the executor unless the settings say otherwise');
   assert.equal(fine.settings.recorder.sealEvery, null, 'no timer unless set');
+  assert.ok(!fine.warnings.some((x) => /sealEvery/.test(x)));
+  // A timer of less than a minute is allowed, and warned about.
+  assert.ok(readSettings({ ...w.settings, recorder: { keys: 'r.jwk', sealEvery: 59999 } }, w.folder).warnings.some((x) => /^recorder\.sealEvery: 59999 ms is less than a minute/.test(x)));
+  assert.ok(!readSettings({ ...w.settings, recorder: { keys: 'r.jwk', sealEvery: 60000 } }, w.folder).warnings.some((x) => /sealEvery/.test(x)));
 });
 
 test('seal: a book sealed with other keys than the settings\' recorder does not pass its check, and the executor does not open on it', async () => {
   const w = await sealedWorld({ open: false });
   const ex = await offline(w);
   await ex.seal();
+  await ex.close();
   // Another recorder's keys are put in place of the ones the book was sealed with.
   rmSync(join(w.folder, 'keys', 'recorder.jwk'));
   await makeKeyFile(join(w.folder, 'keys', 'recorder.jwk'), 'recorder');
@@ -286,8 +300,12 @@ test('acknowledge: a call sent under a permission no longer in force stops the s
   assert.ok(Date.parse(countersignedAt) >= Date.parse(stub.content.when), 'countersigned at the acknowledgement, not before the call was sent');
   assert.equal(stub.content.with, 'executor');
   const d = docs(stub);
-  assert.equal(d['provared.error'], await identifierFingerprint(OUTCOME_UNKNOWN_ACKNOWLEDGED));
-  assert.equal(d[WRITTEN_LATE_DOCUMENT], await identifierFingerprint(WRITTEN_ON_ACKNOWLEDGEMENT));
+  // The three fixed texts of an acknowledged receipt, by their fingerprints written out.
+  assert.equal(d['provared.error'], NO_RECORD_OF_OUTCOME_FINGERPRINT);
+  assert.equal(d[WRITTEN_LATE_DOCUMENT], WRITTEN_LATER_FINGERPRINT);
+  assert.equal(d[ACKNOWLEDGED_DOCUMENT], ACKNOWLEDGED_FINGERPRINT);
+  assert.equal(ACKNOWLEDGED_DOCUMENT, 'executor.acknowledged');
+  assert.deepEqual(done.failed, []);
   assert.equal(d[CALL_DOCUMENT], await identifierFingerprint('lost-call'));
   assert.equal(stub.countersignature.state, 'valid', 'countersigned by the executor');
   const last = copyOf(w).lines.at(-1).entry;
@@ -295,6 +313,7 @@ test('acknowledge: a call sent under a permission no longer in force stops the s
   // Nothing is left to acknowledge, and the book can be sealed again.
   await assert.rejects(ex.acknowledge(), /no call without a receipt/);
   await ex.seal();
+  await ex.close();
   // The executor starts, and takes calls under the permission in force.
   await openWorld(w);
   try {
@@ -326,6 +345,8 @@ test('acknowledge: where the copy holds the outcome, the receipt names it', asyn
   const d = docs(stubsOf(await checked(w)).at(-1));
   assert.equal(d[RESULT_DOCUMENT], result);
   assert.equal(d['provared.error'], undefined);
+  assert.equal(d[WRITTEN_LATE_DOCUMENT], WRITTEN_LATER_FINGERPRINT);
+  assert.equal(d[ACKNOWLEDGED_DOCUMENT], ACKNOWLEDGED_FINGERPRINT);
   assert.equal(copyOf(w).lines.at(-1).entry.outcome, 'acknowledged');
 });
 
@@ -336,7 +357,11 @@ test('acknowledge: never two receipts for one call, also where the copy could no
   const at = join(w.folder, 'copy.jsonl');
   renameSync(at, `${at}.away`);
   mkdirSync(at);
-  await assert.rejects(ex.acknowledge(), /copy .* is not as the executor left it/);
+  const first = await ex.acknowledge();
+  assert.deepEqual(first.written, []);
+  assert.deepEqual(first.failed.map((f) => f.call), ['lost-call']);
+  assert.match(first.failed[0].problem, /copy .* is not as the executor left it/);
+  assert.equal(first.remaining.length, 1);
   rmdirSync(at);
   renameSync(`${at}.away`, at);
   const call = await identifierFingerprint('lost-call');
@@ -350,6 +375,7 @@ test('acknowledge: never two receipts for one call, also where the copy could no
   assert.equal(again.written[0].stub, (await named())[0].fingerprint);
   assert.equal(copyOf(w).lines.at(-1).entry.outcome, 'found-in-book');
   // And so does a new start: the call is finished.
+  await ex.close();
   const next = await offline(w);
   assert.equal((await next.report()).agent.receiptsMissing.length, 0);
   assert.equal((await named()).length, 1);
@@ -415,6 +441,7 @@ test('acknowledge: a call sent under a permission the book does not hold, or one
   assert.equal(copyOf(w).lines.at(-1).entry.kind, 'set-aside');
   assert.ok(w.logs.some((e) => e.event === 'call-set-aside' && e.call.call === 'stray-call'));
   // It stays set aside at the next start, which takes calls: also where a line for the same call is added to the copy afterwards.
+  await ex.close();
   await leaveCall(w, 'stray-call', 'A'.repeat(43));
   await openWorld(w);
   try {
@@ -429,6 +456,7 @@ test('acknowledge: a call sent under a permission the book does not hold, or one
   assert.equal(compared.summary.setAside, 1);
   assert.equal(compared.summary.unfinished, 0);
   assert.equal(compared.summary.agree, false);
+  assert.equal(compared.summary.onlySetAside, true, 'the calls set aside are the only disagreement, and the answer says so');
 
   // A permission the book holds, which names other keys for the executor than it now holds.
   const v = await sealedWorld();
@@ -508,7 +536,11 @@ test('acknowledge: nothing is written where something else changed the book file
   const vx = await offline(v);
   assert.equal((await vx.report()).agent.receiptsMissing[0].usable, true);
   const before = bookText(v);
-  await assert.rejects(vx.acknowledge(), /would not pass its check/);
+  const refused = await vx.acknowledge();
+  assert.deepEqual([refused.written, refused.setAside], [[], []]);
+  assert.deepEqual(refused.failed.map((f) => f.call), ['early-call']);
+  assert.match(refused.failed[0].problem, /would not pass its check/);
+  assert.ok(v.logs.some((e) => e.event === 'not-acknowledged' && e.call === 'early-call'));
   assert.equal(bookText(v), before, 'nothing was written');
   assert.equal(copyOf(v).lines.at(-1).entry.kind, 'sending');
   assert.equal((await vx.report()).agent.receiptsMissing.length, 1);
@@ -537,6 +569,25 @@ test('status from the files writes nothing, and shows the last seal, whether the
   // A call sent under the permission in force, with no receipt: the next start writes it, and the status says so.
   await leaveCall(w, 'late-call', ex.slip.fingerprint);
   assert.equal((await statusFromFiles(w.settings, w.folder)).agent.receiptsAtNextStart, 1);
+  await ex.close();
+  // A command at work on the files is not a start: it writes no late receipt, and does not seal while one is due.
+  w.logs = [];
+  const off = await offline(w);
+  const before = bookText(w);
+  assert.ok(!w.logs.some((e) => e.event === 'receipt-written-late'));
+  assert.equal((await off.report()).agent.receiptsAtNextStart, 1);
+  await assert.rejects(off.seal(), /1 call\(s\) with no receipt in the book, which the executor's next start will give one/);
+  assert.equal(bookText(w), before, 'nothing was written');
+  assert.equal(copyOf(w).lines.at(-1).entry.kind, 'sending');
+  await off.close();
+  // The start writes it.
+  await openWorld(w);
+  try {
+    assert.ok(w.logs.some((e) => e.event === 'receipt-written-late' && e.call === 'late-call'));
+    assert.equal(stubsOf(await checked(w)).length, 1);
+  } finally {
+    await w.close();
+  }
 });
 
 test('the copy is written by one program at a time: a line added by another stops the writing', async () => {
@@ -617,7 +668,9 @@ test('the command over stdio: a call that waits is acknowledged, or set aside, w
   const stopped = await run(['stdio', ...config]);
   assert.equal(stopped.code, 2);
   assert.match(stopped.stderr, /not the one in force/);
-  const status = JSON.parse((await run(['status', ...config])).stdout);
+  const asked = await run(['status', ...config]);
+  assert.equal(asked.code, 1, 'a call that waits is told by the exit code too');
+  const status = JSON.parse(asked.stdout);
   assert.equal(status.agent.receiptsMissing[0].call, 'lost-call');
   const done = await run(['acknowledge', ...config, '--offline']);
   assert.equal(done.code, 0, done.stderr);
@@ -633,4 +686,261 @@ test('the command over stdio: a call that waits is acknowledged, or set aside, w
   assert.equal(aside.code, 0, aside.stderr);
   assert.match(aside.stdout, /^Set aside, with no receipt: stray-call \(The book does not hold the permission/);
   assert.equal(stubsOf(await checked(w)).length, 2);
+});
+
+// --- after the review of 0.5.0 ---
+
+test('the fixed texts a receipt names are these, letter for letter, with these fingerprints', async () => {
+  const texts = [
+    [ACKNOWLEDGED, 'The administrator acknowledged this call. The permission it was made under was not the one in force when this receipt was written.', ACKNOWLEDGED_FINGERPRINT],
+    [WRITTEN_LATER, "This receipt was written later than its call, from the executor's own copy. Its date is the time the copy gives for the call.", WRITTEN_LATER_FINGERPRINT],
+    [NO_RECORD_OF_OUTCOME, 'The executor recorded that it was sending this call, and has no record of its outcome.', NO_RECORD_OF_OUTCOME_FINGERPRINT],
+    // The two a receipt written at a restart names, as published in 0.4.1.
+    [WRITTEN_LATE, 'This receipt was written when the executor next started, from its own copy of what it had sent: the executor stopped before the receipt could be written. Its date is the time the call was sent; the countersignature is dated at the restart.', 'DIPtu-Cf-GQqigMV51m5ehHX2zdFIQJyKn2gRgsOFVU'],
+    [OUTCOME_UNKNOWN, 'The executor stopped while this call was with the tool server, so its outcome is not known. The receipt was written when the executor next started, from its own copy of what it had sent.', 'eDbMc7F1z_1IkhM1smIPpHFEiknFYo3G8Shp3ErLzd8'],
+  ];
+  for (const [constant, text, print] of texts) {
+    assert.equal(constant, text);
+    assert.equal(await identifierFingerprint(text), print, text);
+  }
+});
+
+test('one program at a time: a command with --offline beside a running executor is refused before it reads or writes, and the call in flight gets its true receipt', async () => {
+  const w = await sealedWorld({ config: { timeout: 20000 } });
+  let answer;
+  try {
+    await w.client.call('echo', {});
+    // A call that takes three seconds and then answers.
+    const inFlight = w.client.call('slow', { ms: 3000, tag: 'REAL-ANSWER' }, { timeout: 30000 });
+    await until(() => copyOf(w).lines.at(-1).entry.kind === 'sending');
+    const book = bookText(w);
+    const copy = readFileSync(join(w.folder, 'copy.jsonl'), 'utf8');
+    // Beside it, on the same files: the files opened as "seal --offline" opens them, and the command itself.
+    const logs = [];
+    await assert.rejects(openExecutor(w.settings, { root: w.folder, log: (e) => logs.push(e), offline: true }), (e) => e.code === 'LOCKED' && /An executor is running on the book/.test(e.message));
+    assert.deepEqual(logs.filter((e) => e.event !== 'warning'), [], 'it wrote no receipt and no seal');
+    const sealed = await run(['seal', '--config', w.configPath, '--offline']);
+    assert.equal(sealed.code, 2);
+    assert.match(sealed.stderr, /An executor is running on the book .* Nothing was read or written\./);
+    const acknowledged = await run(['acknowledge', '--config', w.configPath, '--offline']);
+    assert.equal(acknowledged.code, 2);
+    assert.match(acknowledged.stderr, /An executor is running on the book/);
+    // A second executor on the same files is refused in the same way.
+    await assert.rejects(openExecutor(w.settings, { root: w.folder, log: () => {} }), (e) => e.code === 'LOCKED');
+    assert.equal(bookText(w), book, 'the book is as it was');
+    assert.equal(readFileSync(join(w.folder, 'copy.jsonl'), 'utf8'), copy, 'and so is the copy');
+    // Reading is not writing: the status may be asked at any time.
+    assert.equal((await statusFromFiles(w.settings, w.folder)).agent.receiptsAtNextStart, 1);
+    answer = await inFlight;
+    assert.equal(w.executor.stopped(), null, 'the running executor goes on');
+    assert.ok((await w.client.call('echo', {})).result);
+  } finally {
+    await w.close();
+  }
+  assert.match(JSON.stringify(answer.result), /Done, slowly\. REAL-ANSWER/);
+  const c = await checked(w);
+  assert.equal(c.summary.problemFound, false);
+  assert.deepEqual(c.entries.map((e) => e.kind), ['slip', 'stub', 'stub', 'stub']);
+  const d = docs(c.entries[2]);
+  assert.equal(d[RESULT_DOCUMENT], await argumentsFingerprint(answer.result), 'the receipt names what came back');
+  assert.equal(d['provared.error'], undefined);
+  assert.equal(d[WRITTEN_LATE_DOCUMENT], undefined);
+  assert.deepEqual(copyOf(w).lines.map((l) => [l.entry.kind, l.entry.outcome ?? null]), [['sending', null], ['done', 'answer'], ['sending', null], ['done', 'answer'], ['sending', null], ['done', 'answer']]);
+  assert.ok(!w.logs.some((e) => ['book-not-written', 'copy-not-written', 'book-changed'].includes(e.event)));
+  // Once the executor has ended, its lock is gone: the command works.
+  const after = await run(['seal', '--config', w.configPath, '--offline']);
+  assert.equal(after.code, 0, after.stderr);
+  // And an executor opened and not yet closed holds it; closed, it gives it up.
+  const first = await offline(w);
+  await assert.rejects(offline(w), (e) => e.code === 'LOCKED');
+  await first.close();
+  const second = await offline(w);
+  await second.close();
+  // An opening that fails gives the lock up too.
+  rmSync(join(w.folder, 'slip.json'));
+  await assert.rejects(offline(w), /slip .* is missing/);
+  await assert.rejects(offline(w), /slip .* is missing/, 'not: locked');
+});
+
+test('acknowledge says what it did where it could not do all of it, and goes on to the calls it can', async () => {
+  const w = await sealedWorld();
+  await w.client.call('echo', {});
+  const first = w.executor.slip.fingerprint;
+  await w.close();
+  // Three calls wait: one the library will refuse (dated before the receipt ahead of it), one that can have its receipt, one to set aside.
+  await leaveCall(w, 'early-call', first, (l) => ({ ...l, when: new Date(Date.now() - 30000).toISOString() }));
+  await leaveCall(w, 'lost-call', first);
+  await leaveCall(w, 'aside-call', 'A'.repeat(43));
+  await renewSlip(w);
+  const done = await run(['acknowledge', '--config', w.configPath, '--offline', '--set-aside', 'aside-call']);
+  assert.equal(done.code, 1, done.stderr);
+  assert.match(done.stdout, /^Set aside, with no receipt: aside-call /m);
+  assert.match(done.stdout, /^Sent at \S+ \(slow\): its receipt, written under the permission it was sent under, is [A-Za-z0-9_-]{43}\.$/m, 'the call after the one that failed got its receipt');
+  assert.match(done.stdout, /^Not done: early-call \(sent at \S+, slow\): The stub was not written: with it, the book would not pass its check\.$/m);
+  assert.match(done.stdout, /^Still waiting: early-call: can be acknowledged$/m);
+  assert.doesNotMatch(done.stdout + done.stderr, /nothing was acknowledged/);
+  const call = await identifierFingerprint('lost-call');
+  assert.equal(stubsOf(await checked(w)).filter((s) => docs(s)[CALL_DOCUMENT] === call).length, 1);
+  assert.deepEqual(copyOf(w).lines.slice(-2).map((l) => [l.entry.kind, l.entry.call]), [['set-aside', 'aside-call'], ['done', 'lost-call']]);
+  // In a program, the same: what was done, what was not and why, and what still waits.
+  const ex = await offline(w);
+  const again = await ex.acknowledge();
+  assert.deepEqual([again.written, again.setAside], [[], []]);
+  assert.deepEqual(again.failed.map((f) => [f.call, f.tool]), [['early-call', 'slow']]);
+  assert.deepEqual(again.remaining.map((p) => p.call), ['early-call']);
+  await ex.close();
+});
+
+test('seal, acknowledge, status and compare refuse an option they do not know, and then do nothing', async () => {
+  const { w } = await worldWithCallUnderOldSlip();
+  const config = ['--config', w.configPath];
+  const book = existsSync(join(w.folder, 'book.jsonl')) ? bookText(w) : '';
+  const copy = readFileSync(join(w.folder, 'copy.jsonl'), 'utf8');
+  // The option to set a call aside, mistyped: the call must not be given a receipt instead.
+  for (const args of [
+    ['acknowledge', ...config, '--offline', '--setaside', 'lost-call'],
+    ['acknowledge', ...config, '--ofline'],
+    ['seal', ...config, '--offline', '--now'],
+    ['status', ...config, '--offlin'],
+    ['compare', ...config, '--sealers', 'x'],
+  ]) {
+    const r = await run(args);
+    assert.equal(r.code, 2, args.join(' '));
+    assert.match(r.stderr, new RegExp(`${args[0]} takes no "--[a-z]+"; only .*Nothing was done\\.`), args.join(' '));
+    assert.equal(r.stdout, '');
+  }
+  assert.equal(bookText(w), book);
+  assert.equal(readFileSync(join(w.folder, 'copy.jsonl'), 'utf8'), copy);
+});
+
+test('a key file the executor held before countersigns the receipt of a call made under a permission that names it; without it the call can only be set aside', async () => {
+  const w = await sealedWorld();
+  await w.client.call('echo', {});
+  const first = w.executor.slip.fingerprint;
+  await w.close();
+  await leaveCall(w, 'old-keys-call', first);
+  // The executor's keys are changed; the key file it held is kept under another name.
+  renameSync(join(w.folder, 'keys', 'executor.jwk'), join(w.folder, 'keys', 'executor-before.jwk'));
+  w.executorKeys = await makeKeyFile(join(w.folder, 'keys', 'executor.jwk'), 'agent');
+  await renewSlip(w);
+  // Not named in the settings: no receipt.
+  const without = await offline(w);
+  assert.match((await without.report()).agent.receiptsMissing[0].problem, /name that file in "executor\.formerKeys"/);
+  await without.close();
+  // Named.
+  w.settings.executor = { ...w.settings.executor, formerKeys: ['keys/executor-before.jwk'] };
+  const ex = await offline(w);
+  const waiting = (await ex.report()).agent.receiptsMissing;
+  assert.deepEqual([waiting[0].usable, waiting[0].problem, waiting[0].formerKeys], [true, null, true]);
+  const done = await ex.acknowledge();
+  assert.deepEqual([done.written.length, done.written[0].formerKeys, done.failed.length, done.remaining.length], [1, true, 0, 0]);
+  const c = await checked(w);
+  assert.equal(c.summary.problemFound, false);
+  const stub = stubsOf(c).at(-1);
+  assert.equal(stub.content.slip, first);
+  assert.equal(stub.countersignature.state, 'valid', 'countersigned with the keys that permission names for the executor');
+  assert.equal(docs(stub)[ACKNOWLEDGED_DOCUMENT], ACKNOWLEDGED_FINGERPRINT);
+  assert.equal(copyOf(w).lines.at(-1).entry.formerKeys, true);
+  await ex.close();
+  // The executor's present keys countersign everything else.
+  await openWorld(w);
+  try {
+    assert.ok((await w.client.call('echo', {})).result);
+    const after = await checked(w);
+    assert.equal(after.summary.problemFound, false);
+    assert.equal(stubsOf(after).at(-1).countersignature.state, 'valid');
+  } finally {
+    await w.close();
+  }
+  // The settings: a list of paths, each a key file that is there.
+  assert.ok(readSettings({ ...w.settings, executor: { ...w.settings.executor, formerKeys: 'keys/executor-before.jwk' } }, w.folder).problems.some((p) => /^executor\.formerKeys: must be a list/.test(p)));
+  const missing = await checkConfig({ ...w.settings, executor: { ...w.settings.executor, formerKeys: ['keys/none.jwk'] } }, w.folder);
+  assert.ok(missing.problems.some((p) => /^executor\.formerKeys\[0\]: the key file .* does not exist/.test(p)), missing.problems.join(' | '));
+});
+
+test('compare: calls set aside alone end with code 3, anything else with 1; and it says which recorder it expected a seal to be signed by', async () => {
+  const w = await sealedWorld();
+  await w.client.call('echo', {});
+  await w.close();
+  const config = ['--config', w.configPath];
+  const ex = await offline(w);
+  await ex.seal();
+  await ex.close();
+  const agreed = await run(['compare', ...config]);
+  assert.equal(agreed.code, 0, agreed.stdout + agreed.stderr);
+  assert.deepEqual(JSON.parse(agreed.stdout).book.sealersExpected, w.sealKeys);
+  // The recorder may be named by the fingerprint of its key set, as for the checker, where the key file is not to hand.
+  renameSync(join(w.folder, 'keys', 'recorder.jwk'), join(w.folder, 'keys', 'recorder-away.jwk'));
+  const unnamed = await run(['compare', ...config]);
+  assert.equal(unnamed.code, 0);
+  assert.equal(JSON.parse(unnamed.stdout).book.sealersExpected, null, 'the answer says that the seal\'s keys were compared with nothing');
+  const named = await run(['compare', ...config, '--sealer', w.sealKeys[0]]);
+  assert.equal(named.code, 0);
+  assert.deepEqual(JSON.parse(named.stdout).book.sealersExpected, w.sealKeys);
+  const other = await run(['compare', ...config, '--sealer', 'A'.repeat(43)]);
+  assert.equal(other.code, 1, 'a seal signed by another recorder than the one named');
+  assert.equal(JSON.parse(other.stdout).summary.bookProblem, true);
+  assert.equal((await run(['compare', ...config, '--sealer', 'short'])).code, 2);
+  // Another recorder's key file in the settings' place: the seal in the book is not that recorder's.
+  await makeKeyFile(join(w.folder, 'keys', 'recorder.jwk'), 'recorder');
+  const replaced = await run(['compare', ...config]);
+  assert.equal(replaced.code, 1);
+  assert.equal(JSON.parse(replaced.stdout).summary.bookProblem, true);
+  assert.notDeepEqual(JSON.parse(replaced.stdout).book.sealersExpected, w.sealKeys);
+  rmSync(join(w.folder, 'keys', 'recorder.jwk'));
+  renameSync(join(w.folder, 'keys', 'recorder-away.jwk'), join(w.folder, 'keys', 'recorder.jwk'));
+  // A call set aside: code 3, and the answer says that it is the only disagreement.
+  await leaveCall(w, 'stray-call', 'A'.repeat(43));
+  assert.equal((await run(['acknowledge', ...config, '--offline', '--set-aside', 'stray-call'])).code, 0);
+  const aside = await run(['compare', ...config]);
+  assert.equal(aside.code, 3);
+  assert.deepEqual([JSON.parse(aside.stdout).summary.agree, JSON.parse(aside.stdout).summary.onlySetAside], [false, true]);
+  // A new disagreement beside it: code 1.
+  const book = bookText(w).split('\n');
+  writeFileSync(join(w.folder, 'short.jsonl'), `${book[0]}\n`);
+  const more = await run(['compare', ...config, '--book', join(w.folder, 'short.jsonl')]);
+  assert.equal(more.code, 1);
+  assert.deepEqual([JSON.parse(more.stdout).summary.agree, JSON.parse(more.stdout).summary.onlySetAside, JSON.parse(more.stdout).summary.missingFromBook], [false, false, 1]);
+});
+
+test('seal on a timer: a stop that comes while a seal waits its turn leaves no timer behind', async () => {
+  const w = await sealedWorld({ config: { recorder: { ...RECORDER, sealEvery: 1000 }, timeout: 20000 } });
+  const old = w.logs;
+  try {
+    await until(() => old.some((e) => e.event === 'sealed'), { timeout: 20000 });
+    // A call holds the agent's turn; the timer's next seal waits behind it.
+    w.client.call('slow', { ms: 15000 }, { timeout: 30000 }).catch(() => {});
+    await until(() => existsSync(join(w.folder, 'copy.jsonl')) && copyOf(w).lines.at(-1)?.entry.kind === 'sending');
+    await pause(1500);
+  } finally {
+    // The stop comes now, while that seal waits.
+    await w.close();
+  }
+  const sealsThen = old.filter((e) => e.event === 'sealed').length;
+  // Another executor takes the files and writes on. A timer left behind by the first would trip over what it wrote.
+  await openWorld(w);
+  try {
+    await w.client.call('echo', {});
+    await pause(4000);
+    assert.ok((await w.client.call('echo', {})).result);
+  } finally {
+    await w.close();
+  }
+  assert.equal(old.filter((e) => e.event === 'sealed').length, sealsThen, 'the executor that ended sealed nothing more');
+  assert.deepEqual(old.filter((e) => ['not-sealed', 'book-changed', 'book-not-written'].includes(e.event)), [], 'and asked for no seal');
+  assert.equal((await checked(w)).summary.problemFound, false);
+});
+
+test('a seal does not hold up the rest of the program while it is signed', async () => {
+  const w = await sealedWorld({ open: false });
+  const ex = await offline(w);
+  let ticks = 0;
+  const timer = setInterval(() => (ticks += 1), 10);
+  const started = Date.now();
+  await ex.seal();
+  const took = Date.now() - started;
+  clearInterval(timer);
+  await ex.close();
+  // A timer of 10 ms goes on firing while the seal is signed: at least a quarter of the times it could.
+  assert.ok(ticks >= took / 40, `${ticks} ticks in ${took} ms`);
 });
