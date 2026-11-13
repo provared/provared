@@ -45,7 +45,10 @@
 // (PROVARED_MCP_EXECUTOR_ADMIN_SECRET); with --offline they work on the
 // files of an executor that is not running, and need no secret. Over stdio
 // there is no address to ask: "seal" and "acknowledge" take --offline
-// only, and "status" reads the files.
+// only, and "status" reads the files. A command with --offline takes the
+// lock on the files (lock.mjs), so it is refused while an executor runs on
+// them. Before the secret is sent, the executor must show that it is the
+// executor (identity.mjs, askRunning).
 //
 // "check", "keys" and "compare" read either kind of settings: the stdio
 // executor's (with "server" and "agent") or the HTTP executor's (with
@@ -96,10 +99,16 @@ const USAGE = `provared-mcp-executor ${VERSION}: an executor for MCP tool server
 Over HTTP, "seal", "acknowledge" and "status" ask the running executor, with the administrator's secret in
 ${ADMIN_SECRET_ENV}; with --offline they work on the files of an executor that is not running, and need
 no secret. Over stdio there is no address to ask: "seal" and "acknowledge" take --offline only, and "status"
-reads the files.`;
+reads the files. A command with --offline is refused while an executor runs on the same files. The secret is
+sent only once the executor has shown, with its own keys, that it is the executor; the command reads
+"executor.keys" to check.
+
+Exit codes: 0 done, or all is well; 1 not done, or something to look at (status: a book that fails its check,
+a call waiting, an agent stopped; compare: a disagreement; acknowledge: a call still waits); 2 the command
+could not run; 3 (compare) the calls set aside are the only disagreement.`;
 
 /** What the commands that work on the files say first, on the standard error. */
-const OFFLINE_NOTICE = 'the files were opened here; no executor may be running on them.';
+const OFFLINE_NOTICE = 'the files are opened here, for this command alone; it is refused if an executor is running on them.';
 
 /** What to do with what "keys" prints, said in one line on the standard error. */
 const KEYS_NEXT = 'What to do with this: it goes into the permission the person signs with a passkey: "agent" as the permission\'s agent (over HTTP, one for each agent), the "with" entry in its "with", and "requires" as it is. Then put the passkey\'s thumbprint in issuerKeys and run "check" (README, "Set it up").';

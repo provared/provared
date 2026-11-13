@@ -282,6 +282,8 @@ test('acknowledge: a call sent under a permission no longer in force stops the s
   const report = await ex.report();
   assert.deepEqual(report.agent.receiptsMissing.map((p) => [p.call, p.usable, p.problem, p.slip, p.tool, p.outcomeKnown]), [['lost-call', true, null, first, 'slow', false]]);
   const sentAt = report.agent.receiptsMissing[0].when;
+  // More than a second on, so that the receipt's date tells the time of the call from the time of the acknowledgement.
+  await pause(1100);
   const done = await ex.acknowledge();
   assert.equal(done.written.length, 1);
   assert.deepEqual(done.remaining, []);
@@ -294,7 +296,7 @@ test('acknowledge: a call sent under a permission no longer in force stops the s
   assert.equal(stub.fingerprint, done.written[0].stub);
   assert.equal(stub.content.slip, first, 'under the permission the call was sent under, not the one in force');
   assert.notEqual(ex.slip.fingerprint, first);
-  assert.ok(Math.abs(Date.parse(stub.content.when) - Date.parse(sentAt)) < 1000, 'dated when the call was sent');
+  assert.equal(stub.content.when, `${sentAt.slice(0, 19)}Z`, 'dated with the time the copy gives for the call, to the second');
   const line = JSON.parse(bookText(w).split('\n')[stub.index]);
   const countersignedAt = JSON.parse(Buffer.from(line.countersignature.payload, 'base64url').toString('utf8')).when;
   assert.ok(Date.parse(countersignedAt) >= Date.parse(stub.content.when), 'countersigned at the acknowledgement, not before the call was sent');
@@ -643,7 +645,7 @@ test('the command over stdio: keys makes the recorder\'s key file; seal and ackn
   const sealed = await run(['seal', ...config, '--offline']);
   assert.equal(sealed.code, 0, sealed.stderr);
   assert.match(sealed.stdout, /^Sealed: entry 1 of the book is the seal [A-Za-z0-9_-]{43}\.\n$/);
-  assert.match(sealed.stderr, /no executor may be running on them/);
+  assert.match(sealed.stderr, /it is refused if an executor is running on them/);
   const c = await checkBook(bookText(w), { issuerKeys: w.settings.agent.issuerKeys, sealKeys: [print[1]] });
   assert.equal(c.summary.problemFound, false);
   assert.equal(c.entries[1].kind, 'seal');
