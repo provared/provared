@@ -56,7 +56,9 @@ agent B ──HTTP, secret B──►  executor          token, from a file
 ```
 
 Each agent signs in with a secret of its own and has its own slip, keys,
-book and copy; the handling of a call is the same code as on stdio.
+book and copy; the handling of a call is the same code as on stdio. Where
+the settings name `oauth`, an agent may instead be a connection a client
+made through OAuth, approved by the owner (section 14).
 
 ## 3. Sources, as read on 31 October 2026
 
@@ -358,7 +360,8 @@ countersignature, the copy) is the same code, `callCore` in
 1. **Who is calling.** Each agent signs in with a secret of its own, as the
    gateway's agents do: one `Authorization: Bearer <secret>` header, whose
    SHA-256 the settings hold as `secretHash`, compared in constant time
-   (X102). Each agent has its own slip, keys, book, copy and copy key
+   (X102). Or, with `oauth`, with an access token the executor issued
+   for one agent (section 14). Each agent has its own slip, keys, book, copy and copy key
    (X103); its calls go through its own writer, one at a time, and its
    limits are its own. The executor accepts no other token: the agent's
    `Authorization` is removed, and the upstream is sent the executor's
@@ -2183,3 +2186,257 @@ by the fingerprint of its key set, as the checker does, for whoever
 compares without the recorder's key file, and the answer says which
 recorder was expected, or that none was. `secret` says that the secret it
 makes may be an agent's or the administrator's.
+
+## 14. The executor as an OAuth-protected connector
+
+Over HTTP an agent may also connect through OAuth, from 0.5.0, where the
+settings name `oauth` (`oauth.mjs`). This is what a client needs that
+cannot be given a secret by hand: it finds out how to sign in, sends a
+person to a page of the executor's, and gets tokens. The executor is its
+own authorisation server, for itself alone. It still speaks plain HTTP: a
+reverse proxy in front gives it HTTPS and its public address (X216).
+
+Sources, as read on 13 November 2026: the MCP authorization specification
+(2025-11-25); the OAuth 2.1 draft; RFC 9728 (protected resource
+metadata); RFC 8414 (authorisation server metadata); RFC 7636 (PKCE); RFC
+8707 (resource indicators); RFC 6750 (bearer tokens); RFC 9207 (the `iss`
+parameter); the OAuth Client ID Metadata Document draft.
+
+The flow, as built:
+
+1. A client posts to the MCP endpoint with no token. The answer is 401
+   with `WWW-Authenticate: Bearer resource_metadata="<issuer>/.well-known/oauth-protected-resource<path>"`.
+2. The client reads that document: the resource (`<issuer><path>`) and its
+   one authorisation server, the issuer. It then reads
+   `<issuer>/.well-known/oauth-authorization-server`.
+3. The client sends the person's browser to `/oauth/authorize`, naming
+   itself by the URL of its metadata document, with a PKCE challenge
+   (S256) and the resource. The executor takes only a client on the
+   settings' list, fetches its document, and checks the redirect address
+   against it.
+4. The page shows the owner who asks, and which agent the connection would
+   become. The owner proves who they are by the owner's check (X212) and
+   approves; the browser goes back to the client with a code.
+5. The client trades the code and its PKCE verifier at `/oauth/token` for
+   an access token and a refresh token. Each call it then makes carries
+   the access token, and is handled as any agent's: under that agent's
+   slip, into that agent's book.
+
+**X201. One connection is one agent.** An agent under `agents.<name>`
+marked `"oauth": true` (in place of `secretHash`) is kept for a connection.
+It has its own slip, keys, book and copy, exactly as an agent with a
+secret. The owner chooses the agent on the page. Approving a connection
+for an agent ends any connection it had before, with its tokens. Agents
+with secrets work as before, beside them. Why: the receipts then say which
+connection acted, and nothing about the rules or the records changes. No
+standard covers this; it is the plainest. The other way: one agent made
+for each approval, with its own permission; that needs a person to sign a
+permission at approval, which the passkey page of the library does
+elsewhere.
+
+**X202. The issuer is the public address the settings name.**
+`oauth.issuer` is an origin with no path: `https://…`, or
+`http://127.0.0.1:<port>` for tests only. The resource is
+`<issuer><path>`. The resource's metadata is at the address RFC 9728
+section 3.1 gives for it (the path put after
+`/.well-known/oauth-protected-resource`), and nowhere else, since the
+`resource` in it must be the one the address was made from. The server's
+metadata is at RFC 8414's address for an issuer with no path. Why: the
+specification's discovery, in its first form. The other way: an issuer
+with a path, or the OpenID Connect address as well; neither is needed.
+
+**X203. A client is only one the settings list, by its Client ID Metadata
+Document.** `oauth.clients` lists the URLs of the documents. With none,
+no client can connect (and the start warns). There is no Dynamic Client
+Registration. A document is used only where its `client_id` is the URL it
+was fetched from, it names `redirect_uris`, and its
+`token_endpoint_auth_method` is `"none"`; where it names `grant_types` or
+`response_types` they must include `authorization_code` and `code`. A
+client's URL is https, with a path; an `http://127.0.0.1` one is taken
+only where the issuer is one too. Why: the MCP specification's preferred
+way for a client and a server that have never met, and the list keeps the
+executor from fetching what an outsider names. The other way: Dynamic
+Client Registration, which lets anyone register.
+
+**X204. A document is fetched over HTTPS, small and quickly.** Node.js
+checks the certificate. No redirection is followed. At most 5 KiB (the
+size the draft suggests a server limit itself to), within 5 seconds, and
+only an answer of 200 in JSON. Why: the draft's advice, and the plainest
+bounds.
+
+**X205. A document is kept, and its copy outlives a failed fetch.** It is
+kept for its `Cache-Control: max-age`, held between 5 minutes and 24
+hours, or 1 hour where none is given. Then it is fetched again. Where that
+fetch fails (no answer, not 200, too large, not JSON), the copy kept is
+used, however old, and the log says so; a document that arrives but does
+not pass X203 is refused. The copies are in the state file (X210), so they
+outlive a start. Why: a client whose document was out of reach for a
+moment was otherwise stopped, though nothing about it had changed. The
+other way: refuse once the copy has expired.
+
+**X206. The redirect address is matched exactly.** The text the client
+sends must be one of the document's `redirect_uris`, character for
+character, with one exception that OAuth 2.1 (section 8.4.2) requires of a
+server: for an address on the person's own computer written as an IP
+address (`http://127.0.0.1` or `http://[::1]`), the port may differ.
+`localhost` gets no exception. A request whose client or redirect address
+does not pass is answered on the page, and the browser is not sent back
+(RFC 6749, section 4.1.2.1). Every later error is sent back to the client
+with `error`, `state` and `iss`.
+
+**X207. The request at the page, and the code.** `response_type=code`
+only. A PKCE challenge is required, with `code_challenge_method=S256`:
+`plain` is refused, and so is a challenge with no method named, since the
+standard's default for that is `plain`. `resource` must be given and be
+the executor's resource, or the answer is `invalid_target`, as the MCP
+specification has a client always send it. `state` comes back as it was,
+and `iss` with it (RFC 9207). A request waits at the page for 10 minutes.
+A code lasts 60 seconds, is kept only as its hash and in memory, and is
+used once, by the client it was given to, with the same redirect address
+and the right verifier. A code used a second time is refused, and the
+tokens it gave are revoked (OAuth 2.1, section 4.1.3). A parameter given
+twice is refused.
+
+**X208. An access token is random, opaque and short-lived.** 32 random
+bytes in base64url. The executor keeps only its SHA-256, as it keeps the
+agents' secrets. It is bound to the resource, the client and the one
+agent, and lasts 1 hour. At each request the executor checks that it has
+not expired, that the resource is still the executor's, that the client
+is still on the list and that the agent is still marked `oauth`. A
+refused token gets 401 with `error="invalid_token"` (RFC 6750, section
+3.1) beside `resource_metadata`. The upstream never sees it: as for a
+secret, the agent's `Authorization` is removed and the executor's own
+credential sent. Why: an opaque token reveals nothing, and a hash in the
+file opens nothing.
+
+**X209. A refresh token is rotated every time, and a reused one ends the
+connection.** Each refresh gives a new access token and a new refresh
+token; the old refresh token is kept, as its hash, as spent (the last
+1,000). A spent one used again revokes the whole connection, its newest
+tokens with it (OAuth 2.1, section 4.3.1). A refresh token lasts 30 days
+from its issue, and a refresh keeps the scope of the approval.
+
+**X210. The state is one file only the executor may read, written
+whole.** `oauth.state` (default `oauth-state.json`) holds each connection
+(its agent, client, resource, scope, the hashes of its tokens and their
+ends) and the copies of the clients' documents. No token is in it. It is
+written through a new temporary file with mode 0600, which is then put in
+its place, so a stop part-way leaves the old file or the new. On Windows
+the mode does nothing: the folder's own permissions must keep others out.
+A file not in the executor's form stops the start. What waits at the page
+and the codes are kept in memory, so a start ends them.
+
+**X211. Failed attempts are counted for the whole executor.** At the
+owner's check, after 5 failures in 15 minutes, every answer is refused for
+the rest of the 15 minutes. At `/oauth/token`, after 20 failures in a
+minute, every request is refused for the rest of the minute. Each refusal
+is 429 with `Retry-After`; the token endpoint's says
+`temporarily_unavailable`. Why: behind a reverse proxy every request comes
+from the proxy, so a count by address counts nothing. The cost: anyone
+who can reach the executor can hold the page or the token endpoint shut
+for a while. The other way: a count by the address a proxy reports, which
+the executor would have to trust.
+
+**X212. The owner's check, behind one interface, at a page that runs
+nothing.** The page is plain HTML: no script, no style, no image, under a
+Content-Security-Policy of `default-src 'none'`, `frame-ancestors
+'none'` and `form-action` the executor and the client's redirect origin.
+The owner's answer must come with an `Origin` that is the issuer, and
+names the request by a random identifier. The check itself is one object
+given to the executor (`ownerCheck`): `form()` gives the HTML of its fields
+on the page, and `check(fields, {request, origin})` says whether they
+prove the owner. None is built in yet, so a start from the command has
+none, and its page approves nothing (503). The tests use a test check.
+How the founder's engine packages would fill it is below, pending.
+
+**X213. The time limits.** A client gives a tool call up to 240 seconds,
+as it does a sign-in request and a refresh. With `oauth`, the executor's
+`timeout` is 230,000 ms unless the settings say otherwise, so that the
+executor answers a slow call, with its receipt, before the client gives
+up; a `timeout` above 240,000 ms is warned about. Without `oauth` the
+default stays 300,000 ms. The executor answers a sign-in request or a
+refresh at once, except where it must fetch a document (5 seconds, X204).
+
+**X214. The executor has no scopes.** It names none in its metadata. A
+`scope` the client asks for is kept with the approval and given back as it
+was; it means nothing to the executor, since what an agent may do is its
+permission. Why: RFC 6749 lets a server give back the scope asked for, and
+a scope of the executor's own would be a second permission beside the
+signed one. The other way: refuse any scope (`invalid_scope`).
+
+**X215. What the metadata says, and what it does not.** The server's
+metadata names the two endpoints, `code` only, `query` only, the two grant
+types, `S256` only, `none` only, `client_id_metadata_document_supported`
+and `authorization_response_iss_parameter_supported`. It names no
+registration endpoint and no revocation endpoint (a connection ends by
+reuse, by a new approval, by the client being taken off the list, or by
+removing it from the state file while the executor is stopped). The two
+metadata documents have no CORS headers: the clients this is for read
+them from their servers.
+
+**X216. Plain HTTP, behind a reverse proxy.** The executor does not speak
+TLS. A proxy in front of it must give it HTTPS at the issuer's address and
+pass the path and the `Origin` header on unchanged. Why: certificates are
+the proxy's work. The settings' `listen` stays the local address.
+
+### 14.1 The owner's check with the engine packages: PENDING, the founder chooses
+
+A proposal, not built. The founder's own packages `@microtoll/identity`
+and `@microtoll/crypto-core` 0.1.1 (Apache 2.0) would fill the interface of
+X212. Read: their published README files, `FORMATS.md` and exports. In
+their design the person's passkey (its PRF output) unlocks a root key in
+the browser; the server never verifies a passkey; a connection is proved
+by a signature over a challenge with the page's origin bound in.
+
+- **Dependencies.** The two packages would become runtime dependencies of
+  the guard, pinned at exactly 0.1.1, as `provared-connect` pins them. This
+  is an exception to the guard's rule of no runtime dependency but
+  `provared`, and the founder must approve it. Neither has dependencies of
+  its own. `@microtoll/blind-store`'s server code (AGPL) is not used.
+- **The owner's identity, made once.** A command on the server
+  (`provared-mcp-executor owner --config …`) prints a one-time setup link,
+  `<issuer>/oauth/owner#<code>`, which works once and for 15 minutes. So no
+  one who merely finds the address can claim it. On that page, in the
+  browser: `createIdentity`, a passkey made with `createWebAuthn` (its PRF
+  output), `wrapRootKeyWithPrf`, and `wrapRootKeyWithNewRecoveryCode`, whose
+  code is shown once. The page sends the executor the routing public key
+  and the two unlock methods, which are ciphertext.
+- **At the authorisation page.** The executor gives a 32-byte challenge,
+  used once, for 2 minutes. In the browser the passkey's PRF output opens
+  the root key (`unwrapRootKeyWithPrf`), `identityFromRootKey` gives the
+  routing key, and that key signs `authMessage(origin, nonce)`. The
+  executor checks the signature with `verifyAuthSignature`, against the
+  routing public key, the issuer as the origin, and its own challenge.
+- **Where a device has no PRF,** the recovery code opens the root key
+  (`unwrapRootKeyWithRecoveryCode`), and the same signature follows.
+- **What the executor stores:** the routing public key and the unlock
+  methods as the package makes them (ciphertext, the passkey's credential
+  id and PRF salt, the recovery code's lookup hash). Nothing that opens
+  them.
+- **How the page is served.** The packages' own browser files from the
+  executor itself, at its own origin, with the page's script as a file of
+  the executor's: no outside script, no inline script, under
+  `default-src 'none'; script-src 'self'; connect-src 'self'`, with
+  `form-action` and `frame-ancestors` as in X212.
+
+Tried, outside the repository: in Node.js 24.19.0, the published 0.1.1
+packages' own functions made an identity, wrapped and unwrapped its root
+key with a made-up PRF output, and `verifyAuthSignature` passed a
+signature over one origin and refused it over another; a recovery code
+opened the same root key. So the executor's half runs in Node 24.
+
+Why it is not built, and what is missing:
+
+1. The namespace given to `createCryptoCore` prefixes every key
+   derivation label. No design fixes the guard's, and a label is not the
+   builder's to invent.
+2. The founder's approval of the two dependencies.
+3. The executor's own wire for the setup and for the unlock methods: the
+   packages' high-level session speaks `@microtoll/blind-store`'s protocol,
+   whose server is not to be used, so the shape of what the page sends and
+   fetches would be the executor's own, and must be fixed first.
+4. The passkey is bound to the issuer's host (the WebAuthn relying party).
+   A change of public address loses it; only the recovery code would then
+   open the root key. The founder should accept that, or say otherwise.
+5. The tests run no browser, so the page's half (the passkey ceremony)
+   could be tried only by hand.
