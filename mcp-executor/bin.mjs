@@ -397,6 +397,11 @@ async function main(args) {
       process.stdout.write(text);
       process.stderr.write(`provared-mcp-executor: ${KEYS_NEXT}\n`);
     }
+    if (config.recorder?.sealer !== undefined) {
+      // A central sealer starts a recorder's books only from permissions for the agents it was named with, each by the fingerprint of its key set.
+      const named = http ? Object.entries(result).map(([name, e]) => [`the agent "${name}"`, e.agent.keys]) : [['the agent', result.agent.keys]];
+      for (const [who, keys] of named) process.stderr.write(`provared-mcp-executor: the fingerprint of the key set of ${who} is ${await keySetFingerprint(keys)}: the central sealer is told it when this recorder is added (provared-sealer add-recorder --agent).\n`);
+    }
     if (recorderAt) {
       // The recorder's keys go into no permission: what a reader needs is the fingerprint of the key set.
       const fingerprint = await keySetFingerprint(await makeRecorderKeyFile(recorderAt));
@@ -429,7 +434,8 @@ async function main(args) {
     if (named !== undefined) {
       sealKeys = named.split(',').map((s) => s.trim()).filter(Boolean);
       if (sealKeys.length === 0 || !sealKeys.every((f) => /^[A-Za-z0-9_-]{43}$/.test(f))) throw new Error('--sealer must be the fingerprint of a recorder\'s key set (43 characters of base64url), or several with commas between them.');
-    } else if (settings.recorder && existsSync(settings.recorder.keys)) sealKeys = [await keySetFingerprint(await readRecorderKeyFile(settings.recorder.keys))];
+    } else if (settings.recorder?.sealer) sealKeys = [settings.recorder.sealer.keySet];
+    else if (settings.recorder && existsSync(settings.recorder.keys)) sealKeys = [await keySetFingerprint(await readRecorderKeyFile(settings.recorder.keys))];
     const result = await compareCopyWithBook({ copyPath: paths.copy, copyKey, name: settings.name, service: settings.service, book: readIfThere(bookAt), options: { issuerKeys: paths.issuerKeys, ...(sealKeys ? { sealKeys } : {}) } });
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     // 0: they agree. 3: they agree but for calls the administrator set aside, which is all that is known to be wrong. 1: anything else.

@@ -356,6 +356,8 @@ export async function openHttpExecutor(config, more = {}) {
       warnings.push(...prepared.warnings.map((w) => `agents.${name}: ${w}`));
       // A command at work on the files (offline) is not a start: it writes no late receipt by itself.
       const agent = await openAgent(prepared, { settings, executorKeys: shared.executorKeys, now, log, name, sealer: shared.sealer, late: !offline, formerKeys: shared.formerKeys });
+      // From here the agent's own release is used: with a central sealer it first sends what the sealer lacks.
+      releases[releases.length - 1] = agent.release;
       agent.hash = Buffer.from(paths.secretHash);
       agent.open = 0;
       /** The sessions this agent opened, oldest first. */
