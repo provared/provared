@@ -593,7 +593,9 @@ Built so far of stage 2: the rules on the content of a change (section
 11); the HTTP transport with several agents on one executor (section
 10); and, in 0.5.0, sealing a book by command and on a timer,
 acknowledging a call sent under a permission no longer in force, and the
-status (below; X120 to X146).
+status (below; X120 to X146); and a book sealed by a central sealer,
+which holds the recorder's keys away from the executor (below; X147 to
+X159).
 
 **Sealing.** The settings name a recorder (`recorder`: its key file, a
 name, and `sealEvery`). A seal is the library's (format description,
@@ -607,6 +609,25 @@ every `sealEvery` milliseconds, a book that holds an entry after its last
 seal is sealed (at a start, only where that seal is at least `sealEvery`
 old, or there is none), each agent's book in a round of its own. Every
 use of the recorder's key file goes through `sealing.mjs`.
+
+**A central sealer.** In place of the key file, the settings may name a
+central sealer (`recorder.sealer`): the program in `sealer/`, which
+holds the recorder's three keys (format description, section 21.7). The
+executor then holds the recorder's token and no key of the recorder's.
+From `save()` in `openAgent`, the one place where a line reaches a book
+file, the leaf fingerprint of each new line is sent to the sealer, in
+order, each at its place (the sealer's `extend`; the book's first line
+itself with the first of them). The questions, their HMAC proofs and the
+check of each answer are the sealer's own client, copied
+(`sealer-client.mjs`, X151); the leaf fingerprint is the library's. A
+seal is asked of the sealer, only once it has answered for every line,
+and its entry is added through the stub writer's `add`. At a start the
+sealer must answer, and what it holds is compared with the book file
+(the sealer's `held` and `latest`). While it does not answer, the lines
+wait in the book file, the status says how many and since when, and past
+a limit the agent's calls are refused with a denial. Everything of this
+is in `sealing.mjs`; `executor.mjs` calls it from `save()`, from `seal`,
+at the start of an agent, and before a call is sent.
 
 **Acknowledging.** A call the copy shows as sent, with no receipt in the
 book, under another permission than the one in force, waits for the
@@ -633,8 +654,11 @@ address it was asked at with its own keys (`identity.mjs`, X138).
 Still to build:
 
 - An outside time-stamp beside a seal; seals held elsewhere and witnesses
-  (library 0.6.0); a central sealer that holds the recorder's keys away
-  from the executor (`sealer/`; X134 says where it fits).
+  (library 0.6.0).
+- With a central sealer (X158): bringing a sealer up to date after its
+  record was lost or put back; a second book under one permission; a
+  sealer on another computer, which the sealer's program does not yet
+  allow.
 - The copy shipped line by line to a place the executor's operator cannot
   change (a sealer, a witness, an append-only store).
 - Content read in other forms than JSON (YAML, TOML, `key = value`
@@ -2002,7 +2026,8 @@ denial and a seal alike (the permission's line went to the file from
 `prepareAgent` until the review of 0.5.0): that is where each new line's
 leaf fingerprint would be sent as it is written. A book looks
 the same either way: the format description (section 21.7) says a seal
-made from fingerprints is the same record. Nothing of this is built.
+made from fingerprints is the same record. This was written before it
+was built; X147 to X159 are what was built, in those two places.
 
 **X135. No outside time-stamp is written.** A seal's time is the
 recorder's own word. The README says so under its limits, as the
@@ -2183,3 +2208,174 @@ by the fingerprint of its key set, as the checker does, for whoever
 compares without the recorder's key file, and the answer says which
 recorder was expected, or that none was. `secret` says that the secret it
 makes may be an agent's or the administrator's.
+
+The choices from X147 on are for a book sealed by a central sealer
+(section 12). X152, X153 and X156 are for the founder's review.
+
+**X147. The settings name a central sealer in place of the recorder's
+key file, never beside it.** `recorder.sealer`: `address`, `name`,
+`token`, `keySet` and, where wanted, `timeout` and `maxUnsent`;
+`recorder.sealEvery` as before. `recorder.keys` or `recorder.name` beside
+`recorder.sealer` is a problem with the settings. Why: the point of a
+central sealer is that whoever runs the executor holds no key that makes
+a seal; a key file kept as a second way, for when the sealer does not
+answer, would give that back, and a book would then hold seals of two
+key sets, of which a reader expects one. The seals give the sealer's own
+name, so a name here would say nothing. Without `recorder.sealer`
+nothing changes: the key file is read as in X120. The other way: both,
+with the key file used while the sealer is away.
+
+**X148. The settings name the key set the sealer signs with
+(`recorder.sealer.keySet`), and the executor does not ask for it.** It
+is the fingerprint `provared-sealer init` prints, the one a reader
+names. Every check the executor makes of a book expects it (X122), so
+`check`, `compare` and the reading of the files need no answer from the
+sealer; at the sealer's first answer its own word for its key set
+(`about`) is held against it, and another stops the start. Why: what a
+reader is told to expect is then written down by the person who set the
+executor up, and not taken from whoever answers at the address. The
+other way: take the key set from the sealer at each start.
+
+**X149. The recorder's token is read from a file or from the
+environment, and is never in the settings.** `recorder.sealer.token` is
+`{"file": <path>}` or `{"env": <name>}`, one of the two; a value
+written there is a problem, and is not repeated in the message. What is
+read must have the form of a token (32 bytes in base64url) and is never
+logged or printed. The same two ways as the tool server's credentials
+(`server.env`), without the third, a value in the settings.
+
+**X150. Each line is sent from `save()`, once it is in the book file, at
+its place.** The link to the sealer (`sealing.mjs`) is told the text the
+file now holds; it works out the leaf fingerprint of each new line with
+the library's `leafFingerprint` and sends them with the sealer's
+`extend`, naming the place of the first. The place moves on only by the
+sealer's own answer, which must be the place plus the number sent. The
+book's first line goes itself with the first question, as the sealer
+asks. One question is asked at a time, for every book of one executor,
+so that several agents do not fill the sealer's sixteen places. Nothing
+is kept but the count of lines the sealer has answered for: the lines
+that wait are the book file's own. The answer to a call is not held back
+until the sealer has its receipt: the tool has done its work by then,
+and holding the answer would protect nothing.
+
+**X151. The sealer's client is a copy, `sealer-client.mjs`, held to the
+sealer's by a test, declaration by declaration.** The executor depends
+on the library alone, as before. The copy holds the labels, the proofs,
+the members a question may hold and `connectSealer`; a test
+(`test/same-files.test.mjs`) takes each of the ten declarations from the
+copy and from `sealer/sealer.mjs` and holds them the same byte for
+byte, and holds that the copy has no other code. Why not the package:
+`provared-sealer` is not published, and it is the program that keeps the
+keys and signs, which the executor should not carry. Why not the whole
+file, as X1 does for `files.mjs`: the client is one part of a file that
+also holds the server and the key files. The other way: the sealer's
+client in a file of its own in `sealer/`, copied whole; that changes the
+sealer's package, which this step does not.
+
+**X152. At a start the sealer must answer, and what it holds is compared
+with the book file before anything is written (for the founder's
+review).** Compared: the key set (X148); that the sealer holds no more
+lines than the file; that its latest seal is the book's last seal; that
+no later book follows this one. Where they do not agree, the executor
+does not start. Where the sealer's latest seal covers exactly the lines
+of the file and is not in it, the sealer signed and the book never took
+the seal (X156): it is asked for (`latest`) and added, then. Not
+compared, because it cannot be: the lines after the sealer's latest
+seal, of which the sealer holds fingerprints and gives none back; a
+change among them shows when the next seal is added (X155). After the
+permission's line is written, the sealer must also take every line of
+the file before the agent takes a call, so that a sealer that was not
+told this agent stops the start. A command with `--offline` opens the
+files the same way. Why the sealer must answer: an executor that
+started without it could write a line where a seal the sealer had
+signed must stand, and nothing could then put the two right. The other
+way: start, and queue; it needs the executor to remember across a stop
+that a seal was asked for.
+
+**X153. While the sealer does not answer, lines wait, in order, and past
+a limit calls are refused (for the founder's review).** No question
+waits longer than `recorder.sealer.timeout` (5,000 ms unless given; 100
+to 60,000). After a question that failed, the lines are sent again
+every two seconds. A sealer that answers that the place is not the one
+it holds (`out-of-step`: it was started again, and stands at its latest
+seal) is asked what it holds, compared as at a start, and sent the
+lines from there; after three such rounds in a row it is given up on
+until the next try. `recorder.sealer.maxUnsent` (100 unless given; 0 to
+10,000) is how many lines of one book may be unsent: past it, a call
+waits for one try to send them, at most `timeout`, and none where a try
+failed within the last second; it is then refused as a rule of the
+executor's refuses, with a denial, a line in the copy and the code
+`sealer-behind`. The denial is a line, and so unsent too;
+`denialsPerHour` bounds them. Receipts written late at a start and
+acknowledged receipts are not held to the limit: their calls were sent
+already. A sealer's refusal to take lines (the recorder past its number
+of books, say) leaves them unsent in the same way, with the sealer's
+words in the status. Why a limit in lines: it bounds what whoever runs
+the executor could still change unseen. The other ways: a limit in
+time; no call at all while a line is unsent (`maxUnsent` 0 gives that).
+
+**X154. A seal is asked of the sealer only after it has said what it
+holds.** In the agent's turn: the sealer is asked (`held`), compared as
+at a start, and sent what it lacks; only where it then answers for every
+line, and its latest seal is the book's last, is `seal` asked, with
+`previous` and with `when`, the executor's clock, as with a key file
+(the sealer takes a time within 300 seconds of its own). The question
+may take 30 seconds. The entry is added whole through the stub writer's
+`add`; the seal's place and fingerprint, as the executor reports and
+keeps them, come from the book's own check, not from the sealer's
+answer. A refusal by the sealer leaves the book without a seal and the
+agent at work. Why ask first: a sealer started again stands at its
+latest seal, or at the first line; asked for a seal as it stood, it
+would sign over fewer lines than the book holds.
+
+**X155. A seal the book refuses stops the agent, and the executor does
+not start on that book again.** The sealer signed over other lines than
+the book holds: the book file was changed after the lines were sent, or
+other lines were sent. The sealer's latest seal is then one the book can
+never hold, and the sealer signs no other history. Nothing the executor
+could do would make the two agree, so it stops (`sealer-disagrees`) and
+keeps both as they are.
+
+**X156. Where a seal may have been signed and the answer did not come,
+no line is written until the sealer has said (for the founder's
+review).** A seal sits after exactly the entries it covers, so a line
+written before a seal that was signed would shut that seal out for
+good. Until the sealer has said, the agent takes no call, answering as
+it does when stopped, and writes no denial. The sealer is asked again
+every two seconds, and at the next seal or start; a seal it signed is
+added in the agent's turn, before any other line. At a start with a
+permission new to the book, the seal cannot be added, since the
+permission's line would come first: the executor says so, and is
+started once with the permission the book last held. The other way:
+write on, and lose the book's seals.
+
+**X157. What the status says, and `keys`.** Each agent has `sealer`:
+from a running executor `address`, `recorder`, `unsent`, `since`,
+`answeredAt` and `problem`; from the files, where the sealer is asked
+once (`held`), `reached`, `holds`, `unsent`, `latestSeal` and `problem`.
+`since` is in a running executor's memory only. Unsent lines do not
+change the code `status` ends with: they are ordinary while a sealer is
+away. `recorder` shows the sealer's key set, its address, the
+recorder's name and `maxUnsent`. Where the settings name a sealer,
+`keys` says the fingerprint of each agent's key set, which the sealer
+is told when the recorder is added, and makes no recorder's key file;
+it runs before `recorder.sealer` is complete.
+
+**X158. Not built.** Bringing a sealer up to date after its record was
+lost or put back (the sealer's `update`): the executor stops, and says
+that it is to be done with the sealer's own client. A second book under
+one permission (format description, section 21.6): the executor seals
+first books only, and a new book file under a permission whose first
+book the sealer holds is not started on. Going on, under a central
+sealer, with a book already sealed with a key file (X122 refuses it).
+Witnesses for the seals, and seals held elsewhere. A time-stamp that a
+sealer puts beside its seal is added with the entry, and was not tried.
+
+**X159. A limit that is the sealer's protocol's.** The question for a
+seal names the seal before, and not the number of lines the seal should
+cover. A sealer that is started again between its answer about what it
+holds and the question for a seal signs over the lines it then holds.
+For a book that has a seal, that is none new, and it refuses. For a
+book with no seal yet, it signs over the first line alone; the book
+refuses that seal, and X155 applies. The executor cannot close this from
+its side; a question for a seal that named the number of lines would.

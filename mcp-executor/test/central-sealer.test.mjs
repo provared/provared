@@ -416,6 +416,10 @@ test('central sealer: a book cut short behind the executor\'s back is not starte
     const status = await statusFromFiles(w.settings, w.folder);
     assert.equal(status.agent.sealer.holds, 3);
     assert.match(status.agent.sealer.problem, /holds 3 lines of this book, and the book file holds 2/);
+    // A new book file under the same permission is a second history of the same first line: not started on either.
+    rmSync(join(w.folder, 'book.jsonl'));
+    await assert.rejects(openWorld(w), /The executor does not start: the central sealer holds 3 lines of this book, and the executor has sent it 0 at most/);
+    assert.equal(existsSync(join(w.folder, 'book.jsonl')), false, 'nothing was written');
   } finally {
     await w.sealer.stop();
   }

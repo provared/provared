@@ -261,11 +261,71 @@
     another program (a command run with `--offline` beside a running
     executor) stops the writing, where it would have given a line a
     number already used.
+  - **A book sealed by a central sealer.** In place of the recorder's
+    key file, the settings may name a central sealer, the program in
+    `sealer/`, which holds the recorder's three keys: `"recorder":
+    {"sealer": {"address", "name", "token", "keySet", "timeout",
+    "maxUnsent"}, "sealEvery"}`. The token is read from a file or from
+    the environment, never from the settings; `keys` or `name` beside
+    `sealer` is a problem with the settings; with no `sealer` nothing
+    changes. The executor then holds no key that makes a seal. From the
+    one place where a line reaches a book file, the leaf fingerprint of
+    each new line is sent to the sealer, in order, each at its place
+    (the book's first line itself, as the sealer asks), and the seals,
+    by the timer and by `seal`, are asked of the sealer and added
+    through the stub writer's `add`. The questions and their proofs are
+    the sealer's own client, copied into `sealer-client.mjs` and held to
+    the sealer's by a test; the leaf fingerprint is the library's. No
+    record of a new kind and no signature of the executor's making.
+    - At a start the sealer must answer, and what it holds is compared
+      with the book file before anything is written: its key set, that
+      it holds no more lines than the file, that its latest seal is the
+      book's last, and that no later book follows. Where they do not
+      agree the executor does not start. A seal the sealer signed that
+      the book never took is added then.
+    - While the sealer does not answer, no question waits longer than
+      `timeout` (5 seconds unless given), the lines wait in the book
+      file and are sent in order when it answers again, and no seal is
+      asked for. Past `maxUnsent` unsent lines (100 unless given) a
+      call is refused with a denial and the code `sealer-behind`.
+      `status` shows, for each agent, how many lines are unsent and
+      since when; read from the files, it asks the sealer how many
+      lines it holds.
+    - A seal is asked for only after the sealer has said what it holds
+      and has every line. A refusal leaves no seal and the agent at
+      work. A seal the book refuses stops the agent: the book and what
+      the sealer was sent do not agree. Where the answer to the
+      question for a seal does not come, no line is written until the
+      sealer has said whether it signed.
+    - `keys` says the fingerprint of each agent's key set, which the
+      sealer is told when the recorder is added. `compare` expects the
+      sealer's key set.
+    - Not built with it: bringing a sealer up to date after its record
+      was lost or put back; a second book under one permission; going
+      on with a book already sealed with a key file; witnesses. The
+      sealer listens on 127.0.0.1 only, so the two programs are on one
+      computer. `DESIGN.md`, X147 to X159.
+    - Tests (`test/central-sealer.test.mjs`,
+      `test/central-sealer-e2e.test.mjs`, `test/same-files.test.mjs`; 27
+      tests): the sealer's program set up by its own commands and run
+      as a process of its own on 127.0.0.1, ended and started again
+      while calls go on, with the timer's seals; a sealer stopped and
+      started in the same process; the limit of unsent lines; a sealer
+      that never answers; an answer with no proof, another key set,
+      another number of lines, a place it does not hold, answers out of
+      form, and a refusal to sign; a seal whose answer never came,
+      added while the executor runs, at the next start, and with a new
+      permission waiting; a book cut short, put back and written on,
+      and changed in a line the sealer was sent; a sealer behind the
+      book's seals; a later book at the sealer; an agent the sealer was
+      not told; a restart; a book begun before a sealer was named; two
+      agents over HTTP; the status; the settings. 27 defences were
+      taken out one at a time, each with its test run after, on
+      Windows: every one then failed that test.
   - **Not built.** No outside time-stamp is put beside a seal: its time
-    is the recorder's own word. The recorder's keys are in a file on the
-    executor; a central sealer, seals held elsewhere and witnesses are
-    later steps (`DESIGN.md`, X134, says where a central sealer fits).
-    The example settings name no recorder and no administrator.
+    is the recorder's own word. Seals held elsewhere and witnesses are
+    later steps. The example settings name no recorder and no
+    administrator.
   - **For those who run 0.4.1.** A `recorder` or `admin` member already
     in a settings file (copied from a gateway's, say) was set aside with
     a warning, and is now acted on. `check` warns everyone whose
@@ -309,16 +369,23 @@
     `executor.formerKeys`, and, under what it does not do: no outside
     time-stamp, where the recorder's keys are, where the lock does not
     reach, that the administrator's secret travels in the clear, and
-    that a call set aside has no receipt.
+    that a call set aside has no receipt. Under "A central sealer": the
+    settings, how it is set up, what is sent, what happens where the
+    sealer does not answer, at a start and at a seal, and what such a
+    seal shows and does not.
   - **Versions.** 0.5.0 in `package.json`, `server.json` (both fields)
     and the command's `--version`; the `npm pack` file name in the
-    README; `sealing.mjs`, `lock.mjs` and `identity.mjs` in the
-    package's files. The library range stays `^0.7.0`.
+    README; `sealing.mjs`, `sealer-client.mjs`, `lock.mjs` and
+    `identity.mjs` in the package's files. The library range stays
+    `^0.7.0`.
   - **Choices** are X120 to X146 in `DESIGN.md`. X138 (how a command
     knows the executor), X140 (the label and the three texts of an
     acknowledged receipt), X141 (former key files) and X142 (`compare`
     after a call is set aside) wait for the founder's review, and the
-    texts are not to change once 0.5.0 is published.
+    texts are not to change once 0.5.0 is published. For a central
+    sealer they are X147 to X159; X152 (the sealer must answer at a
+    start), X153 (the limit of unsent lines) and X156 (no line while a
+    seal may have been signed) wait for the founder's review.
 
 - **`provared-mcp-executor` 0.4.1 (11 November 2026, on npm and the MCP Registry):
   `demo --stdio`, for an MCP client or a directory's inspector.** A

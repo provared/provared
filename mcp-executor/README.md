@@ -106,7 +106,10 @@ also keeps its own copy of every call, apart from the agent's log, which can
 be held against the log to find a receipt that was left out
 (`compare`). Where the settings name a recorder, the executor can seal the
 book with the recorder's keys, by command or on a timer (`seal`; see
-"Sealing, acknowledging, and what the executor says about itself").
+"Sealing, acknowledging, and what the executor says about itself"). The
+recorder's keys are in a file of the executor's, or with a central
+sealer, a program of its own that is sent the fingerprint of each line
+as it is written and signs the seals.
 
 Evidence, not a verdict. The whole design, with every choice numbered for
 review, is in `DESIGN.md`. The format is described in the Provared format
@@ -447,9 +450,11 @@ The settings (`executor-http.example.json` is a start): `name`, `service`,
 - `recorder`: optional; the recorder that seals the book: `keys`, its key
   file; `name`, a label on each seal (the executor's `name` unless
   given); and `sealEvery`, how often the book is sealed while the executor
-  runs, in milliseconds (no timer unless given). The example settings
-  name none. See "Sealing, acknowledging, and what the executor says
-  about itself".
+  runs, in milliseconds (no timer unless given). Or, in place of `keys`
+  and `name`, `sealer`: a central sealer that holds the recorder's keys
+  (`address`, `name`, `token`, `keySet`, and, where wanted, `timeout`
+  and `maxUnsent`). The example settings name none. See "Sealing,
+  acknowledging, and what the executor says about itself".
 - `tools`: each tool the agent may call, by its exact name, with the action
   name the slip uses for it and, where it applies, its amount: a fixed
   `value`, the whole number at a JSON Pointer (RFC 6901) in the call's
@@ -1107,6 +1112,19 @@ running executor holds only in memory: whether it has stopped, or the
 calls in progress. Where the files cannot be opened as a start would open
 them, it gives the reason in `problem`.
 
+Where the settings name a central sealer, the recorder is shown by the
+fingerprint of the sealer's key set, the sealer's address, the name it
+knows the recorder by and `maxUnsent`, and each agent has a member
+`sealer`. From a running executor: how many lines of the book the sealer
+has not answered for (`unsent`), when the oldest of them was written
+(`since`), when the sealer last answered (`answeredAt`) and what is
+wrong (`problem`, or null). From the files, the sealer is asked, once,
+how many lines of the book it holds: `reached`, `holds`, `unsent` and
+its latest seal (`latestSeal`), with `problem` where it could not be
+asked or holds more lines than the file; `since` is known only to a
+running executor, whose log names it too (`sealer-behind`). Lines that
+are unsent do not change the code `status` ends with.
+
 `status` ends with code 0 where every book it shows passes its check (or
 is not there yet), no call waits to be acknowledged and no agent has
 stopped; with 1 otherwise; and with 2 where it could not ask or read.
@@ -1244,12 +1262,26 @@ again once no call waits.
   nothing outside the executor shows when a book was sealed.
 - **What a seal shows.** That the recorder's keys signed the book as it
   stood, so a later change to an entry before the seal no longer passes
-  the check. The recorder's sealing keys are in a file on the executor in
-  this version, beside the agent's keys and the executor's own: whoever
-  can read the executor's files can write a book of their own and seal
-  it. A central sealer away from the executor, seals held elsewhere and
+  the check. Where the recorder's sealing keys are in a file on the
+  executor, beside the agent's keys and the executor's own, whoever can
+  read the executor's files can write a book of their own and seal it.
+  With a central sealer they hold no key that makes a seal; what such a
+  seal shows and does not is set out under "A central sealer". Seals held elsewhere and
   witnesses are not built here. A book cut back to an earlier seal still
-  passes its check by itself.
+  passes its check by itself; an executor with a central sealer does not
+  start on one, while the sealer keeps its record.
+- **With a central sealer, not built.** Bringing a sealer up to date
+  after its record was lost or put back (the sealer's `update`): the
+  executor stops and says so. A second book under one permission (the
+  book numbers of the format description, section 21.6): a new book file
+  under a permission whose first book the sealer holds is not started
+  on. Going on, under a central sealer, with a book already sealed with
+  a key file. A sealer on another computer: the sealer listens on
+  127.0.0.1 only. A time-stamp beside the sealer's seal was not tried.
+  Between the sealer's answer about what it holds and the question for a
+  seal, a sealer that is started again signs over the lines it then
+  holds: for a book with no seal yet, that is a seal the book refuses,
+  and the agent is stopped.
 - **Sealing is off unless the settings name a recorder**, and there is no
   timer unless they give `sealEvery`. Over stdio a book is sealed only
   while the client runs the executor, or by `seal --offline` while it
