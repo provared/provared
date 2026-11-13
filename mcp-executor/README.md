@@ -352,7 +352,8 @@ The settings (`executor-http.example.json` is a start): `name`, `service`,
   bearer token, readable by the executor alone. Without `credential` the
   upstream is called with none, and the start says so.
 - `agents`: one member for each agent, by name (1 to 64 lower-case letters,
-  digits, full stops, hyphens or underscores): `secretHash`, `slip`,
+  digits, full stops, hyphens or underscores): `secretHash` (or
+  `"oauth": true`, for a connection made through OAuth), `slip`,
   `book`, `keys`, `issuerKeys`, and `copy` and `copyKey` (defaults
   `copies/<name>.jsonl` and `copies/<name>.jsonl.key`). No two agents may
   share a secret or a file.
@@ -366,6 +367,84 @@ The settings (`executor-http.example.json` is a start): `name`, `service`,
 - `bodyLimit`: the most a POST body may be, in bytes (default 10,485,760).
 - `allowedOrigins`: the origins (scheme, host and port) whose pages may
   call the executor. Default none.
+- `oauth`: where agents connect through OAuth (below): `issuer`,
+  `clients` and `state`.
+
+### Signing in through OAuth
+
+A client that cannot be handed a secret can connect through OAuth instead.
+The executor is then its own authorisation server, for itself alone,
+following the MCP authorization specification (2025-11-25). Add to the
+settings:
+
+```json
+"oauth": {
+  "issuer": "https://guard.example.com",
+  "clients": ["https://client.example/oauth/client-metadata.json"],
+  "state": "oauth-state.json"
+},
+"agents": {
+  "connection-1": { "oauth": true, "slip": "slips/connection-1.json", "book": "books/connection-1.jsonl", "keys": "keys/connection-1.jwk", "issuerKeys": ["<thumbprint>"] }
+}
+```
+
+- `issuer` is the executor's public address, as clients reach it: an
+  https origin with no path. The executor itself still speaks plain HTTP;
+  a reverse proxy in front of it gives it HTTPS at that address, and must
+  pass the path and the `Origin` header on unchanged. Only
+  `http://127.0.0.1:<port>` is taken without HTTPS, for tests.
+- `clients` lists the clients that may connect, each by the https URL of
+  its client metadata document. With none, no client can connect. There is
+  no other way to register a client.
+- `state` is the file that holds the connections (default
+  `oauth-state.json`). It holds only hashes of tokens. The executor writes
+  it whole, through a new file that only its owner may read (on Windows,
+  keep others out of the folder).
+- Each connection is one agent marked `"oauth": true`, with its own slip,
+  keys, book and copy, as an agent with a secret. Agents with secrets work
+  as before, beside it.
+
+What happens:
+
+- A request with no token gets 401, with a `WWW-Authenticate` header that
+  names the resource's metadata, at
+  `/.well-known/oauth-protected-resource/mcp`. The server's metadata is at
+  `/.well-known/oauth-authorization-server`.
+- The client sends the person to `/oauth/authorize`. The executor fetches
+  the client's document (over HTTPS, at most 5 KiB, within 5 seconds, no
+  redirection followed), keeps it for its `Cache-Control` age (5 minutes
+  to 24 hours; 1 hour by default), and keeps a copy: where a later fetch
+  fails, the copy is used. The redirect address must be one the document
+  names, exactly (only an address written `http://127.0.0.1` or
+  `http://[::1]` may differ in its port). PKCE is required, with S256 only.
+  The `resource` must be the executor's endpoint.
+- The page shows the owner which client asks and which agent it would
+  become, and asks for the owner's check. The page runs no script. With
+  the owner's approval the browser goes back to the client with a code,
+  which lasts 60 seconds and works once. A code used twice revokes what it
+  gave.
+- At `/oauth/token` the code becomes an access token (1 hour) and a refresh
+  token (30 days). Both are random and kept only as hashes. The access
+  token works only at this endpoint, for this client and this agent. Each
+  refresh gives a new refresh token; an old one used again ends the
+  connection. Approving a new connection for the same agent ends the old
+  one; taking a client off the list ends its connections.
+- After 5 failed owner's checks in 15 minutes, or 20 failed token requests
+  in a minute, the executor refuses everything there for the rest of that
+  time (429). It counts for the whole executor, not for each address, as
+  behind a proxy every request comes from the proxy. So anyone who can
+  reach it can hold it shut for a while.
+- With `oauth`, the `timeout` default is 230,000 ms, under the 240 seconds
+  a client gives a tool call; a longer one is warned about.
+
+What is not built yet: the owner's check itself. The page takes one through
+the program's interface (`openHttpExecutor(settings, {ownerCheck})`), and
+the tests use a test one; the command `http` has none, so its page
+approves nothing. The check by the owner's passkey is a proposal, pending
+(DESIGN.md, section 14.1). There is no revocation endpoint, no dynamic
+client registration, and no OAuth towards the upstream: the upstream still
+gets the executor's fixed token. The folder `recipes/` in the repository
+holds the settings for particular clients.
 
 ## The settings
 

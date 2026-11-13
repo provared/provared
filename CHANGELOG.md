@@ -130,6 +130,43 @@
   date. It shows only that the stub existed by the stamp's time: it catches
   forward dating, not back dating. No code changes.
 
+- **`provared-mcp-executor` 0.5.0 (not yet released): signing in through
+  OAuth.** Over HTTP, an agent had to be handed a secret, so a client that
+  signs in only through OAuth could not connect. No record of a new kind
+  and no cryptography of the executor's own: tokens are random bytes, kept
+  as their SHA-256. What changes, in `mcp-executor/` (DESIGN.md, section
+  14, choices X201 to X216):
+  - **The settings.** `"oauth": {"issuer", "clients", "state"}`: the
+    public address (https, or `http://127.0.0.1:<port>` for tests), the
+    URLs of the clients' metadata documents that may connect (none, then
+    no client can), and the state file. An agent marked `"oauth": true`,
+    in place of `secretHash`, is kept for one connection, with its own
+    slip, keys and book. Agents with secrets work as before.
+  - **The front door** (`oauth.mjs`): the resource's metadata and the
+    server's metadata at their well-known addresses; a 401 that names the
+    resource's metadata; the owner's page at `/oauth/authorize`; codes and
+    refresh tokens at `/oauth/token`. A client's document is fetched over
+    HTTPS (5 KiB, 5 seconds, no redirection), kept for its cache age, and
+    its copy used where a later fetch fails. The redirect address is
+    matched exactly, but for the port of a loopback IP address. PKCE with
+    S256 only. Codes last 60 seconds and work once. Access tokens last an
+    hour, for one resource, client and agent. Refresh tokens are rotated
+    at each use, and one used twice ends the connection. Failed attempts
+    are limited. The state file holds hashes only and is written whole,
+    through a new file with mode 0600.
+  - **The timeout.** With `oauth`, its default is 230,000 ms, under the
+    240 seconds a client gives a tool call. Without, it stays 300,000 ms.
+  - **Not built:** the owner's check itself. The page takes one through
+    `openHttpExecutor(settings, {ownerCheck})`; the command `http` has
+    none, so its page approves nothing. A check by the owner's passkey is
+    proposed, pending (DESIGN.md, section 14.1). No upstream OAuth, no
+    one-command setup, no dynamic client registration, no revocation
+    endpoint.
+  - **A recipe**, `mcp-executor/recipes/claude-ai/`: the settings for one
+    client, with its limits.
+  - **Tests**: `test/oauth.test.mjs`, 11 tests: the whole flow in plain
+    HTTP requests, and each refusal.
+
 - **`provared-mcp-executor` 0.5.0 (not yet released): `seal`,
   `acknowledge` and `status`.** The executor could not seal a book, and a
   call sent under a permission that had since been replaced stopped the

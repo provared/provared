@@ -158,8 +158,8 @@ async function ask(w, url) {
 }
 
 /** The owner's answer on the page: the 303, and the parameters it sends the browser back with. */
-async function answer(w, request, { owner = OWNER_WORD, agent = 'conn', decision = 'approve', origin = w.issuer } = {}) {
-  const r = await send('POST', `${w.issuer}/oauth/authorize`, { headers: { 'content-type': 'application/x-www-form-urlencoded', ...(origin ? { origin } : {}) }, body: new URLSearchParams({ request, agent, decision, owner }).toString() });
+async function answer(w, id, { owner = OWNER_WORD, agent = 'conn', decision = 'approve', origin = w.issuer } = {}) {
+  const r = await send('POST', `${w.issuer}/oauth/authorize`, { headers: { 'content-type': 'application/x-www-form-urlencoded', ...(origin ? { origin } : {}) }, body: new URLSearchParams({ request: id, agent, decision, owner }).toString() });
   const back = r.headers.location ? new URL(r.headers.location) : null;
   return { ...r, back, params: back ? Object.fromEntries(back.searchParams) : null };
 }
@@ -473,6 +473,18 @@ test('the settings: the issuer is https, or http://127.0.0.1 for tests; clients 
   const plain = readHttpSettings({ ...base, agents: { a: { ...base.agents.a, oauth: undefined, secretHash: 'A'.repeat(43) } } }, process.cwd());
   assert.equal(plain.partial.timeout, 300000);
   assert.equal(plain.partial.oauth, null);
+});
+
+test('the recipe\'s example settings, with their placeholders filled in, have no problem', () => {
+  const text = readFileSync(new URL('../recipes/claude-ai/executor-oauth.example.json', import.meta.url), 'utf8')
+    .replace('<address of the upstream MCP endpoint>', 'https://upstream.example/mcp')
+    .replace('<file that holds the upstream\'s bearer token>', 'secrets/upstream')
+    .replace('<public https address of the reverse proxy, such as https://guard.example.com>', 'https://guard.example.com')
+    .replace('<thumbprint of the person\'s passkey>', 'B'.repeat(43));
+  const read = readHttpSettings(JSON.parse(text), process.cwd());
+  assert.deepEqual(read.problems, []);
+  assert.deepEqual(read.settings.oauth.clients, ['https://claude.ai/oauth/mcp-oauth-client-metadata']);
+  assert.equal(read.settings.timeout, 230000);
 });
 
 test('without "oauth" in the settings there is no front door: its paths are not found, and a 401 names no metadata', async () => {
