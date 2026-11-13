@@ -861,6 +861,134 @@ the settings name a recorder, the executor expects every seal in a book to
 be that recorder's: on a book sealed with other keys it does not start,
 because the book does not pass its check.
 
+**A central sealer.** The recorder's keys need not be among the
+executor's files. In place of `keys`, the settings may name a central
+sealer: the program `provared-sealer` (`sealer/` in the repository),
+run by someone other than whoever runs the executor. It holds the
+recorder's three keys, and the executor holds none of them. The executor
+sends it the leaf fingerprint of each line of a book as the line is
+written, never the line, except the book's first line, the permission
+(format description, section 21.7), and asks it for the seals. The
+sealer signs only over what it was sent.
+
+```json
+"recorder": {
+  "sealer": {
+    "address": "http://127.0.0.1:8797",
+    "name": "files-executor",
+    "token": { "file": "keys/sealer-token" },
+    "keySet": "<the fingerprint of the sealer's key set>"
+  },
+  "sealEvery": 3600000
+}
+```
+
+- `address`: where the sealer listens: `http://127.0.0.1:<port>`. The
+  sealer listens on 127.0.0.1 only, so the two programs run on one
+  computer.
+- `name`: the name the sealer knows this recorder by: 1 to 63 small
+  letters, digits and hyphens.
+- `token`: where the recorder's token is read from: `{"file": <path>}`
+  or `{"env": <the name of a variable>}`. The token is never written in
+  the settings, and no command prints it. Keep the file for the
+  executor's user alone.
+- `keySet`: the fingerprint of the key set the sealer signs with, as
+  `provared-sealer init` prints it. It is what a person who checks a book
+  names as the recorder they expect. The executor expects every seal in a
+  book to be signed with it, and does not start where the sealer says it
+  signs with another.
+- `timeout`: how long one question to the sealer may take, in
+  milliseconds: 5,000 unless given, from 100 to 60,000. The question for
+  a seal is given 30 seconds.
+- `maxUnsent`: how many lines of a book may be unsent before that
+  agent's calls are refused: 100 unless given, from 0 to 10,000.
+
+`keys` and `name` may not be named beside `sealer`: the recorder's keys
+are in one place, and a central sealer's seals give its own name.
+
+To set it up:
+
+```
+provared-sealer init --folder /srv/sealer --name "Example Ltd central sealer"
+provared-mcp-executor keys --config executor.json
+provared-sealer add-recorder --folder /srv/sealer --agent <fingerprint> files-executor
+provared-sealer start --folder /srv/sealer
+```
+
+`init` prints the fingerprint of the sealer's key set, for `keySet`.
+Where the settings name a sealer, `keys` says on its standard error the
+fingerprint of each agent's key set, which `add-recorder` takes with
+`--agent`: the sealer starts a recorder's books only from permissions
+for the agents it was told. `add-recorder` prints the token, once; put
+it in the token file. Then start the sealer, and then the executor.
+
+*What is sent.* Every line reaches a book file in one place of the
+program, and from there its leaf fingerprint goes to the sealer: the
+permission's line, each receipt, each denial and each seal. A line is
+sent only once it is in the file. Each question names the place of its
+first line, and the place moves on only by the sealer's answer, so no
+line is left out or sent out of order.
+
+*Where the sealer does not answer.* No question waits longer than
+`timeout`. The lines not yet sent stay in the book file, and are sent in
+order when the sealer answers again; it is tried every two seconds. A
+sealer that was started again holds each book only up to its latest
+seal, so it is sent the lines since. While no more than `maxUnsent`
+lines are unsent, calls are taken. Past that, a call waits for one more
+try, at most `timeout`, and is then refused as a rule of the executor's
+refuses: a denial in the book, and a tool error with the code
+`sealer-behind`, until the sealer has caught up. A denial is a line too;
+`denialsPerHour` bounds how many are written. The answer to a call is
+not held back until the sealer has its receipt. No seal is asked for
+until the sealer holds every line.
+
+*At a start.* The sealer must answer, or the executor does not start;
+nor does a command that opens the files to write (`--offline`). Before
+anything is written, what the sealer holds is compared with the book
+file: that it signs with the key set of the settings; that it holds no
+more lines than the file; that its latest seal is the book's last; and
+that no later book follows this one. Where they do not agree, the
+executor does not start, and says why. A sealer whose record is behind
+the book's seals (lost, or put back to an older one) must be brought up
+to date with the sealer's own `update`; this program does not do that.
+A seal the sealer signed over the book as it stands, which the book
+never took (the executor stopped between the two), is added then. The
+lines after the latest seal cannot be compared: the sealer holds
+fingerprints, and gives none back. A change among them is found when the
+next seal is added: the book refuses the seal, the agent is stopped,
+and the executor does not start on that book again.
+
+*A seal.* The executor first asks the sealer what it holds, and sends
+what it lacks; then it asks for a seal, naming the book's last seal and
+the time by its own clock. The seal's entry is added through the stub
+writer as the sealer gave it. Where the sealer refuses, there is no
+seal, and the agent goes on. Where no answer comes, the sealer may have
+signed: a seal sits after exactly the entries it covers, so no line is
+written, and no call is taken, until the sealer has said. The executor
+asks again every two seconds, and adds the seal before any other line
+if there is one.
+
+*What such a seal shows, and what it does not.* It shows that the
+sealer's keys signed the number of entries and the top fingerprint of
+the tree the sealer built from the fingerprints it was sent. Whoever
+runs the executor holds no key that makes a seal, so they cannot change
+or leave out a line that a seal covers and seal again. While the sealer
+keeps its record, it signs one history of a book: a line it was sent is
+in its next seal, changed or not in the file, unless the sealer is
+started again before that seal. It does not show that the lines are
+true, nor that every call has a line. The executor still holds the
+agent's keys and its own, and a line is in its operator's hands until it
+is sent: an executor that its operator has changed can leave a call out
+before anything reaches the sealer (`compare`, and a copy kept where the
+operator cannot change it, are the checks for that). The sealer sees no
+line but the first. Whoever holds the recorder's token and the agent's
+keys can have another book sealed, from another permission for the same
+agent; the sealer's own README says what it can and cannot tell apart.
+The sealer listens on 127.0.0.1 with no TLS, so the two programs are
+kept apart by two user accounts on one computer: whoever can read both
+accounts' files holds everything. A checker cannot tell a seal made by a
+central sealer from one made beside the agent.
+
 **`seal`** seals one book now. The executor asks the library for a seal
 over the book as it stands, naming the seal before it where there is one,
 and adds it to the book through the stub writer, which takes it only if

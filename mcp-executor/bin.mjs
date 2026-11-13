@@ -32,6 +32,8 @@
 //                                                          the named agent's copy and book)
 //   provared-mcp-executor seal    --config <settings> [--agent <name>] [--offline]
 //                                                          seal a book now, with the recorder's three keys
+//                                                          or, where the settings name one, by the central
+//                                                          sealer that holds them
 //   provared-mcp-executor acknowledge --config <settings> [--agent <name>] [--set-aside <call,…>] [--offline]
 //                                                          acknowledge the calls sent under a permission no
 //                                                          longer in force that have no receipt, and set
@@ -102,6 +104,10 @@ no secret. Over stdio there is no address to ask: "seal" and "acknowledge" take 
 reads the files. A command with --offline is refused while an executor runs on the same files. The secret is
 sent only once the executor has shown, with its own keys, that it is the executor; the command reads
 "executor.keys" to check.
+
+Where the settings name a central sealer ("recorder.sealer"), a seal is asked of it; "status" asks it how
+many lines of each book it holds; and a command that opens the files to write (--offline) needs its answer
+first, as a start does.
 
 Exit codes: 0 done, or all is well; 1 not done, or something to look at (status: a book that fails its check,
 a call waiting, an agent stopped; compare: a disagreement; acknowledge: a call still waits); 2 the command

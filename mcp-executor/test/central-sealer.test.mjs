@@ -631,6 +631,46 @@ test('central sealer: a seal the book never took, with a permission new to the b
   }
 });
 
+test('central sealer: a book with no seal, begun before the settings named a sealer, is sent whole at the first start; one sealed with a key file here is not started on', async () => {
+  const w = await centralWorld({ open: false });
+  try {
+    const central = w.settings.recorder;
+    delete w.settings.recorder;
+    await openWorld(w);
+    await w.client.call('echo', {});
+    await w.client.call('echo', {});
+    await w.close();
+    w.settings.recorder = central;
+    assert.equal(await w.held(), null);
+    await openWorld(w);
+    assert.equal((await w.held()).size, 3, 'every line was sent before the start ended');
+    const sealed = await w.executor.seal();
+    await w.close();
+    const c = await w.checked();
+    assert.equal(c.summary.problemFound, false);
+    assert.equal(c.entries[sealed.entry].content.size, 3);
+  } finally {
+    await w.sealer.stop();
+  }
+  // A book sealed with a key file here: its seal is not the sealer's, so the book does not pass the check the executor makes with the sealer's key set.
+  const v = await centralWorld({ open: false });
+  try {
+    const central = v.settings.recorder;
+    const { makeKeyFile } = await import('../files.mjs');
+    await makeKeyFile(join(v.folder, 'keys', 'recorder.jwk'), 'recorder');
+    v.settings.recorder = { keys: 'keys/recorder.jwk' };
+    await openWorld(v);
+    await v.client.call('echo', {});
+    await v.executor.seal();
+    await v.close();
+    v.settings.recorder = central;
+    await assert.rejects(openWorld(v), /does not pass its check/);
+    assert.equal(await v.held(), null, 'the sealer was sent nothing');
+  } finally {
+    await v.sealer.stop();
+  }
+});
+
 test('central sealer: the status read from the files asks the sealer how many lines it holds, and says where it cannot be asked', async () => {
   const w = await centralWorld({ sealer: { timeout: 500 } });
   try {
