@@ -33,13 +33,26 @@ export async function readRecorderKeyFile(path) {
   return (await loadKeyFile(path, 'recorder')).keys;
 }
 
+/** The SLH-DSA signatures in hand, one after another: the last one asked for, which never fails. */
+let signing = Promise.resolve();
+/** Run "task" once the signatures asked for before it are done; its own result. */
+function oneAtATime(task) {
+  const run = signing.then(task);
+  signing = run.catch(() => {});
+  return run;
+}
+
 /**
  * The recorder as the settings name it: its key file read, with the
  * fingerprint of its key set (how a person checking says which recorder
  * they expect). The third key signs through Node.js's thread pool, not in
  * the program's own thread, where the library's signer for a key in memory
  * would hold up every agent for the second or so that an SLH-DSA signature
- * takes: the same Node.js function, in its form with a callback.
+ * takes: the same Node.js function, in its form with a callback. One such
+ * signature is made at a time, for every recorder in the program: the pool
+ * has four threads unless set, and a call needs it too (its receipt is
+ * signed there, and the upstream's name is looked up there), so four books
+ * sealed at once would hold up every agent's call until they were done.
  * @param {{keys: string, name: string}} recorder the path of its key file, and its name (a label on each seal)
  */
 export async function loadRecorder(recorder) {
@@ -47,7 +60,7 @@ export async function loadRecorder(recorder) {
   const slh = nodeCrypto.createPrivateKey({ key: JSON.parse(readFileSync(recorder.keys, 'utf8')).keys[2], format: 'jwk' });
   const third = Object.freeze({
     key: keys[2],
-    sign: (data) => new Promise((done, failed) => nodeCrypto.sign(null, data, slh, (e, signature) => (e ? failed(e) : done(new Uint8Array(signature))))),
+    sign: (data) => oneAtATime(() => new Promise((done, failed) => nodeCrypto.sign(null, data, slh, (e, signature) => (e ? failed(e) : done(new Uint8Array(signature)))))),
   });
   return { name: recorder.name, keys, privateKeys: [privateKeys[0], privateKeys[1], third], fingerprint: await keySetFingerprint(keys) };
 }

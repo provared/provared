@@ -334,6 +334,11 @@
     aside: 0.4.1 does not know a `set-aside` line in the copy, and takes
     the call for unfinished again.
   - **Fixes from a second review** (X160 on):
+    - An SLH-DSA signature is made one at a time, for every recorder in
+      the program (X161). Four books sealed at once had filled Node.js's
+      thread pool, which has four threads unless set, and another
+      agent's call had then waited some 2.5 seconds for them; it now
+      takes a small part of that.
     - `POST /provared/hello`, which needs no secret, reads a body of 256
       bytes at most, waits 5 seconds at most for it, and takes 8 such
       questions at once; a ninth is answered 503 with nothing signed

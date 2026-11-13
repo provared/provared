@@ -1004,7 +1004,10 @@ of the same agent that is in progress, and that agent's next call waits
 for the seal: on the computer this was built on, a seal took just under
 two seconds to sign and added about 52 KB to the book. The slowest of the
 three signatures is made outside the program's own thread, so other
-agents' calls are served meanwhile.
+agents' calls are served meanwhile. Such signatures are made one at a
+time: where several books are sealed at once, each seal after the first
+waits its turn (and so does the next call of that seal's agent), and
+other agents' calls do not.
 
 Over HTTP, `seal --agent <name>` asks the running executor
 (`POST /provared/seal`, with the body `{"agent": "<name>"}`). Over stdio

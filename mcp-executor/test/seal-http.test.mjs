@@ -632,6 +632,35 @@ test('a timer over HTTP: one agent\'s long call does not hold back the seal of a
   }
 });
 
+test('four books sealed at once do not hold up another agent\'s call: one SLH-DSA signature is made at a time', async () => {
+  // Node.js's thread pool has four threads unless set. Were each seal's third signature made in it at once, it would be full.
+  const sealing = ['alpha', 'beta', 'gamma', 'delta'];
+  const w = await adminWorld({ agents: [...sealing, 'other'], config: { timeout: 30000 } });
+  try {
+    for (const name of [...sealing, 'other']) await call(w, name, 'echo', {});
+    const began = Date.now();
+    const done = {};
+    const seals = sealing.map((name) => w.executor.seal(name).then((r) => {
+      done[name] = Date.now() - began;
+      return r;
+    }));
+    await pause(150);
+    const asked = Date.now();
+    const answer = await call(w, 'other', 'echo', {});
+    const took = Date.now() - asked;
+    assert.ok(answer.json.result);
+    const sealed = await Promise.all(seals);
+    const all = Date.now() - began;
+    assert.equal(sealed.length, 4);
+    for (const name of sealing) assert.equal(sealsOf(await checked(w, name)).length, 1, name);
+    // The call was answered before the seals were all done, and in a small part of the time they took.
+    assert.ok(took < all / 3, `the call took ${took} ms; the four seals ${all} ms (${JSON.stringify(done)})`);
+    assert.ok(Math.min(...Object.values(done)) > 150 + took, `the call took ${took} ms; the first seal was done at ${Math.min(...Object.values(done))} ms`);
+  } finally {
+    await w.close();
+  }
+});
+
 test('a start that cannot listen seals nothing', async () => {
   const taken = net.createServer();
   const port = await listenOn(taken);

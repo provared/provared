@@ -1878,7 +1878,7 @@ executor left it, which is the check made before a call is sent (section
 8). A seal waits behind a call in progress and holds up that agent's
 next: about two seconds, most of it the SLH-DSA signature, which is made
 outside the program's own thread so that other agents are served
-meanwhile (X145).
+meanwhile (X145), one at a time (X161).
 
 **X124. Over stdio there is no administrator's address: `seal` and
 `acknowledge` take `--offline` only, and `status` reads the files.** The
@@ -2394,3 +2394,18 @@ read and nothing signed. These are fixed numbers, not settings: a
 command sends one question and waits for one answer. A caller can still
 ask again and again, one after another; each answer costs two
 signatures.
+
+**X161. One SLH-DSA signature at a time.** Node.js's thread pool has
+four threads unless `UV_THREADPOOL_SIZE` says otherwise, and a call needs
+it too: its receipt is signed there and the upstream's name is looked up
+there. Each agent's round of the timer starts at the same moment, so four
+books with something new filled the pool for the two seconds or so of
+their third signatures, and every agent's call waited. `sealing.mjs` now
+makes these signatures one after another, for every recorder in the
+program, so that sealing takes one thread of the pool at most. The
+fourth of four seals asked for at once is then done some four signatures
+later, where it had been one, and that agent's next call, which waits
+for its own seal, waits that much longer. Other agents' calls do not
+wait. The rounds were not set apart in time instead: the
+queue holds however the seals are asked for, by the timer or by
+`seal --agent`.
