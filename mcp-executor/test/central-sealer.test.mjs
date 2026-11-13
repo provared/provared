@@ -10,9 +10,11 @@ import http from 'node:http';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-const { openWorld, until } = await import('./world.mjs');
-const { centralWorld, refusal, standIn } = await import('./sealer-world.mjs');
+const { leafFingerprint } = await import('provared');
+const { openWorld, signSlip, until } = await import('./world.mjs');
+const { RECORDER, centralWorld, refusal, sealerFolder, standIn } = await import('./sealer-world.mjs');
 const { checkConfig, readSettings, statusFromFiles } = await import('../executor.mjs');
+const { startSealer } = await import('../../sealer/sealer.mjs');
 
 /** The status of the link to the sealer, once it says what is wrong. */
 const problemShown = (w) =>
@@ -378,6 +380,12 @@ test('central sealer: a seal the sealer signed that the book never took is added
     await assert.rejects(w.executor.seal(), /whether the central sealer signed one is not known/);
     await w.close();
     assert.equal(w.lines().length, 2, 'the executor ended before the seal was added');
+    // A sealer that says it holds a seal and then hands over none: nothing is added, and the executor does not start.
+    const empty = await standIn({ token: w.sealer.token, real: `http://127.0.0.1:${w.sealer.port}`, answer: (path, body, forward) => (path === '/latest' ? { latest: null } : forward()) });
+    w.settings.recorder.sealer.address = empty.address;
+    await assert.rejects(openWorld(w), /The executor does not start: .*The sealer's answer with its latest seal is not in the form its protocol gives/);
+    await empty.close();
+    assert.equal(w.lines().length, 2);
     w.settings.recorder.sealer.address = `http://127.0.0.1:${w.sealer.port}`;
     await openWorld(w);
     const c = await w.checked();
@@ -482,6 +490,143 @@ test('central sealer: a line changed behind the executor\'s back is found when t
     await w.close();
     await assert.rejects(openWorld(w), /The executor does not start: the central sealer signed a seal that the book does not take/);
   } finally {
+    await w.sealer.stop();
+  }
+});
+
+test('central sealer: a sealer whose record is behind the book\'s seals (lost, or put back to an older one) stops the start', async () => {
+  const w = await centralWorld();
+  try {
+    await w.client.call('echo', {});
+    const first = await w.executor.seal();
+    await w.level();
+    const older = readFileSync(join(w.sealer.folder, 'state.json'), 'utf8');
+    await w.client.call('echo', {});
+    await w.executor.seal();
+    await w.close();
+    const book = w.bookText();
+    // Put back to the state it had at the first seal.
+    await w.sealer.stop();
+    writeFileSync(join(w.sealer.folder, 'state.json'), older);
+    await w.sealer.start();
+    assert.equal((await w.held()).latest, first.fingerprint);
+    await assert.rejects(openWorld(w), /The executor does not start: the central sealer's latest seal of this book is an earlier one than the book's: its record was lost or put back to an older one/);
+    // Lost altogether, and begun again.
+    await w.sealer.stop();
+    rmSync(join(w.sealer.folder, 'state.json'));
+    await w.sealer.start({ fresh: true });
+    assert.equal(await w.held(), null);
+    await assert.rejects(openWorld(w), /The executor does not start: the central sealer holds nothing of this book, and the book holds a seal of it/);
+    // Begun again, and sent the book's first line by another program: it holds the book, and no seal of it.
+    const line = w.lines()[0];
+    assert.deepEqual(await w.ask().extend(await w.first(), 0, [await leafFingerprint(line)], { line }), { size: 1 });
+    await assert.rejects(openWorld(w), /The executor does not start: the central sealer holds no seal of this book, and the book holds one/);
+    assert.equal(w.bookText(), book, 'nothing was written');
+  } finally {
+    await w.sealer.stop();
+  }
+});
+
+test('central sealer: a book that a later book follows at the sealer is not started on', async () => {
+  const w = await centralWorld();
+  try {
+    await w.client.call('echo', {});
+    const sealed = await w.executor.seal();
+    await w.close();
+    // Another program with the recorder's token starts the next book with the same permission, and has it sealed.
+    const line = w.lines()[0];
+    const first = await w.first();
+    const next = { first, number: 2 };
+    assert.deepEqual(await w.ask().extend(next, 0, [await leafFingerprint(line)], { follows: first, line }), { size: 1 });
+    assert.ok((await w.ask().seal(next, { previous: sealed.fingerprint })).entry);
+    assert.equal((await w.held()).closed, true);
+    await assert.rejects(openWorld(w), /The executor does not start: the central sealer holds a later book that follows this one/);
+  } finally {
+    await w.sealer.stop();
+  }
+});
+
+test('central sealer: an answer that is not in the form the protocol gives is not used', async () => {
+  const w = await centralWorld({ open: false });
+  let wrong = '/held';
+  const fake = await standIn({
+    token: w.sealer.token,
+    real: w.settings.recorder.sealer.address,
+    answer: (path, body, forward) => {
+      if (path !== wrong) return forward();
+      if (path === '/about') return { name: 'A sealer', keys: [] };
+      if (path === '/held') return { held: { size: 2 } };
+      return { size: 'many' };
+    },
+  });
+  try {
+    w.settings.recorder.sealer.address = fake.address;
+    await assert.rejects(openWorld(w), /The executor does not start: what the central sealer holds could not be compared with the book file, as a start needs\. The sealer's answer about what it holds of this book is not in the form its protocol gives/);
+    wrong = '/extend';
+    await assert.rejects(openWorld(w), /The executor does not start: the central sealer has not taken every line of the book\. The central sealer answered with another number of lines than it was sent/);
+    wrong = '/about';
+    await assert.rejects(openWorld(w), /The executor does not start: .*The sealer's answer about itself is not in the form its protocol gives/);
+  } finally {
+    await fake.close();
+    await w.sealer.stop();
+  }
+});
+
+test('central sealer: a sealer that was not told this agent refuses the book\'s first line, and the executor does not start', async () => {
+  const w = await centralWorld({ open: false });
+  // A second sealer, whose recorder of the same name is named for another agent's key set.
+  const other = await sealerFolder([w.executorKeys]);
+  const running = await startSealer({ folder: other.folder, port: other.port });
+  try {
+    writeFileSync(join(w.folder, 'keys', 'sealer-token'), `${other.token}\n`);
+    w.settings.recorder.sealer = { ...w.settings.recorder.sealer, address: running.address, keySet: running.fingerprint };
+    await assert.rejects(openWorld(w), /The executor does not start: the central sealer has not taken every line of the book\. The central sealer did not take the lines: .*\(agent-not-allowed\)/);
+    const asked = (await import('../sealer-client.mjs')).connectSealer({ address: running.address, recorder: RECORDER, token: other.token });
+    assert.equal(await asked.held(await w.first()), null, 'the sealer started no book');
+  } finally {
+    await running.close();
+    await w.sealer.stop();
+  }
+});
+
+test('central sealer: a seal the book never took, with a permission new to the book: the executor does not start until the seal is in the book', async () => {
+  const w = await centralWorld({ open: false, sealer: { timeout: 500 } });
+  const fake = await standIn({
+    token: w.sealer.token,
+    real: w.settings.recorder.sealer.address,
+    answer: async (path, body, forward) => {
+      if (path !== '/seal') return forward();
+      await forward();
+      return null;
+    },
+  });
+  try {
+    w.settings.recorder.sealer.address = fake.address;
+    await openWorld(w);
+    await w.client.call('echo', {});
+    await assert.rejects(w.executor.seal(), /whether the central sealer signed one is not known/);
+    await w.close();
+    w.settings.recorder.sealer.address = `http://127.0.0.1:${w.sealer.port}`;
+    const book = w.bookText();
+    const slip = readFileSync(join(w.folder, 'slip.json'), 'utf8');
+    writeFileSync(join(w.folder, 'slip.json'), JSON.stringify(await signSlip({ passkey: w.passkey, agentKeys: w.agentKeys, executorKeys: w.executorKeys, until: Date.now() + 7200000 })));
+    const renewed = readFileSync(join(w.folder, 'slip.json'), 'utf8');
+    await assert.rejects(openWorld(w), /The executor does not start: .*the permission in force is new to the book: its line would come before the seal/);
+    assert.equal(w.bookText(), book, 'nothing was written');
+    // Once with the permission the book last held: the seal is added.
+    writeFileSync(join(w.folder, 'slip.json'), slip);
+    await openWorld(w);
+    await w.close();
+    // Then with the new one.
+    writeFileSync(join(w.folder, 'slip.json'), renewed);
+    await openWorld(w);
+    await w.level();
+    await w.close();
+    const c = await w.checked();
+    assert.equal(c.summary.problemFound, false);
+    assert.deepEqual(c.entries.map((e) => e.kind), ['slip', 'stub', 'seal', 'slip']);
+  } finally {
+    await fake.close();
     await w.sealer.stop();
   }
 });

@@ -1034,7 +1034,6 @@ export async function openAgent(prepared, { settings, executorKeys, now, log, na
     if (!Array.isArray(setAside) || !setAside.every((c) => typeof c === 'string')) throw new Error('setAside: must be a list of the calls to set aside, as the status names them.');
     return inTurn(async () => {
       if (pending.length === 0) throw new Error('This agent has no call without a receipt to acknowledge.');
-      if (link?.doubt()) throw new Error(`No receipt is written now: ${link.doubt()}`);
       for (const c of setAside) if (!pending.some((p) => p.call === c)) throw new Error(`No call "${c}" is waiting to be acknowledged.`);
       fileAsLeft();
       const at = () => new Date(now()).toISOString();

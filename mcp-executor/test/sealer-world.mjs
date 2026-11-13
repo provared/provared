@@ -57,8 +57,8 @@ export async function centralWorld({ sealer = {}, recorder = {}, open = true, mo
   w.sealer = {
     ...s,
     running: null,
-    async start() {
-      this.running = await startSealer({ folder: s.folder, port: s.port });
+    async start(how = {}) {
+      this.running = await startSealer({ folder: s.folder, port: s.port, ...how });
       this.keySet = this.running.fingerprint;
       return this.running;
     },
