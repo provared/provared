@@ -924,6 +924,8 @@ test('seal on a timer: a stop that comes while a seal waits its turn leaves no t
     await w.close();
   }
   const sealsThen = old.filter((e) => e.event === 'sealed').length;
+  // The call's receipt was written at the stop, and the seal that was waiting its turn behind it after that.
+  assert.deepEqual((await checked(w)).entries.map((e) => e.kind), ['slip', 'seal', 'stub', 'seal']);
   // Another executor takes the files and writes on. A timer left behind by the first would trip over what it wrote.
   await openWorld(w);
   try {

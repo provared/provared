@@ -297,13 +297,13 @@
     executor signs, and the commands sending no secret to another
     listener, to one that passes the challenge on, or on another
     connection; unknown options; and the commands, run as real
-    processes, over stdio and over HTTP. 72 defences were taken out one
-    at a time, each with the test named for it run after: every one then
-    failed. An independent review had taken out 33 and found five that
-    no test held (two checks of the timer at its end and both together,
-    the 503 while stopping, and `compare` naming its recorder); the
-    timer now has one such check, and each of the three is held by a
-    test.
+    processes, over stdio and over HTTP. 75 defences were taken out one
+    at a time, each with the test named for it run after, on Windows:
+    every one then failed that test. An independent review had taken out
+    33 and found five that no test held (two checks of the timer at its
+    end and both together, the 503 while stopping, and `compare` naming
+    its recorder); the timer now has one such check, and each of the
+    three is held by a test.
   - **The README** has a new part, "Sealing, acknowledging, and what the
     executor says about itself", the settings `recorder`, `admin` and
     `executor.formerKeys`, and, under what it does not do: no outside
