@@ -965,3 +965,56 @@ test('a seal does not hold up the rest of the program while it is signed', async
   // A timer of 10 ms goes on firing while the seal is signed: at least a quarter of the times it could.
   assert.ok(ticks >= took / 40, `${ticks} ticks in ${took} ms`);
 });
+
+test('a copy line that holds no document of the outcome names no kind of outcome either, so that "has no record of its outcome" is true of it', async () => {
+  const { RESULT_NOT_FINGERPRINTED } = await import('../executor.mjs');
+  const { unfinished } = await import('../copy.mjs');
+  const w = await sealedWorld();
+  const bookPath = join(w.folder, 'book.jsonl');
+  // Two failures at once: the documents of the outcome cannot be made (their fingerprints fail), and the book cannot be written.
+  const subtle = globalThis.crypto.subtle;
+  const digest = subtle.digest;
+  const refused = [Buffer.from('slowly. N5-MARK'), Buffer.from(RESULT_NOT_FINGERPRINTED)];
+  subtle.digest = function (algorithm, data) {
+    const bytes = Buffer.from(data.buffer ?? data, data.byteOffset ?? 0, data.byteLength);
+    if (refused.some((r) => bytes.includes(r))) return Promise.reject(new Error('made to fail'));
+    return digest.call(subtle, algorithm, data);
+  };
+  let kept;
+  try {
+    await w.client.call('echo', {});
+    kept = bookText(w);
+    const slow = w.client.call('slow', { ms: 600, tag: 'N5-MARK' });
+    await until(() => w.fakeSeen().some((s) => s.seen?.method === 'tools/call' && s.seen.params.name === 'slow'));
+    rmSync(bookPath);
+    mkdirSync(bookPath);
+    const r = await slow;
+    assert.match(r.result.content[0].text, /Done, slowly\. N5-MARK/, 'the server answered');
+  } finally {
+    subtle.digest = digest;
+    await w.close();
+  }
+  const last = copyOf(w).lines.at(-1).entry;
+  assert.equal(last.kind, 'done');
+  assert.equal(last.stub, undefined, 'the book could not be written');
+  assert.deepEqual(last.documents, [], 'no document of the outcome was made');
+  assert.equal(last.outcome, undefined, 'and no kind of outcome is named');
+  // The first call's line, which holds its document, still names its kind.
+  assert.equal(copyOf(w).lines.find((l) => l.entry.kind === 'done').entry.outcome, 'answer');
+  assert.equal(unfinished(copyOf(w)).length, 1, 'the call is still unfinished');
+  // The book put back, a new permission, and the call acknowledged: its receipt says the executor has no record of its outcome.
+  rmSync(bookPath, { recursive: true });
+  writeFileSync(bookPath, kept);
+  await renewSlip(w);
+  const ex = await offline(w);
+  try {
+    await pause(1100);
+    const done = await ex.acknowledge();
+    assert.equal(done.written.length, 1, JSON.stringify(done));
+    const stub = stubsOf(await checked(w)).at(-1);
+    assert.equal(docs(stub)['provared.error'], NO_RECORD_OF_OUTCOME_FINGERPRINT);
+    assert.equal(docs(stub)[RESULT_DOCUMENT], undefined);
+  } finally {
+    await ex.close();
+  }
+});

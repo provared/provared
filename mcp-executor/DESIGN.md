@@ -222,7 +222,8 @@ each call: `sending` (before the call goes to the server; on the disk
 first), `done` (once the stub is in the book, with the stub's and the
 countersignature's fingerprints and the documents added after the call;
 or, where the book could not be written, with those documents and no
-stub, so that the call stays unfinished), `refused` (with the reason, the
+stub, so that the call stays unfinished; the kind of outcome only where
+there are such documents, X165), `refused` (with the reason, the
 codes and the denial's fingerprint), `withdrawn` (cancelled before it
 was sent) and `set-aside` (a call that was sent and has no receipt, which
 the administrator set aside; X130). Each line carries its number from 0 and HMAC-SHA-256 (RFC 2104)
@@ -2437,3 +2438,15 @@ given that time to end. A command (`seal`, `acknowledge` with
 `--offline`) asks once, as before: it is run by hand, and a person can run
 it again. A client that started the executor again at once had been
 refused where 0.4.1 started.
+
+**X165. A `done` line names the kind of outcome only beside its
+documents.** The third fixed text of an acknowledged receipt, "The
+executor recorded that it was sending this call, and has no record of
+its outcome.", was approved word for word and does not change. It is
+written where the copy holds no document of the outcome. A `done` line
+with no stub and no documents (the documents could not be made, and the
+book could not be written) had still named the kind, `"outcome":
+"answer"` or another, so the copy held something of the outcome after
+all. Such a line now names no kind, so the text is true wherever it is
+written. Nothing reads the kind back: it was for whoever reads the copy.
+A line with documents names its kind as before.

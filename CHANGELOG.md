@@ -344,6 +344,13 @@
       `shutdownWait` and 5 seconds more where that is longer), so that
       a client that restarts the executor while the one before is ending
       is not refused; a command asks once (X164).
+    - A `done` line of the copy names the kind of outcome (`"outcome":
+      "answer"`, say) only beside the outcome's documents (X165). Where
+      those documents could not be made and the book could not be
+      written either, the line had named the kind with no document, and
+      a receipt acknowledged from it then said "The executor recorded
+      that it was sending this call, and has no record of its outcome."
+      beside a copy that held its kind. The text is as it was.
     - An SLH-DSA signature is made one at a time, for every recorder in
       the program (X161). Four books sealed at once had filled Node.js's
       thread pool, which has four threads unless set, and another

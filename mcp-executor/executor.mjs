@@ -1625,9 +1625,12 @@ export function callCore({ settings, content, executorKeys, now }) {
             // book could not be written, the line holds what the executor knew of the
             // outcome and no stub, and the call stays unfinished: the next start
             // writes the receipt from the "sending" line and these documents.
+            // The kind of outcome is named only beside its documents: a line with
+            // none holds no record of the outcome, as a receipt from it then says
+            // (NO_RECORD_OF_OUTCOME), and names no kind of one either.
             const added = result.detailsAfter?.added ? afterDocuments : [];
             try {
-              copy.note({ kind: 'done', call: callId, when: new Date(now()).toISOString(), outcome: outcome.kind, ...(saved ? { stub: result.stub.fingerprint } : {}), countersigned: cs.accepted, ...(csFingerprint ? { countersignature: csFingerprint } : {}), documents: added });
+              copy.note({ kind: 'done', call: callId, when: new Date(now()).toISOString(), ...(added.length ? { outcome: outcome.kind } : {}), ...(saved ? { stub: result.stub.fingerprint } : {}), countersigned: cs.accepted, ...(csFingerprint ? { countersignature: csFingerprint } : {}), documents: added });
             } catch (e) {
               agent.stop(`its own copy could not be written (${e.message}).`, 'copy-not-written');
             }
