@@ -29,6 +29,7 @@ import { unfinished } from './copy.mjs';
 import { EXECUTOR_STOPPED, NOT_FOR_KEYS, NO_RECORDER_WARNING, SHARED_KEYS, SHORT_NAME, UNLISTED_FORWARD_WARNING, callCore, describeContentRules, describeRecorder, describeSlip, describeTools, filteredList, isObject, isPlaceholder, missingFiles, openAgent, pathFrom, placeholderProblems, prepareAgent, prepareShared, readAgentPaths, readCredentialFile, readIdentity, readFormerKeys, readKnobs, readRecorderSettings, readToolRules, reportFromFiles, sealTimer, serverIds } from './executor.mjs';
 import { CHALLENGE, identify, plainAddress } from './identity.mjs';
 import { CODES, MAX_LINE_BYTES, idKey, isId, readMessage, responseText, spliceId, topLevelId, unsafeInteger } from './jsonrpc.mjs';
+import { LOCK_WAIT_MS } from './lock.mjs';
 
 /** The most a POST body may be, unless the settings say otherwise: 10 MiB, as the gateway takes. */
 export const BODY_LIMIT = 10 * 1024 * 1024;
@@ -331,7 +332,7 @@ export function sseEvent(others, data) {
  * their receipts now (openAgent).
  *
  * @param {object} config the settings, as in executor-http.example.json
- * @param {{root?: string, now?: () => number, log?: (event: object) => void}} [more]
+ * @param {{root?: string, now?: () => number, log?: (event: object) => void, offline?: boolean, lockWait?: number}} [more] "lockWait": how long a start asks again for a lock that is held, in place of LOCK_WAIT_MS (for tests)
  */
 export async function openHttpExecutor(config, more = {}) {
   const root = more.root ?? process.cwd();
@@ -355,7 +356,8 @@ export async function openHttpExecutor(config, more = {}) {
   try {
     for (const [name, paths] of settings.agents) {
       // Each agent's book and copy are locked for this program before anything of theirs is read (lock.mjs).
-      const prepared = await prepareAgent(paths, settings, shared, { now });
+      // A start asks again for the lock for 10 seconds, while the executor before it may still be ending; a command asks once.
+      const prepared = await prepareAgent(paths, settings, shared, { now, lockWait: offline ? 0 : (more.lockWait ?? LOCK_WAIT_MS) });
       releases.push(prepared.release);
       warnings.push(...prepared.warnings.map((w) => `agents.${name}: ${w}`));
       // A command at work on the files (offline) is not a start: it writes no late receipt by itself.

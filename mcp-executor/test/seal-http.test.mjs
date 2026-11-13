@@ -661,6 +661,21 @@ test('four books sealed at once do not hold up another agent\'s call: one SLH-DS
   }
 });
 
+test('a start on the same files while the executor before it is ending waits for it, and then starts', async () => {
+  const w = await adminWorld({ agents: ['alpha'] });
+  let second = null;
+  try {
+    const opening = openHttpExecutor(w.settings, { root: w.folder, log: () => {} });
+    await pause(1500);
+    await w.closeExecutor();
+    second = await opening;
+    assert.deepEqual(second.agents, ['alpha']);
+  } finally {
+    if (second) await second.close();
+    await w.upstream.close();
+  }
+});
+
 test('a start that cannot listen seals nothing', async () => {
   const taken = net.createServer();
   const port = await listenOn(taken);
@@ -688,9 +703,12 @@ test('a second executor on the same files is refused before it reads them, and a
     await pause(300);
     const book = bookText(w, 'alpha');
     // A second start on the same settings, and the files opened as a command with --offline opens them: of either agent.
-    for (const more of [{}, { offline: true }]) {
+    // A start asks again for some seconds before it is refused; asked once here.
+    for (const more of [{ lockWait: 0 }, { offline: true }]) {
       const logs = [];
+      const asked = Date.now();
       await assert.rejects(openHttpExecutor(w.settings, { root: w.folder, log: (e) => logs.push(e), ...more }), (e) => e.code === 'LOCKED');
+      assert.ok(Date.now() - asked < 2500, `asked once, it does not wait (${JSON.stringify(more)})`);
       assert.deepEqual(logs.filter((e) => e.event !== 'warning'), [], 'it wrote no receipt for the call in flight');
     }
     const sealed = await run(['seal', '--config', w.configPath, '--agent', 'beta', '--offline']);

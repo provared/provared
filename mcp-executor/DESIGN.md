@@ -2409,3 +2409,31 @@ for its own seal, waits that much longer. Other agents' calls do not
 wait. The rounds were not set apart in time instead: the
 queue holds however the seals are asked for, by the timer or by
 `seal --agent`.
+
+**X162. The lock's name, on Windows, writes the folder out in full.**
+`lockName` resolves the book's folder with `realpathSync.native`, which
+writes a short name (`C:\Users\LONGNA~1`) out in full, and falls back to
+`realpathSync` where that fails. A guard started with a short name and a
+command run with the long one had taken two locks. The book file's own
+name is still taken as written, since the file may not be there yet.
+
+**X163. A socket file left behind is cleared by one program at a time
+(not Windows or Linux).** The program that makes the folder
+`<socket file>.clearing` looks again, clears the file away, listens and
+takes the folder away; a program that cannot make the folder is refused
+(or asks again, X164). Two programs that started together after a third
+was stopped had both cleared the file and both listened. A socket file
+that gives no answer within 2 seconds counts as live: the start had
+waited for ever. A folder left by a program stopped in that moment is
+not taken away by itself, since that would let two programs in again;
+the refusal names it, to be taken away by hand. Not run on a Mac: the
+tests of this branch run on Linux, where a socket file works the same
+way when it is asked for.
+
+**X164. A start asks again for a lock that is held.** For 10 seconds
+over HTTP; over stdio, for `shutdownWait` and 5 seconds more where that
+is longer, since the guard before keeps the lock while its server is
+given that time to end. A command (`seal`, `acknowledge` with
+`--offline`) asks once, as before: it is run by hand, and a person can run
+it again. A client that started the executor again at once had been
+refused where 0.4.1 started.

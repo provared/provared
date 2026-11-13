@@ -31,7 +31,7 @@ import { argumentsFingerprint, checkBook, countersign, denialCodes, entryLine, f
 import { loadCopyKey, openCopy, readCopy, unfinished } from './copy.mjs';
 import { aboutSlip, bookFile, loadKeyFile, readIfThere, slipFrom, untilFree } from './files.mjs';
 import { CODES, MAX_LINE_BYTES, idKey, isId, notificationLine, readLines, readMessage, repeatedName, responseLine, responseText, spliceId, topLevelId, unsafeInteger } from './jsonrpc.mjs';
-import { lockFiles } from './lock.mjs';
+import { LOCK_WAIT_MS, lockFiles } from './lock.mjs';
 import { RULES_DOCUMENT, RULE_DOCUMENT, RULES_ENTRY_PREFIX, TOOL_NAME, lookUp, readPointer, readRules, rulesFingerprint, statesContentRules, testCall } from './rules.mjs';
 import { RECORDER_NAME } from './sealer-client.mjs';
 import { SEALER_BEHIND, SEALER_MAX_UNSENT, SEALER_MAX_UNSENT_MAX, SEALER_TIMEOUT, SEALER_TIMEOUT_MAX, SEALER_TIMEOUT_MIN, centralSealer, loadRecorder, localSealer, readRecorderKeyFile } from './sealing.mjs';
@@ -519,11 +519,12 @@ export async function prepareShared(settings) {
  * tool rules and the rules on content), its book, its copy and its stub
  * writer. "paths": slip, book, keys, issuerKeys, copy, copyKey. Says what
  * is wrong in one error. With "readOnly" nothing is written: no slip line to
- * the book file, no copy key made (checkConfig).
+ * the book file, no copy key made (checkConfig). "lockWait": how long to ask
+ * again for the lock while another program holds it (0: once).
  */
-export async function prepareAgent(paths, settings, shared, { now = Date.now, readOnly = false } = {}) {
+export async function prepareAgent(paths, settings, shared, { now = Date.now, readOnly = false, lockWait = 0 } = {}) {
   // One program writes a book and its copy at a time: the lock is taken before anything is read (lock.mjs).
-  const lock = readOnly ? null : await lockFiles(paths.book);
+  const lock = readOnly ? null : await lockFiles(paths.book, { wait: lockWait });
   try {
     return { ...(await readAgentFiles(paths, settings, shared, { now, readOnly })), release: () => (lock ? lock.release() : Promise.resolve()) };
   } catch (e) {
@@ -620,7 +621,7 @@ async function readAgentFiles(paths, settings, shared, { now, readOnly }) {
  * is not running) the server's program and its credentials are not read:
  * no server is started.
  */
-async function prepare(config, root, { now = Date.now, readOnly = false, offline = false } = {}) {
+async function prepare(config, root, { now = Date.now, readOnly = false, offline = false, lockWait } = {}) {
   const { settings, problems, warnings } = readSettings(config, root);
   if (problems.length) throw new Error(`The settings have problems:\n- ${problems.join('\n- ')}`);
   const env = {};
@@ -644,7 +645,9 @@ async function prepare(config, root, { now = Date.now, readOnly = false, offline
       credentialNames.push(name);
     }
   }
-  const agent = await prepareAgent({ ...settings.agent, copy: settings.executor.copy, copyKey: settings.executor.copyKey }, settings, shared, { now, readOnly });
+  // A start asks again for the lock while the executor before it may still be ending: for as long as its server is given to end, and 5 seconds more (10 seconds at least). A command asks once.
+  const wait = offline || readOnly ? 0 : (lockWait ?? Math.max(LOCK_WAIT_MS, settings.shutdownWait + 5000));
+  const agent = await prepareAgent({ ...settings.agent, copy: settings.executor.copy, copyKey: settings.executor.copyKey }, settings, shared, { now, readOnly, lockWait: wait });
   warnings.push(...agent.warnings);
   return { settings, warnings, agent, agentKeys: agent.agentKeys, executorKeys: shared.executorKeys, about: agent.about, env, credentialNames, read: agent.read, content: shared.content, sealer: shared.sealer, formerKeys: shared.formerKeys };
 }
@@ -1702,14 +1705,14 @@ export function callCore({ settings, content, executorKeys, now }) {
  * and cannot be attached.
  *
  * @param {object} config the settings, as in executor.example.json
- * @param {{root?: string, now?: () => number, log?: (event: object) => void, serverStderr?: NodeJS.WritableStream|null, offline?: boolean}} [more]
+ * @param {{root?: string, now?: () => number, log?: (event: object) => void, serverStderr?: NodeJS.WritableStream|null, offline?: boolean, lockWait?: number}} [more] "lockWait": how long a start asks again for a lock that is held, in place of the rule (for tests)
  */
 export async function openExecutor(config, more = {}) {
   const root = more.root ?? process.cwd();
   const now = more.now ?? Date.now;
   const log = more.log ?? ((event) => process.stderr.write(`${JSON.stringify({ provared: 'mcp-executor', ...event })}\n`));
   const offline = more.offline === true;
-  const p = await prepare(config, root, { now, offline });
+  const p = await prepare(config, root, { now, offline, lockWait: more.lockWait });
   const { settings, about, content } = p;
   for (const w of p.warnings) log({ event: 'warning', message: w });
   let agent;

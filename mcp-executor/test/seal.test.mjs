@@ -724,7 +724,9 @@ test('one program at a time: a command with --offline beside a running executor 
     const copy = readFileSync(join(w.folder, 'copy.jsonl'), 'utf8');
     // Beside it, on the same files: the files opened as "seal --offline" opens them, and the command itself.
     const logs = [];
+    const asked = Date.now();
     await assert.rejects(openExecutor(w.settings, { root: w.folder, log: (e) => logs.push(e), offline: true }), (e) => e.code === 'LOCKED' && /An executor is running on the book/.test(e.message));
+    assert.ok(Date.now() - asked < 2500, 'a command asks for the lock once, and does not wait');
     assert.deepEqual(logs.filter((e) => e.event !== 'warning'), [], 'it wrote no receipt and no seal');
     const sealed = await run(['seal', '--config', w.configPath, '--offline']);
     assert.equal(sealed.code, 2);
@@ -732,8 +734,8 @@ test('one program at a time: a command with --offline beside a running executor 
     const acknowledged = await run(['acknowledge', '--config', w.configPath, '--offline']);
     assert.equal(acknowledged.code, 2);
     assert.match(acknowledged.stderr, /An executor is running on the book/);
-    // A second executor on the same files is refused in the same way.
-    await assert.rejects(openExecutor(w.settings, { root: w.folder, log: () => {} }), (e) => e.code === 'LOCKED');
+    // A second executor on the same files is refused in the same way (asked once here: a start asks again for some seconds, and is then refused).
+    await assert.rejects(openExecutor(w.settings, { root: w.folder, log: () => {}, lockWait: 0 }), (e) => e.code === 'LOCKED');
     assert.equal(bookText(w), book, 'the book is as it was');
     assert.equal(readFileSync(join(w.folder, 'copy.jsonl'), 'utf8'), copy, 'and so is the copy');
     // Reading is not writing: the status may be asked at any time.
@@ -939,6 +941,15 @@ test('seal on a timer: a stop that comes while a seal waits its turn leaves no t
   // The first executor's log goes where the second's does: neither asked for a seal it could not have.
   assert.deepEqual([...old, ...w.logs].filter((e) => ['not-sealed', 'book-changed', 'book-not-written'].includes(e.event)), [], 'the executor that ended asked for no further seal');
   assert.equal((await checked(w)).summary.problemFound, false);
+});
+
+test('a start on the same files while the executor before it is ending waits for it, and then starts', async () => {
+  const w = await world();
+  const opening = openExecutor(w.settings, { root: w.folder, log: () => {}, serverStderr: null });
+  await pause(1500);
+  await w.close();
+  const second = await opening;
+  await second.close();
 });
 
 test('a seal does not hold up the rest of the program while it is signed', async () => {

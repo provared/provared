@@ -1020,8 +1020,12 @@ needs no secret: whoever can write those files can do as much.
 at a time. Before `stdio`, `http` or a command with `--offline` reads
 them, it takes a lock named after the book file, which the operating
 system takes away when the program ends, however it ends. A second program
-is refused at once ("An executor is running on the book …"), having read
-and written nothing: so `seal --offline` or `acknowledge --offline` beside
+is refused ("An executor is running on the book …"), having read and
+written nothing. A command asks once. A start (`stdio`, `http`) asks
+again for 10 seconds (over stdio, for `shutdownWait` and 5 seconds more
+where that is longer) before it is refused, so that a client that starts
+the executor again while the one before is still ending is not turned
+away. So `seal --offline` or `acknowledge --offline` beside
 a running executor does nothing, and a second `http` on the same settings
 does not start; nor does a second `stdio`, where a client starts the
 executor twice on one settings file. Over HTTP a command with `--offline` takes every agent's
@@ -1294,16 +1298,22 @@ again once no call waits.
   does not.
 - **Where the lock does not reach.** The lock that keeps two programs off
   one book is named after the book file's path as the file system
-  resolves it. Two paths that reach one file through a link the file
-  system does not resolve, or two computers' views of a shared folder,
-  are two locks. On Windows it is a named pipe; on Linux a socket in the
+  resolves it, the folder written out in full (a short name on Windows
+  included) and the file's own name as written. Two paths that reach one
+  file through a link the file system does not resolve, a short name for
+  the book file itself, or two computers' views of a shared folder, are
+  two locks. On Windows it is a named pipe; on Linux a socket in the
   abstract namespace, which belongs to a network namespace, so two
   containers that share a folder and not a network do not see each
-  other's lock; on other systems a socket file in `/tmp`, where two
-  programs that start at the same instant after a third was stopped can
-  both get it. A program that takes the lock's name first keeps the
+  other's lock; on other systems a socket file in `/tmp`, which a
+  program stopped leaves behind: the next start clears it away, and only
+  the one that first makes the folder `<socket file>.clearing` beside
+  it may. A program stopped in the moment it holds that folder leaves it,
+  and the lock is then refused, with the folder named, until someone
+  takes it away. A program that takes the lock's name first keeps the
   executor from starting on those files, and gains nothing else. The lock
-  has been tried on Windows only. Behind it, the book file and the copy
+  has been tried on Windows only; the tests of the socket file run on
+  Linux and were not run on Windows, where Node.js has no socket files. Behind it, the book file and the copy
   are still checked before each write: a program that got past the lock
   and wrote to them stops the executor at its next call.
 - **The administrator's secret travels in the clear**, like the agents'.

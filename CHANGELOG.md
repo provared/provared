@@ -334,6 +334,16 @@
     aside: 0.4.1 does not know a `set-aside` line in the copy, and takes
     the call for unfinished again.
   - **Fixes from a second review** (X160 on):
+    - The lock (`lock.mjs`): on Windows the book's folder is written
+      out in full by `realpathSync.native`, so that a short name for it
+      is the same lock (X162). Where a socket file is the lock (not
+      Windows or Linux), clearing one left behind is done by one program
+      at a time, the one that makes a folder beside it, and a socket file
+      that gives no answer within 2 seconds counts as live (X163). A
+      start asks again for the lock for 10 seconds (over stdio, for
+      `shutdownWait` and 5 seconds more where that is longer), so that
+      a client that restarts the executor while the one before is ending
+      is not refused; a command asks once (X164).
     - An SLH-DSA signature is made one at a time, for every recorder in
       the program (X161). Four books sealed at once had filled Node.js's
       thread pool, which has four threads unless set, and another
