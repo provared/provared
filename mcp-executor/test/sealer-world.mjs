@@ -79,7 +79,7 @@ export async function centralWorld({ sealer = {}, recorder = {}, open = true, mo
   w.lines = () => w.bookText().split('\n').filter(Boolean);
   w.first = async () => toBase64url(await leafFingerprint(w.lines()[0]));
   w.held = async () => w.ask().held(await w.first());
-  w.checked = () => checkBook(w.bookText(), { issuerKeys: w.settings.agent.issuerKeys, sealKeys: w.sealKeys });
+  w.checked = (more = {}) => checkBook(w.bookText(), { issuerKeys: w.settings.agent.issuerKeys, sealKeys: w.sealKeys, ...more });
   /** Wait until the sealer holds every line of the book file. */
   w.level = () => until(async () => (await w.held())?.size === w.lines().length);
   if (open) await openWorld(w, more);

@@ -164,7 +164,7 @@ export function centralSealer(s) {
     );
     return mine;
   };
-  const unreached = (e) => (e.notTaken || e.disagrees ? e.message : `The central sealer at ${s.address} gave no answer that can be used (${e.cause?.code ?? e.code ?? e.name}: ${e.message})`);
+  const unreached = (e) => (e.notTaken || e.disagrees ? e.message : `The central sealer at ${s.address} gave no answer that can be used (${e.cause?.code ?? (typeof e.code === 'string' ? e.code : e.name)}: ${e.message})`);
   // The sealer must sign with the key set the settings name: asked once, at its first answer.
   let keySetSeen = false;
   async function sameKeySet() {
