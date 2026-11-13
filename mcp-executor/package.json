@@ -43,6 +43,7 @@
   "files": [
     "executor.mjs",
     "http.mjs",
+    "oauth.mjs",
     "compare.mjs",
     "copy.mjs",
     "jsonrpc.mjs",

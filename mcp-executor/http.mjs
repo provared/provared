@@ -29,6 +29,7 @@ import { unfinished } from './copy.mjs';
 import { EXECUTOR_STOPPED, NOT_FOR_KEYS, NO_RECORDER_WARNING, SHARED_KEYS, SHORT_NAME, UNLISTED_FORWARD_WARNING, callCore, describeContentRules, describeRecorder, describeSlip, describeTools, filteredList, isObject, isPlaceholder, missingFiles, openAgent, pathFrom, placeholderProblems, prepareAgent, prepareShared, readAgentPaths, readCredentialFile, readIdentity, readFormerKeys, readKnobs, readRecorderSettings, readToolRules, reportFromFiles, sealTimer, serverIds } from './executor.mjs';
 import { CHALLENGE, identify, plainAddress } from './identity.mjs';
 import { CODES, MAX_LINE_BYTES, idKey, isId, readMessage, responseText, spliceId, topLevelId, unsafeInteger } from './jsonrpc.mjs';
+import { CLIENT_LIMIT, OAUTH_PATH, OAUTH_TIMEOUT, WELL_KNOWN, openFrontDoor, readOAuthSettings } from './oauth.mjs';
 
 /** The most a POST body may be, unless the settings say otherwise: 10 MiB, as the gateway takes. */
 export const BODY_LIMIT = 10 * 1024 * 1024;
@@ -110,6 +111,9 @@ export function readHttpSettings(config, root, { keysOnly = false } = {}) {
   s.path = config.path ?? '/mcp';
   if (typeof s.path !== 'string' || !/^\/[A-Za-z0-9._~\-/]*$/.test(s.path) || s.path.includes('//')) at('path', 'must be the path of the MCP endpoint, beginning with "/", such as "/mcp".');
   else if (s.path === ADMIN_PATH || s.path.startsWith(`${ADMIN_PATH}/`)) at('path', `must not be ${ADMIN_PATH} or under it: those are the executor's own addresses, for the administrator.`);
+  // Signing in through OAuth (oauth.mjs): the public address, the clients' list and the state file.
+  readOAuthSettings(config, root, s, at, warnings, pathFrom);
+  if (s.oauth && typeof s.path === 'string' && [OAUTH_PATH, WELL_KNOWN].some((p) => s.path === p || s.path.startsWith(`${p}/`))) at('path', `must not be ${OAUTH_PATH} or ${WELL_KNOWN}, or under them: with "oauth", those are the executor's own addresses.`);
 
   // The administrator's secret, kept as its hash: without one, the executor's own addresses (status, seal, acknowledge) answer nothing.
   s.admin = null;
@@ -158,7 +162,13 @@ export function readHttpSettings(config, root, { keysOnly = false } = {}) {
       }
       const paths = readAgentPaths(a, root, at, prefix);
       paths.name = name;
-      if (typeof a.secretHash !== 'string' || !SECRET_HASH.test(a.secretHash)) at(`${prefix}.secretHash`, 'must be the hash of the agent\'s secret (provared-mcp-executor secret makes one).');
+      // An agent signs in with its secret, or is a connection made through OAuth ("oauth": true), never both.
+      if (a.oauth !== undefined) {
+        if (a.oauth !== true) at(`${prefix}.oauth`, 'must be true: the agent is a connection made through OAuth, approved by the owner.');
+        else if (a.secretHash !== undefined) at(prefix, 'has both "secretHash" and "oauth": an agent signs in one way.');
+        else if (!s.oauth) at(`${prefix}.oauth`, 'needs the "oauth" settings: issuer and clients.');
+        else paths.oauth = true;
+      } else if (typeof a.secretHash !== 'string' || !SECRET_HASH.test(a.secretHash)) at(`${prefix}.secretHash`, 'must be the hash of the agent\'s secret (provared-mcp-executor secret makes one), or the agent "oauth": true.');
       else if (s.admin && a.secretHash === s.admin.secretHash) at(`${prefix}.secretHash`, 'is also admin.secretHash: an agent must not hold the administrator\'s secret.');
       else paths.secretHash = a.secretHash;
       const copy = a.copy ?? `copies/${name}.jsonl`;
@@ -174,7 +184,7 @@ export function readHttpSettings(config, root, { keysOnly = false } = {}) {
         if (seen.has(key)) at(`${prefix}.${k}`, `is also agents.${seen.get(key)}.${k}: each agent has its own.`);
         else seen.set(key, name);
       }
-      for (const k of Object.keys(a)) if (!['secretHash', 'slip', 'book', 'keys', 'issuerKeys', 'copy', 'copyKey'].includes(k)) warnings.push(`${prefix}.${k}: not a setting; set aside.`);
+      for (const k of Object.keys(a)) if (!['secretHash', 'oauth', 'slip', 'book', 'keys', 'issuerKeys', 'copy', 'copyKey'].includes(k)) warnings.push(`${prefix}.${k}: not a setting; set aside.`);
       s.agents.set(name, paths);
     }
   }
@@ -191,13 +201,18 @@ export function readHttpSettings(config, root, { keysOnly = false } = {}) {
 
   readToolRules(config, s, at);
   readKnobs(config, s, at, root);
+  if (s.oauth) {
+    // A client gives a tool call up to CLIENT_LIMIT: the executor answers first, by default (X213).
+    if (config.timeout === undefined) s.timeout = OAUTH_TIMEOUT;
+    else if (Number.isInteger(s.timeout) && s.timeout > CLIENT_LIMIT) warnings.push(`timeout: ${s.timeout} ms is longer than the ${CLIENT_LIMIT} ms a client gives a tool call, so a slow call may be given up by the client before the executor answers it. Its receipt is still written.`);
+  }
   readRecorderSettings(config, s, at, root, warnings);
   s.bodyLimit = config.bodyLimit ?? BODY_LIMIT;
   if (!Number.isInteger(s.bodyLimit) || s.bodyLimit < 1024 || s.bodyLimit > 1024 * 1024 * 1024) at('bodyLimit', 'must be a whole number of bytes from 1,024 to 1,073,741,824.');
   s.allowedOrigins = config.allowedOrigins ?? [];
   if (!Array.isArray(s.allowedOrigins) || !s.allowedOrigins.every((o) => typeof o === 'string' && /^https?:\/\/[^/\s]+$/.test(o))) at('allowedOrigins', 'must be a list of origins (scheme, host and port, such as "http://localhost:3000") whose pages may call the executor; with none, a call that names an Origin is refused.');
   for (const k of Object.keys(config)) {
-    if (![...SHARED_KEYS, 'listen', 'path', 'upstream', 'agents', 'executor', 'bodyLimit', 'allowedOrigins', 'admin'].includes(k)) warnings.push(`${k}: not a setting; set aside.`);
+    if (![...SHARED_KEYS, 'listen', 'path', 'upstream', 'agents', 'executor', 'bodyLimit', 'allowedOrigins', 'admin', 'oauth'].includes(k)) warnings.push(`${k}: not a setting; set aside.`);
   }
   if (s.unlisted === 'forward') warnings.push(UNLISTED_FORWARD_WARNING);
   return { settings: problems.length ? null : s, problems, warnings, partial: s };
@@ -342,6 +357,8 @@ export async function openHttpExecutor(config, more = {}) {
   const credential = offline ? null : readUpstreamCredential(settings);
   if (credential && credential.token.length < 16) warnings.push('upstream.credential: the token is shorter than 16 characters, so any text of the upstream\'s that happens to hold it is replaced on its way to an agent.');
   const admin = settings.admin ? Buffer.from(settings.admin.secretHash) : null;
+  // The OAuth front door (oauth.mjs), where the settings name "oauth": its state file is read now, before any lock is taken. "ownerCheck" is the owner's check at its page.
+  const door = settings.oauth && !offline ? openFrontDoor({ settings, now, log, ownerCheck: more.ownerCheck ?? null }) : null;
   const agents = new Map();
   /** Give up every lock taken so far: at close, and where the opening fails part-way. */
   const releases = [];
@@ -356,7 +373,7 @@ export async function openHttpExecutor(config, more = {}) {
       warnings.push(...prepared.warnings.map((w) => `agents.${name}: ${w}`));
       // A command at work on the files (offline) is not a start: it writes no late receipt by itself.
       const agent = await openAgent(prepared, { settings, executorKeys: shared.executorKeys, now, log, name, sealer: shared.sealer, late: !offline, formerKeys: shared.formerKeys });
-      agent.hash = Buffer.from(paths.secretHash);
+      agent.hash = paths.secretHash ? Buffer.from(paths.secretHash) : null;
       agent.open = 0;
       /** The sessions this agent opened, oldest first. */
       agent.sessions = new Set();
@@ -452,8 +469,10 @@ export async function openHttpExecutor(config, more = {}) {
 
   const signedIn = (header) => {
     const given = Buffer.from(secretHash(header));
-    for (const agent of agents.values()) if (given.length === agent.hash.length && timingSafeEqual(given, agent.hash)) return agent;
-    return null;
+    for (const agent of agents.values()) if (agent.hash && given.length === agent.hash.length && timingSafeEqual(given, agent.hash)) return agent;
+    // Else an access token the front door issued, for one agent marked "oauth".
+    const name = door?.agentFor(header);
+    return name ? (agents.get(name) ?? null) : null;
   };
   /** The bearer secret of a request: exactly one Authorization header, "Bearer <secret>". */
   const bearer = (req) => {
@@ -944,6 +963,10 @@ export async function openHttpExecutor(config, more = {}) {
   async function take(req, res) {
     const path = (req.url ?? '').split('?')[0];
     if (path === ADMIN_PATH || path.startsWith(`${ADMIN_PATH}/`)) return adminAddress(req, res, path);
+    if (door?.owns(path)) {
+      if (stopping) return refuse(res, 503, null, CODES.notRecorded, 'The executor is stopping and takes no request.', { connection: 'close' });
+      return door.take(req, res, path);
+    }
     if (path !== settings.path) return refuse(res, 404, null, CODES.invalidRequest, `The MCP endpoint is ${settings.path}.`);
     // A browser page's request names its Origin; none may call unless the settings name it (the transport's rule against DNS rebinding).
     const origin = req.headers.origin;
@@ -956,6 +979,8 @@ export async function openHttpExecutor(config, more = {}) {
     const agent = secret ? signedIn(secret) : null;
     if (!agent) {
       log({ event: 'not-signed-in' });
+      // With OAuth, the challenge names the resource's metadata, where a client learns how to sign in (RFC 9728).
+      if (door) return refuse(res, 401, null, CODES.invalidRequest, `Sign in to the executor: with your own secret, or through OAuth (the resource's metadata is at ${door.resourceMetadataUrl}). One header: Authorization: Bearer <secret or token>.`, { 'www-authenticate': door.challenge(secret !== null) });
       return refuse(res, 401, null, CODES.invalidRequest, 'Sign in to the executor with your own secret, in one header: Authorization: Bearer <secret>.', { 'www-authenticate': 'Bearer' });
     }
     if (stopping) return refuse(res, 503, null, CODES.notRecorded, 'The executor is stopping and takes no request.', { connection: 'close' });
