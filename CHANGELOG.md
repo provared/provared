@@ -334,6 +334,11 @@
     aside: 0.4.1 does not know a `set-aside` line in the copy, and takes
     the call for unfinished again.
   - **Fixes from a second review** (X160 on):
+    - `acknowledge` no longer prints "Still waiting: <call>: can be
+      acknowledged" for a call it has just tried and been refused: it
+      gives the reason, says that acknowledging it again gives the same
+      refusal until that changes, and that where it will not, the call can
+      only be set aside, and then has no receipt.
     - The lock (`lock.mjs`): on Windows the book's folder is written
       out in full by `realpathSync.native`, so that a short name for it
       is the same lock (X162). Where a socket file is the lock (not

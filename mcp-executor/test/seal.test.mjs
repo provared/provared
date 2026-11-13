@@ -786,7 +786,9 @@ test('acknowledge says what it did where it could not do all of it, and goes on 
   assert.match(done.stdout, /^Set aside, with no receipt: aside-call /m);
   assert.match(done.stdout, /^Sent at \S+ \(slow\): its receipt, written under the permission it was sent under, is [A-Za-z0-9_-]{43}\.$/m, 'the call after the one that failed got its receipt');
   assert.match(done.stdout, /^Not done: early-call \(sent at \S+, slow\): The stub was not written: with it, the book would not pass its check\.$/m);
-  assert.match(done.stdout, /^Still waiting: early-call: can be acknowledged$/m);
+  // Not "can be acknowledged": it was tried and refused, and is refused again until the reason changes.
+  assert.match(done.stdout, /^Still waiting: early-call: not acknowledged: The stub was not written: with it, the book would not pass its check\. Acknowledging it again gives the same refusal until that changes\. Where it will not change, the call can only be set aside \(--set-aside early-call\), and then has no receipt\.$/m);
+  assert.doesNotMatch(done.stdout, /early-call: can be acknowledged/);
   assert.doesNotMatch(done.stdout + done.stderr, /nothing was acknowledged/);
   const call = await identifierFingerprint('lost-call');
   assert.equal(stubsOf(await checked(w)).filter((s) => docs(s)[CALL_DOCUMENT] === call).length, 1);

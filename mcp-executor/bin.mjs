@@ -521,7 +521,13 @@ async function main(args) {
     for (const w of value.written) process.stdout.write(w.found ? `Sent at ${w.when} (${w.tool}): the book already held its receipt, ${w.stub}; none was written.\n` : `Sent at ${w.when} (${w.tool}): its receipt, written under the permission it was sent under${w.formerKeys ? ' and countersigned with a key file the executor held before' : ''}, is ${w.stub}.\n`);
     for (const f of value.failed ?? []) process.stdout.write(`Not done: ${f.call} (sent at ${f.when}, ${f.tool}): ${f.problem}\n`);
     if (value.remaining.length) {
-      for (const l of value.remaining) process.stdout.write(`Still waiting: ${l.call}: ${l.problem ?? 'can be acknowledged'}\n`);
+      // A call tried just now and refused is not said to be one that can be acknowledged: it gets the same refusal until its reason changes.
+      const failed = new Map((value.failed ?? []).map((f) => [f.call, f.problem]));
+      for (const l of value.remaining) {
+        if (l.problem) process.stdout.write(`Still waiting: ${l.call}: ${l.problem}\n`);
+        else if (failed.has(l.call)) process.stdout.write(`Still waiting: ${l.call}: not acknowledged: ${failed.get(l.call)} Acknowledging it again gives the same refusal until that changes. Where it will not change, the call can only be set aside (--set-aside ${l.call}), and then has no receipt.\n`);
+        else process.stdout.write(`Still waiting: ${l.call}: can be acknowledged\n`);
+      }
       process.stdout.write(`${who} still takes no calls.\n`);
       return 1;
     }
