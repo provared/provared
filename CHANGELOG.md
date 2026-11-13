@@ -333,6 +333,12 @@
     members in their JSON. Going back to 0.4.1 after a call was set
     aside: 0.4.1 does not know a `set-aside` line in the copy, and takes
     the call for unfinished again.
+  - **Fixes from a second review** (X160 on):
+    - `POST /provared/hello`, which needs no secret, reads a body of 256
+      bytes at most, waits 5 seconds at most for it, and takes 8 such
+      questions at once; a ninth is answered 503 with nothing signed
+      (X160). Before, it read up to 64 KiB for as long as `timeout`, for
+      any number of callers.
   - **Tests** (`test/seal.test.mjs`, `test/seal-http.test.mjs`; 41
     tests): the seal checks under the recorder's keys with the library's
     checker, chains to the seal before, and a reader who names another

@@ -458,6 +458,56 @@ test('POST /provared/hello: the executor signs a fresh challenge and the address
   }
 });
 
+test('POST /provared/hello, which anyone may ask: a body of 256 bytes at most, 5 seconds at most for it to arrive, and 8 such questions in hand at once', async () => {
+  // A long timeout for the agents' calls, so that a wait cut short is the hello's own.
+  const w = await adminWorld({ agents: ['alpha'], config: { timeout: 120000 } });
+  const open = [];
+  /** A hello whose body is begun and not ended: the answer's status, once it comes. */
+  const unfinished = () => {
+    const req = http.request({ host: '127.0.0.1', port: w.address.port, path: '/provared/hello', method: 'POST', agent: false, headers: { 'content-type': 'application/json', 'content-length': '60' } });
+    open.push(req);
+    const answered = new Promise((done) => {
+      req.on('response', (res) => {
+        res.resume();
+        done(res.statusCode);
+      });
+      req.on('error', () => done('the connection failed'));
+    });
+    req.write('{"challenge":"');
+    return answered;
+  };
+  try {
+    const challenge = randomBytes(32).toString('base64url');
+    // More than 256 bytes is refused, and nothing is signed, even where the challenge in it is sound.
+    const long = await ask(w, 'POST', '/provared/hello', { secret: null, body: JSON.stringify({ challenge, filler: 'x'.repeat(200) }) });
+    assert.equal(long.status, 400);
+    assert.equal(long.json.signatures, undefined);
+    assert.equal((await ask(w, 'POST', '/provared/hello', { secret: null, body: JSON.stringify({ challenge, filler: 'x'.repeat(150) }) })).status, 200, 'under 256 bytes is taken');
+    // A body that never ends is given up on after 5 seconds, not after the agents' timeout.
+    const began = Date.now();
+    const slow = await Promise.race([unfinished(), pause(15000).then(() => 'no answer')]);
+    const took = Date.now() - began;
+    assert.equal(slow, 400);
+    assert.ok(took >= 4500 && took < 12000, `${took} ms`);
+    // Eight in hand at once: the ninth is turned away at once, and nothing is signed for it.
+    const eight = Array.from({ length: 8 }, unfinished);
+    await pause(500);
+    const ninth = await ask(w, 'POST', '/provared/hello', { secret: null, body: { challenge } });
+    assert.equal(ninth.status, 503);
+    assert.equal(ninth.json.code, 'busy');
+    assert.equal(ninth.json.signatures, undefined);
+    // Once those are given up on, the executor answers again.
+    assert.deepEqual(await Promise.all(eight), Array(8).fill(400));
+    const after = await ask(w, 'POST', '/provared/hello', { secret: null, body: { challenge } });
+    assert.equal(after.status, 200, after.body);
+    // An agent's call was not held up by them.
+    assert.ok((await call(w, 'alpha', 'echo', {})).json.result);
+  } finally {
+    for (const req of open) req.destroy();
+    await w.close();
+  }
+});
+
 test('the commands send the administrator\'s secret to the executor of their settings alone: not to another listener at that address, and not through one that passes the challenge on', async () => {
   const w = await adminWorld({ agents: ['alpha'] });
   const secret = { env: { [ENV]: w.admin } };

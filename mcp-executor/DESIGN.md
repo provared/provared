@@ -2379,3 +2379,18 @@ For a book that has a seal, that is none new, and it refuses. For a
 book with no seal yet, it signs over the first line alone; the book
 refuses that seal, and X155 applies. The executor cannot close this from
 its side; a question for a seal that named the number of lines would.
+
+The choices from X160 on come from a second review of the fixes to
+`seal`, `acknowledge` and `status`.
+
+**X160. `POST /provared/hello` reads little, for a short time, from few
+callers at once.** It needs no secret, so anyone who can reach the
+executor may ask. A challenge is some 60 bytes of JSON, so a body of
+more than 256 bytes is refused with 400 and nothing is signed; a body
+that has not arrived whole within 5 seconds is refused with 400, where
+the agents' own `timeout` may be minutes; and where 8 such questions are
+already in hand a ninth is answered 503 (`busy`) at once, with nothing
+read and nothing signed. These are fixed numbers, not settings: a
+command sends one question and waits for one answer. A caller can still
+ask again and again, one after another; each answer costs two
+signatures.

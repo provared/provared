@@ -1087,7 +1087,10 @@ check fails it says "… did not show that it is the executor of these
 settings … The administrator's secret was not sent." and ends with code
 2. `POST /provared/hello` needs no secret, signs for anyone who asks, and
 signs nothing but that text, which cannot be taken for a record: a
-challenge must be 43 characters of base64url. This shows the command that
+challenge must be 43 characters of base64url. Since anyone may ask, it
+reads a body of 256 bytes at most, waits 5 seconds at most for it, and
+takes 8 such questions at once; a ninth is answered 503 and nothing is
+signed for it. This shows the command that
 it reached the executor; it does not hide the secret from whoever can read
 the connection, which is plain HTTP.
 

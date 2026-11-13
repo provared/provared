@@ -54,6 +54,10 @@ export const CREDENTIAL_REMOVED = '[a credential was removed by the Provared exe
 export const ADMIN_PATH = '/provared';
 /** The most a body sent to one of the executor's own addresses may be: 64 KiB. */
 export const ADMIN_BODY_LIMIT = 64 * 1024;
+/** POST /provared/hello needs no secret, so anyone may ask: the most its body may be (bytes), how long the body may take (milliseconds), and how many such questions are in hand at once. */
+export const HELLO_BODY_LIMIT = 256;
+export const HELLO_WAIT_MS = 5000;
+export const HELLO_AT_ONCE = 8;
 
 /** The agent's headers that go on to the upstream. Every other is dropped: a header is a way to carry a token, and the upstream must get none but the executor's. */
 const FORWARDED_HEADERS = ['accept', 'accept-language', 'content-type', 'mcp-session-id', 'last-event-id'];
@@ -799,14 +803,14 @@ export async function openHttpExecutor(config, more = {}) {
    * GET stream or a long answer must not be cut, so the body's reading has
    * a limit of its own (X119).
    */
-  function readBody(req, limit = settings.bodyLimit) {
+  function readBody(req, limit = settings.bodyLimit, wait = settings.timeout) {
     const declared = Number(req.headers['content-length']);
     if (Number.isFinite(declared) && declared > limit) return Promise.resolve(null);
     return new Promise((done, failed) => {
       const chunks = [];
       let size = 0;
       let over = false;
-      const timer = setTimeout(() => failed(Object.assign(new Error('The body did not arrive whole in time.'), { code: 'BODY_TIMEOUT' })), settings.timeout);
+      const timer = setTimeout(() => failed(Object.assign(new Error('The body did not arrive whole in time.'), { code: 'BODY_TIMEOUT' })), wait);
       timer.unref();
       const settle = (f) => (v) => {
         clearTimeout(timer);
@@ -845,6 +849,8 @@ export async function openHttpExecutor(config, more = {}) {
 
   // --- the executor's own addresses, for the administrator ---
 
+  /** How many POST /provared/hello are in hand. */
+  let hellos = 0;
   const isAdmin = (secret) => {
     const given = Buffer.from(secretHash(secret));
     return admin !== null && given.length === admin.length && timingSafeEqual(given, admin);
@@ -868,16 +874,23 @@ export async function openHttpExecutor(config, more = {}) {
     if (admin === null) return adminRefuse(res, 404, 'not-found', 'This executor has no administrator\'s secret ("admin"), so its own addresses answer nothing.');
     // Before a command sends the secret it asks the executor to show that it is the executor (identity.mjs). No secret is needed, and none should be sent.
     if (req.method === 'POST' && path === `${ADMIN_PATH}/hello`) {
-      let asked;
+      // Anyone may ask, so little is read, for a short time, for few callers at once: a challenge is some 60 bytes of JSON.
+      if (hellos >= HELLO_AT_ONCE) return adminRefuse(res, 503, 'busy', `The executor is answering ${HELLO_AT_ONCE} such questions, the most it takes at once. Ask again.`, { connection: 'close' });
+      hellos += 1;
       try {
-        asked = JSON.parse((await readBody(req, ADMIN_BODY_LIMIT))?.toString('utf8') ?? '');
-      } catch {
-        asked = null;
+        let asked;
+        try {
+          asked = JSON.parse((await readBody(req, HELLO_BODY_LIMIT, HELLO_WAIT_MS))?.toString('utf8') ?? '');
+        } catch {
+          asked = null;
+        }
+        if (!isObject(asked) || typeof asked.challenge !== 'string' || !CHALLENGE.test(asked.challenge)) return adminRefuse(res, 400, 'bad-request', 'Send a challenge of 32 random bytes in base64url: {"challenge": "<43 characters>"}.', { connection: 'close' });
+        const address = plainAddress(req.socket.localAddress);
+        const port = req.socket.localPort;
+        return adminJson(res, 200, { executor: 'provared-mcp-executor', address, port, signatures: await identify(shared.executorKeys.privateKeys, asked.challenge, address, port) });
+      } finally {
+        hellos -= 1;
       }
-      if (!isObject(asked) || typeof asked.challenge !== 'string' || !CHALLENGE.test(asked.challenge)) return adminRefuse(res, 400, 'bad-request', 'Send a challenge of 32 random bytes in base64url: {"challenge": "<43 characters>"}.', { connection: 'close' });
-      const address = plainAddress(req.socket.localAddress);
-      const port = req.socket.localPort;
-      return adminJson(res, 200, { executor: 'provared-mcp-executor', address, port, signatures: await identify(shared.executorKeys.privateKeys, asked.challenge, address, port) });
     }
     const secret = bearer(req);
     if (!secret || !isAdmin(secret)) {
