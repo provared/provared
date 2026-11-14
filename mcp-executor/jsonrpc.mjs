@@ -355,6 +355,22 @@ export function spliceId(text, newId) {
   return `${text.slice(0, at.start)}${JSON.stringify(newId)}${text.slice(at.end)}`;
 }
 
+/**
+ * The text of a JSON message, made one line under every way of ending a
+ * line, and still the same JSON. A line feed or a carriage return between
+ * its values (in JSON they can stand nowhere else) becomes a space; U+0085,
+ * U+2028 and U+2029 (in JSON they can stand only inside a text) are
+ * written as the escapes \u0085, \u2028 and \u2029. The text must already
+ * be known to be JSON. Why: a tool server that ends a line at more than
+ * the line feed (node:readline ends one at a bare carriage return, U+2028
+ * and U+2029) would cut one message into several, and read a piece of it
+ * as a message of its own.
+ */
+export function oneLine(text) {
+  if (!/[\n\r\u0085\u2028\u2029]/.test(text)) return text;
+  return text.replace(/[\n\r]/g, ' ').replace(/[\u0085\u2028\u2029]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`);
+}
+
 /** A response, as the text of one message (no line feed). */
 export function responseText(id, body) {
   return JSON.stringify({ jsonrpc: '2.0', id, ...body });

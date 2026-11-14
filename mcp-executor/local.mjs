@@ -14,7 +14,7 @@
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { KILL_WAIT, SERVER_ENDED, UNREADABLE_ANSWER, isObject } from './executor.mjs';
-import { CODES, MAX_LINE_BYTES, idKey, readLines, readMessage, topLevelId, unsafeInteger } from './jsonrpc.mjs';
+import { CODES, MAX_LINE_BYTES, idKey, oneLine, readLines, readMessage, topLevelId, unsafeInteger } from './jsonrpc.mjs';
 
 /** The most sessions, each with a program of its own, one agent may have at once, unless the settings say otherwise ("sessions.max"). */
 export const SESSIONS_MAX = 8;
@@ -77,7 +77,8 @@ export function openLocalSessions({ settings, env, credentialNames, log, serverS
       return false;
     }
     try {
-      session.child.stdin.write(`${text}\n`);
+      // One line under every way of ending a line: an agent's body may hold line feeds between its values, which would otherwise reach the program as several lines (X248).
+      session.child.stdin.write(`${oneLine(text)}\n`);
       return true;
     } catch {
       return false;
@@ -136,7 +137,8 @@ export function openLocalSessions({ settings, env, credentialNames, log, serverS
     if (now) {
       // What waits to be written is let go with the input.
       session.child.stdin.destroy();
-      return force(session);
+      force(session);
+      return;
     }
     try {
       session.child.stdin.end();
@@ -427,6 +429,11 @@ export function openLocalSessions({ settings, env, credentialNames, log, serverS
      * a program is still there a little after the two waits, that is logged
      * and the stop goes on without it (X242).
      */
+    /** The executor has begun to stop: no program is started from now on (X246). */
+    noMore() {
+      closed = true;
+    },
+
     async close() {
       closed = true;
       for (const session of [...sessions.values()]) end(session, 'executor-stopped');

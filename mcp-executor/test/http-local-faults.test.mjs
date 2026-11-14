@@ -23,7 +23,7 @@ const { BACKLOG_LIMIT, LOCAL_VERSIONS } = await import('../http.mjs');
 const { CLOSE_MARGIN, FLOOD_PER_SECOND, FLOOD_SECONDS, openLocalSessions } = await import('../local.mjs');
 const { CODES } = await import('../jsonrpc.mjs');
 const { httpWorld, openHttpWorld, post, rawRequest, auth } = await import('./http-world.mjs');
-const { FAKE_SERVER, until, pause } = await import('./world.mjs');
+const { FAKE_SERVER, until, pause, world } = await import('./world.mjs');
 
 const TOOLS = { echo: { action: 'provared.data.read' }, slow: { action: 'slow.work' }, flood: { action: 'tool.run' }, stray: { action: 'tool.run' }, loud: { action: 'tool.run' }, mutter: { action: 'tool.run' }, garbage: { action: 'tool.run' } };
 const stubsOf = (checked) => checked.entries.filter((e) => e.kind === 'stub');
@@ -196,12 +196,61 @@ test('"sessions.max" counts a program whose "initialize" is not answered yet, an
   const local = openLocalSessions({ settings: { server: { resolved: 'x', args: [] }, sessions: { max: 1, idle: 60000 }, shutdownWait: 100, timeout: 1000 }, env: {}, credentialNames: [], log: (e) => logs.push(e), serverStderr: null, spawnProgram: child });
   const { session } = await local.begin('alpha', null);
   assert.deepEqual(await local.begin('alpha', null), { refused: 'too-many' }, 'a session whose first message is not yet in hand makes no room');
+  assert.equal(local.count('alpha'), 1, 'and is not ended');
   local.enter(session);
   local.leave(session);
   assert.deepEqual(await local.begin('alpha', null), { refused: 'too-many' }, 'it made room, and its program did not go within the two waits');
   assert.equal(logs.find((e) => e.event === 'session-ended')?.why, 'made-room');
   assert.equal(local.programs('alpha'), 1);
   await local.close();
+});
+
+test('an agent that goes away while room is made for its new session is given none', async () => {
+  const w = await localWorld({ env: { FAKE_LINGER: 800 }, config: { sessions: { max: 1 }, shutdownWait: 5000 } });
+  try {
+    await begin(w, 'alpha');
+    const gone = new AbortController();
+    const asked = begin(w, 'alpha', { signal: gone.signal }).catch(() => null);
+    await until(() => events(w, 'session-ended').some((e) => e.why === 'made-room'));
+    gone.abort();
+    await asked;
+    await until(() => events(w, 'server-started').length === 2, { timeout: 3000 });
+    await until(() => w.executor.programs() === 0, { timeout: 3000 });
+    assert.equal(w.executor.agent('alpha').sessions(), 0, 'no session is left that no one can name');
+    assert.equal(events(w, 'session-ended').at(-1).why, 'not-begun');
+  } finally {
+    await w.close();
+  }
+});
+
+test('local.mjs: one read of a program\'s output at a time, with everything else that waits taken in between', async () => {
+  const child = Object.assign(new EventEmitter(), { stdin: new PassThrough(), stdout: new PassThrough(), stderr: new PassThrough(), kill: () => true });
+  const local = openLocalSessions({ settings: { server: { resolved: 'x', args: [] }, sessions: { max: 1, idle: 60000 }, shutdownWait: 100, timeout: 1000 }, env: {}, credentialNames: [], log: () => {}, serverStderr: null, spawnProgram: () => child });
+  const { session } = await local.begin('alpha', null);
+  const got = [];
+  session.toStream = (text) => got.push(text) > 0;
+  // Five reads' worth of the program's output, waiting at once.
+  for (let i = 0; i < 5; i++) child.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/message', params: { n: i } })}\n`);
+  const turns = [];
+  for (let turn = 0; turn < 8 && got.length < 5; turn++) {
+    turns.push(got.length);
+    await new Promise((d) => setImmediate(d));
+  }
+  assert.equal(got.length, 5, 'every message is read in the end');
+  assert.ok(turns.length >= 4, `the five reads were spread over the turns of the event loop: ${turns.join(', ')}`);
+  child.emit('exit', 0, null);
+  await local.close();
+});
+
+test('stdio: a program that takes no notice of SIGTERM is sent SIGKILL after a second wait, at the client\'s end and at the executor\'s stop', async () => {
+  for (const how of ['the client ends', 'the executor is stopped']) {
+    const w = await world({ env: { FAKE_IGNORE_TERM: { value: '1' } }, config: { shutdownWait: 300 } });
+    assert.equal((await w.client.call('echo', {})).result.isError, undefined);
+    const ending = how === 'the client ends' ? w.close() : w.executor.close();
+    assert.equal(await Promise.race([ending.then(() => 'finished'), pause(5000).then(() => 'still waiting')]), 'finished', how);
+    if (POSIX && how === 'the client ends') assert.deepEqual(w.logs.filter((e) => e.event === 'server-killed').map((e) => e.signal), ['SIGTERM', 'SIGKILL']);
+    if (how !== 'the client ends') await w.close();
+  }
 });
 
 for (const kind of ['request', 'notification']) {

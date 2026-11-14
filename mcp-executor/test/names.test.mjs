@@ -23,8 +23,8 @@ const { FAKE_SERVER, TOOLS, world } = await import('./world.mjs');
 const stubsOf = (checked) => checked.entries.filter((e) => e.kind === 'stub');
 const docs = (stub) => Object.fromEntries(stub.content.details.map((d) => [d.name, d.sha256]));
 const ORDER = { name: 'order', arguments: { total: 999999 } };
-const LONG_S = 'ſ';
-const KELVIN = 'K';
+const LONG_S = '\u017f';
+const KELVIN = '\u212a';
 
 /**
  * Messages that a reader that ignores capitals reads as a call of "order"
@@ -76,7 +76,7 @@ test('readMessage: the agent\'s params with two names in one object that differ 
     { name: 'echo', _meta: {}, _META: {} },
     { name: 'echo', arguments: { total: 1, Total: 2 } },
     { name: 'echo', arguments: { a: { b: [{ k: 1, [KELVIN]: 2 }] } } },
-    { name: 'echo', arguments: { 'straße': 1, STRASSE: 2 } },
+    { name: 'echo', arguments: { 'stra\u00dfe': 1, STRASSE: 2 } },
     { name: 'echo', _meta: { progressToken: 1, ProgressToken: 2 } },
     { name: 'echo', _meta: { [CALL_META]: 'a', [CALL_META.toUpperCase()]: 'b' } },
   ];

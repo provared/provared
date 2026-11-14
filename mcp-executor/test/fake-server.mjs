@@ -6,6 +6,7 @@
 // object to a line, so that a test can see what reached it.
 
 import { appendFileSync } from 'node:fs';
+import { createInterface } from 'node:readline';
 
 const log = (entry) => {
   if (process.env.FAKE_LOG) appendFileSync(process.env.FAKE_LOG, `${JSON.stringify(entry)}\n`);
@@ -154,7 +155,7 @@ function onMessage(given) {
 }
 
 process.stdin.setEncoding('utf8');
-process.stdin.on('data', (chunk) => {
+const onData = (chunk) => {
   buffer += chunk;
   for (;;) {
     const at = buffer.indexOf('\n');
@@ -166,12 +167,27 @@ process.stdin.on('data', (chunk) => {
     try {
       m = JSON.parse(line);
     } catch {
+      log({ notJson: line.slice(0, 120) });
       failure(null, -32700, 'Parse error');
       continue;
     }
     onMessage(m);
   }
-});
+};
+// With FAKE_READLINE the server reads its lines as node:readline does, which ends a line at a bare carriage return, U+2028 and U+2029 as well as at a line feed.
+if (process.env.FAKE_READLINE) {
+  createInterface({ input: process.stdin }).on('line', (line) => {
+    if (line === '') return;
+    let m;
+    try {
+      m = JSON.parse(line);
+    } catch {
+      log({ notJson: line.slice(0, 120) });
+      return failure(null, -32700, 'Parse error');
+    }
+    onMessage(m);
+  });
+} else process.stdin.on('data', onData);
 process.stdin.on('end', () => {
   log({ stdinEnded: true });
   if (process.env.FAKE_IGNORE_TERM) return;

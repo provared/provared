@@ -30,7 +30,7 @@ import { basename, delimiter, dirname, isAbsolute, resolve } from 'node:path';
 import { argumentsFingerprint, checkBook, countersign, denialCodes, entryLine, fingerprint, fromBase64url, identifierFingerprint, openRecorder, randomId, thumbprint } from 'provared';
 import { loadCopyKey, openCopy, readCopy, unfinished } from './copy.mjs';
 import { aboutSlip, bookFile, loadKeyFile, readIfThere, slipFrom, untilFree } from './files.mjs';
-import { CODES, MAX_LINE_BYTES, foldName, idKey, isId, misspelt, notificationLine, readLines, readMessage, repeatedName, responseLine, responseText, spliceId, topLevelId, unsafeInteger } from './jsonrpc.mjs';
+import { CODES, MAX_LINE_BYTES, foldName, idKey, isId, misspelt, notificationLine, oneLine, readLines, readMessage, repeatedName, responseLine, responseText, spliceId, topLevelId, unsafeInteger } from './jsonrpc.mjs';
 import { lockFiles } from './lock.mjs';
 import { RULES_DOCUMENT, RULE_DOCUMENT, RULES_ENTRY_PREFIX, TOOL_NAME, lookUp, readPointer, readRules, rulesFingerprint, statesContentRules, testCall } from './rules.mjs';
 import { loadRecorder, localSealer, readRecorderKeyFile } from './sealing.mjs';
@@ -1684,10 +1684,11 @@ export async function openExecutor(config, more = {}) {
         outputOpen = false;
       }
     };
+    // Each message goes to the server as one line under every way of ending a line (oneLine; X248): "buffer" is the message's text and its line feed.
     const toServer = (buffer) => {
       if (serverGone) return false;
       try {
-        child.stdin.write(buffer);
+        child.stdin.write(`${oneLine(buffer.toString('utf8').slice(0, -1))}\n`);
         return true;
       } catch {
         return false;

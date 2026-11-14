@@ -1132,12 +1132,10 @@ export async function openHttpExecutor(config, more = {}) {
     const clientId = read.kind === 'request' ? m.id : null;
     if (read.kind === 'request' && m.method === 'initialize') {
       if (ctx.session) return refuse(res, 400, clientId, CODES.invalidRequest, 'A session is begun by an "initialize" sent without an Mcp-Session-Id; this one names a session.');
-      // The stop may have begun while this request's body was read: no program is started after it (X246).
-      const stopped = () => refuse(res, 503, clientId, CODES.notRecorded, 'The executor is stopping and takes no request.', { connection: 'close' });
-      if (stopping) return stopped();
       // Where the agent has its most programs, this waits for room (X243).
       const begun = await local.begin(agent.name, ctx.token?.connection ?? null);
-      if (begun.refused === 'stopping') return stopped();
+      // The stop began while this request's body was read, or while it waited for room: no program is started after it (X246).
+      if (begun.refused === 'stopping') return refuse(res, 503, clientId, CODES.notRecorded, 'The executor is stopping and takes no request.', { connection: 'close' });
       if (begun.refused === 'too-many') {
         agent.log({ event: 'refused', code: 'too-many-sessions', sessions: settings.sessions.max });
         return refuse(res, 503, clientId, CODES.notRecorded, `This agent already has ${settings.sessions.max} programs running, the most it may have at once (sessions.max), and room could not be made: each of its sessions has a request in flight, or a program that was ended has not gone yet. Try again when one has ended.`, { connection: 'close' });
@@ -1450,6 +1448,8 @@ export async function openHttpExecutor(config, more = {}) {
      */
     async close() {
       stopping = true;
+      // No program is started from here on: an "initialize" already in hand, whose body arrives later, begins no session (X246).
+      local?.noMore();
       timer?.stop();
       const s = server;
       server = null;
