@@ -358,6 +358,31 @@ function readStrictly(line, { strictNumbers = true } = {}) {
 }
 
 /**
+ * Whether a text is a JSON-RPC error answer and nothing more: one object
+ * whose members are "jsonrpc" ("2.0"), "id" (text, a whole number or null)
+ * and "error" (an object with a whole number "code" and a text "message"),
+ * each once and written exactly so, nested no deeper than MAX_DEPTH and
+ * with no member name given twice at any depth. Such a text has no
+ * "result", under any spelling, for any reader. readMessage refuses the
+ * null id, which a server uses to refuse a request it could not read.
+ */
+export function errorAnswer(text) {
+  try {
+    if (typeof text !== 'string') return false;
+    const message = JSON.parse(text);
+    if (!message || typeof message !== 'object' || Array.isArray(message)) return false;
+    if (deeperThan(text, MAX_DEPTH) || repeatedName(text) !== null) return false;
+    const names = Object.keys(message);
+    if (names.length !== 3 || !['jsonrpc', 'id', 'error'].every((name) => Object.hasOwn(message, name))) return false;
+    if (message.jsonrpc !== '2.0' || !(message.id === null || isId(message.id))) return false;
+    const error = message.error;
+    return error !== null && typeof error === 'object' && !Array.isArray(error) && Number.isInteger(error.code) && typeof error.message === 'string';
+  } catch {
+    return false;
+  }
+}
+
+/**
  * The span of the value of the top-level "id" member of a JSON object text:
  * {start, end, value} (value as JSON.parse reads it), or null where the text
  * does not begin with an object or has no top-level "id". It walks the text

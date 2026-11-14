@@ -22,7 +22,7 @@ import http from 'node:http';
 import https from 'node:https';
 import { unfinished } from './copy.mjs';
 import { EXECUTOR_STOPPED, LIST_NOT_READ, NOT_FOR_KEYS, SHARED_KEYS, SHORT_NAME, UNLISTED_FORWARD_WARNING, callCore, describeContentRules, describeSlip, describeTools, filteredList, isObject, isPlaceholder, missingFiles, openAgent, pathFrom, placeholderProblems, prepareAgent, prepareShared, readAgentPaths, readCredentialFile, readIdentity, readKnobs, readToolRules, serverIds } from './executor.mjs';
-import { CODES, MAX_LINE_BYTES, idKey, isId, readMessage, responseText, spliceId, topLevelId, unsafeInteger } from './jsonrpc.mjs';
+import { CODES, MAX_LINE_BYTES, errorAnswer, idKey, isId, readMessage, responseText, spliceId, topLevelId, unsafeInteger } from './jsonrpc.mjs';
 
 /** The most a POST body may be, unless the settings say otherwise: 10 MiB, as the gateway takes. */
 export const BODY_LIMIT = 10 * 1024 * 1024;
@@ -727,13 +727,16 @@ export async function openHttpExecutor(config, more = {}) {
             if (filtered?.hidden) agent.log({ event: 'tools-hidden', hidden: filtered.hidden });
             out = filtered ? filtered.text : (spliceId(out, clientId) ?? out);
           }
-          // A list of tools that is to be filtered and cannot be read (or is under another id, or is no message) is not handed on: the agent is answered with an error under its id (X250). The upstream's own error under the request's id goes on as it is.
-          if (list && !filtered && !(m && read.kind === 'response' && foundId === serverId && Object.hasOwn(m, 'error'))) {
+          // A list of tools that is to be filtered and cannot be read (or is under another id, or is no message) is not handed on: the agent is answered with an error under its id (X250). The upstream's own error goes on as it is, with its status: under the request's id; or, under any id or a null one, where it is an error answer and nothing more, which holds no result for any reader and so no list (X260).
+          let own = false;
+          if (list && !filtered && !(m && read.kind === 'response' && foundId === serverId && Object.hasOwn(m, 'error')) && !errorAnswer(text)) {
             agent.log({ event: 'tools-list-not-read' });
             out = listNotRead(clientId);
+            own = true;
           }
           const body_ = Buffer.from(scrub(out));
-          res.writeHead(status, { ...returned, 'content-type': type || JSON_TYPE, 'content-length': body_.length });
+          // The executor's own error is JSON whatever the upstream sent, and is not to be stored: the upstream's content type and its word on caching were about the body that is not handed on (X260).
+          res.writeHead(status, own ? { ...returned, 'content-type': JSON_TYPE, 'cache-control': 'no-store', 'content-length': body_.length } : { ...returned, 'content-type': type || JSON_TYPE, 'content-length': body_.length });
           done(res.end(body_));
         });
       });
