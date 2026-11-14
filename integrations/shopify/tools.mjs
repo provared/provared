@@ -1,6 +1,6 @@
 // The tools. Each has a plain schema, and each argument that carries money
 // or a percentage is one whole number at one fixed place in the arguments
-// (DESIGN.md, S4 and S5), so that the guard's rule for the tool can read it
+// (DESIGN.md, S9 and S12), so that the guard's rule for the tool can read it
 // as the call's amount and a permission can limit it.
 //
 // A change (a price, a discount code, a refund) is one request to Shopify,

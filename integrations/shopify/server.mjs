@@ -118,7 +118,7 @@ function main() {
     }
     if (m === null || typeof m !== 'object' || Array.isArray(m)) return void refuse(null, -32600, 'Invalid request: one JSON-RPC message to a line, not a list.');
     if (typeof m.method !== 'string') return; // an answer to a request; this server makes none
-    if (!Object.hasOwn(m, 'id')) return; // a notification: nothing to answer; a cancellation stops nothing (DESIGN.md, S13)
+    if (!Object.hasOwn(m, 'id')) return; // a notification: nothing to answer; a cancellation stops nothing (DESIGN.md, S27)
     const { id, method, params } = m;
     if (typeof id !== 'string' && !Number.isSafeInteger(id)) return void refuse(null, -32600, 'Invalid request: the id must be text or a whole number.');
     if (method === 'initialize') {

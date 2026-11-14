@@ -239,6 +239,11 @@ second call against the permission as it counted the first.
 - It makes no free-delivery or buy-one-get-one code, changes no code
   once made, and cancels, edits and fulfils no order.
 - Orders older than 60 days are not reached.
+- Shopify counts orders among the data that hold customers' details,
+  and on a store that is not a development store it holds such details
+  back from an app until the app is set up for them. This server asks
+  for none of those details, but whether a real store then gives it
+  orders with no further step has not been tried.
 - The client secret is as safe as the file it is kept in and the server
   it runs on.
 

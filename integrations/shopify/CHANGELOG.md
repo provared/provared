@@ -46,9 +46,10 @@ its tests; it has not been tried against a real store.
   action for each tool and the amount where there is one) and
   `content-rules.example.json` (rules that fix the currency of each tool
   that carries money).
-- **Tests** (`npm test`, 49 tests): the protocol, the sign-in and its
-  renewal, a token that stops working mid-session, each tool, a refused
-  refund, Shopify's throttling answer, failures with the outcome
+- **Tests** (`npm test`, 50 tests): the protocol, the sign-in and its
+  renewal, a token that stops working mid-session, each tool, calls
+  handled one at a time, a refused refund, Shopify's throttling answer,
+  failures with the outcome
   unknown, a redirect not followed, the client secret in no output, the
   conversion of money, and the examples held against the server. A job
   in the repository's tests workflow (`integrations/shopify`) runs them.

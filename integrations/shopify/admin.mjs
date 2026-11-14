@@ -45,12 +45,11 @@ function brief(text) {
 /**
  * The store's Admin API, signed in to with the app's client ID and secret.
  * `origin` is the store's address (https://<shop>.myshopify.com). Gives
- * {graphql, scrub, scopes}.
+ * {graphql, scrub}.
  */
 export function openAdmin({ origin, clientId, clientSecret, userAgent }) {
   let held = null;
   let expiresAt = 0;
-  let scopes = null;
   let signing = null;
   const secrets = new Set([clientSecret]);
 
@@ -94,7 +93,6 @@ export function openAdmin({ origin, clientId, clientSecret, userAgent }) {
     secrets.add(body.access_token);
     held = body.access_token;
     expiresAt = Date.now() + body.expires_in * 1000;
-    scopes = typeof body.scope === 'string' ? body.scope : null;
   }
 
   /** An access token with more than a minute left; one sign-in at a time. */
@@ -170,5 +168,5 @@ export function openAdmin({ origin, clientId, clientSecret, userAgent }) {
     return body.data;
   }
 
-  return { graphql, scrub, scopes: () => scopes };
+  return { graphql, scrub };
 }

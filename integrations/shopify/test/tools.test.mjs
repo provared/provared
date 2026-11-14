@@ -108,6 +108,20 @@ test('a shop whose currency has no decimal places: 1250 is 1,250 yen, sent as "1
   await end();
 });
 
+test('calls sent together are handled one at a time, in the order they were sent', async () => {
+  const { fake, server, end } = await world();
+  const product = { product_id: 'gid://shopify/Product/1' };
+  const [before, changed, after] = await Promise.all([
+    server.call('read_product', product),
+    server.call('set_variant_price', { variant_id: BLUE, price_minor: 1250, currency: 'GBP' }),
+    server.call('read_product', product),
+  ]);
+  assert.equal(changed.isError, false, changed.text);
+  assert.deepEqual([before.data.variants[0].price.amount_minor, after.data.variants[0].price.amount_minor], [1000, 1250], 'the reading sent after the change sees it');
+  assert.deepEqual(fake.sent.map((r) => r.operation), ['sign-in', 'ReadProduct', 'ReadVariant', 'SetVariantPrice', 'ReadProduct']);
+  await end();
+});
+
 test('list_discount_codes: a percentage code with its percent; another kind with its name and state', async () => {
   const { server, end } = await world();
   const list = await server.call('list_discount_codes', {});
