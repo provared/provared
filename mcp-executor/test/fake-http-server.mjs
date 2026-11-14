@@ -33,7 +33,9 @@ const TOOLS = [
 export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
   const seen = [];
   const sessions = new Set();
-  const state = { elsewhere: 0, aborted: 0 };
+  const state = { elsewhere: 0, aborted: 0, fold: false, ran: [] };
+  // With "fold" set, the server reads member names without regard to capitals, the last one winning, as some JSON readers do for the fields they know.
+  const fold = (o) => (o && typeof o === 'object' && !Array.isArray(o) ? Object.fromEntries(Object.entries(o).map(([k, v]) => [k.toLowerCase().toUpperCase().toLowerCase(), v])) : o);
   let nextSession = 1;
 
   const json = (res, status, value, headers = {}) => {
@@ -112,6 +114,10 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
         return json(res, 400, { jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } });
       }
       seen.push({ method: 'POST', headers: req.headers, body: m });
+      if (state.fold && !Array.isArray(m)) {
+        m = fold(m);
+        if (m.params) m.params = { ...fold(m.params), arguments: fold(fold(m.params).arguments) };
+      }
       if (Array.isArray(m)) return json(res, 400, { jsonrpc: '2.0', id: null, error: { code: -32600, message: 'No batches' } });
       if (Object.hasOwn(m, 'result') || Object.hasOwn(m, 'error') || m.id === undefined) {
         res.writeHead(202);
@@ -140,6 +146,7 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
       if (method !== 'tools/call') return failure(res, id, -32601, `Method not found: ${method}`);
       const name = params.name;
       const args = params.arguments ?? {};
+      state.ran.push({ name, args });
       const text = (t) => result(res, id, { resultType: 'complete', content: [{ type: 'text', text: t }] });
       if (name === 'echo') return result(res, id, { resultType: 'complete', content: [{ type: 'text', text: JSON.stringify(args) }], structuredContent: { args, meta: params._meta ?? null, headers: req.headers } });
       if (name === 'order') return text(`Ordered for ${args.total}.`);
@@ -225,6 +232,12 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
           res.writeHead(200, { 'content-type': 'application/json' });
           return res.end('{"jsonrpc":"2.0","id":' + JSON.stringify(id) + ',"result":{"a":1,"a":2}}');
         }
+        // A second result, or a second id, under a name in other capitals: a client that ignores capitals would read the second.
+        if (how === 'capital-result' || how === 'capital-id') {
+          res.writeHead(200, { 'content-type': 'application/json' });
+          const second = how === 'capital-id' ? '"ID":"someone-else"' : '"Result":{"content":[{"type":"text","text":"the other result"}]}';
+          return res.end('{"jsonrpc":"2.0","id":' + JSON.stringify(id) + ',"result":{"content":[{"type":"text","text":"the result"}]},' + second + '}');
+        }
         if (how === 'bigint') {
           res.writeHead(200, { 'content-type': 'application/json' });
           return res.end(`{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"resultType":"complete","content":[{"type":"text","text":"ok"}],"structuredContent":{"snowflake":1234567890123456789}}}`);
@@ -242,6 +255,12 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
         port,
         seen,
         sessions,
+        /** Every tools/call the server ran: {name, args}, as it read them. */
+        ran: state.ran,
+        /** Read member names without regard to capitals from now on. */
+        foldNames: () => {
+          state.fold = true;
+        },
         get elsewhere() {
           return state.elsewhere;
         },
