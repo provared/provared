@@ -6,6 +6,7 @@
 // object to a line, so that a test can see what reached it.
 
 import { appendFileSync } from 'node:fs';
+import { createInterface } from 'node:readline';
 
 const log = (entry) => {
   if (process.env.FAKE_LOG) appendFileSync(process.env.FAKE_LOG, `${JSON.stringify(entry)}\n`);
@@ -119,25 +120,39 @@ function onMessage(given) {
   return failure(id, -32601, `Method not found: ${method}`);
 }
 
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', (chunk) => {
-  buffer += chunk;
-  for (;;) {
-    const at = buffer.indexOf('\n');
-    if (at === -1) break;
-    const line = buffer.slice(0, at).replace(/\r$/, '');
-    buffer = buffer.slice(at + 1);
-    if (line === '') continue;
-    let m;
-    try {
-      m = JSON.parse(line);
-    } catch {
-      failure(null, -32700, 'Parse error');
-      continue;
-    }
-    onMessage(m);
+function onLine(line) {
+  if (line === '') return;
+  let m;
+  try {
+    m = JSON.parse(line);
+  } catch {
+    log({ notJson: line.slice(0, 120) });
+    failure(null, -32700, 'Parse error');
+    return;
   }
-});
+  onMessage(m);
+}
+
+// FAKE_LINE_ENDS: how the server ends a line. Not set: at a line feed alone.
+// "readline": as node:readline does, at a bare carriage return, U+2028 and
+// U+2029 too. "universal": at a line feed, a carriage return, or the two
+// together, as a reader in text mode with universal newlines does (Python's
+// own way of reading its standard input).
+const lineEnd = process.env.FAKE_LINE_ENDS === 'universal' ? /\r\n|\r(?!$)|\n/ : /\n/;
+process.stdin.setEncoding('utf8');
+if (process.env.FAKE_LINE_ENDS === 'readline') createInterface({ input: process.stdin }).on('line', onLine);
+else {
+  process.stdin.on('data', (chunk) => {
+    buffer += chunk;
+    for (;;) {
+      const found = lineEnd.exec(buffer);
+      if (!found) break;
+      const line = buffer.slice(0, found.index).replace(/\r$/, '');
+      buffer = buffer.slice(found.index + found[0].length);
+      onLine(line);
+    }
+  });
+}
 process.stdin.on('end', () => {
   log({ stdinEnded: true });
   if (process.env.FAKE_LINGER) setTimeout(() => process.exit(0), Number(process.env.FAKE_LINGER));
