@@ -136,9 +136,13 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
       if (method === 'hang') return; // never answers
       // Opens a session of the client's naming, with the status it asks for (a session id on a non-2xx answer is the review's case).
       if (method === 'with-session') return json(res, params.status ?? 200, { jsonrpc: '2.0', id, result: {} }, { 'mcp-session-id': params.session });
-      if (method === 'tools/list' && state.deepList) {
-        // A list whose first tool has a schema nested very deeply, as a JSON body or as an event.
-        const text = `{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"tools":[{"name":"echo","inputSchema":{"type":"object","x":${deep(state.deepList)}}},{"name":"hidden","inputSchema":{"type":"object"}}]}}`;
+      if (method === 'tools/list' && state.oddList === 'error') return failure(res, id, -32601, 'This server lists no tools.');
+      if (method === 'tools/list' && (state.deepList || state.oddList)) {
+        // A list the executor cannot read, as a JSON body or as an event: its first tool's schema nested very deeply; or ("twice") a member named twice beside it; or a result with no "tools", and the tools under "Tools"; or ("other-id") a list under another id.
+        const result = state.deepList ? `{"tools":[{"name":"echo","inputSchema":{"type":"object","x":${deep(state.deepList)}}},{"name":"hidden","inputSchema":{"type":"object"}}]}`
+          : state.oddList === 'twice' ? '{"tools":[{"name":"echo"},{"name":"hidden"}],"a":1,"a":2}'
+            : state.oddList === 'other-id' ? '{"tools":[{"name":"echo"},{"name":"hidden"}]}' : '{"Tools":[{"name":"echo"},{"name":"hidden"}]}';
+        const text = `{"jsonrpc":"2.0","id":${JSON.stringify(state.oddList === 'other-id' ? 'someone-else' : id)},"result":${result}}`;
         if (params.sse) {
           sse(res)(text);
           return res.end();
@@ -288,6 +292,10 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
         /** Answer tools/list, from now on, with a list nested this deeply. */
         deepList: (depth) => {
           state.deepList = depth;
+        },
+        /** Answer tools/list, from now on, with a list the executor cannot read in the way named, or ("error") with an error; null: as usual. */
+        oddList: (kind) => {
+          state.oddList = kind;
         },
         get elsewhere() {
           return state.elsewhere;

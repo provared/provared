@@ -79,6 +79,12 @@ function onMessage(given) {
     // The answer written as raw text, so that the number is exact: a whole number beyond 2^53 - 1 in a tool's definition.
     return process.stdout.write(`{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"resultType":"complete","tools":[{"name":"error","description":"A protocol error.","inputSchema":{"type":"object"}},{"name":"hidden","description":"No rule.","inputSchema":{"type":"object"},"ordinal":1234567890123456789},{"name":"big","description":"A large answer.","inputSchema":{"type":"object"},"ordinal":1234567890123456789}]}}\n`);
   }
+  if (method === 'tools/list' && process.env.FAKE_ODD_LIST === 'error') return failure(id, -32601, 'This server lists no tools.');
+  if (method === 'tools/list' && process.env.FAKE_ODD_LIST) {
+    // A list the executor cannot read: "twice", a member named twice beside it; anything else, a result with no "tools", and the tools under "Tools".
+    const odd = process.env.FAKE_ODD_LIST === 'twice' ? '{"tools":[{"name":"echo"},{"name":"hidden"}],"a":1,"a":2}' : '{"Tools":[{"name":"echo"},{"name":"hidden"}]}';
+    return process.stdout.write(`{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":${odd}}\n`);
+  }
   if (method === 'tools/list' && process.env.FAKE_DEEP_LIST) {
     // A list whose first tool has a schema nested very deeply.
     return process.stdout.write(`{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"tools":[{"name":"echo","inputSchema":{"type":"object","x":${deep(Number(process.env.FAKE_DEEP_LIST))}}},{"name":"hidden","inputSchema":{"type":"object"}}]}}\n`);

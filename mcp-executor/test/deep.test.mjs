@@ -105,7 +105,8 @@ test('stdio: the server\'s answers nested 200,000 levels deep (a result, an erro
     const error = await w.client.call('deeperror', { depth: DEPTH });
     assert.equal(error.error?.message, 'deep');
     const list = await w.client.request('tools/list', {});
-    assert.deepEqual(list.result.tools.map((t) => t.name), ['echo', 'hidden'], 'a list the executor cannot read is handed on as it was, as any such answer is');
+    assert.equal(list.error?.code, CODES.internal, 'a list the executor is to filter and cannot read is not handed on (test/list.test.mjs)');
+    assert.ok(!w.client.rawText.includes('"hidden"'));
     const noted = await w.client.call('deepnote', { depth: DEPTH });
     assert.equal(noted.result?.content[0].text, 'After a deep notification.');
     assert.ok(w.client.others.some((m) => m.method === 'notifications/message'), 'the notification is handed on as it was');
@@ -138,7 +139,7 @@ test('HTTP: the agent\'s bodies nested 200,000 levels deep are refused, and the 
     for (const params of [{}, { sse: true }]) {
       const list = await request(w, 'alpha', 'tools/list', params);
       assert.equal(list.status, 200);
-      assert.ok(list.body.includes('"hidden"'), 'a list the executor cannot read is handed on as it was');
+      assert.ok(list.body.includes(String(CODES.internal)) && !list.body.includes('"hidden"'), 'a list the executor is to filter and cannot read is not handed on (test/list.test.mjs)');
     }
     // Within the limit, a result is read and fingerprinted; and the executor is still there.
     assert.equal((await call(w, 'alpha', 'odd', { how: 'deep-result', depth: 50 })).status, 200);

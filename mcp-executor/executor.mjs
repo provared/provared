@@ -51,6 +51,8 @@ export const OUTCOME_UNKNOWN = `${EXECUTOR_STOPPED} The receipt was written when
 export const RESULT_NOT_FINGERPRINTED = 'The tool server answered, and its result could not be written in the one form of RFC 8785 (text that is not well-formed Unicode, a number JSON cannot write, or a whole number beyond 9,007,199,254,740,991), so the receipt names no result.';
 /** The error text a receipt names where the server's answer could not be read as a message; the answer went to the client as it was. */
 export const UNREADABLE_ANSWER = 'The tool server answered with a line the executor could not read as a message (not JSON, a member name given twice, or not a response), so the receipt names no result. The line was handed to the agent as it was.';
+/** What the agent is told where the server's answer to tools/list is to be filtered and could not be read. */
+export const LIST_NOT_READ = 'The tool server\'s list of tools could not be read by the executor, which is to leave out of it the tools that have no rule. So the list was not handed on.';
 /** The document a receipt written at a restart names, and the text its fingerprint is of. */
 export const WRITTEN_LATE_DOCUMENT = 'executor.written-late';
 export const WRITTEN_LATE = 'This receipt was written when the executor next started, from its own copy of what it had sent: the executor stopped before the receipt could be written. Its date is the time the call was sent; the countersignature is dated at the restart.';
@@ -1244,6 +1246,12 @@ export async function openExecutor(config, more = {}) {
     // --- from the server ---
     /** The entry for a server id, or undefined. */
     const entryFor = (id) => (typeof id === 'string' ? mapped.get(id) : undefined);
+    /** The answer to a tools/list that is to be filtered could not be read: the agent is answered with an error under its id, and is not handed the list (X250). */
+    const listNotRead = (serverId, entry) => {
+      forget(serverId);
+      log({ event: 'tools-list-not-read' });
+      answerError(entry.id, CODES.internal, LIST_NOT_READ);
+    };
     readLines(child.stdout, {
       onLine: (line) => {
         const read = readMessage(line, { strictNumbers: false });
@@ -1262,6 +1270,8 @@ export async function openExecutor(config, more = {}) {
           const entry = found ? entryFor(found.value) : undefined;
           log({ event: 'server-line-not-read', code: read.refused.code, ...(entry ? { matched: entry.kind } : {}) });
           if (entry?.kind === 'call' && entry.call.state === 'sent' && entry.call.settle) return entry.call.settle({ kind: 'unreadable', text, errorText: UNREADABLE_ANSWER });
+          // A list of tools that is to be filtered and cannot be read is not handed on: it would show the agent the tools the executor is to hide.
+          if (entry?.kind === 'list') return listNotRead(found.value, entry);
           if (entry && entry.kind !== 'call') {
             forget(found.value);
             return toClient(forClient(text, entry.id));
@@ -1293,6 +1303,8 @@ export async function openExecutor(config, more = {}) {
               if (filtered.hidden) log({ event: 'tools-hidden', hidden: filtered.hidden });
               return toClient(Buffer.from(`${filtered.text}\n`));
             }
+            // A result that is not a list of tools as the executor reads one (no "tools", or not a list). The server's own error goes on as it is.
+            if (Object.hasOwn(m, 'result')) return listNotRead(m.id, entry);
           }
           if (entry) {
             forget(m.id);

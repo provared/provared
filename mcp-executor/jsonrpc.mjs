@@ -12,6 +12,8 @@ export const CODES = Object.freeze({
   parse: -32700,
   invalidRequest: -32600,
   invalidParams: -32602,
+  // The server's list of tools could not be read, so it was not handed on.
+  internal: -32603,
   // The executor's own: a receipt could not be written, so the call was not taken.
   notRecorded: 1001,
   // The tool server gave no answer within the time allowed, or ended before it answered.
