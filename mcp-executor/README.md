@@ -118,7 +118,7 @@ npm install -g provared-mcp-executor
 ```
 
 Or from a copy of the repository: in `mcp-executor`, `npm pack`, then
-`npm install -g ./provared-mcp-executor-0.4.1.tgz`.
+`npm install -g ./provared-mcp-executor-0.4.2.tgz`.
 
 It needs Node.js 24.7 or later, and depends only on the `provared` library,
 at version 0.7.0 or a later 0.7 version (`^0.7.0`): its receipts name
@@ -428,10 +428,18 @@ The settings (`executor-http.example.json` is a start): `name`, `service`,
   arguments (`pointer`), or the length of the list there (`count`). A call
   whose amount cannot be read is refused, and so is one whose arguments
   name one member twice in one object, or two that differ only in capitals
-  (`total` and `TOTAL`): a server may read the other one. (A member
-  name given twice exactly is refused in every message; names that differ
-  only in capitals are refused only where a rule reads the amount from the
-  arguments.)
+  (`total` and `TOTAL`): a server may read the other one. A member name
+  given twice exactly is refused in every message. So, from 0.4.2, is
+  every message of the agent's whose `params` hold, in one object at any
+  depth, two names that differ only in capitals; a `tools/call` that
+  writes `name`, `arguments` or `_meta` in other capitals; and a message
+  with a member at its top level other than `jsonrpc`, `id`, `method`,
+  `params`, `result` and `error`. The agent is answered with the error
+  -32600 and nothing is sent to the server. Why: a tool server whose JSON
+  reader ignores capitals takes `Method` for `method` and `Name` for
+  `name`, so such a message was one thing to the executor and another to
+  that server (DESIGN.md, X241). Versions up to 0.4.1 did not refuse
+  them.
 - `contentRules`: optional; the path of a file of rules on the content of
   a change, tested before a call is let through (see "Rules on the content
   of a change" below). Its fingerprint is named in every receipt and

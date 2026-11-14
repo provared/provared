@@ -2,6 +2,70 @@
 
 ## Not yet released
 
+- **`provared-mcp-executor` 0.4.2 (not yet released): a security fix. In
+  front of a tool server whose JSON reader ignores capitals, an agent
+  could run a tool that no rule names, with no receipt, or a tool other
+  than the one its receipt names. 0.4.2 refuses the messages that did
+  it.**
+  - **What was weak.** The executor reads member names exactly. Some
+    JSON readers do not: the standard JSON reader of the Go language
+    takes `Method` for `method` and `Name` for `name` in the fields it
+    knows, the later one winning. A message with both was therefore one
+    message to the executor and another to such a server. A review ran
+    three, in front of a made-up server that reads names that way:
+    `{"method":"ping","Method":"tools/call", ...}` was a ping to the
+    executor, which passed it on with no check, no receipt and no
+    denial, and a tool call to the server, which ran it;
+    `{"method":"notifications/initialized","Method":"tools/call","ID":13, ...}`
+    likewise; and `{"name":"echo","Name":"order","arguments":{},"Arguments":{"total":999999}}`
+    was checked, receipted and countersigned as `echo` with no
+    arguments, and run as `order` for 999,999.
+  - **Who was exposed.** Anyone who runs the executor, on stdio or over
+    HTTP, in front of a tool server whose JSON reader ignores capitals
+    in member names. A server that reads names exactly, as the JSON
+    readers of Node.js and Python do, is not affected. Which MCP servers
+    read names without regard to capitals was not checked. Every
+    version up to 0.4.1 has the weakness: `readMessage` in
+    `mcp-executor/jsonrpc.mjs` has looked only for a name given twice
+    exactly since the first version.
+  - **What 0.4.2 does** (`readMessage` in `mcp-executor/jsonrpc.mjs`,
+    `handleCall` and `filteredList` in `mcp-executor/executor.mjs`;
+    `mcp-executor/DESIGN.md`, X241). A message with a member at its top
+    level other than `jsonrpc`, `id`, `method`, `params`, `result` and
+    `error`, written exactly so, is refused, from the agent and from the
+    server. A message of the agent's is refused where its `params` hold,
+    in one object at any depth, two names that differ only in capitals
+    (or in the long s for `s`, or the Kelvin sign for `k`); where a
+    `tools/call` writes `name`, `arguments` or `_meta` in other
+    capitals, or a `notifications/cancelled` writes `requestId` so; and
+    where the `_meta` of a `tools/call` writes `red.prova/call-id` or
+    `traceparent` in other capitals. The agent is answered with the
+    error -32600, as for a member name given twice, and nothing is sent
+    to the server. A server's answer with such a member at its top level
+    is treated as any line the executor cannot read: the receipt says
+    the answer could not be read and names no result. In a `tools/list`
+    answer that the executor filters, a tool with a second name in other
+    capitals is not shown, and a second list (`Tools`) is left out.
+  - **What changes for a caller.** Arguments with two names in one
+    object that differ only in capitals (`path` and `PATH`) are now
+    refused in every call, with -32600 and no denial; before, they were
+    refused, with a denial, only where a rule read the amount or the
+    content from the arguments. `misspelt` is a new export of
+    `provared-mcp-executor/jsonrpc`.
+  - **What it does not cover.** Only capitals and those two letters are
+    folded; a reader that takes two names for one in some other way is
+    not covered. A content rule still compares names exactly, as the
+    README says.
+  - **Tests.** `mcp-executor/test/names.test.mjs` sends eleven such
+    messages on stdio and over HTTP, in front of the made-up servers
+    reading names without regard to capitals (`FAKE_FOLD` in
+    `test/fake-server.mjs`, `foldNames()` in `test/fake-http-server.mjs`),
+    and reads each server's own record of what it ran; each of its five
+    tests fails without the fix. Two older tests that expected a denial
+    for such arguments now expect the error.
+  - **Versions.** 0.4.2 in `mcp-executor/package.json` and
+    `mcp-executor/server.json` (both fields).
+
 - **`provared` 0.8.1 (not yet released; `package.json` and
   `python/pyproject.toml` still say 0.8.0): a time-stamp's time in the
   years 0000 to 0099 is read, where it was refused; and two checks on

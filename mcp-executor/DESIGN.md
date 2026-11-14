@@ -653,7 +653,9 @@ from the arguments, an object that names one member twice once folded
 (`total` and `TOTAL`; the long s and `s`; the Kelvin sign and `k`) gives
 no amount and the call is refused, as the gateway refuses such bodies.
 Why: a server written in a language whose JSON reader folds names could
-act on the other value. The other way: trust the exact names.
+act on the other value. The other way: trust the exact names. (From
+0.4.2 such arguments are refused in every call, before any rule is read:
+X241.)
 
 **X9. The executor refuses to start unless the permission fits it.** The
 slip's `agent.keys` must be the keys the executor holds for the agent; the
@@ -1757,3 +1759,71 @@ only until then. Why: a review showed an authenticated POST that stopped
 sending staying open for ever and holding a slot. `timeout` again rather
 than a knob of its own (as X113). The other way: Node's `requestTimeout`,
 which does not tell a body from a stream.
+
+**X241. A message is refused where a name in it differs only in capitals
+from one the executor reads (0.4.2).** The number is the one this choice
+has in the later design, so that one number names one choice. Three
+rules, in `readMessage` (`jsonrpc.mjs`), the same on stdio and over HTTP:
+
+- At its top level a message has the members `jsonrpc`, `id`, `method`,
+  `params`, `result` and `error`, written exactly so, and no other. A
+  message with any other member is refused. This holds for the agent's
+  messages and for the server's.
+- The agent's `params` hold, in one object at any depth (so in
+  `arguments` and in `_meta` too), no two names that are one once folded,
+  as X8 folds them: capitals, the long s and `s`, the Kelvin sign and `k`.
+- In the `params` of a `tools/call` the names `name`, `arguments` and
+  `_meta`, and in those of a `notifications/cancelled` the name
+  `requestId`, are written exactly: a name that is one of them once
+  folded, and is not written so, is refused (`Arguments` with no
+  `arguments`). In the `_meta` of a `tools/call` the same holds for
+  `red.prova/call-id` and `traceparent` (`handleCall` in `executor.mjs`).
+
+The agent is answered with the error -32600, as for a member name given
+twice, which the executor has refused from the start, and nothing is sent
+to the server. A message of the server's that the first rule refuses is
+treated as any line the executor cannot read: a call's receipt says the
+answer could not be read and names no result, and the line goes to the
+agent as it was. In a `tools/list` answer that the executor filters, a
+tool with a second name in other capitals is not shown, and a member that
+is `tools` once folded, and is not `tools`, is left out.
+
+Why: a review ran a tool that no rule names through a made-up server
+whose JSON reader takes member names without regard to capitals, the
+later one winning, as the standard JSON reader of the Go language does
+for the fields it knows. `{"method":"ping","Method":"tools/call", ...}`
+was a ping to the executor, passed on with no check and no receipt, and a
+tool call to that server. `{"name":"echo","Name":"order", ...}` was
+checked and receipted as `echo`, and run as `order`. Every version up to
+0.4.1 has this weakness where it stands in front of such a server. A
+server that reads names exactly, as the JSON readers of Node.js and
+Python do, is not affected. Which MCP servers read names without regard
+to capitals was not checked.
+
+No denial is written for such a message: it has two readings, and a
+denial would name a tool and an amount that may not be the ones meant.
+X8's refusal of such arguments, and the content rules' own, stay in the
+code for a caller of `amountOf` and `testCall`; through the executor they
+are no longer reached, since the message is refused before any rule is
+read.
+
+What this does not cover. Only capitals and the two letters above are
+folded: a reader that takes two names for one in another way (by leaving
+out `_` or `-`, or by a Unicode normal form) is not covered. Nothing is
+checked in the `result` or `error` of the agent's own answers to a
+server's requests, where the executor reads nothing. A lone name in the
+arguments in other capitals (`Total` where a rule reads `/total`) is not
+refused here: the amount is then not found and the call is refused (X8),
+and a content rule compares names exactly, as the README says. The cost:
+arguments that rightly hold two names that differ only in capitals in one
+object (`path` and `PATH`) can no longer be sent.
+
+The other ways. Refuse only at the top level and one level deep in a
+tool call's `params`, the review's smallest fix: not taken, since a
+server that folds names folds them at every depth of the arguments it
+reads into its own types. Or fold names in the executor and read as such
+a server would: not taken, since the executor would then differ from the
+servers that read names exactly. `test/names.test.mjs` sends each such
+message on stdio and over HTTP, in front of a made-up server that reads
+names without regard to capitals, and reads that server's own record of
+what it ran.
