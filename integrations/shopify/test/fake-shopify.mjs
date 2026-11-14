@@ -21,6 +21,12 @@ function minor(amount, currency) {
   return currency === 'JPY' ? Number(units) : Number(units) * 100 + Number(fraction.padEnd(2, '0').slice(0, 2));
 }
 
+/** Whether a value is a decimal string as Shopify takes money: digits, or digits, a full stop and digits. */
+function isDecimal(value) {
+  const parts = String(value).split('.');
+  return typeof value === 'string' && parts.length <= 2 && parts.every((p) => /^\d+$/.test(p));
+}
+
 function decimal(value, currency) {
   if (currency === 'JPY') return String(value);
   const digits = String(value).padStart(3, '0');
@@ -152,7 +158,7 @@ export async function fakeShopify({ expiresIn = 86399, currency = 'GBP' } = {}) 
       for (const input of v.variants) {
         const x = p?.variants.find((y) => y.id === input.id);
         if (!x) userErrors.push({ field: ['variants', '0', 'id'], message: 'Product variant does not exist' });
-        else if (!/^\d+(\.\d+)?$/.test(String(input.price))) userErrors.push({ field: ['variants', '0', 'price'], message: 'Price is not a number' });
+        else if (!isDecimal(input.price)) userErrors.push({ field: ['variants', '0', 'price'], message: 'Price is not a number' });
         else {
           x.price = String(input.price);
           changed.push({ id: x.id, price: x.price });
@@ -169,7 +175,7 @@ export async function fakeShopify({ expiresIn = 86399, currency = 'GBP' } = {}) 
       const given = input.customerGets?.value ?? {};
       let value = null;
       if (typeof given.percentage === 'number' && given.percentage > 0 && given.percentage <= 1) value = { percentage: given.percentage };
-      else if (given.discountAmount && /^\d+(\.\d+)?$/.test(String(given.discountAmount.amount))) value = { amount: String(given.discountAmount.amount), currency: store.currency };
+      else if (given.discountAmount && isDecimal(given.discountAmount.amount)) value = { amount: String(given.discountAmount.amount), currency: store.currency };
       else userErrors.push({ field: ['basicCodeDiscount', 'customerGets', 'value'], message: 'Value is not valid' });
       if (userErrors.length) return { discountCodeBasicCreate: { codeDiscountNode: null, userErrors } };
       const d = { id: `gid://shopify/DiscountCodeNode/${store.discounts.length + 1}`, kind: 'DiscountCodeBasic', title: input.title, code: input.code, status: 'ACTIVE', startsAt: input.startsAt, endsAt: input.endsAt ?? null, usageLimit: input.usageLimit ?? null, asyncUsageCount: 0, appliesOncePerCustomer: input.appliesOncePerCustomer ?? false, value };
@@ -196,7 +202,7 @@ export async function fakeShopify({ expiresIn = 86399, currency = 'GBP' } = {}) 
       if (keys.has(v.idempotencyKey)) return refused(null, 'This request was already made');
       const t = input.transactions?.[0];
       const parent = o.transactions.find((x) => x.id === t?.parentId);
-      if (input.transactions?.length !== 1 || !parent || t.orderId !== o.id || t.kind !== 'REFUND' || t.gateway !== parent.gateway || !/^\d+(\.\d+)?$/.test(String(t.amount))) return refused(['transactions'], 'Transactions are not valid');
+      if (input.transactions?.length !== 1 || !parent || t.orderId !== o.id || t.kind !== 'REFUND' || t.gateway !== parent.gateway || !isDecimal(t.amount)) return refused(['transactions'], 'Transactions are not valid');
       if (input.currency !== o.currency) return refused(['currency'], 'Currency must be the presentment currency');
       if (o.gatewayRefuses) return refused(['transactions'], 'The payment gateway declined the refund');
       const value = minor(t.amount, o.currency);
@@ -229,6 +235,7 @@ export async function fakeShopify({ expiresIn = 86399, currency = 'GBP' } = {}) 
         record.operation = 'sign-in';
         const fault = takeFault('sign-in');
         if (fault?.kind === 'status') return json(fault.status, fault.body ?? {});
+        if (fault?.kind === 'redirect') return void res.writeHead(307, { Location: fault.to }).end();
         const form = new URLSearchParams(body);
         if (req.headers['content-type'] !== 'application/x-www-form-urlencoded' || form.get('grant_type') !== 'client_credentials' || form.get('client_id') !== CLIENT_ID || form.get('client_secret') !== CLIENT_SECRET) {
           // A made-up refusal that repeats what it was sent, to show that the server takes the secret out of what it says.
@@ -254,6 +261,7 @@ export async function fakeShopify({ expiresIn = 86399, currency = 'GBP' } = {}) 
       if (fault?.kind === 'status') return json(fault.status, fault.body ?? { errors: 'made-up failure' });
       if (fault?.kind === 'errors') return json(200, { errors: fault.errors });
       if (fault?.kind === 'drop') return void req.socket.destroy();
+      if (fault?.kind === 'redirect') return void res.writeHead(307, { Location: fault.to }).end();
       const run = operations[record.operation];
       if (!run) return json(200, { errors: [{ message: `The made-up store does not know the operation ${record.operation}.` }] });
       const data = run(message.variables ?? {}, message.query);
@@ -265,7 +273,7 @@ export async function fakeShopify({ expiresIn = 86399, currency = 'GBP' } = {}) 
     server.listen(0, '127.0.0.1', resolve);
   });
 
-  return {
+  const fake = {
     origin: `http://127.0.0.1:${server.address().port}`,
     store,
     sent,
@@ -276,10 +284,22 @@ export async function fakeShopify({ expiresIn = 86399, currency = 'GBP' } = {}) 
     /** The tokens given so far stop working, as when they expire. */
     expireTokens: () => valid.clear(),
     close: () => new Promise((resolve) => {
+      open.delete(fake);
       server.closeAllConnections();
-      server.close(resolve);
+      server.close(() => resolve());
     }),
   };
+  open.add(fake);
+  return fake;
+}
+
+// Every made-up Shopify started and not yet closed, so that a test that
+// fails half-way leaves none listening.
+const open = new Set();
+
+/** Close every made-up Shopify still open. */
+export async function closeFakes() {
+  for (const fake of [...open]) await fake.close();
 }
 
 export const THROTTLED = [{ message: 'Throttled', extensions: { code: 'THROTTLED' } }];

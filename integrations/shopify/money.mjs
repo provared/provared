@@ -51,11 +51,12 @@ export function toDecimal(minor, currency) {
 export function toMinor(decimal, currency) {
   const p = places(currency);
   if (p === null || typeof decimal !== 'string') return null;
-  const m = /^(\d{1,15})(?:\.(\d{1,9}))?$/.exec(decimal);
-  if (!m) return null;
-  const fraction = m[2] ?? '';
+  // Digits, or digits, a full stop and digits; nothing else.
+  const parts = decimal.split('.');
+  if (parts.length > 2 || !/^\d{1,16}$/.test(parts[0]) || (parts.length === 2 && !/^\d{1,9}$/.test(parts[1]))) return null;
+  const fraction = parts[1] ?? '';
   if (fraction.length > p && /[1-9]/.test(fraction.slice(p))) return null;
-  const minor = Number(m[1] + fraction.slice(0, p).padEnd(p, '0'));
+  const minor = Number(parts[0] + fraction.slice(0, p).padEnd(p, '0'));
   return isMinor(minor) ? minor : null;
 }
 

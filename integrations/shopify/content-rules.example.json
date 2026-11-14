@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "name": "a refund is in pounds sterling",
+      "tool": "refund_order",
+      "test": { "pointer": "/currency", "equals": "GBP" }
+    },
+    {
+      "name": "a price is in pounds sterling",
+      "tool": "set_variant_price",
+      "test": { "pointer": "/currency", "equals": "GBP" }
+    },
+    {
+      "name": "a money-off discount code is in pounds sterling",
+      "tool": "create_amount_discount_code",
+      "test": { "pointer": "/currency", "equals": "GBP" }
+    }
+  ]
+}

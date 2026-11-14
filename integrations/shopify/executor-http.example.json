@@ -1,0 +1,51 @@
+{
+  "name": "Provared MCP executor for the Shopify store",
+  "service": "executor",
+  "listen": { "host": "127.0.0.1", "port": 8796 },
+  "path": "/mcp",
+  "server": {
+    "command": "<path of Node.js 24, such as /usr/bin/node>",
+    "args": ["<path of provared-shopify's server.mjs>"],
+    "env": {
+      "SHOPIFY_SHOP": { "file": "shopify/shop" },
+      "SHOPIFY_CLIENT_ID": { "file": "shopify/client-id" },
+      "SHOPIFY_CLIENT_SECRET": { "file": "shopify/client-secret" }
+    }
+  },
+  "sessions": { "max": 8, "idle": 1800000 },
+  "shutdownWait": 35000,
+  "oauth": {
+    "issuer": "<public https address of the reverse proxy, such as https://guard.example.com>",
+    "clients": ["https://claude.ai/oauth/mcp-oauth-client-metadata"],
+    "state": "oauth-state.json"
+  },
+  "agents": {
+    "claude-1": {
+      "oauth": true,
+      "slip": "slips/claude-1.json",
+      "book": "books/claude-1.jsonl",
+      "keys": "keys/claude-1.jwk",
+      "issuerKeys": ["<thumbprint of the person's passkey>"]
+    }
+  },
+  "executor": {
+    "keys": "keys/executor.jwk"
+  },
+  "tools": {
+    "list_products": { "action": "shopify.list_products" },
+    "read_product": { "action": "shopify.read_product" },
+    "set_variant_price": { "action": "shopify.set_variant_price", "amount": { "unit": "GBP-pence", "pointer": "/price_minor" } },
+    "list_discount_codes": { "action": "shopify.list_discount_codes" },
+    "create_percentage_discount_code": { "action": "shopify.create_percentage_discount_code", "amount": { "unit": "percent", "pointer": "/percent" } },
+    "create_amount_discount_code": { "action": "shopify.create_amount_discount_code", "amount": { "unit": "GBP-pence", "pointer": "/amount_minor" } },
+    "deactivate_discount_code": { "action": "shopify.deactivate_discount_code" },
+    "list_orders": { "action": "shopify.list_orders" },
+    "read_order": { "action": "shopify.read_order" },
+    "refund_order": { "action": "shopify.refund_order", "amount": { "unit": "GBP-pence", "pointer": "/amount_minor" } }
+  },
+  "contentRules": "content-rules.json",
+  "unlisted": "refuse",
+  "hideUnlisted": true,
+  "timeout": 230000,
+  "allowedOrigins": []
+}

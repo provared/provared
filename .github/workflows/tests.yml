@@ -195,6 +195,30 @@ jobs:
       - name: Fail on any warning but the expected one, at the newest releases
         run: sh tools/lint/node-warnings.sh "$RUNNER_TEMP/test-output.txt"
 
+  # The MCP server for one Shopify store's Admin API. It uses nothing but
+  # Node.js itself and does not load the library, so nothing is installed
+  # and no name is pointed anywhere. Its tests start the server as a
+  # program of its own and a made-up Shopify on the local address
+  # (integrations/shopify/test/fake-shopify.mjs): no test reaches Shopify,
+  # a real store or any other computer, and no secret is used.
+  javascript-shopify:
+    name: integrations/shopify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      # As "npm test" in the folder, without hiding warnings.
+      - name: Run the tests
+        working-directory: integrations/shopify
+        run: set -o pipefail; node --test test/*.test.mjs 2>&1 | tee "$RUNNER_TEMP/test-output.txt"
+      - name: Fail on any warning but the expected one
+        run: sh tools/lint/node-warnings.sh "$RUNNER_TEMP/test-output.txt"
+
   # The library in Python, on the oldest and the newest Python it supports.
   python:
     name: Python library (Python ${{ matrix.python }})

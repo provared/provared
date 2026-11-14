@@ -6,9 +6,9 @@ import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { after, before, test } from 'node:test';
-import { CLIENT_ID, CLIENT_SECRET, fakeShopify } from './fake-shopify.mjs';
-import { runToEnd, startServer } from './world.mjs';
+import { after, afterEach, before, test } from 'node:test';
+import { CLIENT_ID, CLIENT_SECRET, closeFakes, fakeShopify } from './fake-shopify.mjs';
+import { closeServers, runToEnd, startServer } from './world.mjs';
 
 const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 
@@ -16,7 +16,9 @@ let fake;
 before(async () => {
   fake = await fakeShopify();
 });
-after(() => fake.close());
+// A test that fails half-way leaves no server running and nothing listening.
+afterEach(closeServers);
+after(closeFakes);
 
 test('initialize: the protocol version asked for is answered where it is one the server speaks, and 2025-11-25 otherwise', async () => {
   const server = startServer(fake);

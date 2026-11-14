@@ -48,7 +48,7 @@ const ID_PATTERNS = {
 };
 
 const CURRENCY = /^[A-Z]{3}$/;
-const DATE_TIME = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$/;
+const DATE_TIME = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(Z|[+-][0-9]{2}:[0-9]{2})$/;
 
 const MINOR = 'A whole number of the currency\'s smallest unit, never a decimal: 1250 is 12.50 GBP, and 1250 is 1,250 JPY.';
 
@@ -68,8 +68,8 @@ const PAGE = {
 
 const DISCOUNT_OPTIONS = {
   title: text('The name the merchant sees in the Shopify admin. The code itself where it is left out.', { maxLength: 255 }),
-  starts_at: text('When the code starts to work, as a date and time with its zone (2026-12-01T00:00:00Z). Now where it is left out.', { pattern: DATE_TIME, maxLength: 40 }),
-  ends_at: text('When the code stops working, as a date and time with its zone. No end where it is left out.', { pattern: DATE_TIME, maxLength: 40 }),
+  starts_at: text('When the code starts to work, as a date and time to the second with its zone (2026-12-01T00:00:00Z, or 2026-12-01T00:00:00+01:00). Now where it is left out.', { pattern: DATE_TIME, maxLength: 25 }),
+  ends_at: text('When the code stops working, as a date and time to the second with its zone. No end where it is left out.', { pattern: DATE_TIME, maxLength: 25 }),
   usage_limit: whole('The most times the code may be used in all. No limit where it is left out.', 1, 2147483647),
   once_per_customer: flag('Whether a customer may use the code only once. False where it is left out.'),
 };

@@ -114,7 +114,7 @@ export function startServer(fake, { env = {} } = {}) {
     return { text, isError: answer.result?.isError === true, data, answer };
   }
 
-  return {
+  const server = {
     request,
     call,
     /** Write a line as it is. */
@@ -124,10 +124,27 @@ export function startServer(fake, { env = {} } = {}) {
     output: () => stdout + stderr,
     stderr: () => stderr,
     ended,
-    /** Close the program's input, as the guard does, and wait for it to end: its exit code. */
+    /** Close the program's input, as the guard does, and wait for it to end: its exit code. One that has not ended ten seconds later is ended by force. */
     async close() {
+      running.delete(server);
       child.stdin.end();
-      return ended;
+      const timer = setTimeout(() => child.kill(), 10000);
+      try {
+        return await ended;
+      } finally {
+        clearTimeout(timer);
+      }
     },
   };
+  running.add(server);
+  return server;
+}
+
+// Every server started and not yet closed, so that a test that fails
+// half-way leaves none running (each test file closes them after each test).
+const running = new Set();
+
+/** Close every server still running. */
+export async function closeServers() {
+  for (const server of [...running]) await server.close();
 }
