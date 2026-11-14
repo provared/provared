@@ -11,12 +11,45 @@ import './local-library.mjs'; // first: "provared" is this repository's own libr
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-const { LIST_NOT_READ } = await import('../executor.mjs');
+const { checkBook, identifierFingerprint } = await import('provared');
+const { LIST_NOT_READ, UNREADABLE_ANSWER } = await import('../executor.mjs');
 const { CODES } = await import('../jsonrpc.mjs');
-const { httpWorld, call, request } = await import('./http-world.mjs');
-const { world } = await import('./world.mjs');
+const { httpWorld, openHttpWorld, post, call, request } = await import('./http-world.mjs');
+const { FAKE_SERVER, world } = await import('./world.mjs');
 
 const DEPTH = 200000;
+
+for (const [how, env] of [['nested 200,000 levels deep', { FAKE_DEEP_LIST: { value: String(DEPTH) } }], ['with a member named twice', { FAKE_ODD_LIST: { value: 'twice' } }], ['with no "tools" in its result, and the tools under "Tools"', { FAKE_ODD_LIST: { value: 'capital-only' } }]]) {
+  test(`HTTP, in front of a local program: a list of tools ${how} is not handed on, and an answer nested as deeply does not end the executor`, async () => {
+    const w = await httpWorld({ open: false });
+    delete w.settings.upstream;
+    w.settings.server = { command: process.execPath, args: [FAKE_SERVER], env };
+    w.settings.tools = { echo: { action: 'provared.data.read' }, deep: { action: 'tool.run' }, deeperror: { action: 'tool.run' } };
+    await openHttpWorld(w, { serverStderr: null });
+    try {
+      const begun = await post(w, 'alpha', { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'test', version: '1' } } });
+      const headers = { 'mcp-session-id': begun.headers.get('mcp-session-id'), 'mcp-protocol-version': '2025-11-25' };
+      const list = await post(w, 'alpha', { jsonrpc: '2.0', id: 'list-1', method: 'tools/list' }, { headers });
+      assert.equal(list.status, 200, list.body.slice(0, 200));
+      assert.equal(list.json.id, 'list-1');
+      assert.equal(list.json.error?.code, CODES.internal);
+      assert.equal(list.json.error.message, LIST_NOT_READ);
+      assert.ok(!list.body.includes('hidden'), 'nothing the agent was sent names the tool with no rule');
+      assert.equal(w.logs.filter((e) => e.event === 'tools-list-not-read').length, 1);
+      // The agent's own body nested as deeply is refused, and the program's result and error nested as deeply are answers the executor cannot read.
+      const deepBody = await post(w, 'alpha', null, { headers, raw: `{"jsonrpc":"2.0","id":2,"method":"ping","params":{"a":${'['.repeat(DEPTH)}1${']'.repeat(DEPTH)}}}` });
+      assert.equal(deepBody.status, 400);
+      assert.equal(deepBody.json.id, 2);
+      for (const [id, tool] of [[3, 'deep'], [4, 'deeperror']]) assert.equal((await post(w, 'alpha', { jsonrpc: '2.0', id, method: 'tools/call', params: { name: tool, arguments: { depth: DEPTH } } }, { headers })).status, 200, tool);
+      assert.equal((await post(w, 'alpha', { jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'echo', arguments: {} } }, { headers })).status, 200, 'the executor goes on');
+      const stubs = (await checkBook(w.executor.agent('alpha').writer.book(), { issuerKeys: w.settings.agents.alpha.issuerKeys })).entries.filter((e) => e.kind === 'stub');
+      const unreadable = await identifierFingerprint(UNREADABLE_ANSWER);
+      assert.deepEqual(stubs.map((s) => s.content.details.find((d) => d.name === 'provared.error')?.sha256 === unreadable), [true, true, false]);
+    } finally {
+      await w.close();
+    }
+  });
+}
 
 for (const [how, env] of [['nested 200,000 levels deep', { FAKE_DEEP_LIST: { value: String(DEPTH) } }], ['with a member named twice', { FAKE_ODD_LIST: { value: 'twice' } }], ['with no "tools" in its result, and the tools under "Tools"', { FAKE_ODD_LIST: { value: 'capital-only' } }]]) {
   test(`stdio: a list of tools ${how} is not handed on: the agent is answered with an error under its id`, async () => {

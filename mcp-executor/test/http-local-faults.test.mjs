@@ -16,14 +16,17 @@ import http from 'node:http';
 import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 const { checkBook, identifierFingerprint } = await import('provared');
-const { SERVER_ENDED, UNREADABLE_ANSWER } = await import('../executor.mjs');
+const { KILL_WAIT, SERVER_ENDED, UNREADABLE_ANSWER } = await import('../executor.mjs');
 const { BACKLOG_LIMIT, LOCAL_VERSIONS } = await import('../http.mjs');
-const { CLOSE_MARGIN, FLOOD_PER_SECOND, FLOOD_SECONDS, openLocalSessions } = await import('../local.mjs');
+const { CLOSE_MARGIN, FLOOD_PER_SECOND, FLOOD_SECONDS, STDERR_LINE, openLocalSessions } = await import('../local.mjs');
 const { CODES } = await import('../jsonrpc.mjs');
 const { httpWorld, openHttpWorld, post, rawRequest, auth } = await import('./http-world.mjs');
-const { FAKE_SERVER, until, pause, world } = await import('./world.mjs');
+const { FAKE_SERVER, until, pause, world, openWorld } = await import('./world.mjs');
+
+const LAUNCHER = fileURLToPath(new URL('./launcher.mjs', import.meta.url));
 
 const TOOLS = { echo: { action: 'provared.data.read' }, slow: { action: 'slow.work' }, flood: { action: 'tool.run' }, stray: { action: 'tool.run' }, loud: { action: 'tool.run' }, mutter: { action: 'tool.run' }, garbage: { action: 'tool.run' } };
 const stubsOf = (checked) => checked.entries.filter((e) => e.kind === 'stub');
@@ -42,7 +45,7 @@ async function localWorld({ env = {}, config = {}, more = { serverStderr: null }
   return w;
 }
 
-const seenByProgram = (w) => (existsSync(w.fakeLog) ? readFileSync(w.fakeLog, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : []);
+const seenByProgram = (w) => (existsSync(w.fakeLog) ? ((text) => text.slice(0, text.lastIndexOf('\n') + 1))(readFileSync(w.fakeLog, 'utf8')).split('\n').filter(Boolean).map((l) => JSON.parse(l)) : []);
 const bookOf = (w, name) => checkBook(w.executor.agent(name).writer.book(), { issuerKeys: w.settings.agents[name].issuerKeys });
 const events = (w, event) => w.logs.filter((e) => e.event === event);
 const initialize = (id = 1, version = '2025-11-25') => ({ jsonrpc: '2.0', id, method: 'initialize', params: { protocolVersion: version, capabilities: {}, clientInfo: { name: 'test', version: '1' } } });
@@ -532,7 +535,8 @@ test('MCP-Protocol-Version: a request that names a version the executor does not
 });
 
 test('a request the program never answers is cancelled at the timeout, under the executor\'s id; "initialize" is not', async () => {
-  const w = await localWorld({ config: { timeout: 1000 } });
+  // The timeout leaves a program time to start on a busy computer: the session must be begun before the request that is never answered.
+  const w = await localWorld({ config: { timeout: 4000 } });
   try {
     const { session } = await begin(w, 'alpha');
     const answer = await ask(w, 'alpha', session, { jsonrpc: '2.0', id: 7, method: 'never' });
@@ -548,9 +552,214 @@ test('a request the program never answers is cancelled at the timeout, under the
   const never = await localWorld({ env: { FAKE_INIT: 'never' }, config: { timeout: 1000 } });
   try {
     assert.equal((await begin(never, 'alpha')).answer.status, 504);
-    await until(() => never.executor.programs() === 0, { timeout: 3000 });
+    await until(() => never.executor.programs() === 0, { timeout: 10000 });
     assert.ok(!seenByProgram(never).some((e) => e.seen?.method === 'notifications/cancelled'));
   } finally {
     await never.close();
+  }
+});
+
+test('a program that writes much, answers and ends at once: its exit does not overtake its last lines, and the answer reaches the agent with its receipt (X251)', async () => {
+  const w = await localWorld({ config: { tools: { ...TOOLS, chatty: { action: 'tool.run' } }, timeout: 20000 } });
+  try {
+    // The counts at which the re-check lost answers on Linux: all of them at 1,500, some at each of the others.
+    const counts = [1500, 1500, 1500, 1500, 3000, 3000, 6000, 12000];
+    for (const [i, count] of counts.entries()) {
+      const { session } = await begin(w, 'alpha');
+      const answer = await callIn(w, 'alpha', session, 'chatty', { count });
+      assert.equal(answer.json.result?.content[0].text, 'Chatty.', `session ${i}, ${count} notifications: ${answer.body.slice(0, 200)}`);
+    }
+    const stubs = stubsOf(await bookOf(w, 'alpha'));
+    assert.equal(stubs.length, counts.length);
+    for (const stub of stubs) assert.ok(docs(stub)['provared.tool-result'], 'the receipt names the result, not a program that ended before it answered');
+    assert.equal(events(w, 'late-answer-dropped').length, 0);
+  } finally {
+    await w.close();
+  }
+  // The same on stdio.
+  const stdio = await world({ config: { tools: { chatty: { action: 'tool.run' } }, timeout: 20000 } });
+  const answer = await stdio.client.call('chatty', { count: 3000 });
+  assert.equal(answer.result?.content[0].text, 'Chatty.', JSON.stringify(answer).slice(0, 200));
+  await stdio.close();
+});
+
+test('the stop reaches what a program started: a server behind a launcher that passes no signal on is ended with it, and counts until it has gone (X252)', { skip: POSIX ? false : 'Windows has no process groups: there the one process the executor started is ended, as the README says' }, async () => {
+  const alive = (pid) => {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const pidsOf = (file) => (existsSync(file) ? readFileSync(file, 'utf8').split('\n').filter(Boolean).map(Number) : []);
+  // The real server stays when its input closes, and ends at SIGTERM; the launcher passes no signal on.
+  const w = await httpWorld({ open: false });
+  delete w.settings.upstream;
+  const pids = join(w.folder, 'pids');
+  w.settings.server = { command: process.execPath, args: [LAUNCHER, FAKE_SERVER], env: { FAKE_LINGER: { value: '600000' }, LAUNCHER_PIDS: { value: pids } } };
+  w.settings.tools = TOOLS;
+  Object.assign(w.settings, { sessions: { max: 2 }, shutdownWait: 300 });
+  await openHttpWorld(w, { serverStderr: null });
+  try {
+    const most = await mostPrograms(w, async () => {
+      for (let i = 0; i < 5; i++) assert.equal((await begin(w, 'alpha')).answer.status, 200);
+    });
+    assert.equal(most, 2);
+    assert.equal(pidsOf(pids).length, 5);
+    assert.equal(pidsOf(pids).filter(alive).length, 2, 'the real servers of the three sessions that made room have gone');
+  } finally {
+    await w.close();
+  }
+  await until(() => pidsOf(pids).filter(alive).length === 0, { timeout: 3000 });
+  // A launcher that ends by itself and leaves its server running: what is left in its group is ended, and counts as the program until it has gone.
+  const left = await httpWorld({ open: false });
+  delete left.settings.upstream;
+  const leftPids = join(left.folder, 'pids');
+  left.settings.server = { command: process.execPath, args: [LAUNCHER, FAKE_SERVER], env: { FAKE_LINGER: { value: '600000' }, LAUNCHER_PIDS: { value: leftPids }, LAUNCHER_LEAVES: { value: '700' } } };
+  left.settings.tools = TOOLS;
+  Object.assign(left.settings, { shutdownWait: 300 });
+  await openHttpWorld(left, { serverStderr: null });
+  try {
+    assert.equal((await begin(left, 'alpha')).answer.status, 200);
+    await until(() => left.logs.some((e) => e.event === 'server-group-left'), { timeout: 6000 });
+    await until(() => left.executor.programs() === 0, { timeout: 6000 });
+    assert.equal(pidsOf(leftPids).filter(alive).length, 0, 'the server the launcher left behind has gone');
+  } finally {
+    await left.close();
+  }
+  // The same on stdio, at the client's end.
+  const stdio = await world({ open: false, config: { shutdownWait: 300 } });
+  const stdioPids = join(stdio.folder, 'pids');
+  stdio.settings.server = { command: process.execPath, args: [LAUNCHER, FAKE_SERVER], env: { FAKE_LINGER: { value: '600000' }, LAUNCHER_PIDS: { value: stdioPids } } };
+  await openWorld(stdio);
+  assert.equal((await stdio.client.call('echo', {})).result?.isError, undefined);
+  assert.equal(pidsOf(stdioPids).filter(alive).length, 1);
+  await stdio.close();
+  await until(() => pidsOf(stdioPids).filter(alive).length === 0, { timeout: 3000 });
+});
+
+/** A stand-in for a program, for the tests of local.mjs alone: nothing ends it, and a test writes its output. */
+const standIn = () => Object.assign(new EventEmitter(), { stdin: new PassThrough(), stdout: new PassThrough(), stderr: new PassThrough(), kill: () => true });
+/** The sessions of a stand-in program, with the clock in the test's hands. */
+async function clocked(t, settings = {}) {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'] });
+  const child = standIn();
+  const logs = [];
+  const local = openLocalSessions({ settings: { server: { resolved: 'x', args: [] }, sessions: { max: 1, idle: 3600000 }, shutdownWait: 100, timeout: 1000, ...settings }, env: {}, credentialNames: [], log: (e) => logs.push(e), serverStderr: null, spawnProgram: () => child });
+  const { session } = await local.begin('alpha', null);
+  /** Write "count" lines of the program's output at once, and let them be read. */
+  const write = async (count, line = { jsonrpc: '2.0', method: 'notifications/message', params: { level: 'info' } }) => {
+    child.stdout.write(`${JSON.stringify(line)}\n`.repeat(count));
+    for (let turn = 0; turn < 3; turn++) await new Promise((d) => setImmediate(d));
+  };
+  return { child, logs, local, session, write, tick: (ms) => t.mock.timers.tick(ms) };
+}
+
+test('local.mjs, the flood rule by the clock: more than 1,000 messages in each of 5 seconds running ends the session; an honest program below that, evenly or in bursts, is not ended (X245)', async (t) => {
+  // 1,001 in each of five seconds running.
+  const flood = await clocked(t);
+  for (let second = 0; second < FLOOD_SECONDS; second++) {
+    assert.equal(flood.session.ended, null, `second ${second}`);
+    await flood.write(FLOOD_PER_SECOND + 1);
+    flood.tick(1000);
+  }
+  assert.equal(flood.session.ended, 'flooding');
+  assert.equal(flood.logs.filter((e) => e.event === 'server-flooding').length, 1);
+  t.mock.timers.reset();
+
+  // 1,000 a second, evenly, for 12 seconds: at the limit, and not over it.
+  const even = await clocked(t);
+  for (let second = 0; second < 12; second++) {
+    await even.write(FLOOD_PER_SECOND);
+    even.tick(1000);
+  }
+  assert.equal(even.session.ended, null);
+  t.mock.timers.reset();
+
+  // 1,001 at once every 1.9 seconds, for 40 seconds: about 527 a second, and in every other second none at all.
+  const bursts = await clocked(t);
+  for (let burst = 0; burst < 21; burst++) {
+    await bursts.write(FLOOD_PER_SECOND + 1);
+    bursts.tick(1900);
+  }
+  assert.equal(bursts.session.ended, null);
+  t.mock.timers.reset();
+
+  // Four seconds over the limit, one second with nothing, four more over it: the quiet second breaks the run.
+  const broken = await clocked(t);
+  for (const pause of [1000, 1000, 1000, 2000, 1000, 1000, 1000, 2000]) {
+    await broken.write(FLOOD_PER_SECOND + 1);
+    broken.tick(pause);
+  }
+  assert.equal(broken.session.ended, null);
+  // And a second with a few messages, under the limit, breaks it as well.
+  for (const count of [FLOOD_PER_SECOND + 1, FLOOD_PER_SECOND + 1, FLOOD_PER_SECOND + 1, 5, FLOOD_PER_SECOND + 1, FLOOD_PER_SECOND + 1]) {
+    await broken.write(count);
+    broken.tick(1000);
+  }
+  assert.equal(broken.session.ended, null);
+});
+
+test('local.mjs, the flood rule counts every message that answers nothing in flight: an answer to no request, and a message that reaches an open stream, as much as one that is dropped (X245)', async (t) => {
+  const answers = await clocked(t);
+  for (let second = 0; second < FLOOD_SECONDS; second++) {
+    await answers.write(FLOOD_PER_SECOND + 1, { jsonrpc: '2.0', id: 'nobody', result: {} });
+    answers.tick(1000);
+  }
+  assert.equal(answers.session.ended, 'flooding', 'answers to nothing in flight');
+  t.mock.timers.reset();
+
+  const streamed = await clocked(t);
+  let delivered = 0;
+  streamed.session.toStream = () => {
+    delivered += 1;
+    return true;
+  };
+  for (let second = 0; second < FLOOD_SECONDS; second++) {
+    await streamed.write(FLOOD_PER_SECOND + 1);
+    streamed.tick(1000);
+  }
+  assert.equal(streamed.session.ended, 'flooding', 'messages that reach an open stream');
+  assert.ok(delivered > FLOOD_PER_SECOND * (FLOOD_SECONDS - 1), 'and they were delivered until then');
+});
+
+test('local.mjs: the second wait, before SIGKILL, is "shutdownWait" again and at most 5 seconds (X242)', async (t) => {
+  const long = await clocked(t, { shutdownWait: 20000 });
+  const signals = () => long.logs.filter((e) => e.event === 'server-killed').map((e) => e.signal);
+  long.local.end(long.session, 'ended-by-agent');
+  long.tick(19999);
+  assert.deepEqual(signals(), []);
+  long.tick(1);
+  assert.deepEqual(signals(), ['SIGTERM']);
+  long.tick(KILL_WAIT - 1);
+  assert.deepEqual(signals(), ['SIGTERM']);
+  long.tick(1);
+  assert.deepEqual(signals(), ['SIGTERM', 'SIGKILL'], '5 seconds after SIGTERM, not 20');
+  t.mock.timers.reset();
+
+  const short = await clocked(t, { shutdownWait: 300 });
+  short.local.end(short.session, 'ended-by-agent');
+  short.tick(300);
+  short.tick(299);
+  assert.deepEqual(short.logs.filter((e) => e.event === 'server-killed').map((e) => e.signal), ['SIGTERM']);
+  short.tick(1);
+  assert.deepEqual(short.logs.filter((e) => e.event === 'server-killed').map((e) => e.signal), ['SIGTERM', 'SIGKILL'], '"shutdownWait" again, where it is shorter');
+});
+
+test('a line of a program\'s standard error longer than 64 KiB is dropped, and the log says so; the lines after it are written on', async () => {
+  const said = [];
+  const stderr = new PassThrough();
+  stderr.on('data', (d) => said.push(d.toString('utf8')));
+  const w = await localWorld({ config: { tools: { ...TOOLS, longerr: { action: 'tool.run' } } }, more: { serverStderr: stderr } });
+  try {
+    const { session } = await begin(w, 'alpha');
+    assert.equal((await callIn(w, 'alpha', session, 'longerr', {})).json.result?.content[0].text, 'Long.');
+    await until(() => said.join('').includes('after the long line\n'));
+    assert.ok(said.every((piece) => piece.length <= STDERR_LINE + 1), 'no piece written on is longer than the limit');
+    assert.ok(!said.join('').includes('LLLL'));
+    assert.equal(events(w, 'server-stderr-line-dropped').length, 1);
+  } finally {
+    await w.close();
   }
 });

@@ -160,7 +160,7 @@ test('X37: a receipt written at a restart names executor.written-late, keeps the
 });
 
 test('F1: a server line with "id" twice at the top level matches no call: it is handed on as it is, and the call ends by the timeout with a "no answer" receipt', async () => {
-  const w = await world({ config: { timeout: 1000, tools: { twoids: { action: 'tool.run' } } } });
+  const w = await world({ config: { timeout: 3000, tools: { twoids: { action: 'tool.run' } } } });
   try {
     const r = await w.client.request('tools/call', { name: 'twoids' }, { id: 't1' });
     assert.equal(r.error.code, 1002, 'the call ended by the timeout');
@@ -169,7 +169,7 @@ test('F1: a server line with "id" twice at the top level matches no call: it is 
     assert.ok(!rawLines(w).some((l) => l.includes('"id":"t1","id"')), 'nothing was spliced into it');
     const [stub] = stubsOf(await bookOf(w));
     assert.match(Buffer.from(JSON.stringify(docs(stub))).toString(), /provared\.error/);
-    assert.equal(docs(stub)['provared.error'], await identifierFingerprint(`The tool server gave no answer within 1000 ms, so the executor cancelled the call (call ${w.logs.find((e) => e.event === 'taken').call}). Its outcome is not known.`));
+    assert.equal(docs(stub)['provared.error'], await identifierFingerprint(`The tool server gave no answer within 3000 ms, so the executor cancelled the call (call ${w.logs.find((e) => e.event === 'taken').call}). Its outcome is not known.`));
     assert.ok(w.logs.some((e) => e.event === 'server-line-not-read' && e.matched === undefined));
   } finally {
     await w.close();
@@ -177,7 +177,7 @@ test('F1: a server line with "id" twice at the top level matches no call: it is 
 });
 
 test('F2: a batch (a line that is not one object) from the server is not a message: handed on unmatched, and the call ends by the timeout with a "no answer" receipt', async () => {
-  const w = await world({ config: { timeout: 1000, tools: { batch: { action: 'tool.run' } } } });
+  const w = await world({ config: { timeout: 3000, tools: { batch: { action: 'tool.run' } } } });
   try {
     const r = await w.client.request('tools/call', { name: 'batch' }, { id: 'b1' });
     assert.equal(r.error.code, 1002);

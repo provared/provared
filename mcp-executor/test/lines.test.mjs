@@ -39,8 +39,9 @@ test('oneLine: the same JSON, with no line end of any kind in it', () => {
   assert.equal(oneLine('{"a":1}'), '{"a":1}');
 });
 
-test('stdio, in front of a server that reads with node:readline: a text with U+2028, U+2029 or U+0085 is answered, and a call hidden between carriage returns is not run', async () => {
-  const w = await world({ env: { FAKE_READLINE: { value: '1' } } });
+// The two readers: node:readline, and a text reader with universal newlines, which Python's io.TextIOWrapper gives unless told otherwise, as the official Python SDK's stdio server uses, and how Python opens its standard input on Windows.
+for (const [reader, readerEnv] of [['with node:readline', { FAKE_READLINE: { value: '1' } }], ['as a text reader with universal newlines does', { FAKE_LINE_ENDS: { value: 'universal' } }]]) test(`stdio, in front of a server that reads ${reader}: a text with U+2028, U+2029 or U+0085 is answered, and a call hidden between carriage returns is not run`, async () => {
+  const w = await world({ env: readerEnv });
   try {
     // The text reaches the tool whole, and comes back as it was sent.
     w.client.raw(`${JSON.stringify({ jsonrpc: '2.0', id: 'odd', method: 'tools/call', params: { name: 'echo', arguments: { text: ODD } } })}\n`);
@@ -61,7 +62,7 @@ test('stdio, in front of a server that reads with node:readline: a text with U+2
   }
 });
 
-for (const [reader, env] of [['at a line feed alone', {}], ['as node:readline does', { FAKE_READLINE: { value: '1' } }]]) test(`HTTP, in front of a local program that ends a line ${reader}: whatever white space the agent's body holds, each message reaches the program as one line, and a call hidden between line ends is not run`, async () => {
+for (const [reader, env] of [['at a line feed alone', {}], ['as node:readline does', { FAKE_READLINE: { value: '1' } }], ['as a text reader with universal newlines does', { FAKE_LINE_ENDS: { value: 'universal' } }]]) test(`HTTP, in front of a local program that ends a line ${reader}: whatever white space the agent's body holds, each message reaches the program as one line, and a call hidden between line ends is not run`, async () => {
   const w = await httpWorld({ open: false });
   delete w.settings.upstream;
   w.fakeLog = join(w.folder, 'fake.log');

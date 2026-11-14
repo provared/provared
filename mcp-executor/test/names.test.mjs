@@ -44,7 +44,33 @@ const TWO_READINGS = [
   ['a second arguments with the long s', (id) => ({ jsonrpc: '2.0', id, method: 'tools/call', params: { name: 'order', arguments: { total: 1 }, [`argument${LONG_S}`]: { total: 999999 } } })],
   ['"Arguments" beside "arguments": the amount the executor checked is not the one the server acts on', (id) => ({ jsonrpc: '2.0', id, method: 'tools/call', params: { name: 'order', arguments: { total: 1 }, Arguments: { total: 999999 } } })],
   ['"Arguments" alone: the executor saw no arguments', (id) => ({ jsonrpc: '2.0', id, method: 'tools/call', params: { name: 'echo', Arguments: { total: 999999 }, Name: 'order' } })],
+  ['the method itself in other capitals: no call to the executor, a call to a server that reads the method so (X253)', (id) => ({ jsonrpc: '2.0', id, method: 'Tools/Call', params: ORDER })],
 ];
+
+test('readMessage: a method of the agent\'s that is one the executor acts on, written in other capitals, is refused (X253)', () => {
+  const read = (method, more) => readMessage(Buffer.from(JSON.stringify({ jsonrpc: '2.0', id: 7, method, params: {} })), more);
+  for (const method of ['Tools/Call', 'TOOLS/CALL', 'tools/Call', `tool${LONG_S}/call`, 'Tools/List', 'tools/LIST', 'Initialize', 'INITIALIZE', 'Notifications/Cancelled', 'notifications/CANCELLED']) {
+    const got = read(method);
+    assert.equal(got.refused?.code, CODES.invalidRequest, method);
+    assert.equal(got.id, 7, 'the refusal names the request');
+    assert.equal(read(method, { strictNumbers: false }).kind, 'request', 'a line of the server is not read for it');
+  }
+  for (const method of ['tools/call', 'tools/list', 'initialize', 'notifications/cancelled', 'ping', 'sampling/createMessage', 'resources/templates/list', 'tools/calls', 'Other/Method']) assert.equal(read(method).kind, 'request', method);
+});
+
+test('stdio, with "unlisted": "forward": a tool with no rule is sent on unchecked, but not one whose name is a ruled tool\'s in other capitals (X253)', async () => {
+  const w = await world({ config: { unlisted: 'forward' } });
+  try {
+    for (const name of ['Order', 'ORDER', 'Echo']) {
+      const refused = await w.client.call(name, { total: 999999 });
+      assert.equal(refused.error?.code, CODES.invalidRequest, name);
+    }
+    assert.equal((await w.client.call('hidden', {})).error?.code, -32602, 'the server\'s own answer: a tool with no rule, sent on');
+    assert.deepEqual(w.fakeSeen().filter((e) => e.seen?.method === 'tools/call').map((e) => e.seen.params.name), ['hidden'], 'only that one reached the server');
+  } finally {
+    await w.close();
+  }
+});
 
 test('readMessage: a member at the top level other than the six of JSON-RPC is refused, from the agent and from the server', () => {
   for (const strictNumbers of [true, false]) {

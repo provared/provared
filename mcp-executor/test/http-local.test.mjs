@@ -47,8 +47,10 @@ async function localWorld({ agents = ['alpha', 'beta'], server, config, open = t
   return w;
 }
 
+/** The whole lines of a text: the program may be half-way through writing its last one. */
+const wholeLines = (text) => text.slice(0, text.lastIndexOf('\n') + 1);
 /** What the made-up program saw, in every session: each message, in order. */
-const seenByProgram = (w) => (existsSync(w.fakeLog) ? readFileSync(w.fakeLog, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : []);
+const seenByProgram = (w) => (existsSync(w.fakeLog) ? wholeLines(readFileSync(w.fakeLog, 'utf8')).split('\n').filter(Boolean).map((l) => JSON.parse(l)) : []);
 const bookOf = (w, name) => checkBook(w.executor.agent(name).writer.book(), { issuerKeys: w.settings.agents[name].issuerKeys });
 const events = (w, event) => w.logs.filter((e) => e.event === event);
 
@@ -373,12 +375,12 @@ test('the limit on how long: a session is ended, with its program, "sessions.idl
 });
 
 test('a call the program never answers is cancelled at the executor\'s timeout, and one the agent cancels is cancelled under the executor\'s id, each with its receipt; a request it never answers is answered 504', async () => {
-  const w = await localWorld({ config: { timeout: 1000 } });
+  const w = await localWorld({ config: { timeout: 3000 } });
   try {
     const { session } = await begin(w, 'alpha');
     const never = await callIn(w, 'alpha', session, 'slow', { never: true }, 2);
     assert.equal(never.json.error.code, CODES.noAnswer);
-    assert.match(never.json.error.message, /gave no answer within 1000 ms/);
+    assert.match(never.json.error.message, /gave no answer within 3000 ms/);
     const sent = seenByProgram(w).filter((s) => s.seen?.method === 'tools/call').at(-1).seen.id;
     assert.ok(seenByProgram(w).some((s) => s.seen?.method === 'notifications/cancelled' && s.seen.params.requestId === sent), 'the program is told, under the executor\'s id');
 

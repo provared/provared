@@ -150,6 +150,15 @@ function onMessage(given) {
       };
       return more();
     }
+    // "count" notifications, then the answer, and the server ends as soon as the answer is written: an exit close behind much output.
+    if (name === 'chatty') {
+      let notes = '';
+      for (let i = 0; i < (args.count ?? 1500); i++) notes += `${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/message', params: { level: 'info', data: `n${i}` } })}\n`;
+      if (notes) process.stdout.write(notes);
+      return process.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: 'Chatty.' }] } })}\n`, () => process.exit(0));
+    }
+    // A line of 100 KiB on its standard error, then a short one.
+    if (name === 'longerr') return process.stderr.write(`${'L'.repeat(100 * 1024)}\nafter the long line\n`, () => text('Long.'));
     // An answer to nothing the executor asked, then a notification, then the answer.
     if (name === 'stray') {
       send({ jsonrpc: '2.0', id: 'nobody', result: { content: [{ type: 'text', text: 'an answer to nothing' }] } });

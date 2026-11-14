@@ -490,16 +490,17 @@ test('two simultaneous calls by one agent, and by two agents: each book holds it
     assert.equal(copyOf(w, 'beta').lines.length, 2);
 
     // The limit on calls in progress is each agent's own.
-    const first = call(w, 'alpha', 'slow', { ms: 400 }, { id: 'l-1' });
-    const second = call(w, 'alpha', 'slow', { ms: 400 }, { id: 'l-2' });
-    await pause(100);
+    // Two calls that stay with the upstream long enough for what follows, however busy the computer: the test waits until both are in hand, and asks its two refusals, which take no time, before anything else.
+    const first = call(w, 'alpha', 'slow', { ms: 2000 }, { id: 'l-1' });
+    const second = call(w, 'alpha', 'slow', { ms: 2000 }, { id: 'l-2' });
+    await until(() => w.executor.agent('alpha').calls() === 2);
     const third = await call(w, 'alpha', 'echo', {}, { id: 'l-3' });
     assert.equal(third.json.error.code, 1001);
     assert.match(third.json.error.message, /maxWaiting/);
-    const betas = await call(w, 'beta', 'echo', {}, { id: 'l-3' });
-    assert.equal(betas.status, 200, 'the other agent is not held back');
     const again = await call(w, 'alpha', 'echo', {}, { id: 'l-1' });
     assert.equal(again.json.error.code, -32600, 'the same id while that call is in progress');
+    const betas = await call(w, 'beta', 'echo', {}, { id: 'l-3' });
+    assert.equal(betas.status, 200, 'the other agent is not held back');
     await Promise.all([first, second]);
     assert.equal(stubsOf(await bookOf(w, 'alpha')).length, 5);
   } finally {

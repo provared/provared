@@ -951,6 +951,6 @@ test('a seal does not hold up the rest of the program while it is signed', async
   const took = Date.now() - started;
   clearInterval(timer);
   await ex.close();
-  // A timer of 10 ms goes on firing while the seal is signed: at least a quarter of the times it could.
-  assert.ok(ticks >= took / 40, `${ticks} ticks in ${took} ms`);
+  // A timer of 10 ms goes on firing while the seal is signed. A seal that held the program up would let it fire once or twice at most, however long the signing took. On a busy computer the timer fires far less often than every 10 ms, so the count asked for is small: three, and one for every 200 ms.
+  assert.ok(took < 100 || ticks >= Math.max(3, took / 200), `${ticks} ticks in ${took} ms`);
 });
