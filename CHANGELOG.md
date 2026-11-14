@@ -114,11 +114,20 @@
   - **The reading never ends the executor** (`foldedInParams` and
     `readMessage` in `mcp-executor/jsonrpc.mjs`; DESIGN.md, X250). The
     check for names in other capitals walks the message's text as it
-    came, and calls nothing that calls itself: a message 200,000 levels
-    deep is read, refused or answered with an error, on stdio and over
-    HTTP. (As first built for 0.4.2, and never released, the check wrote
-    the `params` out afresh, and one line 5,000 levels deep ended the
-    executor on stdio.) The two older refusals, for a member name given
+    came, and calls nothing that calls itself. And a message nested more
+    than 256 levels deep is not read at all (`MAX_DEPTH`): the agent's
+    is refused with -32600 under its id; the server's is treated as any
+    line the executor cannot read, so that a call's receipt says its
+    answer could not be read, and a list of tools is handed on as it
+    was, unfiltered. Before, one deep answer of the server's ended the
+    executor: its error, or its list of tools, which the executor writes
+    out afresh, overflowed the stack (run). An agent's cancellation of a
+    call in flight is written afresh in the same way (read in the code,
+    not run on its own). (As first built for 0.4.2,
+    and never released, the check for names did the same on any line
+    5,000 levels deep.) What changes for a caller: a message deeper than
+    256 levels, which 0.4.1 passed on where it was not a call, is
+    refused. The two older refusals, for a member name given
     twice and for a whole number beyond 2^53 - 1, are now answered under
     the request's id where it can be found; before, under no id, so that
     a client on stdio waited out its own timeout.
@@ -128,8 +137,8 @@
     refused, with a denial, only where a rule read the amount or the
     content from the arguments. A call that a rule on content cannot read
     exactly, in the two ways above, is now refused where it was let
-    through. `misspelt`, `foldedInParams` and `oneLine` are new exports
-    of `provared-mcp-executor/jsonrpc`, and `unreadableAt` of
+    through. `misspelt`, `foldedInParams`, `oneLine`, `deeperThan` and
+    `MAX_DEPTH` are new exports of `provared-mcp-executor/jsonrpc`, and `unreadableAt` of
     `provared-mcp-executor/rules`.
   - **What it does not cover.** The folding is that of capitals and a
     little wider: it also makes one of the long s and `s`, the Kelvin
@@ -150,8 +159,10 @@
     for such arguments now expect the error. Two new tests in
     `test/content-rules.test.mjs` run the rules' cases, the first in
     front of the made-up server that ignores capitals; and
-    `test/deep.test.mjs` (4 tests) sends 200,000 levels of nesting on
-    stdio and over HTTP, and reads the ids of the older refusals; an
+    `test/deep.test.mjs` (5 tests) sends 200,000 levels of nesting each
+    way on stdio and over HTTP (the agent's requests, a call and a
+    cancellation; the server's result, error, list of tools and
+    notification), and reads the ids of the older refusals; an
     older test that expected such a refusal under no id now expects the
     request's. Each of these fixes was undone once to see a test fail.
   - **Versions.** 0.4.2 in `mcp-executor/package.json` and

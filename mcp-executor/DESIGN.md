@@ -1939,13 +1939,45 @@ refusals for a member name given twice, and for a whole number beyond
 top-level `id` that is text or a whole number every reader holds exactly
 (`topLevelId`); before, under no id.
 
+A message nested more than 256 levels deep, objects and lists together
+and the message itself the first, is not read at all (`MAX_DEPTH` and
+`deeperThan` in `jsonrpc.mjs`, which walks the text and calls nothing
+that calls itself). The agent's is refused with -32600 under its id, and
+nothing is sent to the server. The server's is a line the executor
+cannot read, as X241 treats a member it does not know: where it answers
+a call, the receipt says the answer could not be read and names no
+result, and the line goes to the agent as it was; where it answers
+another request, a `tools/list` among them, it is handed on as it was,
+unfiltered; a notification or a request of the server's is handed on as
+it was.
+
 Why: the same review found that the first build of 0.4.2, never
 released, wrote the `params` out afresh to look for such names, which
 calls itself once for each level of nesting: one line of 10 KB, 5,000
 levels deep, overflowed the stack where the lines are read and ended the
-executor on stdio (over HTTP it answered 500 and went on). A call of a
-rule's tool nested that deeply is still not sent: its arguments cannot
-be fingerprinted at that depth, and the agent is answered with error
-1001. And a client on stdio that is answered under no id cannot match
-the answer to its request, and waits out its own timeout.
-`test/deep.test.mjs` sends 200,000 levels on stdio and over HTTP.
+executor on stdio (over HTTP it answered 500 and went on). The walk
+closed that one place, and others were left, on both sides: an agent's
+cancellation of a call in flight is written afresh for the server; a
+server's error is written out for the receipt, and its list of tools is
+written afresh once filtered. Each calls itself in the same way: one
+deep answer of the server's ended the executor (run), and the agent's
+cancellation is the same code path (read, not run on its own). A limit where the message
+is read closes them together, and whatever is written later. 256 is the
+builder's number: it is far below the depth at which any of these
+overflows (some thousands), and above what the library fingerprints: the
+fingerprint of a call's arguments, and of its result, takes 64 levels.
+Between the two, as before, a call whose arguments nest too deeply is
+answered with error 1001 and not sent, and a result that nests too
+deeply is receipted as a result that could not be fingerprinted. The
+receipt's text for an answer that could not be read names three reasons
+(not JSON, a name given twice, not a response) and not this one; the
+text is left as it is, since its fingerprint is what receipts name. And
+a client on stdio that is answered under no id cannot match the answer
+to its request, and waits out its own timeout.
+
+The other way: catch the error at each place that writes a value out.
+Not taken: each new place would need its own, and the stack's depth
+where one is reached is not the same from one run to the next.
+`test/deep.test.mjs` sends 200,000 levels each way on stdio and over
+HTTP: the agent's requests, a call and a cancellation, and the server's
+result, error, list of tools and notification.

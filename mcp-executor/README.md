@@ -439,7 +439,9 @@ The settings (`executor-http.example.json` is a start): `name`, `service`,
   reader ignores capitals takes `Method` for `method` and `Name` for
   `name`, so such a message was one thing to the executor and another to
   that server (DESIGN.md, X241). Versions up to 0.4.1 did not refuse
-  them.
+  them. From 0.4.2 a message nested more than 256 levels deep is not
+  read either: the agent's is refused with -32600, and the server's is
+  treated as any line the executor cannot read (DESIGN.md, X250).
 - `contentRules`: optional; the path of a file of rules on the content of
   a change, tested before a call is let through (see "Rules on the content
   of a change" below). Its fingerprint is named in every receipt and
