@@ -291,7 +291,7 @@ test('lines the executor cannot read strictly are refused, not passed on', async
     w.client.raw('{"jsonrpc":"2.0","id":"d1","method":"ping","method":"tools/call","params":{"name":"hidden"}}\n');
     m = await w.client.nextOther();
     assert.equal(m.error.code, -32600, 'a member name given twice');
-    assert.equal(m.id, null);
+    assert.equal(m.id, 'd1', 'the refusal names the request, whose id is given once (X250)');
     w.client.raw('{"jsonrpc":"2.0","id":"d2","method":"tools/call","params":{"name":"echo","arguments":{"a":1,"a":2}}}\n');
     m = await w.client.nextOther();
     assert.equal(m.error.code, -32600, 'a member name given twice, deep in the arguments');

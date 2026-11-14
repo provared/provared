@@ -1095,7 +1095,7 @@ export async function openExecutor(config, more = {}) {
         outputOpen = false;
       }
     };
-    // Each message goes to the server as one line under every way of ending a line (oneLine; X248): "buffer" is the message's text and its line feed.
+    // Each message goes to the server as one line, for a reader of UTF-8 that ends a line at a line feed, a carriage return, U+0085, U+2028 or U+2029 (oneLine; X248): "buffer" is the message's text and its line feed.
     const toServer = (buffer) => {
       if (serverGone) return false;
       try {

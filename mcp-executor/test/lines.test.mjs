@@ -1,9 +1,11 @@
 // One message, one line (DESIGN.md, X248). A message the executor writes
-// to the tool server's standard input is one line under every way of
-// ending a line. A tool server that ends a line at more than the line
-// feed (node:readline ends one at a bare carriage return, U+2028 and
-// U+2029; a reader in text mode with universal newlines, as Python reads
-// its standard input, ends one at a bare carriage return) was otherwise
+// to the tool server's standard input is one line for a reader of UTF-8.
+// A tool server that ends a line at more than the line feed
+// (node:readline ends one at a bare carriage return, U+2028 and U+2029; a
+// text reader with universal newlines, which Python's io.TextIOWrapper
+// gives unless told otherwise, as the official Python SDK's stdio server
+// uses, and how Python opens its standard input on Windows, ends one at a
+// bare carriage return) was otherwise
 // handed one message of the agent's as several lines, and read a piece of
 // it as a message of its own: a call the executor never checked. These
 // tests send such messages in front of a made-up server that reads each
@@ -35,7 +37,7 @@ test('oneLine: the same JSON, with no line end of any kind in it', () => {
   assert.equal(oneLine('{"a":1}'), '{"a":1}');
 });
 
-for (const [reader, how] of [['readline', 'with node:readline'], ['universal', 'in text mode with universal newlines, as Python reads its standard input']]) {
+for (const [reader, how] of [['readline', 'with node:readline'], ['universal', 'as a text reader with universal newlines does (Python\'s io.TextIOWrapper, unless told otherwise)']]) {
   test(`stdio, in front of a server that reads ${how}: a call hidden between carriage returns is not run, and a text with U+2028, U+2029 or U+0085 is answered`, async () => {
     const w = await world({ env: { FAKE_LINE_ENDS: { value: reader } } });
     const book = () => checkBook(w.executor.writer.book(), { issuerKeys: w.settings.agent.issuerKeys });

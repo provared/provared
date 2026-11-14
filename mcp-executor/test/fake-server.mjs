@@ -9,7 +9,15 @@ import { appendFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 
 const log = (entry) => {
-  if (process.env.FAKE_LOG) appendFileSync(process.env.FAKE_LOG, `${JSON.stringify(entry)}\n`);
+  if (!process.env.FAKE_LOG) return;
+  let line;
+  try {
+    line = JSON.stringify(entry);
+  } catch {
+    // Nested too deeply to be written out: the log says only what kind of message it was.
+    line = JSON.stringify({ seen: { method: entry.seen?.method ?? null, id: entry.seen?.id ?? null, tooDeepToLog: true } });
+  }
+  appendFileSync(process.env.FAKE_LOG, `${line}\n`);
 };
 
 process.stderr.write('fake-server: started\n');
@@ -136,8 +144,10 @@ function onLine(line) {
 // FAKE_LINE_ENDS: how the server ends a line. Not set: at a line feed alone.
 // "readline": as node:readline does, at a bare carriage return, U+2028 and
 // U+2029 too. "universal": at a line feed, a carriage return, or the two
-// together, as a reader in text mode with universal newlines does (Python's
-// own way of reading its standard input).
+// together, as a text reader with universal newlines does, which Python's
+// io.TextIOWrapper gives unless told otherwise, as the official Python
+// SDK's stdio server uses, and how Python opens its standard input on
+// Windows.
 const lineEnd = process.env.FAKE_LINE_ENDS === 'universal' ? /\r\n|\r(?!$)|\n/ : /\n/;
 process.stdin.setEncoding('utf8');
 if (process.env.FAKE_LINE_ENDS === 'readline') createInterface({ input: process.stdin }).on('line', onLine);

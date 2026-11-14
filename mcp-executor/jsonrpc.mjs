@@ -85,7 +85,10 @@ export function readLines(stream, { onLine, onTooLong, onEnd, limit = MAX_LINE_B
 /**
  * Names that some readers take as one: the same once put in small letters,
  * then capitals, then small letters again (so "ID" and "id", the long s
- * and "s", the Kelvin sign and "k"), as the gateway folds them.
+ * and "s", the Kelvin sign and "k"), as the gateway folds them. This is
+ * wider than capitals alone: it also makes one of the sharp s and "ss", of
+ * the dotless i, the dotted capital I and "i", and of the ligatures (ff, fi,
+ * fl, ffi, ffl, st) and their letters. It errs on the side of refusing.
  */
 export function foldName(name) {
   return name.toLowerCase().toUpperCase().toLowerCase().replace(/i̇/g, 'i');
@@ -141,6 +144,52 @@ export function misspelt(object, names) {
   const folded = new Set(names.map(foldName));
   for (const key of Object.keys(object)) {
     if (!names.includes(key) && folded.has(foldName(key))) return key;
+  }
+  return null;
+}
+
+/**
+ * The first member name that, once folded (foldName), is given twice in
+ * one object within the value of the top-level "params" of a JSON object
+ * text, or null. It walks the text as it came and calls nothing that calls
+ * itself, so that no depth of nesting can overflow the stack. The text must
+ * already be known to be JSON with no name given twice exactly.
+ */
+export function foldedInParams(text) {
+  const stack = [];
+  let expectKey = false;
+  let inside = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '{') {
+      stack.push(new Set());
+      expectKey = true;
+    } else if (c === '[') {
+      stack.push(null);
+      expectKey = false;
+    } else if (c === '}' || c === ']') {
+      stack.pop();
+      expectKey = false;
+    } else if (c === ',') {
+      expectKey = stack.at(-1) instanceof Set;
+    } else if (c === ':') {
+      expectKey = false;
+    } else if (c === '"') {
+      let j = i + 1;
+      while (text[j] !== '"') j += text[j] === '\\' ? 2 : 1;
+      if (expectKey) {
+        const key = JSON.parse(text.slice(i, j + 1));
+        if (stack.length === 1) inside = key === 'params';
+        else if (inside) {
+          const names = stack.at(-1);
+          const seen = foldName(key);
+          if (names.has(seen)) return key;
+          names.add(seen);
+        }
+        expectKey = false;
+      }
+      i = j;
+    }
   }
   return null;
 }
@@ -218,7 +267,23 @@ export function idKey(id) {
  * The server's lines are read without those three, and handed on as raw
  * bytes.
  */
-export function readMessage(line, { strictNumbers = true } = {}) {
+export function readMessage(line, options) {
+  try {
+    return readStrictly(line, options);
+  } catch {
+    // No line is known to reach this. It is here so that no line, whatever it holds, can end the executor from where its lines are read.
+    return { refused: { code: CODES.invalidRequest, message: 'The message could not be read.' }, id: null };
+  }
+}
+
+/** The id a refusal may be answered under: the top-level "id" of the text, where it is there once, is text or a whole number, and is a number every reader holds exactly; else null. */
+function answerableId(text) {
+  const at = topLevelId(text);
+  if (!at || !isId(at.value) || unsafeInteger(text.slice(at.start, at.end)) !== null) return null;
+  return at.value;
+}
+
+function readStrictly(line, { strictNumbers = true } = {}) {
   let text;
   try {
     text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(line);
@@ -234,15 +299,17 @@ export function readMessage(line, { strictNumbers = true } = {}) {
   if (Array.isArray(message)) return { refused: { code: CODES.invalidRequest, message: 'A list of messages (a batch) is not accepted: one message to a line.' }, id: null };
   if (!message || typeof message !== 'object') return { refused: { code: CODES.invalidRequest, message: 'A message is a JSON object.' }, id: null };
   const repeated = repeatedName(text);
-  if (repeated !== null) return { refused: { code: CODES.invalidRequest, message: 'A member name is given twice in one object of the message, which two readers may read differently.' }, id: null };
-  if (strictNumbers && unsafeInteger(text) !== null) return { refused: { code: CODES.invalidRequest, message: 'The message holds a whole number beyond 9,007,199,254,740,991, which two readers may hold differently.' }, id: null };
+  // These two refusals name the request where its id can be found, so that a client is not left waiting for an answer.
+  if (repeated !== null) return { refused: { code: CODES.invalidRequest, message: 'A member name is given twice in one object of the message, which two readers may read differently.' }, id: answerableId(text) };
+  if (strictNumbers && unsafeInteger(text) !== null) return { refused: { code: CODES.invalidRequest, message: 'The message holds a whole number beyond 9,007,199,254,740,991, which two readers may hold differently.' }, id: answerableId(text) };
   const id = Object.hasOwn(message, 'id') ? message.id : undefined;
   const knownId = isId(id) ? id : null;
   if (Object.keys(message).some((name) => !MEMBERS.has(name))) return { refused: { code: CODES.invalidRequest, message: 'The message has a member at its top level other than "jsonrpc", "id", "method", "params", "result" and "error", written exactly so. A reader that ignores capitals may take such a member for one of them, so the message is not read.' }, id: knownId };
   if (strictNumbers && message.params !== null && typeof message.params === 'object' && !Array.isArray(message.params)) {
-    if (repeatedName(JSON.stringify(message.params), true) !== null) return { refused: { code: CODES.invalidRequest, message: 'The params hold two member names in one object that differ only in capitals, which two readers may read differently.' }, id: knownId };
+    // The text is walked as it came, and not written afresh, so that no depth of nesting can overflow the stack.
+    if (foldedInParams(text) !== null) return { refused: { code: CODES.invalidRequest, message: 'The params hold two member names in one object that differ only in capitals, or in letters that some readers take as the same, which two readers may read differently.' }, id: knownId };
     const read = READ_IN_PARAMS.get(message.method);
-    if (read && misspelt(message.params, read) !== null) return { refused: { code: CODES.invalidRequest, message: `The params hold a member whose name differs only in capitals from one the executor reads (${read.join(', ')}), which two readers may read differently.` }, id: knownId };
+    if (read && misspelt(message.params, read) !== null) return { refused: { code: CODES.invalidRequest, message: `The params hold a member whose name differs only in capitals, or in letters that some readers take as the same, from one the executor reads (${read.join(', ')}), which two readers may read differently.` }, id: knownId };
   }
   if (message.jsonrpc !== '2.0') return { refused: { code: CODES.invalidRequest, message: 'The message does not say "jsonrpc": "2.0".' }, id: knownId };
   if (id !== undefined && !isId(id)) return { refused: { code: CODES.invalidRequest, message: 'The id must be text or a whole number.' }, id: null };
@@ -356,8 +423,10 @@ export function spliceId(text, newId) {
 }
 
 /**
- * The text of a JSON message, made one line under every way of ending a
- * line, and still the same JSON. A line feed or a carriage return between
+ * The text of a JSON message, made one line for a reader that takes the
+ * bytes as UTF-8, and still the same JSON. (A reader that takes them as
+ * another encoding may still cut a line inside a character beyond ASCII:
+ * inside a text, so it can spoil a message and cannot hide a call.) A line feed or a carriage return between
  * its values (in JSON they can stand nowhere else) becomes a space; U+0085,
  * U+2028 and U+2029 (in JSON they can stand only inside a text) are
  * written as the escapes \u0085, \u2028 and \u2029. The text must already
