@@ -1947,9 +1947,23 @@ nothing is sent to the server. The server's is a line the executor
 cannot read, as X241 treats a member it does not know: where it answers
 a call, the receipt says the answer could not be read and names no
 result, and the line goes to the agent as it was; where it answers
-another request, a `tools/list` among them, it is handed on as it was,
-unfiltered; a notification or a request of the server's is handed on as
-it was.
+another request, it is handed on as it was; a notification or a request
+of the server's is handed on as it was.
+
+One answer is not handed on: the server's answer to a `tools/list` that
+the executor is to filter (`hideUnlisted`) and cannot read, whether it
+is nested too deeply, names a member twice, holds no `tools` list in its
+result or, over HTTP, comes under another id or is no message. Handed on
+as it was, it would show the agent the tools the executor is to hide. The
+agent's request is answered with the error -32603 under its id, with the
+words of `LIST_NOT_READ`, and the log says `tools-list-not-read`
+(`executor.mjs` on stdio; `http.mjs` for a JSON body and for an event).
+The server's own error to `tools/list` goes on as it is. Before, in
+every version, such a list was handed on unfiltered. What stays: a line
+of the server's that the executor cannot match to any request (an id
+given twice, or no id), and an event under another id, are handed on as
+they were, and may hold anything the server chooses to write.
+`test/list.test.mjs` runs each on stdio and over HTTP.
 
 Why: the same review found that the first build of 0.4.2, never
 released, wrote the `params` out afresh to look for such names, which

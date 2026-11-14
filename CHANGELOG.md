@@ -118,8 +118,13 @@
     than 256 levels deep is not read at all (`MAX_DEPTH`): the agent's
     is refused with -32600 under its id; the server's is treated as any
     line the executor cannot read, so that a call's receipt says its
-    answer could not be read, and a list of tools is handed on as it
-    was, unfiltered. Before, one deep answer of the server's ended the
+    answer could not be read. A list of tools that the executor is to
+    filter (`hideUnlisted`) and cannot read, for this or any other
+    reason, is no longer handed to the agent as it was, which showed it
+    the tools the executor is to hide: the request is answered with the
+    error -32603 under its id, and the log says `tools-list-not-read`
+    (`test/list.test.mjs`, 5 tests, on stdio and over HTTP as a JSON
+    body and as an event stream). Before, one deep answer of the server's ended the
     executor: its error, or its list of tools, which the executor writes
     out afresh, overflowed the stack (run). An agent's cancellation of a
     call in flight is written afresh in the same way (read in the code,
