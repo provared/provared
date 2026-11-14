@@ -17,6 +17,12 @@
 // to the upstream; every other message passes through, the answer to a
 // tools/list filtered as on stdio.
 //
+// In place of an upstream HTTP MCP server the settings may name a local
+// program ("server", as the stdio executor's): the executor then starts one
+// for each MCP session an agent begins and speaks to it over its standard
+// input and output (local.mjs; DESIGN.md, section 10.1). The check, the
+// documents, the countersignature and the copy are the same.
+//
 // Beside the MCP endpoint the executor has three addresses of its own, as
 // the gateway has, for the administrator alone, who signs in with a secret
 // no agent holds: GET /provared/status, POST /provared/seal and POST
@@ -26,9 +32,10 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import http from 'node:http';
 import https from 'node:https';
 import { unfinished } from './copy.mjs';
-import { EXECUTOR_STOPPED, NOT_FOR_KEYS, NO_RECORDER_WARNING, SHARED_KEYS, SHORT_NAME, UNLISTED_FORWARD_WARNING, callCore, describeContentRules, describeRecorder, describeSlip, describeTools, filteredList, isObject, isPlaceholder, missingFiles, openAgent, pathFrom, placeholderProblems, prepareAgent, prepareShared, readAgentPaths, readCredentialFile, readIdentity, readFormerKeys, readKnobs, readRecorderSettings, readToolRules, reportFromFiles, sealTimer, serverIds } from './executor.mjs';
+import { EXECUTOR_STOPPED, NOT_FOR_KEYS, NO_RECORDER_WARNING, SHARED_KEYS, SHORT_NAME, UNLISTED_FORWARD_WARNING, callCore, describeContentRules, describeRecorder, describeSlip, describeTools, filteredList, isObject, isPlaceholder, missingFiles, openAgent, pathFrom, placeholderProblems, prepareAgent, prepareShared, programProblems, readAgentPaths, readCredentialFile, readIdentity, readFormerKeys, readKnobs, readProgramEnvironment, readRecorderSettings, readServerSettings, readShutdownWait, readToolRules, reportFromFiles, resolveProgram, sealTimer, serverIds } from './executor.mjs';
 import { CHALLENGE, identify, plainAddress } from './identity.mjs';
 import { CODES, MAX_LINE_BYTES, idKey, isId, readMessage, responseText, spliceId, topLevelId, unsafeInteger } from './jsonrpc.mjs';
+import { openLocalSessions, readSessionSettings } from './local.mjs';
 import { CLIENT_LIMIT, OAUTH_PATH, OAUTH_TIMEOUT, WELL_KNOWN, openFrontDoor, readOAuthSettings } from './oauth.mjs';
 
 /** The most a POST body may be, unless the settings say otherwise: 10 MiB, as the gateway takes. */
@@ -123,8 +130,15 @@ export function readHttpSettings(config, root, { keysOnly = false } = {}) {
     if (isObject(config.admin)) for (const k of Object.keys(config.admin)) if (k !== 'secretHash') warnings.push(`admin.${k}: not a setting; set aside.`);
   }
 
+  // What the executor stands in front of: an upstream HTTP MCP server ("upstream"), or a local program it starts ("server", as the stdio executor's, read by the same code), never both (X231).
   const up = config.upstream;
-  if (!isObject(up)) at('upstream', 'must be an object: url, credential.');
+  const local = config.server !== undefined;
+  if (local && up !== undefined) at('upstream', 'is given beside "server": the executor stands in front of one tool server, an HTTP MCP server ("upstream") or a local program it starts ("server"), never both.');
+  else if (local) {
+    readServerSettings(config, s, at, warnings, root, 'http');
+    readShutdownWait(config, s, at);
+    readSessionSettings(config, s, at, warnings);
+  } else if (!isObject(up)) at('upstream', 'must be an object: url, credential. Or, for a local program the executor starts, give "server" in its place.');
   else {
     s.upstream = {};
     let url = null;
@@ -212,7 +226,7 @@ export function readHttpSettings(config, root, { keysOnly = false } = {}) {
   s.allowedOrigins = config.allowedOrigins ?? [];
   if (!Array.isArray(s.allowedOrigins) || !s.allowedOrigins.every((o) => typeof o === 'string' && /^https?:\/\/[^/\s]+$/.test(o))) at('allowedOrigins', 'must be a list of origins (scheme, host and port, such as "http://localhost:3000") whose pages may call the executor; with none, a call that names an Origin is refused.');
   for (const k of Object.keys(config)) {
-    if (![...SHARED_KEYS, 'listen', 'path', 'upstream', 'agents', 'executor', 'bodyLimit', 'allowedOrigins', 'admin', 'oauth'].includes(k)) warnings.push(`${k}: not a setting; set aside.`);
+    if (![...SHARED_KEYS, 'listen', 'path', 'upstream', 'agents', 'executor', 'bodyLimit', 'allowedOrigins', 'admin', 'oauth', ...(local ? ['server', 'shutdownWait', 'sessions'] : [])].includes(k)) warnings.push(`${k}: not a setting${['shutdownWait', 'sessions'].includes(k) ? ' without "server", a local program' : ''}; set aside.`);
   }
   if (s.unlisted === 'forward') warnings.push(UNLISTED_FORWARD_WARNING);
   return { settings: problems.length ? null : s, problems, warnings, partial: s };
@@ -220,7 +234,7 @@ export function readHttpSettings(config, root, { keysOnly = false } = {}) {
 
 /** The upstream's credential, read once at start and held in memory. Never logged. */
 function readUpstreamCredential(settings) {
-  if (!settings.upstream.credential) return null;
+  if (!settings.upstream?.credential) return null;
   const token = readCredentialFile(settings.upstream.credential.file, 'upstream.credential');
   if (token === '' || /[^\x21-\x7e]/.test(token)) throw new Error('upstream.credential: the file holds no token, or one with a space, a line break or a character that cannot be sent in a header.');
   return { token, header: `Bearer ${token}` };
@@ -244,10 +258,17 @@ export async function checkHttpConfig(config, root) {
         problems.push(e.message);
       }
     }
+    // A local program: its program, its folder and its credentials, as the stdio executor's "check" looks at them.
+    if (partial.server) problems.push(...programProblems(config, partial, root));
     problems.push(...(await missingFiles(partial, [...(partial.agents ?? new Map())].map(([name, paths]) => [`agents.${name}`, paths]))));
   }
   if (problems.length) return { problems, warnings, tools };
   try {
+    let program = null;
+    if (settings.server) {
+      resolveProgram(settings, root, warnings, 'http');
+      program = { program: settings.server.resolved, credentials: readProgramEnvironment(settings).credentialNames, sessions: settings.sessions };
+    }
     const shared = await prepareShared(settings);
     warnings.push(...shared.warnings);
     readUpstreamCredential(settings);
@@ -259,7 +280,7 @@ export async function checkHttpConfig(config, root) {
     }
     if (!shared.sealer) warnings.push(NO_RECORDER_WARNING);
     if (!settings.admin) warnings.push('admin: no administrator\'s secret is named, so GET /provared/status, POST /provared/seal and POST /provared/acknowledge answer nothing; "seal", "acknowledge" and "status" then work only with --offline, on a stopped executor.');
-    return { problems: [], warnings, tools, upstream: settings.upstream.url, credential: settings.upstream.credential !== null, listen: settings.listen, path: settings.path, agents, recorder: describeRecorder(settings, shared.sealer), admin: settings.admin !== null };
+    return { problems: [], warnings, tools, ...(program ?? { upstream: settings.upstream.url, credential: settings.upstream.credential !== null }), listen: settings.listen, path: settings.path, agents, recorder: describeRecorder(settings, shared.sealer), admin: settings.admin !== null };
   } catch (e) {
     return { problems: [e.message], warnings, tools };
   }
@@ -342,7 +363,7 @@ export function sseEvent(others, data) {
  * their receipts now (openAgent).
  *
  * @param {object} config the settings, as in executor-http.example.json
- * @param {{root?: string, now?: () => number, log?: (event: object) => void}} [more]
+ * @param {{root?: string, now?: () => number, log?: (event: object) => void, serverStderr?: NodeJS.WritableStream|null}} [more] "serverStderr": where the standard error of a local program goes (by default, the executor's own; null, nowhere)
  */
 export async function openHttpExecutor(config, more = {}) {
   const root = more.root ?? process.cwd();
@@ -355,6 +376,9 @@ export async function openHttpExecutor(config, more = {}) {
   // Opened to work on the files of an executor that is not running ("seal", "acknowledge" with --offline): the upstream's credential is not read, and it does not listen.
   const offline = more.offline === true;
   const credential = offline ? null : readUpstreamCredential(settings);
+  // A local program ("server"): found now, and its credentials read now, as a stdio executor's start does, so that a missing one stops the start (X238).
+  if (settings.server && !offline) resolveProgram(settings, root, warnings, 'http');
+  const program = settings.server && !offline ? readProgramEnvironment(settings) : { env: {}, credentialNames: [] };
   if (credential && credential.token.length < 16) warnings.push('upstream.credential: the token is shorter than 16 characters, so any text of the upstream\'s that happens to hold it is replaced on its way to an agent.');
   const admin = settings.admin ? Buffer.from(settings.admin.secretHash) : null;
   // The OAuth front door (oauth.mjs), where the settings name "oauth": opened below, once every agent's lock is held.
@@ -388,8 +412,10 @@ export async function openHttpExecutor(config, more = {}) {
   for (const w of warnings) log({ event: 'warning', message: w });
   const core = callCore({ settings, content: shared.content, executorKeys: shared.executorKeys, now });
   const newServerId = serverIds();
-  const upstream = new URL(settings.upstream.url);
-  const lib = upstream.protocol === 'https:' ? https : http;
+  const upstream = settings.upstream ? new URL(settings.upstream.url) : null;
+  const lib = upstream?.protocol === 'https:' ? https : http;
+  // The sessions of a local program, each with a program of its own, where the settings name "server" in place of "upstream" (local.mjs; DESIGN.md, section 10.1).
+  const local = settings.server ? openLocalSessions({ settings, env: program.env, credentialNames: program.credentialNames, log, ...(more.serverStderr === undefined ? {} : { serverStderr: more.serverStderr }) }) : null;
 
   /** The text with the upstream's credential taken out, wherever it stands. Everything that goes to an agent passes through here. */
   const scrub = credential ? (text) => text.split(credential.token).join(CREDENTIAL_REMOVED) : (text) => text;
@@ -994,7 +1020,9 @@ export async function openHttpExecutor(config, more = {}) {
     // A session belongs to the agent that opened it.
     const sessionIds = req.headersDistinct['mcp-session-id'] ?? [];
     if (sessionIds.length > 1 || (sessionIds.length === 1 && !SESSION_ID.test(sessionIds[0]))) return refuse(res, 400, null, CODES.invalidRequest, 'The Mcp-Session-Id header must be given once, as 1 to 512 visible ASCII characters.');
-    if (sessionIds.length === 1 && sessions.get(sessionIds[0]) !== agent.name) {
+    // A local program's session is also held to the connection made through OAuth it was begun under (X234).
+    const session = local && sessionIds.length === 1 ? local.owned(sessionIds[0], agent.name, who.token?.connection ?? null) : null;
+    if (sessionIds.length === 1 && (local ? !session : sessions.get(sessionIds[0]) !== agent.name)) {
       agent.log({ event: 'refused', code: 'session-not-found' });
       return refuse(res, 404, null, CODES.invalidRequest, 'The session is not known to the executor, or is not this agent\'s. Begin a new one.');
     }
@@ -1003,12 +1031,171 @@ export async function openHttpExecutor(config, more = {}) {
       return refuse(res, 503, null, CODES.notRecorded, `This agent already has ${MAX_OPEN} requests in flight, the most it may have. Try again when one has ended.`, { connection: 'close' });
     }
     agent.open += 1;
-    const ctx = { req, res, agent, token: who.token, upstream: null, streaming: false, finalEvent: null };
+    const ctx = { req, res, agent, token: who.token, upstream: null, streaming: false, finalEvent: null, session, entered: null };
+    // A message in hand keeps its session from being taken for idle; an open stream of the program's own messages does not (X235).
+    if (session && req.method !== 'GET') enter(ctx, session);
     try {
       await one(ctx, sessionIds[0]);
     } finally {
       agent.open -= 1;
+      if (ctx.entered) local.leave(ctx.entered);
     }
+  }
+
+  // --- a local program: one for each session (local.mjs; DESIGN.md, section 10.1) ---
+
+  /** The request in hand is this session's, until it has been answered. */
+  const enter = (ctx, session) => {
+    ctx.session = session;
+    ctx.entered = session;
+    local.enter(session);
+  };
+
+  /** The answer to a request other than a tool call, from a session's program ("got" is what local.ask gave), under the agent's id; the answer to a tools/list filtered as on stdio. */
+  function answerLocal(ctx, clientId, got, { list = false, extra = {} } = {}) {
+    const { res, agent } = ctx;
+    if (got.failed === 'gone') return;
+    if (got.failed) return refuse(res, got.failed === 'timeout' ? 504 : 502, clientId, CODES.noAnswer, got.failed === 'timeout' ? `The tool server gave no answer within ${settings.timeout} ms.` : 'The tool server ended before it answered.');
+    if (list && got.message) learnAnnotations(got.message);
+    const filtered = list && settings.hideUnlisted && got.message ? filteredList(got.text, got.message, clientId, settings) : null;
+    if (filtered?.hidden) agent.log({ event: 'tools-hidden', hidden: filtered.hidden });
+    json(res, 200, scrub(filtered ? filtered.text : (spliceId(got.text, clientId) ?? got.text)), extra);
+  }
+
+  /** The link the shared call handling uses for a session's program: one line each way, as on stdio. */
+  const localLink = (ctx, session) => ({
+    newServerId,
+    key: (id) => local.key(session, id),
+    answer: (text) => json(ctx.res, 200, scrub(text)),
+    unavailable: () => (stopping ? 'The executor is stopping, so this call was not sent.' : session.gone || session.ended ? 'The tool server has ended.' : null),
+    send: (call, forwarded) => {
+      ctx.exchange = true;
+      return local.write(session, JSON.stringify(forwarded));
+    },
+    // On the executor's timeout the program is told, as on stdio; an answer that comes later names nothing in flight, and is dropped.
+    cancel: (call, reason) => local.write(session, JSON.stringify({ jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: call.serverId, reason } })),
+    forward: (id, serverId, text) => {
+      ctx.exchange = true;
+      ctx.forwarded = local.ask(session, spliceId(text, serverId) ?? text, serverId, id).then((got) => answerLocal(ctx, id, got));
+    },
+    track: (call) => local.track(session, call),
+    untrack: (call) => local.untrack(session, call),
+  });
+
+  /** The stream of a session's program's own messages (its requests and notifications), for a GET: {end, cancel}, as "exchange" gives. One stream for a session: a later one takes the place of the earlier (X233). */
+  function localStream(ctx, session) {
+    const { res, agent } = ctx;
+    let done;
+    const end = new Promise((d) => {
+      done = d;
+    });
+    session.closeStream?.();
+    const write = (text) => {
+      if (res.destroyed || res.writableEnded) return false;
+      if (res.writableLength > BACKLOG_LIMIT) {
+        agent.log({ event: 'agent-not-reading', kind: 'stream', held: res.writableLength });
+        res.destroy();
+        return false;
+      }
+      res.write(scrub(sseEvent([], text)));
+      return true;
+    };
+    const close = () => {
+      if (session.toStream === write) {
+        session.toStream = null;
+        session.closeStream = null;
+      }
+      if (!res.writableEnded && !res.destroyed) res.end();
+      done();
+    };
+    res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store' });
+    res.flushHeaders?.();
+    session.toStream = write;
+    session.closeStream = close;
+    res.on('close', close);
+    return { end, cancel: close };
+  }
+
+  /**
+   * One message for a local program, other than a tool call under a session
+   * (which "one" handles with the session's link). An "initialize" without
+   * a session begins one, and starts its program; every other message needs
+   * its session. A request is answered with one JSON body; a notification
+   * or a response with 202 (X232, X233).
+   */
+  async function localPost(ctx, read) {
+    const { res, agent } = ctx;
+    const m = read.message;
+    const clientId = read.kind === 'request' ? m.id : null;
+    if (read.kind === 'request' && m.method === 'initialize') {
+      if (ctx.session) return refuse(res, 400, clientId, CODES.invalidRequest, 'A session is begun by an "initialize" sent without an Mcp-Session-Id; this one names a session.');
+      const begun = local.begin(agent.name, ctx.token?.connection ?? null);
+      if (begun.refused === 'too-many') {
+        agent.log({ event: 'refused', code: 'too-many-sessions', sessions: settings.sessions.max });
+        return refuse(res, 503, clientId, CODES.notRecorded, `This agent already has ${settings.sessions.max} sessions, the most it may have at once (sessions.max), and each has a request in flight. Try again when one has ended.`, { connection: 'close' });
+      }
+      if (begun.refused) return refuse(res, 502, clientId, CODES.noAnswer, 'The tool server could not be started, so no session was begun.');
+      const session = begun.session;
+      enter(ctx, session);
+      // A session begun under a connection made through OAuth ends with that connection.
+      if (ctx.token) session.release = door.watch(ctx.token.connection, () => local.end(session, 'connection-ended'));
+      const serverId = newServerId();
+      const asked = local.ask(session, spliceId(read.text, serverId) ?? JSON.stringify({ ...m, id: serverId }), serverId, clientId);
+      res.on('close', () => {
+        if (!res.writableFinished) local.forget(session, serverId);
+      });
+      const got = await asked;
+      // No session without the program's own result to "initialize": the program is ended, and the agent is told why.
+      const begunWell = !got.failed && got.message !== null && Object.hasOwn(got.message, 'result');
+      if (!begunWell) local.end(session, 'not-begun');
+      if (got.failed === 'timeout') return refuse(res, 504, clientId, CODES.noAnswer, `The tool server gave no answer to "initialize" within ${settings.timeout} ms, so no session was begun.`);
+      if (got.failed === 'ended') return refuse(res, 502, clientId, CODES.noAnswer, 'The tool server ended before it answered "initialize", so no session was begun.');
+      return answerLocal(ctx, clientId, got, { extra: begunWell ? { 'mcp-session-id': session.id } : {} });
+    }
+    const session = ctx.session;
+    if (!session) {
+      agent.log({ event: 'refused', code: 'no-session' });
+      return refuse(res, 400, clientId, CODES.invalidRequest, 'In front of a local program the executor serves sessions: begin one with "initialize", and send the Mcp-Session-Id it answers with on every message after.');
+    }
+    const accepted = () => {
+      res.writeHead(202);
+      res.end();
+    };
+    if (read.kind === 'request') {
+      const serverId = newServerId();
+      const asked = local.ask(session, spliceId(read.text, serverId) ?? JSON.stringify({ ...m, id: serverId }), serverId, clientId);
+      res.on('close', () => {
+        if (!res.writableFinished) local.forget(session, serverId);
+      });
+      return answerLocal(ctx, clientId, await asked, { list: m.method === 'tools/list' });
+    }
+    if (read.kind === 'notification') {
+      // A request's method sent without an id would reach the program unchecked; only the protocol's own notifications pass.
+      if (!m.method.startsWith('notifications/')) {
+        agent.log({ event: 'notification-dropped', method: m.method });
+        return accepted();
+      }
+      if (m.method === 'notifications/cancelled' && isId(m.params?.requestId)) {
+        // The program knows a request by the executor's id for it, as on stdio.
+        const call = agent.calls.get(local.key(session, m.params.requestId));
+        if (call && !call.cancelled) {
+          call.cancelled = true;
+          if (call.state === 'sent' && call.settle) {
+            local.write(session, JSON.stringify({ ...m, params: { ...m.params, requestId: call.serverId } }));
+            call.settle({ kind: 'error', text: 'The agent cancelled this call while it was with the tool server, so its outcome is not known.', code: CODES.noAnswer });
+          }
+          return accepted();
+        }
+        const other = local.serverIdOf(session, m.params.requestId);
+        if (other !== undefined) {
+          local.write(session, JSON.stringify({ ...m, params: { ...m.params, requestId: other } }));
+          return accepted();
+        }
+      }
+    }
+    // A notification, or the agent's response to a request of the program's own: as it is.
+    local.write(session, read.text);
+    accepted();
   }
 
   async function one(ctx, sessionId) {
@@ -1018,7 +1205,16 @@ export async function openHttpExecutor(config, more = {}) {
       const h = headersFor(req, null, undefined);
       if (h.problem) return refuse(res, 400, null, HEADER_MISMATCH, h.problem);
       if (h.dropped.length) agent.log({ event: 'headers-dropped', headers: h.dropped });
-      const ex = exchange(ctx, { method: req.method, headers: h.headers, kind: req.method === 'GET' ? 'stream' : 'other' });
+      if (local) {
+        // A local program: the stream is of its session's own messages, and a DELETE ends the session and, with it, its program (X233, X234).
+        if (!ctx.session) return refuse(res, 400, null, CODES.invalidRequest, 'Name the session: the Mcp-Session-Id that the answer to "initialize" gave.');
+        if (req.method === 'DELETE') {
+          local.end(ctx.session, 'ended-by-agent');
+          res.writeHead(204);
+          return res.end();
+        }
+      }
+      const ex = local ? localStream(ctx, ctx.session) : exchange(ctx, { method: req.method, headers: h.headers, kind: req.method === 'GET' ? 'stream' : 'other' });
       res.on('close', () => ex.cancel());
       // A token is checked when its request arrives, and a stream has no end of its own. So a stream opened with an access token is ended when that token stops standing, for whatever reason: it expires, its connection ends, or later tokens push it out; it then no longer holds one of the agent's places (X229). A call already taken is not cut: it ends within the timeout, with its receipt.
       let release = null;
@@ -1077,10 +1273,12 @@ export async function openHttpExecutor(config, more = {}) {
     // A legacy session (2025-11-25: a session id, or a protocol version before 2026-07-28) cancels by notification, not by closing the stream (X111).
     const version = h.headers['mcp-protocol-version'];
     const legacy = sessionId !== undefined || (typeof version === 'string' && version < '2026-07-28');
+    // A local program: every message but a session's tool call is carried by localPost; the call goes on below, through the same check, with the session's link.
+    if (local && !(ctx.session && read.kind === 'request' && m.method === 'tools/call')) return localPost(ctx, read);
 
     if (read.kind === 'request') {
       if (m.method === 'tools/call') {
-        const link = {
+        const link = ctx.session ? localLink(ctx, ctx.session) : {
           newServerId,
           answer: (text) => {
             if (ctx.streaming) {
@@ -1107,7 +1305,7 @@ export async function openHttpExecutor(config, more = {}) {
           untrack: () => {},
         };
         // The call this request began, once handleCall has begun it (it does so before its first await); not one already in progress under the same id, which handleCall refuses.
-        const key = idKey(m.id);
+        const key = link.key ? link.key(m.id) : idKey(m.id);
         const before = agent.calls.get(key);
         const handled = core.handleCall(agent, link, m.id, m, read.text);
         const begun = agent.calls.get(key);
@@ -1185,8 +1383,10 @@ export async function openHttpExecutor(config, more = {}) {
     /** One agent's stub writer and copy, for tests and tools: {writer, stopped, calls}. */
     agent: (name) => {
       const a = agents.get(name);
-      return a ? { writer: a.writer, stopped: a.stopped, slip: { fingerprint: a.about.fingerprint }, calls: () => a.calls.size, open: () => a.open } : null;
+      return a ? { writer: a.writer, stopped: a.stopped, slip: { fingerprint: a.about.fingerprint }, calls: () => a.calls.size, open: () => a.open, sessions: () => (local ? local.count(name) : a.sessions.size) } : null;
     },
+    /** In front of a local program: how many of its programs are running now, those of sessions just ended among them; null in front of an upstream HTTP server. */
+    programs: () => (local ? local.programs() : null),
     executorKeys: shared.executorKeys.keys,
     /** The recorder that seals: its name, the fingerprint of its key set and the timer; null where the settings name none. */
     recorder: describeRecorder(settings, shared.sealer),
@@ -1207,7 +1407,7 @@ export async function openHttpExecutor(config, more = {}) {
         server.once('error', failed);
         server.listen(port, host, () => {
           const at = server.address();
-          log({ event: 'listening', address: at.address, port: at.port, path: settings.path, upstream: settings.upstream.url, credential: credential !== null, agents: [...agents.keys()] });
+          log({ event: 'listening', address: at.address, port: at.port, path: settings.path, ...(local ? { server: settings.server.resolved, credentials: program.credentialNames } : { upstream: settings.upstream.url, credential: credential !== null }), agents: [...agents.keys()] });
           // The timer starts only once the executor is listening: a start that cannot listen seals nothing.
           timer?.start();
           done({ address: at.address, port: at.port });
@@ -1243,6 +1443,8 @@ export async function openHttpExecutor(config, more = {}) {
       }
       const deadline = Date.now() + STOP_WAIT;
       while ([...agents.values()].some((a) => a.calls.size > 0) && Date.now() < deadline) await new Promise((d) => setTimeout(d, 20));
+      // Every session of a local program ends with the executor: each program's input is closed, and one that has not ended within "shutdownWait" is ended by force.
+      if (local) await local.close();
       if (s) {
         await new Promise((done) => {
           s.close(() => done());

@@ -43,6 +43,7 @@
   "files": [
     "executor.mjs",
     "http.mjs",
+    "local.mjs",
     "oauth.mjs",
     "owner.mjs",
     "owner-steps.mjs",

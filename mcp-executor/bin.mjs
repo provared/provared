@@ -10,12 +10,16 @@
 //   provared-mcp-executor init    [--http]                 copy the example settings and rules into this folder,
 //                                                          as executor.json (or executor-http.json) and
 //                                                          content-rules.json; nothing is overwritten
-//   provared-mcp-executor stdio   --config executor.json   run as the tool server the agent's client starts:
+//   provared-mcp-executor init    --http --demo            write settings for the HTTP executor in front of the
+//                                                          demonstration's made-up server, run as a local
+//                                                          program, with the OAuth sign-in; nothing is overwritten
+//   provared-mcp-executor stdio  --config executor.json   run as the tool server the agent's client starts:
 //                                                          start the real server, check and receipt each call
 //   provared-mcp-executor http    --config executor-http.json
 //                                                          run as a Streamable HTTP MCP server in front of an
-//                                                          upstream HTTP MCP server, for several agents, each
-//                                                          signing in with a secret of its own
+//                                                          upstream HTTP MCP server, or of a local program
+//                                                          started for each session, for several agents, each
+//                                                          signing in with a secret of its own or through OAuth
 //   provared-mcp-executor secret                           make a new secret for an agent, and print it with
 //                                                          its hash (the hash goes into the settings)
 //   provared-mcp-executor check   --config executor.json   say what each rule maps to, and what is wrong
@@ -58,7 +62,7 @@
 //
 // "check", "keys" and "compare" read either kind of settings: the stdio
 // executor's (with "server" and "agent") or the HTTP executor's (with
-// "upstream" and "agents"). "stdio" writes nothing to its standard output
+// "agents", and "upstream" or "server"). "stdio" writes nothing to its standard output
 // but MCP messages; what it has to say goes to its standard error, one JSON
 // object to a line, as does "http". "demo --stdio" first says one plain
 // line there: that it is a demonstration, when its permission ends, and
@@ -92,6 +96,7 @@ const USAGE = `provared-mcp-executor ${VERSION}: an executor for MCP tool server
 
   provared-mcp-executor demo    [--stdio]    try it with no passkey and no settings
   provared-mcp-executor init    [--http]     copy the example settings into this folder
+  provared-mcp-executor init    --http --demo   settings for the demonstration's made-up server behind the HTTP executor
   provared-mcp-executor stdio   --config executor.json
   provared-mcp-executor http    --config executor-http.json
   provared-mcp-executor secret
@@ -281,6 +286,55 @@ async function askRunning(config, root, method, path, body, hint) {
   }
 }
 
+/**
+ * "init --http --demo": settings for the HTTP executor in front of the
+ * demonstration's made-up server (demo/server.mjs, the tools "echo" and
+ * "add"), run as a local program, with the OAuth sign-in and one agent kept
+ * for a connection. So the executor can be tried from a client that signs
+ * in through OAuth with no tool server of anyone's. Three files are written
+ * in the current folder, none over a file already there: the settings, the
+ * demonstration's rules on content, and the made-up credential the made-up
+ * server asks for. The permission is still a person's to sign, with a
+ * passkey: nothing here is signed by a stand-in.
+ */
+function initHttpDemo() {
+  const settingsAt = resolve('executor-http.json');
+  const rulesAt = resolve('content-rules.json');
+  const tokenAt = resolve('demo-token');
+  const there = [settingsAt, rulesAt, tokenAt].filter((path) => existsSync(path));
+  if (there.length) throw new Error(`Nothing was written: ${there.join(' and ')} already ${there.length > 1 ? 'exist' : 'exists'}. Move ${there.length > 1 ? 'them' : 'it'}, or run init in another folder.`);
+  const agent = 'connection-1';
+  const settings = {
+    name: 'Provared MCP executor, demonstration',
+    service: 'executor',
+    listen: { host: '127.0.0.1', port: 8796 },
+    path: '/mcp',
+    // The made-up server, started by this Node.js, in this folder, where its made-up credential is.
+    server: { command: process.execPath, args: [join(HERE, 'demo', 'server.mjs')], env: { DEMO_TOKEN: { file: 'demo-token' } } },
+    oauth: { issuer: '<public https address of the reverse proxy, such as https://guard.example.com>', clients: ["<address of the client's metadata document>"], state: 'oauth-state.json' },
+    agents: { [agent]: { oauth: true, slip: `slips/${agent}.json`, book: `books/${agent}.jsonl`, keys: `keys/${agent}.jwk`, issuerKeys: ["<thumbprint of the person's passkey>"] } },
+    executor: { keys: 'keys/executor.jwk' },
+    tools: { echo: { action: 'demo.echo' }, add: { action: 'demo.add' } },
+    contentRules: 'content-rules.json',
+    unlisted: 'refuse',
+    hideUnlisted: true,
+    allowedOrigins: [],
+  };
+  writeFileSync(settingsAt, `${JSON.stringify(settings, null, 2)}\n`, { flag: 'wx' });
+  copyFileSync(join(HERE, 'demo', 'content-rules.json'), rulesAt, constants.COPYFILE_EXCL);
+  writeFileSync(tokenAt, `${randomBytes(16).toString('hex')}\n`, { mode: 0o600, flag: 'wx' });
+  const name = basename(settingsAt);
+  const steps = [
+    `In ${name}, put in each value written <like this>: the public https address the executor is reached at ("oauth.issuer"), the address of the client's metadata document ("oauth.clients") and, once the permission is signed, the passkey's thumbprint.`,
+    `provared-mcp-executor keys --config ${name}`,
+    `The person signs a permission for the agent "${agent}" with a passkey, holding what "keys" printed, for the actions demo.echo and demo.add; save it as slips/${agent}.json (in the folder slips/, which you make), and put the passkey's thumbprint in its "issuerKeys".`,
+    `provared-mcp-executor check --config ${name}   (it lists every problem left)`,
+    `provared-mcp-executor owner --config ${name}   (the link that sets up the owner's passkey), then: provared-mcp-executor http --config ${name}`,
+  ];
+  process.stdout.write(`Wrote ${[settingsAt, rulesAt, tokenAt].join(', ')}.\nThese settings run the demonstration's made-up server (${settings.server.args[0]}; the tools "echo" and "add", which reach no network) as a local program behind the executor, one for each session. The file demo-token holds a made-up credential, made now, which that server asks for.\nNext:\n${steps.map((s, i) => `  ${i + 1}. ${s}`).join('\n')}\n`);
+  return 0;
+}
+
 /** "stdio" (and "demo --stdio"): run the executor over this process's standard input and output until the server ends. */
 async function runStdio({ config, root }) {
   const executor = await openExecutor(config, { root });
@@ -313,8 +367,12 @@ async function main(args) {
   }
   if (command === 'init') {
     const http = args.includes('--http');
-    const unknown = args.slice(1).filter((a) => a !== '--http');
-    if (unknown.length) throw new Error(`init takes no ${unknown.map((a) => `"${a}"`).join(', ')}; only --http.`);
+    const unknown = args.slice(1).filter((a) => a !== '--http' && a !== '--demo');
+    if (unknown.length) throw new Error(`init takes no ${unknown.map((a) => `"${a}"`).join(', ')}; only --http and, with it, --demo.`);
+    if (args.includes('--demo')) {
+      if (!http) throw new Error('init takes --demo only with --http: settings for the demonstration\'s made-up server behind the HTTP executor. For the demonstration over stdio, run "provared-mcp-executor demo". Nothing was written.');
+      return initHttpDemo();
+    }
     const files = EXAMPLES[http ? 'http' : 'stdio'].map(([from, to]) => [join(HERE, from), resolve(to)]);
     // Nothing is written unless every file can be: none is overwritten.
     const there = files.filter(([, to]) => existsSync(to)).map(([, to]) => to);

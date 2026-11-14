@@ -482,8 +482,15 @@ export function openFrontDoor({ settings, now = Date.now, log = () => {}, ownerC
   };
   // The requests held open, each under the access token it came with: {hash, connection, end}, where "end" ends the request (X229).
   const held = new Set();
-  /** End every request held open whose token no longer stands, for whatever reason: its connection has ended, or later tokens have pushed it out. Called once memory has changed for good. */
+  // What is kept under a connection, whatever token it came with (a session of a local program): {connection, end}, where "end" is called when the connection ends (X234).
+  const watched = new Set();
+  /** End every request held open whose token no longer stands, for whatever reason: its connection has ended, or later tokens have pushed it out; and everything kept under a connection that has ended. Called once memory has changed for good. */
   const endHeld = () => {
+    for (const w of [...watched]) {
+      if (state.grants.some((g) => g.id === w.connection)) continue;
+      watched.delete(w);
+      w.end();
+    }
     for (const h of [...held]) {
       if (standsFor(h.hash)) continue;
       held.delete(h);
@@ -912,6 +919,18 @@ export function openFrontDoor({ settings, now = Date.now, log = () => {}, ownerC
       const h = { hash: token.hash, connection: token.connection, end };
       held.add(h);
       return () => held.delete(h);
+    },
+    /**
+     * Keep something under a connection ("connection" is the id agentFor
+     * gave), whatever token each of its requests comes with: "end" is
+     * called, once, when the connection ends (a refresh token used twice, a
+     * code used twice, a new approval of its agent). Gives the function
+     * that lets it go (X234).
+     */
+    watch(connection, end) {
+      const w = { connection, end };
+      watched.add(w);
+      return () => watched.delete(w);
     },
     /**
      * At the executor's close, with the agents' locks still held: where the

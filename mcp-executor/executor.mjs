@@ -48,6 +48,8 @@ export const UNLISTED_ACTION = 'executor.unlisted';
 
 /** The error text a receipt names where the executor stopped on request (a signal, close()) with the call with the server: the receipt is written then, before the stop completes. */
 export const EXECUTOR_STOPPED = 'The executor stopped while this call was with the tool server, so its outcome is not known.';
+/** The error text a receipt names where the tool server's program ended with the call still with it: the same over stdio and, for a local program, over HTTP. */
+export const SERVER_ENDED = 'The tool server ended before it answered this call, so its outcome is not known.';
 /** The same, where the executor stopped without warning and the receipt was written at the next start, from the copy. */
 export const OUTCOME_UNKNOWN = `${EXECUTOR_STOPPED} The receipt was written when the executor next started, from its own copy of what it had sent.`;
 export const RESULT_NOT_FINGERPRINTED = 'The tool server answered, and its result could not be written in the one form of RFC 8785 (text that is not well-formed Unicode, a number JSON cannot write, or a whole number beyond 9,007,199,254,740,991), so the receipt names no result.';
@@ -127,7 +129,56 @@ export function readSettings(config, root, { keysOnly = false } = {}) {
   };
   if (!isObject(config)) return { settings: null, problems: ['The settings must be a JSON object.'], warnings };
   readIdentity(config, s, at);
+  readServerSettings(config, s, at, warnings, root);
 
+  const agent = config.agent;
+  if (!isObject(agent)) at('agent', 'must be an object: slip, book, keys, issuerKeys.');
+  else s.agent = readAgentPaths(agent, root, at, 'agent');
+
+  const ex = config.executor;
+  if (!isObject(ex)) at('executor', 'must be an object: keys, copy, copyKey.');
+  else {
+    s.executor = {};
+    if (typeof ex.keys !== 'string' || ex.keys === '') at('executor.keys', 'must be a path.');
+    else s.executor.keys = pathFrom(root, ex.keys);
+    const copy = ex.copy ?? 'copy.jsonl';
+    if (typeof copy !== 'string' || copy === '') at('executor.copy', 'must be a path.');
+    else s.executor.copy = pathFrom(root, copy);
+    const copyKey = ex.copyKey ?? `${copy}.key`;
+    if (typeof copyKey !== 'string' || copyKey === '') at('executor.copyKey', 'must be a path.');
+    else s.executor.copyKey = pathFrom(root, copyKey);
+    readFormerKeys(ex, s, at, root);
+  }
+
+  readToolRules(config, s, at);
+  readKnobs(config, s, at, root);
+  readRecorderSettings(config, s, at, root, warnings);
+  readShutdownWait(config, s, at);
+  for (const k of Object.keys(config)) {
+    if (![...SHARED_KEYS, 'server', 'agent', 'executor', 'shutdownWait'].includes(k)) warnings.push(`${k}: not a setting; set aside.`);
+  }
+  if (s.unlisted === 'forward') warnings.push(UNLISTED_FORWARD_WARNING);
+  return { settings: problems.length ? null : s, problems, warnings, partial: s };
+}
+
+/** Who sets the executor's own environment: over stdio, the agent's client, which starts it; over HTTP, whoever starts it. */
+const ENVIRONMENT_SET_BY = { stdio: "the agent's client sets when it starts the executor", http: 'whoever starts the executor sets' };
+
+/** How long the tool server is given to end once its input is closed, before it is ended by force: "shutdownWait". */
+export function readShutdownWait(config, s, at) {
+  s.shutdownWait = config.shutdownWait ?? 5000;
+  if (!Number.isInteger(s.shutdownWait) || s.shutdownWait < 100 || s.shutdownWait > 600000) at('shutdownWait', 'must be a whole number of milliseconds from 100 to 600,000.');
+}
+
+/**
+ * The tool server the executor starts, "server": its program, arguments,
+ * folder, the folders a bare name is looked for in, and its environment,
+ * each variable read from a file, from the executor's own environment or
+ * from the settings. The same for both ways of running; "transport" ("stdio"
+ * or "http") only says, in a warning, who sets the executor's environment.
+ */
+export function readServerSettings(config, s, at, warnings, root, transport = 'stdio') {
+  const setBy = ENVIRONMENT_SET_BY[transport];
   const server = config.server;
   if (!isObject(server)) at('server', 'must be an object naming the tool server: command, args, cwd, env.');
   else {
@@ -157,7 +208,7 @@ export function readSettings(config, root, { keysOnly = false } = {}) {
             if (typeof from.env !== 'string' || !ENV_NAME.test(from.env)) at(`server.env.${name}.env`, "must be a variable name in the executor's own environment.");
             else {
               s.server.env[name] = { env: from.env };
-              warnings.push(`server.env.${name}: its value comes from the executor's own environment, which the agent's client sets when it starts the executor. A credential is better kept in a file of its own ("file"), readable by the executor alone.`);
+              warnings.push(`server.env.${name}: its value comes from the executor's own environment, which ${setBy}. A credential is better kept in a file of its own ("file"), readable by the executor alone.`);
             }
           } else {
             if (typeof from.value !== 'string') at(`server.env.${name}.value`, 'must be text.');
@@ -172,36 +223,6 @@ export function readSettings(config, root, { keysOnly = false } = {}) {
     s.server.passEnv = server.passEnv ?? DEFAULT_PASS_ENV;
     if (!Array.isArray(s.server.passEnv) || !s.server.passEnv.every((n) => typeof n === 'string' && ENV_NAME.test(n))) at('server.passEnv', "must be a list of variable names to pass from the executor's environment to the server.");
   }
-
-  const agent = config.agent;
-  if (!isObject(agent)) at('agent', 'must be an object: slip, book, keys, issuerKeys.');
-  else s.agent = readAgentPaths(agent, root, at, 'agent');
-
-  const ex = config.executor;
-  if (!isObject(ex)) at('executor', 'must be an object: keys, copy, copyKey.');
-  else {
-    s.executor = {};
-    if (typeof ex.keys !== 'string' || ex.keys === '') at('executor.keys', 'must be a path.');
-    else s.executor.keys = pathFrom(root, ex.keys);
-    const copy = ex.copy ?? 'copy.jsonl';
-    if (typeof copy !== 'string' || copy === '') at('executor.copy', 'must be a path.');
-    else s.executor.copy = pathFrom(root, copy);
-    const copyKey = ex.copyKey ?? `${copy}.key`;
-    if (typeof copyKey !== 'string' || copyKey === '') at('executor.copyKey', 'must be a path.');
-    else s.executor.copyKey = pathFrom(root, copyKey);
-    readFormerKeys(ex, s, at, root);
-  }
-
-  readToolRules(config, s, at);
-  readKnobs(config, s, at, root);
-  readRecorderSettings(config, s, at, root, warnings);
-  s.shutdownWait = config.shutdownWait ?? 5000;
-  if (!Number.isInteger(s.shutdownWait) || s.shutdownWait < 100 || s.shutdownWait > 600000) at('shutdownWait', 'must be a whole number of milliseconds from 100 to 600,000.');
-  for (const k of Object.keys(config)) {
-    if (![...SHARED_KEYS, 'server', 'agent', 'executor', 'shutdownWait'].includes(k)) warnings.push(`${k}: not a setting; set aside.`);
-  }
-  if (s.unlisted === 'forward') warnings.push(UNLISTED_FORWARD_WARNING);
-  return { settings: problems.length ? null : s, problems, warnings, partial: s };
 }
 
 /** The settings both ways of running share: the name, the service id, the tool rules and the knobs of readKnobs. */
@@ -376,7 +397,7 @@ function isFile(path) {
  * program is not found. On Windows a bare name is tried with .exe and .com,
  * which a program started without a shell can run (not .cmd or .bat).
  */
-export function resolveCommand(command, { root, path, env = process.env, platform = process.platform }) {
+export function resolveCommand(command, { root, path, env = process.env, platform = process.platform, transport = 'stdio' }) {
   const named = /[\\/]/.test(command);
   if (named) {
     const full = pathFrom(root, command);
@@ -390,7 +411,9 @@ export function resolveCommand(command, { root, path, env = process.env, platfor
     for (const ext of exts) {
       const candidate = resolve(dir, command + ext);
       if (isFile(candidate)) {
-        return { path: candidate, warning: path ? null : `server.command: the bare name "${command}" was found through the executor's own PATH, which the agent's client sets, as ${candidate}. Name the program by its path, or give "server.path", so that the client cannot choose which program is given the credential.` };
+        if (path) return { path: candidate, warning: null };
+        if (transport === 'http') return { path: candidate, warning: `server.command: the bare name "${command}" was found through the executor's own PATH, which whoever starts the executor sets, as ${candidate}. Name the program by its path, or give "server.path", so that the PATH does not choose which program is given the credential.` };
+        return { path: candidate, warning: `server.command: the bare name "${command}" was found through the executor's own PATH, which the agent's client sets, as ${candidate}. Name the program by its path, or give "server.path", so that the client cannot choose which program is given the credential.` };
       }
     }
   }
@@ -410,6 +433,55 @@ function credentialValue(name, from) {
     return v;
   }
   return readCredentialFile(from.file, `server.env.${name}`);
+}
+
+/** Find the tool server's program, as a start does: "settings.server.resolved" is its path. Throws where it is not found. */
+export function resolveProgram(settings, root, warnings, transport = 'stdio') {
+  const program = resolveCommand(settings.server.command, { root, path: settings.server.path, transport });
+  if (program.warning) warnings.push(program.warning);
+  settings.server.resolved = program.path;
+}
+
+/**
+ * The tool server's environment: the few variables passed on from the
+ * executor's own, and the credentials, read now, so that a missing one stops
+ * the start, and kept in memory for the server's environment alone. Gives
+ * {env, credentialNames}; the values are never logged.
+ */
+export function readProgramEnvironment(settings) {
+  const env = {};
+  const credentialNames = [];
+  for (const name of settings.server.passEnv) {
+    const v = process.env[name];
+    if (v !== undefined) env[name] = v;
+  }
+  for (const [name, from] of Object.entries(settings.server.env)) {
+    env[name] = credentialValue(name, from);
+    credentialNames.push(name);
+  }
+  return { env, credentialNames };
+}
+
+/** What "check" finds wrong with the tool server's program, its folder and its credentials, each on its own: a list of problems. A placeholder of the example still in place is not looked at here (placeholderProblems names it). */
+export function programProblems(config, s, root) {
+  const problems = [];
+  if (s.server?.command && s.server.path !== undefined && !isPlaceholder(s.server.command)) {
+    try {
+      resolveCommand(s.server.command, { root, path: s.server.path });
+    } catch (e) {
+      problems.push(e.message);
+    }
+  }
+  if (typeof config.server?.cwd === 'string' && !isPlaceholder(config.server.cwd) && !isFolder(s.server.cwd)) problems.push(`server.cwd: the folder ${s.server.cwd} does not exist.`);
+  for (const [name, from] of Object.entries(s.server?.env ?? {})) {
+    if (from.file !== undefined && isPlaceholder(config.server.env[name].file)) continue;
+    try {
+      credentialValue(name, from);
+    } catch (e) {
+      problems.push(e.message);
+    }
+  }
+  return problems;
 }
 
 /** Read a credential from a file, as the gateway does: one line ending at the end is dropped. Its value is returned, never logged. */
@@ -580,27 +652,10 @@ async function readAgentFiles(paths, settings, shared, { now, readOnly }) {
 async function prepare(config, root, { now = Date.now, readOnly = false, offline = false } = {}) {
   const { settings, problems, warnings } = readSettings(config, root);
   if (problems.length) throw new Error(`The settings have problems:\n- ${problems.join('\n- ')}`);
-  const env = {};
-  const credentialNames = [];
-  if (!offline) {
-    const program = resolveCommand(settings.server.command, { root, path: settings.server.path });
-    if (program.warning) warnings.push(program.warning);
-    settings.server.resolved = program.path;
-  }
+  if (!offline) resolveProgram(settings, root, warnings);
   const shared = await prepareShared(settings);
   warnings.push(...shared.warnings);
-  if (!offline) {
-    // The credentials: read now, so that a missing one stops the start, and
-    // kept in memory for the server's environment alone.
-    for (const name of settings.server.passEnv) {
-      const v = process.env[name];
-      if (v !== undefined) env[name] = v;
-    }
-    for (const [name, from] of Object.entries(settings.server.env)) {
-      env[name] = credentialValue(name, from);
-      credentialNames.push(name);
-    }
-  }
+  const { env, credentialNames } = offline ? { env: {}, credentialNames: [] } : readProgramEnvironment(settings);
   const agent = await prepareAgent({ ...settings.agent, copy: settings.executor.copy, copyKey: settings.executor.copyKey }, settings, shared, { now, readOnly });
   warnings.push(...agent.warnings);
   return { settings, warnings, agent, agentKeys: agent.agentKeys, executorKeys: shared.executorKeys, about: agent.about, env, credentialNames, read: agent.read, content: shared.content, sealer: shared.sealer, formerKeys: shared.formerKeys };
@@ -631,22 +686,7 @@ export async function checkConfig(config, root) {
   const problems = placeholderProblems(config, found);
   if (partial) {
     const s = partial;
-    if (s.server?.command && s.server.path !== undefined && !isPlaceholder(s.server.command)) {
-      try {
-        resolveCommand(s.server.command, { root, path: s.server.path });
-      } catch (e) {
-        problems.push(e.message);
-      }
-    }
-    if (typeof config.server?.cwd === 'string' && !isPlaceholder(config.server.cwd) && !isFolder(s.server.cwd)) problems.push(`server.cwd: the folder ${s.server.cwd} does not exist.`);
-    for (const [name, from] of Object.entries(s.server?.env ?? {})) {
-      if (from.file !== undefined && isPlaceholder(config.server.env[name].file)) continue;
-      try {
-        credentialValue(name, from);
-      } catch (e) {
-        problems.push(e.message);
-      }
-    }
+    problems.push(...programProblems(config, s, root));
     problems.push(...(await missingFiles(s, s.agent ? [['agent', s.agent]] : [])));
   }
   if (problems.length) return { problems, warnings, tools };
@@ -1346,7 +1386,8 @@ export function callCore({ settings, content, executorKeys, now }) {
   async function handleCall(agent, link, id, message, text) {
     const { log, copy, writer, file, about, calls } = agent;
     const answerError = (code, words, data) => link.answer(responseText(id, { error: { code, message: words, ...(data === undefined ? {} : { data }) } }));
-    const key = idKey(id);
+    // A call in flight is held by its id; where the link has sessions (a local program behind HTTP), by its session and its id, since an id is unique only within its session (X236).
+    const key = link.key ? link.key(id) : idKey(id);
     if (calls.has(key)) return answerError(CODES.invalidRequest, 'A request with this id is already in progress.');
     if (calls.size >= settings.maxWaiting) {
       log({ event: 'refused', code: 'too-many-waiting', waiting: calls.size });
@@ -1850,7 +1891,7 @@ export async function openExecutor(config, more = {}) {
       child.on('exit', (code, signal) => {
         serverGone = true;
         for (const call of calls.values()) {
-          if (call.state === 'sent' && call.settle) call.settle({ kind: 'error', text: 'The tool server ended before it answered this call, so its outcome is not known.', code: CODES.noAnswer });
+          if (call.state === 'sent' && call.settle) call.settle({ kind: 'error', text: SERVER_ENDED, code: CODES.noAnswer });
         }
         log({ event: 'server-ended', code, signal });
         done({ code: code ?? 1, signal });
