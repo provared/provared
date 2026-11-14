@@ -3,10 +3,11 @@
 This recipe is the settings for one client: claude.ai, which adds a remote
 MCP server as a "custom connector" and signs in to it through OAuth. The
 guard (`provared-mcp-executor`) is run by a business on its own server, in
-front of one upstream MCP server. claude.ai connects to the guard; the
-guard checks each tool call against the permission, sends on what it
-allows with the upstream's token, and writes a receipt for each in the
-connection's book.
+front of one tool server: an upstream HTTP MCP server, or a local program
+the guard starts. claude.ai connects to the guard; the guard checks each
+tool call against the permission, sends on what it allows, with the
+upstream's token or to the program it started with its credential, and
+writes a receipt for each in the connection's book.
 
 It describes only what is built, in version 0.5.0 (not yet released). It
 has been tried only by the package's own tests, on one computer, with a
@@ -68,9 +69,17 @@ stand-in client. It has not been tried with claude.ai itself.
 - **An approval is not in the book.** The guard's log says when a
   connection was approved and for which client; the agent's book holds
   only the receipts of its calls.
-- **The upstream needs a fixed token.** The guard sends the upstream a
-  bearer token read from a file. An upstream that only signs in through
-  OAuth itself is not served yet.
+- **The upstream needs a fixed token.** The guard sends an upstream HTTP
+  server a bearer token read from a file. An upstream that only signs in
+  through OAuth itself is not served yet. A local program is given its
+  credentials in its environment, each read from a file.
+- **A local program serves sessions.** In front of a local program the
+  guard starts one program for each session that claude.ai begins, and
+  ends it when the session ends, has had nothing from claude.ai for half
+  an hour (`sessions.idle`), or makes room for a ninth (`sessions.max`).
+  A request under an ended session is answered 404, after which a client
+  is to begin a new session. Whether claude.ai does so has not been
+  tried.
 - **No one-command setup yet.** The keys, the permission and the proxy are
   set up by hand, as for any agent over HTTP.
 
@@ -85,6 +94,32 @@ stand-in client. It has not been tried with claude.ai itself.
 To let a second claude.ai connection in, add a second agent marked
 `"oauth": true`. Each approved connection is one agent, with its own
 permission and book.
+
+## Trying it with the demonstration's server
+
+To try the connector with no tool server of your own, run
+`provared-mcp-executor init --http --demo` in a new folder. It writes
+`executor-http.json`, `content-rules.json` and `demo-token`. The settings
+run the demonstration's made-up server as a local program behind the
+guard: two tools, `echo` and `add`, which reach no network. One agent,
+`connection-1`, is kept for the connection. Then:
+
+1. In `executor-http.json`, set `oauth.issuer` to the proxy's public
+   address and `oauth.clients` to
+   `["https://claude.ai/oauth/mcp-oauth-client-metadata"]`.
+2. Make the keys with `provared-mcp-executor keys --config executor-http.json`.
+   Have the permission signed for the agent `connection-1`, for the
+   actions `demo.echo` and `demo.add`; save it as
+   `slips/connection-1.json`, and put the passkey's thumbprint in the
+   agent's `issuerKeys`.
+3. Go on from step 1 of "Trying the owner's passkey by hand", below, with
+   `executor-http.json` as the settings.
+
+In claude.ai the connector then shows the two tools. `echo` with a text
+that holds the lower-case word "password" is refused by the
+demonstration's rule on content, and a denial is written; any other call
+to either tool gets a receipt in `books/connection-1.jsonl`. This has been
+tried only by the package's own tests, with a stand-in client.
 
 ## Trying the owner's passkey by hand
 

@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { PassThrough } from 'node:stream';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
@@ -324,6 +325,29 @@ test('the limit on how many: at most "sessions.max" for each agent, the one quie
     assert.equal((await begin(w, 'alpha')).answer.status, 200);
     assert.equal(w.executor.agent('beta').sessions(), 1, 'another agent\'s session never makes room');
   } finally {
+    await w.close();
+  }
+});
+
+test('many programs at once: what each says on its standard error is handed on, and Node.js is given nothing to warn about', async () => {
+  const w = await localWorld({ config: { sessions: { max: 12 } }, open: false });
+  const said = new PassThrough();
+  let text = '';
+  said.setEncoding('utf8').on('data', (d) => {
+    text += d;
+  });
+  const warnings = [];
+  const onWarning = (warning) => warnings.push(warning.name);
+  process.on('warning', onWarning);
+  await openHttpWorld(w, { serverStderr: said });
+  try {
+    const begun = await Promise.all(Array.from({ length: 12 }, () => begin(w, 'alpha')));
+    assert.ok(begun.every((b) => b.answer.status === 200));
+    assert.equal(w.executor.programs(), 12);
+    await until(() => text.split('fake-server: started').length - 1 === 12);
+    assert.deepEqual(warnings.filter((name) => name === 'MaxListenersExceededWarning'), [], 'no warning of too many listeners on the one place they all write to');
+  } finally {
+    process.off('warning', onWarning);
     await w.close();
   }
 });

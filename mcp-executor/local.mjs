@@ -175,7 +175,8 @@ export function openLocalSessions({ settings, env, credentialNames, log, serverS
       sessions.set(session.id, session);
       running.add(session);
       log({ event: 'server-started', agent, command: settings.server.resolved, credentials: credentialNames });
-      if (serverStderr) child.stderr.pipe(serverStderr, { end: false });
+      // What the program says on its standard error goes where the settings' owner looks, as on stdio. Written on, not piped: many programs write to the one place, and a pipe from each would hang its own listeners on it.
+      if (serverStderr) child.stderr.on('data', (said) => serverStderr.write(said));
       else child.stderr.resume();
       child.stdin.on('error', (e) => log({ event: 'server-stdin-error', agent, error: e.code ?? e.message }));
       readLines(child.stdout, {

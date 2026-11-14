@@ -352,7 +352,8 @@ itself has a problem.
 `provared-mcp-executor http --config …` runs the executor as a Streamable
 HTTP MCP server (2026-07-28: "each message is an HTTP POST to a single MCP
 endpoint; replies arrive as a JSON object or a request-scoped SSE stream")
-in front of one upstream HTTP MCP server (`http.mjs`). Four things differ
+in front of one upstream HTTP MCP server (`http.mjs`), or of a local
+program started for each session (section 10.1). Four things differ
 from stdio; the rest (the rules, the check, the documents, the
 countersignature, the copy) is the same code, `callCore` in
 `executor.mjs`, which each transport reaches through a small link (X101).
@@ -429,6 +430,174 @@ token the upstream encodes before echoing is not seen by the check of
 X105, and JSON's escaping of a `/`, `"` or `\` in the token counts as
 encoding; and the credential is kept from an agent only for what passes
 through the executor.
+
+### 10.1 A local program in place of the upstream
+
+The tool server behind the HTTP executor may be a local program: one the
+executor starts and speaks to over its standard input and output, as the
+stdio executor does (section 5), where the rest of this section describes
+an upstream HTTP MCP server. The sign-in (a secret, or OAuth, section 14),
+the agents, the rules, the check, the documents, the countersignature and
+the copy are unchanged: a `tools/call` reaches `callCore` through a link
+that writes one line to the program and reads one line back
+(`local.mjs`, and `localLink` in `http.mjs`).
+
+A stdio program holds one conversation: it is initialised once, and
+whatever it writes goes to whoever started it. So no two agents may share
+one. The executor starts **one program for each MCP session**, and a
+session is one agent's.
+
+The rules of the Streamable HTTP transport followed here are those of
+revision 2025-11-25, the one with sessions. Its text was not among the
+sources of section 3 and was not fetched for this step, which makes no
+request to an outside service: the rules are given below as the builder
+holds them, and each is to be checked against the published text. Where
+the choice is the plainest option and not the specification's, it says so.
+
+**X231. One upstream: `upstream` or `server`, never both.** The HTTP
+settings name either `upstream.url` (and its credential) or a `server`
+block, with `shutdownWait`. Settings with both are refused, and so are
+settings with neither. `server` is the stdio executor's, read by the same
+code (`readServerSettings`): the program, its arguments, its folder, the
+folders a bare name is looked for in, and its environment, each variable
+from a file, from the executor's environment or from the settings, with
+the same warnings; only the warning's words differ, since over HTTP it is
+whoever starts the executor, not an agent's client, that sets its
+environment. The program is found, and its credentials are read, once, at
+the executor's start, as a stdio start does; every session's program is
+given the same environment. Why: the plainest option. One block read by
+one piece of code cannot drift into two sets of rules.
+
+**X232. A session is begun by `initialize`, and has a program of its
+own.** An `initialize` request sent with no `Mcp-Session-Id` starts the
+program and is sent to it; where the program answers with a result, the
+answer goes back with a new `Mcp-Session-Id`: 32 random bytes in
+base64url. Every later message must name its session. A message with no
+session, other than that `initialize`, is refused with 400; a session that
+is not known, has ended, or is another agent's is answered 404, and
+nothing reaches any program; an `initialize` that names a session is
+refused with 400. By the specification (2025-11-25): the server may give a
+session id with the result of `initialize`, of visible ASCII characters
+and not to be guessed; a server that needs one answers a request without
+it, other than the initialisation, with 400, and an ended session with
+404, after which the client begins a new one. The 400 for an `initialize`
+under a session is the plainest option. A request of the 2026-07-28
+revision, which has no sessions, is therefore refused in front of a local
+program: the executor serves the session era only there.
+
+**X233. One answer to a request, and one stream for the program's own
+messages.** A request is answered with one JSON body, under the agent's
+id; the answer to `tools/list` is filtered as on stdio. A notification, or
+the agent's response to a request of the program's, is answered 202 once
+it is written to the program. The program's own requests and
+notifications go on the session's GET stream, as events with no id; where
+the agent has no stream open they are dropped, and the log says so
+(`server-message-dropped`). A session has one stream: a later GET takes
+the place of the earlier, which is ended. Nothing is replayed. A response
+of the program that answers nothing in flight (it came after a timeout or
+a cancellation) is dropped, and so is a line that cannot be read as a
+message and names no request in flight; on stdio such a line is handed on
+as it is, and here there is no request it could answer. By the
+specification: a request is answered with `application/json` or an event
+stream, and a client takes both; a notification or a response with 202;
+the server may send its requests and notifications on the GET stream, and
+must not send a response there. One stream, no replay and the dropping
+are the plainest options: the specification lets a server keep several
+streams and replay, and requires neither.
+
+**X234. When a session ends, and how.** A session ends when the agent
+sends DELETE under it (answered 204); when its program ends by itself;
+when it has been idle (X235); when it makes room for a new one (X235);
+when the connection made through OAuth it was begun under ends; when a
+message names it under another connection than its own; and when the
+executor stops. However it ends, it is forgotten at once, its stream is
+closed, and its program's input is closed; a program that has not ended
+`shutdownWait` later is ended by force, as on stdio. A call still with the
+program when the program ends is settled as on stdio, with the same text
+in its receipt ("The tool server ended before it answered this call…",
+`SERVER_ENDED`); at the executor's stop the calls are settled first, as
+the executor's stop (X115), and the programs are ended after. Why: a
+session begun under a connection belongs to it, so the next connection
+approved for the same agent (X201) must not carry it on; `oauth.mjs`
+tells the sessions of a connection's end (`watch`), and the check on each
+message stands behind that; while `watch` works the check is never
+reached, so no test fails without it. An access token's end does not end the
+session: the next token of the same connection goes on with it. The
+specification lets a server end a session at any time; the rest is the
+plainest option. The one difference from X229 is stated: there, a call
+already taken is not cut when its token ends; here, a call with the
+program when its connection ends gets the receipt of a program that
+ended, unless the program answers before it ends.
+
+**X235. The limits: `sessions.max` and `sessions.idle`.** An agent may
+have `sessions.max` sessions at once (8 unless the settings say otherwise;
+1 to 256), so the executor runs at most that many programs for each agent,
+and beside them, for at most `shutdownWait` each, those of sessions just
+ended. Where an agent at its most begins another, its own session that
+has been quiet longest, with no message in hand, is ended to make room;
+where each of them has a message in hand, the `initialize` is refused with
+503, and none is ended. Another agent's sessions are never counted and
+never ended. A session is ended once `sessions.idle` milliseconds have
+passed since the agent's last message under it (30 minutes unless the
+settings say otherwise; a second to a day); while a message is in hand,
+a call that is still with the program among them, the time does not run.
+An open GET stream is not a message: it does not keep a session. Why: the
+plainest options. A client that does not end its sessions would otherwise
+lock itself out for the idle time; ending the quietest harms only the
+agent that asked. The numbers are the builder's: no source gives them.
+
+**X236. A call's id is its session's.** A call in flight is held by its
+session and its id, so two sessions of one agent may each have a call
+under the same id at once (`link.key`). By the specification: a request's
+id is unique within a session, and a client numbers each session from the
+start. In front of an upstream HTTP server the calls are still held by
+the agent and the id alone, as before.
+
+**X237. Cancellation and time, as on stdio.** The agent's
+`notifications/cancelled` for a call is written to the program under the
+executor's id for the call, and the call is settled as cancelled; for
+another request in flight it is renamed in the same way. On the
+executor's `timeout` the program is sent the cancellation, as on stdio.
+Closing the connection is not a cancellation (X111, the legacy rule): the
+call runs on, bounded by `timeout`, and its outcome is recorded. A request
+other than a call that the program has not answered within `timeout` is
+answered 504, and a later answer is dropped; `initialize` is such a
+request, and then no session is begun. Why: stdio's rules, with the one
+addition that a request must end, since an HTTP request cannot wait for
+ever.
+
+**X238. A program that will not start.** A program that is not found, or
+a credential that cannot be read, stops the executor's start, and `check`
+names it. A program that is found and cannot be run, or that ends before
+it answers `initialize`, begins no session: the agent is answered 502, or
+504 where it gave no answer in time, with the reason, and the program is
+ended. Where the program answers `initialize` with an error, that error
+goes to the agent, no session is begun and the program is ended. Why: the
+plainest option. No session exists that has no program behind it.
+
+**X239. What it does not do.** The program's credentials are not looked
+for in what it answers: as on stdio, and unlike the upstream's token
+(X105). The mirrored headers of X110 are checked as before and go
+nowhere, since a program takes no headers. The programs are not kept from
+each other by the executor: each is given the same environment and the
+same folder, and what they share on the disk is theirs to keep apart.
+What each writes to its standard error goes to the executor's, among the
+executor's own log lines, with nothing to say which session wrote it.
+Nothing of a session outlives the executor: after a restart every
+session id is unknown, and the client begins again. A restart still
+writes the receipt of a call that was with a program, from the agent's
+copy (section 8).
+
+**X240. `init --http --demo`.** It writes, in the current folder and over
+no file already there, settings whose `server` is the demonstration's
+made-up server (`demo/server.mjs`, the tools `echo` and `add`, which reach
+no network) started by the Node.js that runs the command; the OAuth
+settings with the public address and the client left to put in; one agent
+kept for a connection; the demonstration's rules on content; and the
+made-up credential the made-up server asks for. Unlike `demo`, nothing is
+signed by a stand-in: the keys, the permission and the owner are set up as
+for any agent over HTTP. Why: so that the sign-in can be tried from a
+client with no tool server of anyone's behind it.
 
 ## 11. F-157: rules on the content of a change
 

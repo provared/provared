@@ -130,6 +130,55 @@
   date. It shows only that the stub existed by the stamp's time: it catches
   forward dating, not back dating. No code changes.
 
+- **`provared-mcp-executor` 0.5.0 (not yet released): over HTTP, the tool
+  server may be a local program.** The HTTP executor could stand only in
+  front of an upstream HTTP MCP server, so a tool server that is a program
+  on the same computer, speaking MCP over its standard input and output,
+  could be reached only over stdio, by one agent. No record of a new kind,
+  no cryptography, and no new network request. What changes, in
+  `mcp-executor/` (DESIGN.md, section 10.1, choices X231 to X240):
+  - **The settings.** The HTTP settings name either `upstream` or
+    `server`, never both. `server` and `shutdownWait` are the stdio
+    executor's, read by the same code, with the same rules for the
+    program, its folder and its credentials. `sessions`: `max` (8) and
+    `idle` (1,800,000 ms). `check` describes the program, names its
+    credentials and lists what is wrong with either.
+  - **One program for each session** (`local.mjs`). The program is started
+    when an agent sends `initialize`, and the answer carries a session id
+    of 32 random bytes. A session is the agent's that began it; another
+    agent that names it is answered 404. A `tools/call` goes through the
+    same check, receipt, countersignature and copy, under the slip and
+    into the book of the agent that sent it. A request is answered with
+    one JSON body; the program's own requests and notifications go on the
+    session's GET stream.
+  - **When a session ends**, its program is ended: at the agent's DELETE,
+    at the program's own end, after `sessions.idle` with nothing from the
+    agent, to make room where the agent is at `sessions.max`, at the end
+    of the connection made through OAuth it was begun under, and at the
+    executor's stop. A program that ends with a call in flight gives the
+    receipt it gives on stdio. A program that cannot be run, or that does
+    not answer `initialize`, begins no session.
+  - **A call's id is its session's**: two sessions of one agent may each
+    have a call under the same id at once. In front of an upstream HTTP
+    server nothing changes.
+  - **`init --http --demo`** writes settings that run the demonstration's
+    made-up server (the tools `echo` and `add`) as the local program,
+    with the OAuth sign-in, and the two files it needs. Nothing is
+    overwritten, and nothing is signed by a stand-in.
+  - **Not built, and not tried.** The rules of the Streamable HTTP
+    transport are those of revision 2025-11-25 as the builder holds them:
+    its text was not fetched for this step. A request of the 2026-07-28
+    revision, which has no sessions, is refused in front of a local
+    program. The program's credentials are not looked for in what it
+    answers, as on stdio. No client but the tests' own has been tried.
+  - **Tests**: `test/http-local.test.mjs`, 14 tests, through the
+    executor's settings and its HTTP address, with the tests' made-up
+    program: a full call by an agent's secret and through the OAuth
+    sign-in; two agents at once; a program that ends in the middle of a
+    call, and one that will not start; the two limits; twelve programs at
+    once; cancelling; the executor's stop; the settings; and
+    `init --http --demo`.
+
 - **`provared-mcp-executor` 0.5.0 (not yet released): signing in through
   OAuth.** Over HTTP, an agent had to be handed a secret, so a client that
   signs in only through OAuth could not connect. No record of a new kind

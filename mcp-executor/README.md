@@ -71,7 +71,8 @@ Protocol (MCP). It runs in two ways: over the stdio transport, where the
 agent's MCP client starts the executor as if it were the tool server and the
 executor starts the real server, with its credential; or over HTTP, where
 the executor is itself a Streamable HTTP MCP server in front of one upstream
-HTTP MCP server, and several agents call it, each signing in with a secret
+HTTP MCP server, or of a local program it starts for each session, and
+several agents call it, each signing in with a secret
 of its own (see "Over HTTP, for several agents"). Either way, for every
 `tools/call`:
 
@@ -227,7 +228,8 @@ provared-mcp-executor http --config executor-http.json
 The executor listens as a Streamable HTTP MCP server (one endpoint, `/mcp`
 unless the settings say otherwise, on `127.0.0.1:8796` unless they say
 otherwise) in front of one upstream HTTP MCP server named in
-`upstream.url`. Each agent signs in with a secret of its own, in one header,
+`upstream.url`, or of a local program it starts for each session (see "A
+local program in place of the upstream", below). Each agent signs in with a secret of its own, in one header,
 `Authorization: Bearer <secret>`, and has its own slip, keys, book and copy
 under `agents.<name>`. `provared-mcp-executor secret` makes a secret and
 prints its hash; the hash goes into the settings as the agent's
@@ -353,6 +355,8 @@ The settings (`executor-http.example.json` is a start): `name`, `service`,
   about) and `credential`: `{"file": <path>}`, the file that holds the
   bearer token, readable by the executor alone. Without `credential` the
   upstream is called with none, and the start says so.
+- `server`, in place of `upstream` and never beside it: a local program,
+  with `shutdownWait` and `sessions` (below).
 - `agents`: one member for each agent, by name (1 to 64 lower-case letters,
   digits, full stops, hyphens or underscores): `secretHash` (or
   `"oauth": true`, for a connection made through OAuth), `slip`,
@@ -371,6 +375,97 @@ The settings (`executor-http.example.json` is a start): `name`, `service`,
   call the executor. Default none.
 - `oauth`: where agents connect through OAuth (below): `issuer`,
   `clients` and `state`.
+
+### A local program in place of the upstream
+
+The tool server behind the HTTP executor may be a program on the same
+computer that speaks MCP over its standard input and output, as the stdio
+executor's does. Leave `upstream` out and give `server`:
+
+```json
+"server": {
+  "command": "/usr/bin/node",
+  "args": ["/srv/tools/server.mjs"],
+  "cwd": "/srv/tools",
+  "env": { "TOOLS_TOKEN": { "file": "secrets/tools-token" } }
+},
+"sessions": { "max": 8, "idle": 1800000 },
+"shutdownWait": 5000
+```
+
+`server` and `shutdownWait` are the stdio executor's settings, read by the
+same code, with the same rules for the program, its folder and its
+credentials (see "The settings"). Settings with both `upstream` and
+`server`, or with neither, are refused. The program is found and its
+credentials are read once, when the executor starts; `check` names a
+program that is not there and a credential that cannot be read.
+
+What is different from an upstream HTTP server:
+
+- **One program for each session.** A program is started when an agent
+  sends `initialize` with no `Mcp-Session-Id`, and the answer carries a
+  new session id. Every later message must name its session. A session is
+  the agent's that began it: another agent that names it is answered 404,
+  as for a session that does not exist, and nothing reaches the program.
+  So no agent's messages or answers pass through a program that serves
+  another. A message with no session, other than that `initialize`, is
+  refused with 400; so the executor serves only clients that begin a
+  session, not the session-less requests of the 2026-07-28 revision.
+- **The same check and the same records.** A `tools/call` goes through the
+  same rules, check, receipt, countersignature and copy, under the slip
+  and into the book of the agent that sent it. The program is sent the
+  call under an id of the executor's own.
+- **Answers.** A request is answered with one JSON body. A notification,
+  or the agent's response to a request of the program's, is answered 202.
+  The program's own requests and notifications go on the session's GET
+  stream; a session has one, a later GET taking the place of the earlier,
+  and where none is open they are dropped and the log says so. Nothing is
+  replayed.
+- **When a session ends**, its program is ended: its input is closed, and
+  where it has not ended `shutdownWait` milliseconds later it is ended by
+  force. A session ends when the agent sends DELETE under it (204); when
+  its program ends by itself; when it has been idle; when it makes room
+  for a new one; when the connection made through OAuth it was begun
+  under ends (a refreshed token goes on with the same session); and when
+  the executor stops. A request under an ended session is answered 404,
+  and the client begins a new one.
+- **A program that ends with a call in flight** gives the receipt it gives
+  on stdio: the agent is answered with the error "The tool server ended
+  before it answered this call, so its outcome is not known." and the
+  receipt names that text.
+- **A program that cannot be run**, or that ends or says nothing before it
+  answers `initialize`, begins no session: the agent is answered 502 (504
+  where it gave no answer within `timeout`) and told why.
+- **The limits.** `sessions.max` (default 8, from 1 to 256) is the most
+  sessions one agent may have at once. An agent at its most that begins
+  another has its own session that has been quiet longest ended to make
+  room; where each of its sessions has a message in hand, the new one is
+  refused with 503. `sessions.idle` (default 1,800,000 ms, half an hour;
+  from a second to a day) is how long a session is kept after the agent's
+  last message under it; the time does not run while a call is with the
+  program, and an open GET stream does not keep a session. A request
+  other than a call that the program does not answer within `timeout` is
+  answered 504.
+- **Cancelling** is as on stdio: the agent's `notifications/cancelled` is
+  written to the program under the executor's id for the call. Closing
+  the connection does not cancel a call.
+
+What each program writes to its standard error goes to the executor's,
+among the executor's own log lines.
+
+What it does not do: the program's credentials are not looked for in what
+it answers (as on stdio; the replacing described above is for the
+upstream's token); every session's program is given the same environment
+and folder, and the executor does not keep the programs from each other
+on the disk; and no session outlives the executor.
+
+`provared-mcp-executor init --http --demo` writes settings of this kind
+for the demonstration's made-up server (the tools `echo` and `add`, which
+reach no network), with the OAuth sign-in below: `executor-http.json`,
+`content-rules.json` and `demo-token`, a made-up credential that server
+asks for. It overwrites nothing. The public address, the client and the
+passkey's thumbprint are left to put in, and the keys, the permission and
+the owner are set up as for any agent; nothing is signed by a stand-in.
 
 ### Signing in through OAuth
 
