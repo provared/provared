@@ -55,6 +55,8 @@ export const OUTCOME_UNKNOWN = `${EXECUTOR_STOPPED} The receipt was written when
 export const RESULT_NOT_FINGERPRINTED = 'The tool server answered, and its result could not be written in the one form of RFC 8785 (text that is not well-formed Unicode, a number JSON cannot write, or a whole number beyond 9,007,199,254,740,991), so the receipt names no result.';
 /** The error text a receipt names where the server's answer could not be read as a message; the answer went to the client as it was. */
 export const UNREADABLE_ANSWER = 'The tool server answered with a line the executor could not read as a message (not JSON, a member name given twice, or not a response), so the receipt names no result. The line was handed to the agent as it was.';
+/** What the agent is told where the server's answer to tools/list is to be filtered and could not be read. */
+export const LIST_NOT_READ = 'The tool server\'s list of tools could not be read by the executor, which is to leave out of it the tools that have no rule. So the list was not handed on.';
 /** The document a receipt written at a restart names, and the text its fingerprint is of. */
 export const WRITTEN_LATE_DOCUMENT = 'executor.written-late';
 export const WRITTEN_LATE = 'This receipt was written when the executor next started, from its own copy of what it had sent: the executor stopped before the receipt could be written. Its date is the time the call was sent; the countersignature is dated at the restart.';
@@ -166,6 +168,39 @@ const ENVIRONMENT_SET_BY = { stdio: "the agent's client sets when it starts the 
 
 /** The longest second wait: a program still running "shutdownWait" after its input was closed is sent SIGTERM, and one still running after a second wait, of "shutdownWait" again and at most this long, is sent SIGKILL, which no program can ignore (X242). */
 export const KILL_WAIT = 5000;
+
+/** How long, at most, after a program has gone, the executor goes on reading what the program wrote before it settles the calls that were with it (X251). */
+export const OUTPUT_WAIT = 1000;
+
+/** Whether a program is started as the leader of a process group of its own: on Linux and macOS, so that a signal reaches whatever the program starts. Not on Windows, which has no such groups (X252). */
+export const OWN_GROUP = process.platform !== 'win32';
+
+/**
+ * Send a signal to a program the executor started. On Linux and macOS it
+ * goes to the program's whole process group: the program, and whatever it
+ * started that has not left the group. On Windows it ends the one process
+ * the executor started, and what that process started is ended only where
+ * the system ties it to its parent (X252).
+ */
+export function signalProgram(child, signal) {
+  try {
+    if (OWN_GROUP && Number.isInteger(child.pid)) process.kill(-child.pid, signal);
+    else child.kill(signal);
+  } catch {
+    // No such group: the program and all it started have gone.
+  }
+}
+
+/** Whether anything is left in the process group of a program the executor started (Linux and macOS; never on Windows). */
+export function groupLeft(child) {
+  if (!OWN_GROUP || !Number.isInteger(child.pid)) return false;
+  try {
+    process.kill(-child.pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /** How long the tool server is given to end once its input is closed, before it is ended by force: "shutdownWait". */
 export function readShutdownWait(config, s, at) {
@@ -1410,6 +1445,8 @@ export function callCore({ settings, content, executorKeys, now }) {
     const callId = randomId();
     try {
       const rule = settings.tools.get(name);
+      // A tool with no rule is sent on unchecked only where its name is not a ruled tool's name in other capitals: a server that reads the name without regard to capitals would run the ruled tool, with no check (X253).
+      if (!rule && settings.unlisted === 'forward' && misspelt({ [name]: true }, [...settings.tools.keys()]) !== null) return answerError(CODES.invalidRequest, 'The tool name differs only in capitals, or in letters that some readers take as the same, from a tool the executor has a rule for, which two readers may read differently.');
       if (!rule && settings.unlisted === 'forward') {
         log({ event: 'forwarded-unlisted', tool: name, call: callId });
         link.forward(id, serverId, text);
@@ -1669,7 +1706,8 @@ export async function openExecutor(config, more = {}) {
   function attach(input, output, { serverStderr = more.serverStderr === undefined ? process.stderr : more.serverStderr } = {}) {
     if (attached) throw new Error('The executor is already attached.');
     if (offline) throw new Error('The executor was opened to work on its files (offline), and starts no server.');
-    const child = spawn(settings.server.resolved, settings.server.args, { cwd: settings.server.cwd, env: p.env, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, shell: false });
+    // On Linux and macOS the server leads a process group of its own, so that a signal reaches whatever it starts (X252).
+    const child = spawn(settings.server.resolved, settings.server.args, { cwd: settings.server.cwd, env: p.env, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, shell: false, detached: OWN_GROUP });
     log({ event: 'server-started', command: settings.server.resolved, credentials: p.credentialNames });
     if (serverStderr) child.stderr.pipe(serverStderr, { end: false });
     else child.stderr.resume();
@@ -1684,7 +1722,7 @@ export async function openExecutor(config, more = {}) {
         outputOpen = false;
       }
     };
-    // Each message goes to the server as one line under every way of ending a line (oneLine; X248): "buffer" is the message's text and its line feed.
+    // Each message goes to the server as one line, for a reader of UTF-8 that ends a line at a line feed, a carriage return, U+0085, U+2028 or U+2029 (oneLine; X248): "buffer" is the message's text and its line feed.
     const toServer = (buffer) => {
       if (serverGone) return false;
       try {
@@ -1833,6 +1871,12 @@ export async function openExecutor(config, more = {}) {
     // --- from the server ---
     /** The entry for a server id, or undefined. */
     const entryFor = (id) => (typeof id === 'string' ? mapped.get(id) : undefined);
+    /** The answer to a tools/list that is to be filtered could not be read: the agent is answered with an error under its id, and is not handed the list (X250). */
+    const listNotRead = (serverId, entry) => {
+      forget(serverId);
+      log({ event: 'tools-list-not-read' });
+      answerError(entry.id, CODES.internal, LIST_NOT_READ);
+    };
     readLines(child.stdout, {
       onLine: (line) => {
         const read = readMessage(line, { strictNumbers: false });
@@ -1851,6 +1895,8 @@ export async function openExecutor(config, more = {}) {
           const entry = found ? entryFor(found.value) : undefined;
           log({ event: 'server-line-not-read', code: read.refused.code, ...(entry ? { matched: entry.kind } : {}) });
           if (entry?.kind === 'call' && entry.call.state === 'sent' && entry.call.settle) return entry.call.settle({ kind: 'unreadable', text, errorText: UNREADABLE_ANSWER });
+          // A list of tools that is to be filtered and cannot be read is not handed on: it would show the agent the tools the executor is to hide.
+          if (entry?.kind === 'list') return listNotRead(found.value, entry);
           if (entry && entry.kind !== 'call') {
             forget(found.value);
             return toClient(forClient(text, entry.id));
@@ -1882,6 +1928,8 @@ export async function openExecutor(config, more = {}) {
               if (filtered.hidden) log({ event: 'tools-hidden', hidden: filtered.hidden });
               return toClient(Buffer.from(`${filtered.text}\n`));
             }
+            // A result that is not a list of tools as the executor reads one (no "tools", or not a list). The server's own error goes on as it is.
+            if (Object.hasOwn(m, 'result')) return listNotRead(m.id, entry);
           }
           if (entry) {
             forget(m.id);
@@ -1896,13 +1944,28 @@ export async function openExecutor(config, more = {}) {
 
     // --- the end ---
     const serverEnded = new Promise((done) => {
-      child.on('exit', (code, signal) => {
+      const over = (code, signal) => {
+        if (serverGone) return;
         serverGone = true;
         for (const call of calls.values()) {
           if (call.state === 'sent' && call.settle) call.settle({ kind: 'error', text: SERVER_ENDED, code: CODES.noAnswer });
         }
         log({ event: 'server-ended', code, signal });
+        // Whatever the server started and left in its process group is ended with it (Linux and macOS; X252).
+        if (groupLeft(child)) {
+          log({ event: 'server-group-left' });
+          signalProgram(child, 'SIGKILL');
+        }
         done({ code: code ?? 1, signal });
+      };
+      child.on('exit', (code, signal) => {
+        // The server has gone. What it wrote before it went may still wait to be read: the calls that were with it are settled once its output has ended, so that its last lines are not taken for no answer (X251). At most OUTPUT_WAIT longer, where something it started still holds its output open.
+        if (child.stdout.readableEnded || child.stdout.destroyed) return over(code, signal);
+        const late = setTimeout(() => over(code, signal), OUTPUT_WAIT);
+        child.stdout.once('end', () => {
+          clearTimeout(late);
+          over(code, signal);
+        });
       });
       child.on('error', (e) => {
         serverGone = true;
@@ -1922,12 +1985,12 @@ export async function openExecutor(config, more = {}) {
       killTimer = setTimeout(() => {
         if (serverGone) return;
         log({ event: 'server-killed', signal: 'SIGTERM' });
-        child.kill();
+        signalProgram(child, 'SIGTERM');
         // A program that takes no notice of SIGTERM is sent SIGKILL after a second wait, which no program can ignore (X242).
         killTimer = setTimeout(() => {
           if (serverGone) return;
           log({ event: 'server-killed', signal: 'SIGKILL' });
-          child.kill('SIGKILL');
+          signalProgram(child, 'SIGKILL');
         }, Math.min(settings.shutdownWait, KILL_WAIT));
       }, settings.shutdownWait);
     });
@@ -1986,9 +2049,9 @@ export async function openExecutor(config, more = {}) {
       } catch {
         // Already gone.
       }
-      const t = setTimeout(() => attached.child.kill(), settings.shutdownWait);
+      const t = setTimeout(() => signalProgram(attached.child, 'SIGTERM'), settings.shutdownWait);
       // SIGKILL after a second wait, for a program that takes no notice of SIGTERM (X242).
-      const last = setTimeout(() => attached.child.kill('SIGKILL'), settings.shutdownWait + Math.min(settings.shutdownWait, KILL_WAIT));
+      const last = setTimeout(() => signalProgram(attached.child, 'SIGKILL'), settings.shutdownWait + Math.min(settings.shutdownWait, KILL_WAIT));
       await attached.closed;
       clearTimeout(t);
       clearTimeout(last);

@@ -9,7 +9,15 @@ import { appendFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 
 const log = (entry) => {
-  if (process.env.FAKE_LOG) appendFileSync(process.env.FAKE_LOG, `${JSON.stringify(entry)}\n`);
+  if (!process.env.FAKE_LOG) return;
+  let line;
+  try {
+    line = JSON.stringify(entry);
+  } catch {
+    // Nested too deeply to be written out: the log says only what kind of message it was.
+    line = JSON.stringify({ seen: { method: entry.seen?.method ?? null, id: entry.seen?.id ?? null, tooDeepToLog: true } });
+  }
+  appendFileSync(process.env.FAKE_LOG, `${line}\n`);
 };
 
 process.stderr.write('fake-server: started\n');
@@ -31,6 +39,9 @@ const TOOLS = [
   { name: 'ask', description: 'Asks the client something first (legacy sampling).', inputSchema: { type: 'object' } },
   { name: 'big', description: 'A large answer.', inputSchema: { type: 'object' } },
 ];
+
+/** The text of a value nested "depth" lists deep. */
+const deep = (depth) => `${'['.repeat(depth)}1${']'.repeat(depth)}`;
 
 const cancelled = new Set();
 const pendingAsks = new Map();
@@ -80,6 +91,16 @@ function onMessage(given) {
   if (method === 'tools/list' && params.cursor === 'page2' && process.env.FAKE_BIG_LIST) {
     // The answer written as raw text, so that the number is exact: a whole number beyond 2^53 - 1 in a tool's definition.
     return process.stdout.write(`{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"resultType":"complete","tools":[{"name":"error","description":"A protocol error.","inputSchema":{"type":"object"}},{"name":"hidden","description":"No rule.","inputSchema":{"type":"object"},"ordinal":1234567890123456789},{"name":"big","description":"A large answer.","inputSchema":{"type":"object"},"ordinal":1234567890123456789}]}}\n`);
+  }
+  if (method === 'tools/list' && process.env.FAKE_ODD_LIST === 'error') return failure(id, -32601, 'This server lists no tools.');
+  if (method === 'tools/list' && process.env.FAKE_ODD_LIST) {
+    // A list the executor cannot read: "twice", a member named twice beside it; anything else, a result with no "tools", and the tools under "Tools".
+    const odd = process.env.FAKE_ODD_LIST === 'twice' ? '{"tools":[{"name":"echo"},{"name":"hidden"}],"a":1,"a":2}' : '{"Tools":[{"name":"echo"},{"name":"hidden"}]}';
+    return process.stdout.write(`{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":${odd}}\n`);
+  }
+  if (method === 'tools/list' && process.env.FAKE_DEEP_LIST) {
+    // A list whose first tool has a schema nested very deeply.
+    return process.stdout.write(`{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"tools":[{"name":"echo","inputSchema":{"type":"object","x":${deep(Number(process.env.FAKE_DEEP_LIST))}}},{"name":"hidden","inputSchema":{"type":"object"}}]}}\n`);
   }
   if (method === 'tools/list' && process.env.FAKE_CAPITAL_LIST) {
     // A list with names in other capitals: a tool the executor shows under one name and a client that ignores capitals reads under another, and a second list.
@@ -139,6 +160,13 @@ function onMessage(given) {
     if (name === 'loud') return process.stderr.write(`${'e'.repeat(1023)}\n`.repeat(args.kib ?? 1024), () => text('Loud.'));
     // Half a line on its standard error, with no line feed.
     if (name === 'mutter') return process.stderr.write('half a line', () => text('Muttered.'));
+    // Answers nested "depth" levels deep, written as text: a result, an error, and a notification before a plain result.
+    if (name === 'deep') return process.stdout.write(`{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"content":[{"type":"text","text":"deep"}],"structuredContent":{"a":${deep(args.depth)}}}}\n`);
+    if (name === 'deeperror') return process.stdout.write(`{"jsonrpc":"2.0","id":${JSON.stringify(id)},"error":{"code":-32000,"message":"deep","data":${deep(args.depth)}}}\n`);
+    if (name === 'deepnote') {
+      process.stdout.write(`{"jsonrpc":"2.0","method":"notifications/message","params":{"level":"info","data":${deep(args.depth)}}}\n`);
+      return text('After a deep notification.');
+    }
     if (name === 'twoids') return process.stdout.write(`{"jsonrpc":"2.0","id":${JSON.stringify(id)},"id":${JSON.stringify(id)},"result":{"resultType":"complete","content":[]}}\n`);
     if (name === 'batch') return process.stdout.write(`[{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"resultType":"complete","content":[]}}]\n`);
     if (name === 'garbage') return process.stdout.write(`{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"resultType":"complete","a":1,"a":2}}\n`);
@@ -154,14 +182,21 @@ function onMessage(given) {
   return failure(id, -32601, `Method not found: ${method}`);
 }
 
+// FAKE_LINE_ENDS=universal: the server ends a line at a line feed, a carriage
+// return, or the two together, as a text reader with universal newlines
+// does, which Python's io.TextIOWrapper gives unless told otherwise, as the
+// official Python SDK's stdio server uses, and how Python opens its standard
+// input on Windows. Not set: at a line feed alone. (FAKE_READLINE, below, is
+// node:readline itself.)
+const lineEnd = process.env.FAKE_LINE_ENDS === 'universal' ? /\r\n|\r(?!$)|\n/ : /\n/;
 process.stdin.setEncoding('utf8');
 const onData = (chunk) => {
   buffer += chunk;
   for (;;) {
-    const at = buffer.indexOf('\n');
-    if (at === -1) break;
-    const line = buffer.slice(0, at).replace(/\r$/, '');
-    buffer = buffer.slice(at + 1);
+    const found = lineEnd.exec(buffer);
+    if (!found) break;
+    const line = buffer.slice(0, found.index).replace(/\r$/, '');
+    buffer = buffer.slice(found.index + found[0].length);
     if (line === '') continue;
     let m;
     try {

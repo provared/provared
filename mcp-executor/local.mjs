@@ -13,7 +13,7 @@
 
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { KILL_WAIT, SERVER_ENDED, UNREADABLE_ANSWER, isObject } from './executor.mjs';
+import { KILL_WAIT, OUTPUT_WAIT, OWN_GROUP, SERVER_ENDED, UNREADABLE_ANSWER, groupLeft, isObject, signalProgram } from './executor.mjs';
 import { CODES, MAX_LINE_BYTES, idKey, oneLine, readLines, readMessage, topLevelId, unsafeInteger } from './jsonrpc.mjs';
 
 /** The most sessions, each with a program of its own, one agent may have at once, unless the settings say otherwise ("sessions.max"). */
@@ -96,18 +96,15 @@ export function openLocalSessions({ settings, env, credentialNames, log, serverS
 
   /** End a program that has not ended of itself: SIGTERM now and, where it is still running after the second wait, SIGKILL (the specification's order for stdio: close the input, SIGTERM, SIGKILL). On Windows the first is already final. */
   function force(session) {
-    if (session.gone) return;
+    if (session.gone || session.dead) return;
     const kill = (signal) => {
       log({ event: 'server-killed', agent: session.agent, signal });
-      try {
-        session.child.kill(signal);
-      } catch {
-        // Already gone.
-      }
+      // On Linux and macOS the signal goes to the program's whole process group: to whatever it started, too (X252).
+      signalProgram(session.child, signal);
     };
     kill('SIGTERM');
     session.killTimer = setTimeout(() => {
-      if (!session.gone) kill('SIGKILL');
+      if (!session.gone && !session.dead) kill('SIGKILL');
     }, killWait);
   }
 
@@ -164,19 +161,23 @@ export function openLocalSessions({ settings, env, credentialNames, log, serverS
    * A line of a program that answers nothing in flight is counted: a
    * program that writes more than FLOOD_PER_SECOND of them in each of
    * FLOOD_SECONDS seconds running has its session ended, and is ended by
-   * force at once. True where the session has ended.
+   * force at once. True where the session has ended. The seconds are the
+   * clock's, counted from the session's start: the first, the second and
+   * so on. A second that holds no more than the limit, or none at all,
+   * breaks the run, however much the seconds beside it hold.
    */
   function counted(session) {
     if (session.ended) return true;
-    const at = Date.now();
-    if (at - session.windowStart >= 1000) {
-      const quietSince = at - session.windowStart >= 2000;
-      session.strikes = session.inWindow > FLOOD_PER_SECOND && !quietSince ? session.strikes + 1 : 0;
-      session.windowStart = at;
-      session.inWindow = 0;
+    const second = Math.floor((Date.now() - session.begun) / 1000);
+    if (second !== session.second) {
+      // The second just over is one more of the run where it came straight before this one and held more than the limit; any other breaks the run.
+      session.strikes = second === session.second + 1 && session.inSecond > FLOOD_PER_SECOND ? session.strikes + 1 : 0;
+      session.second = second;
+      session.inSecond = 0;
     }
-    session.inWindow += 1;
-    if (session.strikes < FLOOD_SECONDS) return false;
+    session.inSecond += 1;
+    // The seconds over the limit before this one, and this one once it is over it too.
+    if (session.strikes + (session.inSecond > FLOOD_PER_SECOND ? 1 : 0) < FLOOD_SECONDS) return false;
     log({ event: 'server-flooding', agent: session.agent });
     end(session, 'flooding', true);
     return true;
@@ -237,13 +238,14 @@ export function openLocalSessions({ settings, env, credentialNames, log, serverS
   function start(agent, connection) {
     let child;
     try {
-      child = spawnProgram(settings.server.resolved, settings.server.args, { cwd: settings.server.cwd, env, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, shell: false });
+      // On Linux and macOS the program leads a process group of its own, so that a signal reaches whatever it starts (X252).
+      child = spawnProgram(settings.server.resolved, settings.server.args, { cwd: settings.server.cwd, env, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, shell: false, detached: OWN_GROUP });
     } catch (e) {
       log({ event: 'server-failed', agent, error: e.code ?? e.message });
       return { refused: 'not-started' };
     }
     // 32 random bytes in base64url: visible ASCII, and not to be guessed.
-    const session = { id: randomBytes(32).toString('base64url'), agent, connection, child, gone: false, ended: null, busy: 0, last: Date.now(), waiting: new Map(), toStream: null, closeStream: null, release: null, idleTimer: null, killTimer: null, exited: null, starting: true, version: null, dropped: {}, windowStart: Date.now(), inWindow: 0, strikes: 0 };
+    const session = { id: randomBytes(32).toString('base64url'), agent, connection, child, gone: false, ended: null, busy: 0, last: Date.now(), waiting: new Map(), toStream: null, closeStream: null, release: null, idleTimer: null, killTimer: null, exited: null, starting: true, version: null, dropped: {}, dead: false, begun: Date.now(), second: 0, inSecond: 0, strikes: 0 };
     sessions.set(session.id, session);
     running.add(session);
     log({ event: 'server-started', agent, command: settings.server.resolved, credentials: credentialNames });
@@ -283,10 +285,33 @@ export function openLocalSessions({ settings, env, credentialNames, log, serverS
         for (const [event, entry] of Object.entries(session.dropped)) if (entry.count > 0) log({ event, agent, ...entry.more, count: entry.count });
         log({ event: how.error === undefined ? 'server-ended' : 'server-failed', agent, ...how });
         end(session, 'server-ended');
-        running.delete(session);
-        done();
+        const finish = () => {
+          running.delete(session);
+          done();
+        };
+        if (!groupLeft(child)) return finish();
+        // What the program started and left in its process group is ended too: SIGTERM, and SIGKILL after the second wait. Until it has gone it counts as the program still running, for "sessions.max" and for the stop (Linux and macOS; X252).
+        log({ event: 'server-group-left', agent });
+        signalProgram(child, 'SIGTERM');
+        const last = Date.now() + killWait;
+        const look = setInterval(() => {
+          if (groupLeft(child) && Date.now() < last) return;
+          clearInterval(look);
+          if (groupLeft(child)) signalProgram(child, 'SIGKILL');
+          finish();
+        }, 50);
       };
-      child.on('exit', (code, signal) => over({ code, signal }));
+      child.on('exit', (code, signal) => {
+        // The program has gone. What it wrote before it went may still wait to be read, one read at a time (X245): its calls are settled once its output has ended, so that its last lines are not taken for no answer (X251). At most OUTPUT_WAIT longer, where something it started still holds its output open.
+        session.dead = true;
+        clearTimeout(session.killTimer);
+        if (child.stdout.readableEnded || child.stdout.destroyed) return over({ code, signal });
+        const late = setTimeout(() => over({ code, signal }), OUTPUT_WAIT);
+        child.stdout.once('end', () => {
+          clearTimeout(late);
+          over({ code, signal });
+        });
+      });
       child.on('error', (e) => over({ error: e.code ?? e.message }));
     });
     touch(session);
