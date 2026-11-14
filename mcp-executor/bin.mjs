@@ -39,6 +39,12 @@
 //   provared-mcp-executor status  --config <settings> [--offline]
 //                                                          the last seal, whether each book passes its check,
 //                                                          and the calls waiting to be acknowledged
+//   provared-mcp-executor owner   --config <settings> [--reset]
+//                                                          with "oauth" in the settings, on a stopped executor:
+//                                                          print a one-time link that sets up the owner's
+//                                                          passkey, once, within 15 minutes; refused where an
+//                                                          owner exists, unless --reset, which also ends every
+//                                                          connection (DESIGN.md, section 14.1)
 //
 // Over HTTP, "seal", "acknowledge" and "status" ask the running executor,
 // with the administrator's secret from the environment
@@ -74,6 +80,7 @@ import { checkConfig, loadRules, openExecutor, readSettings, softwareEntry, stat
 import { loadKeyFile, makeKeyFile, readIfThere } from './files.mjs';
 import { ADMIN_PATH, checkHttpConfig, httpStatusFromFiles, newSecret, openHttpExecutor, readHttpSettings, secretHash } from './http.mjs';
 import { checkIdentity, plainAddress } from './identity.mjs';
+import { makeOwnerSetup } from './oauth.mjs';
 import { makeRecorderKeyFile, readRecorderKeyFile } from './sealing.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -94,6 +101,7 @@ const USAGE = `provared-mcp-executor ${VERSION}: an executor for MCP tool server
   provared-mcp-executor seal    --config <settings> [--agent <name>] [--offline]
   provared-mcp-executor acknowledge --config <settings> [--agent <name>] [--set-aside <call,…>] [--offline]
   provared-mcp-executor status  --config <settings> [--offline]
+  provared-mcp-executor owner   --config <settings> [--reset]
   provared-mcp-executor --version
 
 Over HTTP, "seal", "acknowledge" and "status" ask the running executor, with the administrator's secret in
@@ -102,6 +110,10 @@ no secret. Over stdio there is no address to ask: "seal" and "acknowledge" take 
 reads the files. A command with --offline is refused while an executor runs on the same files. The secret is
 sent only once the executor has shown, with its own keys, that it is the executor; the command reads
 "executor.keys" to check.
+
+"owner" is for settings with "oauth", and works on the files of an executor that is not running: it prints a
+link that sets up the owner's passkey, once, within 15 minutes. Where an owner exists it is refused, unless
+--reset, which removes the owner and ends every connection, with its tokens.
 
 Exit codes: 0 done, or all is well; 1 not done, or something to look at (status: a book that fails its check,
 a call waiting, an agent stopped; compare: a disagreement; acknowledge: a call still waits); 2 the command
@@ -514,6 +526,26 @@ async function main(args) {
       return 1;
     }
     process.stdout.write(`${who} takes calls again${offline ? ', once it is started' : ''}.\n`);
+    return 0;
+  }
+  if (command === 'owner') {
+    onlyOptions(command, args, ['--reset'], ['--config']);
+    const { config, root } = readConfig(args);
+    if (!isHttp(config) || config.oauth === undefined) throw new Error('owner is for an HTTP executor whose settings name "oauth". Nothing was done.');
+    const { settings, problems } = readHttpSettings(config, root);
+    if (problems.length) throw new Error(`The settings have problems:\n- ${problems.join('\n- ')}`);
+    process.stderr.write(`provared-mcp-executor: ${OFFLINE_NOTICE}\n`);
+    // The files are locked for this command alone, so the state file has one writer (lock.mjs).
+    const executor = await openOffline(config, root);
+    let made;
+    try {
+      made = makeOwnerSetup(settings, { reset: args.includes('--reset') });
+    } finally {
+      await executor.close();
+    }
+    if (made.revoked > 0) process.stdout.write(`The owner was removed, and ${made.revoked} connection${made.revoked === 1 ? '' : 's'} ended, with ${made.revoked === 1 ? 'its' : 'their'} tokens.\n`);
+    else if (args.includes('--reset')) process.stdout.write('The owner was removed. No connection was open.\n');
+    process.stdout.write(`Start the executor, then open this link in the browser that is to hold the owner's passkey. It works once, until ${new Date(made.expires).toISOString()}, and is not shown again:\n  ${made.link}\n`);
     return 0;
   }
   throw new Error(`Unknown command "${command}".\n\n${USAGE}`);

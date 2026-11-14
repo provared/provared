@@ -357,8 +357,8 @@ export async function openHttpExecutor(config, more = {}) {
   const credential = offline ? null : readUpstreamCredential(settings);
   if (credential && credential.token.length < 16) warnings.push('upstream.credential: the token is shorter than 16 characters, so any text of the upstream\'s that happens to hold it is replaced on its way to an agent.');
   const admin = settings.admin ? Buffer.from(settings.admin.secretHash) : null;
-  // The OAuth front door (oauth.mjs), where the settings name "oauth": its state file is read now, before any lock is taken. "ownerCheck" is the owner's check at its page.
-  const door = settings.oauth && !offline ? openFrontDoor({ settings, now, log, ownerCheck: more.ownerCheck ?? null }) : null;
+  // The OAuth front door (oauth.mjs), where the settings name "oauth": its state file is read now, before any lock is taken. "ownerCheck" is the owner's check at its page: left out (as the command "http" leaves it), the one by the owner's passkey (owner.mjs); null, none.
+  const door = settings.oauth && !offline ? openFrontDoor({ settings, now, log, ownerCheck: more.ownerCheck }) : null;
   const agents = new Map();
   /** Give up every lock taken so far: at close, and where the opening fails part-way. */
   const releases = [];

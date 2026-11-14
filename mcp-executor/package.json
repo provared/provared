@@ -44,6 +44,9 @@
     "executor.mjs",
     "http.mjs",
     "oauth.mjs",
+    "owner.mjs",
+    "owner-steps.mjs",
+    "owner-page.mjs",
     "compare.mjs",
     "copy.mjs",
     "jsonrpc.mjs",
@@ -70,6 +73,8 @@
     "test": "node --disable-warning=ExperimentalWarning --test --test-timeout=60000 --test-force-exit test/*.test.mjs"
   },
   "dependencies": {
+    "@microtoll/crypto-core": "0.1.1",
+    "@microtoll/identity": "0.1.1",
     "provared": "^0.7.0"
   }
 }

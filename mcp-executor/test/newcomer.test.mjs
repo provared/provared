@@ -359,8 +359,10 @@ test('the version: --version, server.json and the package agree', () => {
 
 test('the package holds every file the command loads, and the demonstration\'s server and rules', () => {
   const files = new Set(PACKAGE.files);
-  for (const f of ['bin.mjs', 'quiet.mjs', 'demo.mjs', 'demo/server.mjs', 'demo/content-rules.json', 'executor.example.json', 'executor-http.example.json', 'content-rules.example.json']) assert.ok(files.has(f), f);
-  for (const f of PACKAGE.files.filter((x) => x.endsWith('.mjs'))) {
+  // owner-page.mjs and owner-steps.mjs are also the files the executor serves to the owner's pages (owner.mjs).
+  for (const f of ['bin.mjs', 'quiet.mjs', 'demo.mjs', 'demo/server.mjs', 'demo/content-rules.json', 'executor.example.json', 'executor-http.example.json', 'content-rules.example.json', 'owner-page.mjs', 'owner-steps.mjs']) assert.ok(files.has(f), f);
+  // The page's script runs in the browser: what it imports are the executor's addresses, not the package's files.
+  for (const f of PACKAGE.files.filter((x) => x.endsWith('.mjs') && x !== 'owner-page.mjs')) {
     for (const m of readFileSync(join(HERE, f), 'utf8').matchAll(/from '\.\/([^']+)'|import\('\.\/([^']+)'\)|import '\.\/([^']+)'/g)) {
       const name = m.slice(1).find(Boolean);
       assert.ok(files.has(name), `${f} loads ./${name}, which is in the package`);

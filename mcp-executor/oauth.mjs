@@ -20,7 +20,8 @@
 // metadata document, which the executor fetches itself. An approved
 // connection is one agent under "agents", marked "oauth": true, with its own
 // slip, keys and book. The owner's check at the page is behind one
-// interface (ownerCheck); none is built in yet (X212).
+// interface (ownerCheck, X212). The one built in is by the owner's passkey
+// (owner.mjs, section 14.1), with its own addresses under /oauth/owner.
 //
 // No cryptography is new: tokens are random bytes from Node.js, kept only
 // as their SHA-256, as the agents' secrets are; PKCE's S256 is SHA-256.
@@ -30,6 +31,7 @@ import { readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import https from 'node:https';
 import { untilFree } from './files.mjs';
+import { OWNER_PATH, SETUP_LIFE, openPasskeyCheck, readOwner } from './owner.mjs';
 
 /** Where the executor's own OAuth addresses are. */
 export const OAUTH_PATH = '/oauth';
@@ -152,7 +154,7 @@ function readState(path) {
   try {
     text = untilFree(() => readFileSync(path, 'utf8'));
   } catch (e) {
-    if (e.code === 'ENOENT') return { version: STATE_VERSION, grants: [], documents: {} };
+    if (e.code === 'ENOENT') return { version: STATE_VERSION, grants: [], documents: {}, owner: null, setup: null };
     throw new Error(`oauth.state: the file could not be read (${e.code ?? e.message}).`);
   }
   let state;
@@ -162,10 +164,36 @@ function readState(path) {
     throw new Error('oauth.state: the file is not JSON. It is the executor\'s own; it is not read past this.');
   }
   const grantOk = (g) => isObject(g) && typeof g.id === 'string' && typeof g.agent === 'string' && typeof g.client === 'string' && typeof g.resource === 'string' && (g.scope === null || typeof g.scope === 'string') && (g.refresh === null || HASH.test(g.refresh)) && Number.isInteger(g.refreshExpires) && Array.isArray(g.spent) && g.spent.every((h) => HASH.test(h)) && Array.isArray(g.access) && g.access.every((a) => isObject(a) && HASH.test(a.hash) && Number.isInteger(a.expires));
-  if (!isObject(state) || state.version !== STATE_VERSION || !Array.isArray(state.grants) || !state.grants.every(grantOk) || !isObject(state.documents)) {
+  // The owner and a setup waiting for its link (X226): absent in a file written before them, which is read as having neither.
+  const ownerOk = (v) => v === undefined || v === null || (isObject(v) && Number.isInteger(v.created) && !readOwner({ routingPublicKey: v.routingPublicKey, passkey: v.passkey, recovery: v.recovery }).problem && Object.keys(v).length === 4);
+  const setupOk = (v) => v === undefined || v === null || (isObject(v) && typeof v.hash === 'string' && HASH.test(v.hash) && Number.isInteger(v.expires));
+  if (!isObject(state) || state.version !== STATE_VERSION || !Array.isArray(state.grants) || !state.grants.every(grantOk) || !isObject(state.documents) || !ownerOk(state.owner) || !setupOk(state.setup)) {
     throw new Error('oauth.state: the file is not in the form the executor writes.');
   }
+  state.owner ??= null;
+  state.setup ??= null;
   return state;
+}
+
+/**
+ * Make a one-time setup link for the owner, on the files of an executor
+ * that is not running (the command "owner"). Refused where an owner exists,
+ * unless "reset": then the owner is removed and every connection ends, with
+ * its tokens. Gives {link, expires, revoked} (X218, X223).
+ */
+export function makeOwnerSetup(settings, { reset = false, now = Date.now } = {}) {
+  const o = settings.oauth;
+  const state = readState(o.state);
+  if (state.owner && !reset) throw new Error('An owner is already set up on this executor, so a second setup is refused. To replace the owner, run the command again with --reset: every connection then ends, with its tokens.');
+  const revoked = reset ? state.grants.length : 0;
+  if (reset) {
+    state.grants = [];
+    state.owner = null;
+  }
+  const code = newToken();
+  state.setup = { hash: hashOf(code), expires: now() + SETUP_LIFE };
+  writeState(o.state, JSON.stringify(state));
+  return { link: `${o.issuer}${OWNER_PATH}#${code}`, expires: state.setup.expires, revoked };
 }
 
 // --- a client's metadata document ---
@@ -268,11 +296,11 @@ function page(title, body) {
   return `<!doctype html>\n<html lang="en-GB">\n<head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${escape(title)}</title></head>\n<body>\n<h1>${escape(title)}</h1>\n${body}\n</body>\n</html>\n`;
 }
 
-function sendPage(res, status, title, body, { formTo = [] } = {}) {
+function sendPage(res, status, title, body, { formTo = [], scripts = false } = {}) {
   if (res.headersSent) return;
   const text = Buffer.from(page(title, body));
-  // Nothing on the page runs, loads or frames; the form goes to the executor, which then sends the browser to the client (X212).
-  const csp = `default-src 'none'; form-action 'self'${formTo.map((o) => ` ${o}`).join('')}; frame-ancestors 'none'; base-uri 'none'`;
+  // Nothing on the page loads or frames, and nothing runs but a script from the executor's own address where the owner's check has one, which fetches from there only (X224); the form goes to the executor, which then sends the browser to the client (X212).
+  const csp = `default-src 'none';${scripts ? " script-src 'self'; connect-src 'self';" : ''} form-action 'self'${formTo.map((o) => ` ${o}`).join('')}; frame-ancestors 'none'; base-uri 'none'`;
   res.writeHead(status, {
     'content-type': 'text/html; charset=utf-8',
     'content-length': text.length,
@@ -366,10 +394,12 @@ function failureCount({ most, window }, now) {
  * The front door: the OAuth addresses and the check of an access token.
  *
  * settings  the executor's settings (settings.oauth, settings.path, settings.name, settings.agents)
- * ownerCheck  the owner's check at the page, or null: {form() -> HTML of its fields, check(fields, {request, origin}) -> Promise<boolean>}
+ * ownerCheck  the owner's check at the page: {form() -> HTML of its fields, check(fields, {request, origin}) -> Promise<boolean>},
+ *           with, where it has them, "scripts" (the page runs a script of the executor's own) and its own addresses
+ *           (owns(path), take(req, res, path)); null for none; left out, the check by the owner's passkey (owner.mjs)
  * fetch     fetchDocument, or a stand-in
  */
-export function openFrontDoor({ settings, now = Date.now, log = () => {}, ownerCheck = null, fetch = fetchDocument }) {
+export function openFrontDoor({ settings, now = Date.now, log = () => {}, ownerCheck: given = undefined, fetch = fetchDocument }) {
   const o = settings.oauth;
   const issuer = o.issuer;
   const resource = `${issuer}${settings.path}`;
@@ -418,6 +448,31 @@ export function openFrontDoor({ settings, now = Date.now, log = () => {}, ownerC
   };
   const ownerFailures = failureCount(OWNER_FAILURES, now);
   const tokenFailures = failureCount(TOKEN_FAILURES, now);
+
+  // The owner's check: the one given, or by the owner's passkey (owner.mjs), which keeps the owner in the state file.
+  const ownerCheck = given !== undefined ? given : openPasskeyCheck({
+    issuer,
+    now,
+    log,
+    store: {
+      owner: () => state.owner,
+      setup: () => state.setup,
+      setOwner: (owner) => {
+        state.owner = owner;
+        state.setup = null;
+        save();
+      },
+    },
+    failures: ownerFailures,
+    isRequest: (id) => {
+      const r = requests.get(id);
+      return r !== undefined && r.expires > now();
+    },
+    page: (res, status, title, body) => sendPage(res, status, title, body, { scripts: true }),
+    json: sendJson,
+    hashOf,
+  });
+  const checkOwns = (path) => typeof ownerCheck?.owns === 'function' && ownerCheck.owns(path);
 
   /** The client's document: the copy while it is fresh, else fetched again; where the fetch fails, the copy kept, however old (X205). */
   async function clientFor(id) {
@@ -513,7 +568,7 @@ export function openFrontDoor({ settings, now = Date.now, log = () => {}, ownerC
       '<p><button type="submit" name="decision" value="approve">Approve</button> <button type="submit" name="decision" value="refuse">Refuse</button></p>',
       '</form>',
     ].join('\n');
-    sendPage(res, 200, 'Approve a connection', body, { formTo: [where.origin] });
+    sendPage(res, 200, 'Approve a connection', body, { formTo: [where.origin], scripts: ownerCheck?.scripts === true });
   }
 
   /** POST /oauth/authorize: the owner's answer (X212). */
@@ -649,9 +704,10 @@ export function openFrontDoor({ settings, now = Date.now, log = () => {}, ownerC
     resource,
     resourceMetadataUrl,
     /** Whether a path is one of the front door's. */
-    owns: (path) => path === resourceMetadataPath || path === serverMetadataPath || path === `${OAUTH_PATH}/authorize` || path === `${OAUTH_PATH}/token`,
+    owns: (path) => path === resourceMetadataPath || path === serverMetadataPath || path === `${OAUTH_PATH}/authorize` || path === `${OAUTH_PATH}/token` || checkOwns(path),
     /** Answer a request to one of the front door's paths. */
     async take(req, res, path) {
+      if (checkOwns(path)) return ownerCheck.take(req, res, path);
       if (path === resourceMetadataPath || path === serverMetadataPath) {
         req.resume();
         if (req.method !== 'GET' && req.method !== 'HEAD') return sendJson(res, 405, { error: 'invalid_request', error_description: 'GET only' }, { allow: 'GET, HEAD' });
