@@ -71,6 +71,8 @@ const RETURNED_HEADERS = ['content-type', 'mcp-session-id', 'mcp-protocol-versio
 const QUIET_HEADERS = ['host', 'connection', 'content-length', 'accept-encoding', 'user-agent', 'authorization', 'transfer-encoding', 'keep-alive', 'origin', 'mcp-protocol-version'];
 const SESSION_ID = /^[\x21-\x7e]{1,512}$/;
 const PROTOCOL_VERSION_META = 'io.modelcontextprotocol/protocolVersion';
+/** The revisions of the specification the executor serves in front of a local program: those with Streamable HTTP and sessions. A request whose MCP-Protocol-Version names another is refused with 400, unless it is the version the session's program answered "initialize" with (X247). */
+export const LOCAL_VERSIONS = Object.freeze(['2025-11-25', '2025-06-18', '2025-03-26']);
 /** The member of params that Mcp-Name mirrors, for each method that has one, as the 2026-07-28 revision's table of standard request headers says (X110). */
 const MIRRORED_NAME = new Map([['tools/call', 'name'], ['prompts/get', 'name'], ['resources/read', 'uri']]);
 /** A number as JSON writes one (RFC 8259): no hexadecimal, no space, no "Infinity", none of what Number() would take besides. */
@@ -415,7 +417,7 @@ export async function openHttpExecutor(config, more = {}) {
   const upstream = settings.upstream ? new URL(settings.upstream.url) : null;
   const lib = upstream?.protocol === 'https:' ? https : http;
   // The sessions of a local program, each with a program of its own, where the settings name "server" in place of "upstream" (local.mjs; DESIGN.md, section 10.1).
-  const local = settings.server ? openLocalSessions({ settings, env: program.env, credentialNames: program.credentialNames, log, ...(more.serverStderr === undefined ? {} : { serverStderr: more.serverStderr }) }) : null;
+  const local = settings.server ? openLocalSessions({ settings, env: program.env, credentialNames: program.credentialNames, log, backlog: BACKLOG_LIMIT, ...(more.serverStderr === undefined ? {} : { serverStderr: more.serverStderr }) }) : null;
 
   /** The text with the upstream's credential taken out, wherever it stands. Everything that goes to an agent passes through here. */
   const scrub = credential ? (text) => text.split(credential.token).join(CREDENTIAL_REMOVED) : (text) => text;
@@ -1055,6 +1057,7 @@ export async function openHttpExecutor(config, more = {}) {
   function answerLocal(ctx, clientId, got, { list = false, extra = {} } = {}) {
     const { res, agent } = ctx;
     if (got.failed === 'gone') return;
+    if (got.failed === 'not-reading') return refuse(res, 503, clientId, CODES.noAnswer, 'The tool server is not reading what it is sent, so this request was not sent and the session was ended. Begin a new one.');
     if (got.failed) return refuse(res, got.failed === 'timeout' ? 504 : 502, clientId, CODES.noAnswer, got.failed === 'timeout' ? `The tool server gave no answer within ${settings.timeout} ms.` : 'The tool server ended before it answered.');
     if (list && got.message) learnAnnotations(got.message);
     const filtered = list && settings.hideUnlisted && got.message ? filteredList(got.text, got.message, clientId, settings) : null;
@@ -1129,18 +1132,26 @@ export async function openHttpExecutor(config, more = {}) {
     const clientId = read.kind === 'request' ? m.id : null;
     if (read.kind === 'request' && m.method === 'initialize') {
       if (ctx.session) return refuse(res, 400, clientId, CODES.invalidRequest, 'A session is begun by an "initialize" sent without an Mcp-Session-Id; this one names a session.');
-      const begun = local.begin(agent.name, ctx.token?.connection ?? null);
+      // The stop may have begun while this request's body was read: no program is started after it (X246).
+      const stopped = () => refuse(res, 503, clientId, CODES.notRecorded, 'The executor is stopping and takes no request.', { connection: 'close' });
+      if (stopping) return stopped();
+      // Where the agent has its most programs, this waits for room (X243).
+      const begun = await local.begin(agent.name, ctx.token?.connection ?? null);
+      if (begun.refused === 'stopping') return stopped();
       if (begun.refused === 'too-many') {
         agent.log({ event: 'refused', code: 'too-many-sessions', sessions: settings.sessions.max });
-        return refuse(res, 503, clientId, CODES.notRecorded, `This agent already has ${settings.sessions.max} sessions, the most it may have at once (sessions.max), and each has a request in flight. Try again when one has ended.`, { connection: 'close' });
+        return refuse(res, 503, clientId, CODES.notRecorded, `This agent already has ${settings.sessions.max} programs running, the most it may have at once (sessions.max), and room could not be made: each of its sessions has a request in flight, or a program that was ended has not gone yet. Try again when one has ended.`, { connection: 'close' });
       }
       if (begun.refused) return refuse(res, 502, clientId, CODES.noAnswer, 'The tool server could not be started, so no session was begun.');
       const session = begun.session;
       enter(ctx, session);
+      // The agent went away while room was made: there is no one to give the session to.
+      if (res.destroyed) return local.end(session, 'not-begun');
       // A session begun under a connection made through OAuth ends with that connection.
       if (ctx.token) session.release = door.watch(ctx.token.connection, () => local.end(session, 'connection-ended'));
       const serverId = newServerId();
-      const asked = local.ask(session, spliceId(read.text, serverId) ?? JSON.stringify({ ...m, id: serverId }), serverId, clientId);
+      // "initialize" is never cancelled; where it is not answered in time the program is ended.
+      const asked = local.ask(session, spliceId(read.text, serverId) ?? JSON.stringify({ ...m, id: serverId }), serverId, clientId, { cancel: false });
       res.on('close', () => {
         if (!res.writableFinished) local.forget(session, serverId);
       });
@@ -1148,6 +1159,8 @@ export async function openHttpExecutor(config, more = {}) {
       // No session without the program's own result to "initialize": the program is ended, and the agent is told why.
       const begunWell = !got.failed && got.message !== null && Object.hasOwn(got.message, 'result');
       if (!begunWell) local.end(session, 'not-begun');
+      // The version the program answered with is one the session's later requests may name in MCP-Protocol-Version (X247).
+      else if (isObject(got.message.result) && typeof got.message.result.protocolVersion === 'string') session.version = got.message.result.protocolVersion;
       if (got.failed === 'timeout') return refuse(res, 504, clientId, CODES.noAnswer, `The tool server gave no answer to "initialize" within ${settings.timeout} ms, so no session was begun.`);
       if (got.failed === 'ended') return refuse(res, 502, clientId, CODES.noAnswer, 'The tool server ended before it answered "initialize", so no session was begun.');
       return answerLocal(ctx, clientId, got, { extra: begunWell ? { 'mcp-session-id': session.id } : {} });
@@ -1169,12 +1182,13 @@ export async function openHttpExecutor(config, more = {}) {
       });
       return answerLocal(ctx, clientId, await asked, { list: m.method === 'tools/list' });
     }
+    // A message that could not be given to the program is not answered 202: "If the server cannot accept the input, it MUST return an HTTP error status code" (X247).
+    const notWritten = () => (session.ended === 'not-reading'
+      ? refuse(res, 503, null, CODES.noAnswer, 'The tool server is not reading what it is sent, so this message was not sent and the session was ended. Begin a new one.')
+      : refuse(res, 502, null, CODES.noAnswer, 'The tool server has ended, so this message was not sent.'));
     if (read.kind === 'notification') {
       // A request's method sent without an id would reach the program unchecked; only the protocol's own notifications pass.
-      if (!m.method.startsWith('notifications/')) {
-        agent.log({ event: 'notification-dropped', method: m.method });
-        return accepted();
-      }
+      if (!m.method.startsWith('notifications/')) return notANotification(ctx, m);
       if (m.method === 'notifications/cancelled' && isId(m.params?.requestId)) {
         // The program knows a request by the executor's id for it, as on stdio.
         const call = agent.calls.get(local.key(session, m.params.requestId));
@@ -1187,19 +1201,29 @@ export async function openHttpExecutor(config, more = {}) {
           return accepted();
         }
         const other = local.serverIdOf(session, m.params.requestId);
-        if (other !== undefined) {
-          local.write(session, JSON.stringify({ ...m, params: { ...m.params, requestId: other } }));
-          return accepted();
-        }
+        if (other !== undefined) return local.write(session, JSON.stringify({ ...m, params: { ...m.params, requestId: other } })) ? accepted() : notWritten();
       }
     }
     // A notification, or the agent's response to a request of the program's own: as it is.
-    local.write(session, read.text);
-    accepted();
+    return local.write(session, read.text) ? accepted() : notWritten();
+  }
+
+  /** A request's method sent without an id: it is not sent on, since it would reach the tool server unchecked, and it is refused with 400, since it was not accepted (X247). */
+  function notANotification(ctx, m) {
+    ctx.agent.log({ event: 'notification-dropped', method: m.method.slice(0, 80) });
+    return refuse(ctx.res, 400, null, CODES.invalidRequest, 'A message with no id is a notification, and only the protocol\'s own notifications (notifications/...) are sent on. This one names a request\'s method, so it was not sent: give it an id.');
   }
 
   async function one(ctx, sessionId) {
     const { req, res, agent } = ctx;
+    if (local) {
+      // In front of a local program no one else reads the header, so the executor answers for it: "If the server receives a request with an invalid or unsupported MCP-Protocol-Version, it MUST respond with 400 Bad Request." A request that names no version is taken, as the specification allows (X247).
+      const versions = req.headersDistinct['mcp-protocol-version'] ?? [];
+      if (versions.length === 1 && !LOCAL_VERSIONS.includes(versions[0]) && versions[0] !== ctx.session?.version) {
+        agent.log({ event: 'refused', code: 'protocol-version' });
+        return refuse(res, 400, null, CODES.invalidRequest, `The MCP-Protocol-Version header names a version the executor does not serve in front of a local program. It serves ${LOCAL_VERSIONS.join(', ')}, and the version a session's program answered "initialize" with.`);
+      }
+    }
     if (req.method !== 'POST') {
       // The GET stream of server messages, or the DELETE that ends a session: no message, so no mirrored metadata to check; the same few headers go on.
       const h = headersFor(req, null, undefined);
@@ -1335,11 +1359,7 @@ export async function openHttpExecutor(config, more = {}) {
     }
     if (read.kind === 'notification') {
       // A request's method sent without an id would reach the upstream unchecked; only the protocol's own notifications pass.
-      if (!m.method.startsWith('notifications/')) {
-        agent.log({ event: 'notification-dropped', method: m.method });
-        res.writeHead(202);
-        return res.end();
-      }
+      if (!m.method.startsWith('notifications/')) return notANotification(ctx, m);
       let text = read.text;
       if (m.method === 'notifications/cancelled' && isId(m.params?.requestId)) {
         const call = agent.calls.get(idKey(m.params.requestId));
@@ -1443,7 +1463,7 @@ export async function openHttpExecutor(config, more = {}) {
       }
       const deadline = Date.now() + STOP_WAIT;
       while ([...agents.values()].some((a) => a.calls.size > 0) && Date.now() < deadline) await new Promise((d) => setTimeout(d, 20));
-      // Every session of a local program ends with the executor: each program's input is closed, and one that has not ended within "shutdownWait" is ended by force.
+      // Every session of a local program ends with the executor, and no program is started after this: each program's input is closed, and one that has not ended within "shutdownWait" is ended by force (SIGTERM, then SIGKILL). This always finishes (X242).
       if (local) await local.close();
       if (s) {
         await new Promise((done) => {

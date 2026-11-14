@@ -13,6 +13,12 @@ const log = (entry) => {
 
 process.stderr.write('fake-server: started\n');
 
+// With FAKE_IGNORE_TERM the server takes no notice of SIGTERM and does not end when its input closes: only a signal it cannot ignore ends it.
+if (process.env.FAKE_IGNORE_TERM) {
+  process.on('SIGTERM', () => log({ sigterm: true }));
+  setInterval(() => {}, 1000);
+}
+
 const TOOLS = [
   { name: 'echo', description: 'Gives back its arguments, and what the server sees.', inputSchema: { type: 'object' } },
   { name: 'order', description: 'Places an order.', inputSchema: { type: 'object', properties: { total: { type: 'integer' } } } },
@@ -60,6 +66,13 @@ function onMessage(given) {
   }
   if (id === undefined) return; // other notifications
   if (method === 'server/discover') return result(id, { resultType: 'complete', supportedVersions: ['2026-07-28'], capabilities: { tools: {} }, _meta: { 'io.modelcontextprotocol/serverInfo': { name: 'fake-server', version: '0.0.1' } } });
+  // FAKE_INIT: "error" answers initialize with an error, "never" does not answer it, "deaf" answers it and reads nothing after.
+  if (method === 'initialize' && process.env.FAKE_INIT === 'error') return failure(id, -32602, 'Unsupported protocol version');
+  if (method === 'initialize' && process.env.FAKE_INIT === 'never') return;
+  if (method === 'initialize' && process.env.FAKE_INIT === 'deaf') {
+    setImmediate(() => process.stdin.pause());
+    setInterval(() => {}, 1000);
+  }
   if (method === 'initialize') return result(id, { protocolVersion: params.protocolVersion ?? '2025-11-25', capabilities: { tools: { listChanged: false } }, serverInfo: { name: 'fake-server', version: '0.0.1' } });
   if (method === 'ping') return result(id, {});
   if (method === 'never') return; // a request that is never answered
@@ -104,6 +117,27 @@ function onMessage(given) {
     // A second result, or a second id, under a name in other capitals: a client that ignores capitals would read the second.
     if (name === 'capresult') return process.stdout.write(`{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"content":[{"type":"text","text":"the result"}]},"Result":{"content":[{"type":"text","text":"the other result"}]}}\n`);
     if (name === 'capid') return process.stdout.write(`{"jsonrpc":"2.0","id":${JSON.stringify(id)},"ID":"someone-else","result":{"content":[{"type":"text","text":"the result"}]}}\n`);
+    if (name === 'flood') {
+      // Notifications without pause, until the server is ended; or "count" of them, and then the answer.
+      const line = `${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/message', params: { level: 'info', data: 'x'.repeat(80) } })}\n`;
+      let left = args.count ?? Infinity;
+      const more = () => {
+        const now = Math.min(left, 500);
+        left -= now;
+        process.stdout.write(line.repeat(now), () => (left > 0 ? setImmediate(more) : text('Flooded.')));
+      };
+      return more();
+    }
+    // An answer to nothing the executor asked, then a notification, then the answer.
+    if (name === 'stray') {
+      send({ jsonrpc: '2.0', id: 'nobody', result: { content: [{ type: 'text', text: 'an answer to nothing' }] } });
+      send({ jsonrpc: '2.0', method: 'notifications/message', params: { level: 'info', data: 'after the stray answer' } });
+      return text('Strayed.');
+    }
+    // Much on its standard error, and the answer only once all of it is written.
+    if (name === 'loud') return process.stderr.write(`${'e'.repeat(1023)}\n`.repeat(args.kib ?? 1024), () => text('Loud.'));
+    // Half a line on its standard error, with no line feed.
+    if (name === 'mutter') return process.stderr.write('half a line', () => text('Muttered.'));
     if (name === 'twoids') return process.stdout.write(`{"jsonrpc":"2.0","id":${JSON.stringify(id)},"id":${JSON.stringify(id)},"result":{"resultType":"complete","content":[]}}\n`);
     if (name === 'batch') return process.stdout.write(`[{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"resultType":"complete","content":[]}}]\n`);
     if (name === 'garbage') return process.stdout.write(`{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"resultType":"complete","a":1,"a":2}}\n`);
@@ -140,6 +174,7 @@ process.stdin.on('data', (chunk) => {
 });
 process.stdin.on('end', () => {
   log({ stdinEnded: true });
+  if (process.env.FAKE_IGNORE_TERM) return;
   if (process.env.FAKE_LINGER) setTimeout(() => process.exit(0), Number(process.env.FAKE_LINGER));
   else process.exit(0);
 });

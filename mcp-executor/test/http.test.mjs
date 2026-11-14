@@ -274,7 +274,9 @@ test('attack: a batch, or a message shape that would carry a tools/call past the
     assert.equal(batch.status, 400);
     assert.match(batch.json.error.message, /batch/);
     const asNotification = await post(w, 'alpha', { jsonrpc: '2.0', method: 'tools/call', params: callBody.params });
-    assert.equal(asNotification.status, 202, 'dropped: nothing to answer');
+    assert.equal(asNotification.status, 400, 'not sent on, and not answered as accepted (X247)');
+    assert.equal(asNotification.json.error.code, -32600);
+    assert.equal(seenCalls(w).length, 0, 'it did not reach the upstream');
     assert.ok(w.logs.some((e) => e.event === 'notification-dropped' && e.method === 'tools/call'));
     const nullId = await post(w, 'alpha', { ...callBody, id: null });
     assert.equal(nullId.status, 400);

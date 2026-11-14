@@ -315,7 +315,7 @@ test('the limit on how many: at most "sessions.max" for each agent, the one quie
     await until(() => w.executor.agent('alpha').calls() === 2);
     const fourth = await begin(w, 'alpha');
     assert.equal(fourth.answer.status, 503);
-    assert.match(fourth.answer.json.error.message, /already has 2 sessions/);
+    assert.match(fourth.answer.json.error.message, /already has 2 programs running/);
     assert.equal(fourth.session, null);
     const [one, two] = await Promise.all(busy);
     assert.equal(one.json.result?.content[0].text, 'Done, slowly. one', one.body);

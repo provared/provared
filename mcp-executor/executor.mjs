@@ -164,6 +164,9 @@ export function readSettings(config, root, { keysOnly = false } = {}) {
 /** Who sets the executor's own environment: over stdio, the agent's client, which starts it; over HTTP, whoever starts it. */
 const ENVIRONMENT_SET_BY = { stdio: "the agent's client sets when it starts the executor", http: 'whoever starts the executor sets' };
 
+/** The longest second wait: a program still running "shutdownWait" after its input was closed is sent SIGTERM, and one still running after a second wait, of "shutdownWait" again and at most this long, is sent SIGKILL, which no program can ignore (X242). */
+export const KILL_WAIT = 5000;
+
 /** How long the tool server is given to end once its input is closed, before it is ended by force: "shutdownWait". */
 export function readShutdownWait(config, s, at) {
   s.shutdownWait = config.shutdownWait ?? 5000;
@@ -1916,10 +1919,15 @@ export async function openExecutor(config, more = {}) {
         // Already gone.
       }
       killTimer = setTimeout(() => {
-        if (!serverGone) {
-          log({ event: 'server-killed' });
-          child.kill();
-        }
+        if (serverGone) return;
+        log({ event: 'server-killed', signal: 'SIGTERM' });
+        child.kill();
+        // A program that takes no notice of SIGTERM is sent SIGKILL after a second wait, which no program can ignore (X242).
+        killTimer = setTimeout(() => {
+          if (serverGone) return;
+          log({ event: 'server-killed', signal: 'SIGKILL' });
+          child.kill('SIGKILL');
+        }, Math.min(settings.shutdownWait, KILL_WAIT));
       }, settings.shutdownWait);
     });
 
@@ -1978,8 +1986,11 @@ export async function openExecutor(config, more = {}) {
         // Already gone.
       }
       const t = setTimeout(() => attached.child.kill(), settings.shutdownWait);
+      // SIGKILL after a second wait, for a program that takes no notice of SIGTERM (X242).
+      const last = setTimeout(() => attached.child.kill('SIGKILL'), settings.shutdownWait + Math.min(settings.shutdownWait, KILL_WAIT));
       await attached.closed;
       clearTimeout(t);
+      clearTimeout(last);
     },
   };
 }
