@@ -276,6 +276,31 @@ export function readMessage(line, options) {
   }
 }
 
+/**
+ * The most levels of nesting, of objects and lists together, in a message
+ * the executor reads: the message itself is the first. A deeper message is
+ * refused where the agent sent it, and is a line the executor cannot read
+ * where the server did.
+ */
+export const MAX_DEPTH = 256;
+
+/** Whether a JSON text is nested more than "limit" levels deep. It walks the text and calls nothing that calls itself. The text must already be known to be JSON. */
+export function deeperThan(text, limit) {
+  let depth = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '"') {
+      let j = i + 1;
+      while (text[j] !== '"') j += text[j] === '\\' ? 2 : 1;
+      i = j;
+    } else if (c === '{' || c === '[') {
+      depth += 1;
+      if (depth > limit) return true;
+    } else if (c === '}' || c === ']') depth -= 1;
+  }
+  return false;
+}
+
 /** The id a refusal may be answered under: the top-level "id" of the text, where it is there once, is text or a whole number, and is a number every reader holds exactly; else null. */
 function answerableId(text) {
   const at = topLevelId(text);
@@ -298,6 +323,8 @@ function readStrictly(line, { strictNumbers = true } = {}) {
   }
   if (Array.isArray(message)) return { refused: { code: CODES.invalidRequest, message: 'A list of messages (a batch) is not accepted: one message to a line.' }, id: null };
   if (!message || typeof message !== 'object') return { refused: { code: CODES.invalidRequest, message: 'A message is a JSON object.' }, id: null };
+  // Nothing after this point, here or in what uses the message, has to walk a value deeper than MAX_DEPTH: much that walks a value calls itself once for each level, and would overflow the stack.
+  if (deeperThan(text, MAX_DEPTH)) return { refused: { code: CODES.invalidRequest, message: `The message is nested more than ${MAX_DEPTH} levels deep, which the executor does not read.` }, id: answerableId(text) };
   const repeated = repeatedName(text);
   // These two refusals name the request where its id can be found, so that a client is not left waiting for an answer.
   if (repeated !== null) return { refused: { code: CODES.invalidRequest, message: 'A member name is given twice in one object of the message, which two readers may read differently.' }, id: answerableId(text) };

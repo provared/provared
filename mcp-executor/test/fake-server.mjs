@@ -34,6 +34,9 @@ const TOOLS = [
   { name: 'big', description: 'A large answer.', inputSchema: { type: 'object' } },
 ];
 
+/** The text of a value nested "depth" lists deep. */
+const deep = (depth) => `${'['.repeat(depth)}1${']'.repeat(depth)}`;
+
 const cancelled = new Set();
 const pendingAsks = new Map();
 let serverRequestId = 1000;
@@ -76,6 +79,10 @@ function onMessage(given) {
     // The answer written as raw text, so that the number is exact: a whole number beyond 2^53 - 1 in a tool's definition.
     return process.stdout.write(`{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"resultType":"complete","tools":[{"name":"error","description":"A protocol error.","inputSchema":{"type":"object"}},{"name":"hidden","description":"No rule.","inputSchema":{"type":"object"},"ordinal":1234567890123456789},{"name":"big","description":"A large answer.","inputSchema":{"type":"object"},"ordinal":1234567890123456789}]}}\n`);
   }
+  if (method === 'tools/list' && process.env.FAKE_DEEP_LIST) {
+    // A list whose first tool has a schema nested very deeply.
+    return process.stdout.write(`{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"tools":[{"name":"echo","inputSchema":{"type":"object","x":${deep(Number(process.env.FAKE_DEEP_LIST))}}},{"name":"hidden","inputSchema":{"type":"object"}}]}}\n`);
+  }
   if (method === 'tools/list' && process.env.FAKE_CAPITAL_LIST) {
     // A list with names in other capitals: a tool the executor shows under one name and a client that ignores capitals reads under another, and a second list.
     return process.stdout.write(`{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"tools":[{"name":"echo","inputSchema":{"type":"object"}},{"name":"order","Name":"hidden","inputSchema":{"type":"object"}},{"name":"slow","NAME":"hidden","inputSchema":{"type":"object"}}],"Tools":[{"name":"hidden","inputSchema":{"type":"object"}}],"TOOLS":[]}}\n`);
@@ -113,6 +120,13 @@ function onMessage(given) {
     // A second result, or a second id, under a name in other capitals: a client that ignores capitals would read the second.
     if (name === 'capresult') return process.stdout.write(`{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"content":[{"type":"text","text":"the result"}]},"Result":{"content":[{"type":"text","text":"the other result"}]}}\n`);
     if (name === 'capid') return process.stdout.write(`{"jsonrpc":"2.0","id":${JSON.stringify(id)},"ID":"someone-else","result":{"content":[{"type":"text","text":"the result"}]}}\n`);
+    // Answers nested "depth" levels deep, written as text: a result, an error, and a notification before a plain result.
+    if (name === 'deep') return process.stdout.write(`{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"content":[{"type":"text","text":"deep"}],"structuredContent":{"a":${deep(args.depth)}}}}\n`);
+    if (name === 'deeperror') return process.stdout.write(`{"jsonrpc":"2.0","id":${JSON.stringify(id)},"error":{"code":-32000,"message":"deep","data":${deep(args.depth)}}}\n`);
+    if (name === 'deepnote') {
+      process.stdout.write(`{"jsonrpc":"2.0","method":"notifications/message","params":{"level":"info","data":${deep(args.depth)}}}\n`);
+      return text('After a deep notification.');
+    }
     if (name === 'twoids') return process.stdout.write(`{"jsonrpc":"2.0","id":${JSON.stringify(id)},"id":${JSON.stringify(id)},"result":{"resultType":"complete","content":[]}}\n`);
     if (name === 'batch') return process.stdout.write(`[{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"resultType":"complete","content":[]}}]\n`);
     if (name === 'garbage') return process.stdout.write(`{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"resultType":"complete","a":1,"a":2}}\n`);
