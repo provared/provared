@@ -13,12 +13,16 @@
 //   SHOPIFY_CLIENT_ID_FILE       the file that holds it
 //   SHOPIFY_CLIENT_SECRET        the app's client secret, or
 //   SHOPIFY_CLIENT_SECRET_FILE   the file that holds it
+//   SHOPIFY_MIN_PRICE_MINOR      the lowest price it will set, in the
+//                                currency's smallest unit (1 unless given)
+//   SHOPIFY_MAX_PRICE_CUT_PERCENT  how far below the present price one call
+//                                may set a price, from 0 to 100 (0 unless
+//                                given: a price may be raised, not lowered)
 //
 // It uses nothing but Node.js itself. The only requests it makes are to
 // that store's token address and Admin API (admin.mjs).
 
 import { readFileSync } from 'node:fs';
-import { createInterface } from 'node:readline';
 import { API_VERSION, ToolError, openAdmin } from './admin.mjs';
 import { TOOLS, runTool, toolNamed } from './tools.mjs';
 
@@ -36,6 +40,9 @@ It takes no arguments but --version and --help. Its settings are read from its e
   SHOPIFY_SHOP                 the store: the part of its myshopify.com address before ".myshopify.com"
   SHOPIFY_CLIENT_ID            the app's client ID, or SHOPIFY_CLIENT_ID_FILE, the file that holds it
   SHOPIFY_CLIENT_SECRET        the app's client secret, or SHOPIFY_CLIENT_SECRET_FILE, the file that holds it
+  SHOPIFY_MIN_PRICE_MINOR      the lowest price it will set, a whole number of the currency's smallest unit (1 unless given)
+  SHOPIFY_MAX_PRICE_CUT_PERCENT  how far below the present price one call may set a price, a whole number from 0 to 100
+                               (0 unless given: a price may be raised, not lowered)
 `;
 
 function stop(message) {
@@ -75,6 +82,15 @@ function storeOrigin(env) {
   return { shop, origin: test, madeUp: true };
 }
 
+/** A whole number from the environment, from 0 to `most`; `unless` where the variable is not set. Anything else stops the start: a limit that cannot be read is not guessed. */
+function wholeNumber(env, name, unless, most) {
+  const given = env[name];
+  if (given === undefined) return unless;
+  const value = /^[0-9]{1,16}$/.test(given) ? Number(given) : NaN;
+  if (!Number.isSafeInteger(value) || value > most) stop(`${name} must be a whole number from 0 to ${most}, in digits alone.`);
+  return value;
+}
+
 function main() {
   const argv = process.argv.slice(2);
   if (argv.length === 1 && argv[0] === '--version') return void process.stdout.write(`${VERSION}\n`);
@@ -84,9 +100,16 @@ function main() {
   const { shop, origin, madeUp } = storeOrigin(process.env);
   const clientId = credential(process.env, 'SHOPIFY_CLIENT_ID');
   const clientSecret = credential(process.env, 'SHOPIFY_CLIENT_SECRET');
-  const admin = openAdmin({ origin, clientId, clientSecret, userAgent: `${NAME}/${VERSION}` });
+  // The floor under a price: the server's own, which no call can change. Unless set otherwise, no price of nothing and no cut at all.
+  const limits = {
+    minPriceMinor: wholeNumber(process.env, 'SHOPIFY_MIN_PRICE_MINOR', 1, Number.MAX_SAFE_INTEGER),
+    maxPriceCutPercent: wholeNumber(process.env, 'SHOPIFY_MAX_PRICE_CUT_PERCENT', 0, 100),
+  };
+  let scrub = String;
+  const log = (message) => process.stderr.write(`${NAME}: ${scrub(message)}\n`);
+  const admin = openAdmin({ origin, clientId, clientSecret, userAgent: `${NAME}/${VERSION}`, log });
+  scrub = admin.scrub;
 
-  const log = (message) => process.stderr.write(`${NAME}: ${admin.scrub(message)}\n`);
   const send = (message) => process.stdout.write(`${JSON.stringify(message)}\n`);
   const answer = (id, result) => send({ jsonrpc: '2.0', id, result });
   const refuse = (id, code, message) => send({ jsonrpc: '2.0', id, error: { code, message } });
@@ -94,10 +117,12 @@ function main() {
   const told = (value, isError) => ({ content: [{ type: 'text', text: admin.scrub(value) }], ...(isError ? { isError: true } : {}) });
 
   log(`${VERSION}, store ${shop}, Admin API ${API_VERSION}${madeUp ? `, at the made-up server ${origin} (a test: Shopify is not reached)` : ''}.`);
+  log(`a price: none below ${limits.minPriceMinor} of the currency's smallest unit, and ${limits.maxPriceCutPercent === 0 ? 'no cut' : `no cut of more than ${limits.maxPriceCutPercent}% in one call`}.`);
 
   async function call(id, tool, args) {
     try {
-      answer(id, told(JSON.stringify(await runTool(tool, args, admin), null, 2), false));
+      // The secrets are taken out of each text before the answer is written as JSON, and out of the JSON after.
+      answer(id, told(JSON.stringify(admin.scrubAll(await runTool(tool, args, admin, limits)), null, 2), false));
     } catch (e) {
       if (e instanceof ToolError) return void answer(id, told(e.message, true));
       log(`${tool.name} failed: ${e?.stack ?? e}`);
@@ -144,9 +169,27 @@ function main() {
   // Where the reader of the output has gone, what is written is lost and the
   // server goes on until its input ends, so that a change in hand is finished.
   process.stdout.on('error', () => {});
+  // One message to a line, and a line ends at a line feed and nowhere else
+  // (one carriage return before it is dropped). A carriage return alone is
+  // white space inside a JSON message, and U+2028 and U+2029 may stand
+  // inside its text, so none of them ends a line here.
+  let rest = '';
+  process.stdin.setEncoding('utf8');
+  process.stdin.on('data', (chunk) => {
+    const from = rest.length;
+    rest += chunk;
+    for (let at = rest.indexOf('\n', from); at !== -1; at = rest.indexOf('\n')) {
+      const line = rest.slice(0, at);
+      rest = rest.slice(at + 1);
+      handle(line.endsWith('\r') ? line.slice(0, -1) : line);
+    }
+  });
   // When the input ends, the calls in hand are answered and the server then
   // ends by itself: nothing else keeps it running.
-  createInterface({ input: process.stdin, crlfDelay: Infinity }).on('line', handle);
+  process.stdin.on('end', () => {
+    if (rest !== '') handle(rest);
+    rest = '';
+  });
 }
 
 main();

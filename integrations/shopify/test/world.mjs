@@ -119,6 +119,11 @@ export function startServer(fake, { env = {} } = {}) {
     call,
     /** Write a line as it is. */
     write: (line) => child.stdin.write(`${line}\n`),
+    /** Write text as it is, with no line feed added, and wait for the answer that has this id. */
+    raw: (id, text) => new Promise((resolve) => {
+      waiting.set(id, resolve);
+      child.stdin.write(text);
+    }),
     unasked,
     /** Everything the program has written so far, on both outputs. */
     output: () => stdout + stderr,

@@ -121,16 +121,17 @@ function orderNode(o) {
 
 /**
  * Start the made-up Shopify. `expiresIn` is how long its tokens say they
- * last, in seconds; `currency` is the shop's. Gives its address, what it
+ * last, in seconds; `currency` is the shop's; `clientSecret` is the secret it
+ * takes in place of the usual one. Gives its address, what it
  * was sent, its store, and ways to make it fail on purpose.
  */
-export async function fakeShopify({ expiresIn = 86399, currency = 'GBP' } = {}) {
+export async function fakeShopify({ expiresIn = 86399, currency = 'GBP', clientSecret = CLIENT_SECRET } = {}) {
   const store = madeUpStore(currency);
   const sent = []; // every request: {path, method, headers, body, operation, variables}
   const issued = []; // every access token given
   const valid = new Set();
   const faults = []; // {on: an operation's name or "sign-in", kind, ...}: each is used once
-  const keys = new Set(); // the idempotency keys of the refunds made
+  const keys = new Map(); // the idempotency key of each refund made, and its answer
 
   const operations = {
     ShopCurrency: () => ({ shop: { currencyCode: store.currency } }),
@@ -199,7 +200,8 @@ export async function fakeShopify({ expiresIn = 86399, currency = 'GBP' } = {}) 
       const input = v.input;
       const o = store.orders.find((x) => x.id === input.orderId);
       if (!o) return refused(['orderId'], 'Order does not exist');
-      if (keys.has(v.idempotencyKey)) return refused(null, 'This request was already made');
+      // A second request with the key of a refund already made is answered with that refund, and makes none (Shopify's page on idempotency).
+      if (keys.has(v.idempotencyKey)) return structuredClone(keys.get(v.idempotencyKey));
       const t = input.transactions?.[0];
       const parent = o.transactions.find((x) => x.id === t?.parentId);
       if (input.transactions?.length !== 1 || !parent || t.orderId !== o.id || t.kind !== 'REFUND' || t.gateway !== parent.gateway || !isDecimal(t.amount)) return refused(['transactions'], 'Transactions are not valid');
@@ -208,10 +210,13 @@ export async function fakeShopify({ expiresIn = 86399, currency = 'GBP' } = {}) 
       const value = minor(t.amount, o.currency);
       const { paid, refunded } = orderTotals(o);
       if (value > paid - refunded) return refused(['transactions'], 'Refund amount is greater than the amount that can be refunded');
-      keys.add(v.idempotencyKey);
       const r = { id: `gid://shopify/Refund/${700 + o.refunds.length + 1}`, createdAt: '2026-11-14T12:00:00Z', note: input.note ?? null, notify: input.notify ?? null, value };
       o.refunds.push(r);
-      return { refundCreate: { refund: { id: r.id, createdAt: r.createdAt, totalRefundedSet: set(decimal(value, o.currency), o.currency) }, userErrors: [] } };
+      // The refund's own transaction, with its state: "paymentState" on an order is what the made-up gateway says of sending the money.
+      const payment = { id: `gid://shopify/OrderTransaction/${800 + o.refunds.length}`, kind: 'REFUND', status: o.paymentState ?? 'SUCCESS', amountSet: set(decimal(value, o.currency), o.currency) };
+      const answer = { refundCreate: { refund: { id: r.id, createdAt: r.createdAt, totalRefundedSet: set(decimal(value, o.currency), o.currency), transactions: { nodes: [payment] } }, userErrors: [] } };
+      keys.set(v.idempotencyKey, answer);
+      return structuredClone(answer);
     },
   };
 
@@ -227,8 +232,9 @@ export async function fakeShopify({ expiresIn = 86399, currency = 'GBP' } = {}) 
       const body = Buffer.concat(chunks).toString('utf8');
       const record = { path: req.url, method: req.method, headers: req.headers, body, operation: null, variables: null };
       sent.push(record);
+      // An answer of the Admin API names the version that gave it, as Shopify's does.
       const json = (status, value) => {
-        res.writeHead(status, { 'Content-Type': 'application/json' });
+        res.writeHead(status, { 'Content-Type': 'application/json', ...(req.url === API_PATH && fake.version ? { 'X-Shopify-API-Version': fake.version } : {}) });
         res.end(JSON.stringify(value));
       };
       if (req.url === TOKEN_PATH && req.method === 'POST') {
@@ -237,7 +243,7 @@ export async function fakeShopify({ expiresIn = 86399, currency = 'GBP' } = {}) 
         if (fault?.kind === 'status') return json(fault.status, fault.body ?? {});
         if (fault?.kind === 'redirect') return void res.writeHead(307, { Location: fault.to }).end();
         const form = new URLSearchParams(body);
-        if (req.headers['content-type'] !== 'application/x-www-form-urlencoded' || form.get('grant_type') !== 'client_credentials' || form.get('client_id') !== CLIENT_ID || form.get('client_secret') !== CLIENT_SECRET) {
+        if (req.headers['content-type'] !== 'application/x-www-form-urlencoded' || form.get('grant_type') !== 'client_credentials' || form.get('client_id') !== CLIENT_ID || form.get('client_secret') !== clientSecret) {
           // A made-up refusal that repeats what it was sent, to show that the server takes the secret out of what it says.
           return json(400, { error: 'invalid_client', error_description: `The client ${form.get('client_id')} or its secret ${form.get('client_secret')} is not right.` });
         }
@@ -262,9 +268,12 @@ export async function fakeShopify({ expiresIn = 86399, currency = 'GBP' } = {}) 
       if (fault?.kind === 'errors') return json(200, { errors: fault.errors });
       if (fault?.kind === 'drop') return void req.socket.destroy();
       if (fault?.kind === 'redirect') return void res.writeHead(307, { Location: fault.to }).end();
+      if (fault?.kind === 'answer') return json(200, fault.body); // this answer, and nothing done
       const run = operations[record.operation];
       if (!run) return json(200, { errors: [{ message: `The made-up store does not know the operation ${record.operation}.` }] });
       const data = run(message.variables ?? {}, message.query);
+      if (fault?.kind === 'tamper') fault.with(data); // the thing is done, and the answer reports something else
+      if (fault?.kind === 'version') return void res.writeHead(200, { 'Content-Type': 'application/json', 'X-Shopify-API-Version': fault.version }).end(JSON.stringify({ data })); // the thing is done, by another version
       if (fault?.kind === 'after') return fault.status === 'drop' ? void req.socket.destroy() : json(fault.status, { errors: 'made-up failure after the change' });
       json(200, { data, extensions: { cost: { requestedQueryCost: 10, actualQueryCost: 10, throttleStatus: { maximumAvailable: 2000, currentlyAvailable: 1990, restoreRate: 100 } } } });
     });
@@ -275,6 +284,8 @@ export async function fakeShopify({ expiresIn = 86399, currency = 'GBP' } = {}) 
 
   const fake = {
     origin: `http://127.0.0.1:${server.address().port}`,
+    /** The version its answers name; another, or null for none, to show what the server does then. */
+    version: '2026-10',
     store,
     sent,
     issued,

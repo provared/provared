@@ -234,9 +234,13 @@ test('refund_order: part of an order, as one refund transaction against the paym
   const { fake, server, end } = await world();
   const refund = await server.call('refund_order', { order_id: ORDER_1001, amount_minor: 750, currency: 'GBP', note: 'One mug arrived chipped' });
   assert.equal(refund.isError, false, refund.text);
-  assert.deepEqual(refund.data, { done: '7.50 GBP was refunded on order #1001.', refund_id: 'gid://shopify/Refund/701', order_id: ORDER_1001, refunded: gbp('7.50', 750), customer_told: false });
   const sent = fake.of('RefundOrder');
   assert.equal(sent.length, 1);
+  assert.deepEqual(refund.data, {
+    done: '7.50 GBP was refunded on order #1001.', refunded: gbp('7.50', 750), refund_id: 'gid://shopify/Refund/701', order_id: ORDER_1001,
+    transactions: [{ transaction_id: 'gid://shopify/OrderTransaction/801', kind: 'REFUND', status: 'SUCCESS', amount: gbp('7.50', 750) }],
+    customer_told: false, idempotency_key: sent[0].variables.idempotencyKey,
+  });
   assert.match(JSON.parse(sent[0].body).query, /refundCreate\(input: \$input\) @idempotent\(key: \$idempotencyKey\)/);
   assert.match(sent[0].variables.idempotencyKey, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   assert.deepEqual(sent[0].variables.input, {

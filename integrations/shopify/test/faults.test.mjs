@@ -66,11 +66,23 @@ test('a refund whose answer is lost after Shopify made it: the outcome is said t
   fake.faults.push({ on: 'RefundOrder', kind: 'after', status: 'drop' });
   const lost = await server.call('refund_order', REFUND);
   assert.equal(lost.isError, true);
-  assert.match(lost.text, /^Could not reach Shopify \(.+\)\. Whether the change was made is not known\. Read the order before trying again\.$/);
+  const key = fake.of('RefundOrder')[0].variables.idempotencyKey;
+  assert.equal(lost.text.replace(/^Could not reach Shopify \(.+?\)\. /, ''), `Whether the change was made is not known. Read the order before trying again; to send this same refund again, give "idempotency_key": "${key}" with every other argument as it was, and Shopify will not make it twice.`);
   assert.equal(fake.of('RefundOrder').length, 1, 'sent once: a second sending would have refunded twice');
   assert.equal(fake.store.orders[0].refunds.length, 1, 'the made-up store did make the refund');
   const read = await server.call('read_order', { order_id: ORDER_1001 });
   assert.equal(read.data.refunded.amount_minor, 750, 'reading the order, as the answer says to, shows it');
+  // The agent sends the same call again with the key it was told: Shopify answers with the first refund and makes no second.
+  const again = await server.call('refund_order', { ...REFUND, idempotency_key: key });
+  assert.equal(again.isError, false, again.text);
+  assert.equal(again.data.done, '7.50 GBP was refunded on order #1001.');
+  assert.equal(again.data.idempotency_key, key);
+  assert.deepEqual(fake.of('RefundOrder').map((r) => r.variables.idempotencyKey), [key, key]);
+  assert.equal(fake.store.orders[0].refunds.length, 1, 'still one refund');
+  // Sent again without the key, it is a refund of its own.
+  const second = await server.call('refund_order', REFUND);
+  assert.notEqual(second.data.idempotency_key, key);
+  assert.equal(fake.store.orders[0].refunds.length, 2);
   await end();
 });
 
@@ -78,7 +90,7 @@ test('Shopify\'s own failure on a change (HTTP 500, or an error in its answer): 
   const { fake, server, end } = await world();
   fake.faults.push({ on: 'RefundOrder', kind: 'after', status: 502 }, { on: 'SetVariantPrice', kind: 'errors', errors: [{ message: 'Internal error. Looks like something went wrong on our end.', extensions: { code: 'INTERNAL_SERVER_ERROR' } }] });
   const refund = await server.call('refund_order', REFUND);
-  assert.equal(refund.text, 'Shopify had an error (HTTP 502). Whether the change was made is not known. Read the order before trying again.');
+  assert.match(refund.text, /^Shopify had an error \(HTTP 502\)\. Whether the change was made is not known\. Read the order before trying again; to send this same refund again, give "idempotency_key": "[0-9a-f-]{36}" /);
   const price = await server.call('set_variant_price', { variant_id: BLUE, price_minor: 1250, currency: 'GBP' });
   assert.equal(price.text, 'Shopify answered with an error: Internal error. Looks like something went wrong on our end.. Whether the change was made is not known. Read the product before trying again.');
   assert.deepEqual([refund.isError, price.isError], [true, true]);
@@ -127,7 +139,7 @@ test('a redirect is not followed: neither the client secret nor the access token
   assert.match(query.text, /^Could not reach Shopify \(.+\)\.$/);
   fake.faults.push({ on: 'RefundOrder', kind: 'redirect', to: `${elsewhere.origin}/admin/api/2026-10/graphql.json` });
   const refund = await server.call('refund_order', REFUND);
-  assert.match(refund.text, /^Could not reach Shopify \(.+\)\. Whether the change was made is not known\. Read the order before trying again\.$/);
+  assert.match(refund.text, /^Could not reach Shopify \(.+?\)\. Whether the change was made is not known\. Read the order before trying again; /);
   assert.equal(elsewhere.sent.length, 0, 'the other address was sent nothing');
   await end();
   await elsewhere.close();

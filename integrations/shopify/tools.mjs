@@ -4,8 +4,12 @@
 // as the call's amount and a permission can limit it.
 //
 // A change (a price, a discount code, a refund) is one request to Shopify,
-// sent once. Before it, a tool reads what it needs to be sure the amount
-// means what it says: the shop's currency, or the order's.
+// sent once, straight after a reading: of the shop's currency, the variant
+// or the order, so that the amount means what it says, and so that Shopify
+// has just answered with this server's version of the Admin API.
+//
+// After a change a tool says "done" only where Shopify reports what was
+// asked for. Where it reports something else, the tool says what it reports.
 
 import { randomUUID } from 'node:crypto';
 import { ToolError } from './admin.mjs';
@@ -25,6 +29,10 @@ function text(description, { pattern, minLength = 1, maxLength = 500 } = {}) {
   const schema = { type: 'string', description, minLength, maxLength, ...(pattern ? { pattern: pattern.source } : {}) };
   if (pattern) TESTS.set(schema, pattern);
   return schema;
+}
+
+function oneOf(description, values) {
+  return { type: 'string', description: `${description} One of: ${values.join(', ')}.`, enum: values };
 }
 
 function whole(description, minimum, maximum = Number.MAX_SAFE_INTEGER) {
@@ -49,6 +57,8 @@ const ID_PATTERNS = {
 
 const CURRENCY = /^[A-Z]{3}$/;
 const DATE_TIME = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(Z|[+-][0-9]{2}:[0-9]{2})$/;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const ORDER_NAME = /^#?[A-Za-z0-9-]{1,30}$/;
 
 const MINOR = 'A whole number of the currency\'s smallest unit, never a decimal: 1250 is 12.50 GBP, and 1250 is 1,250 JPY.';
 
@@ -63,7 +73,25 @@ function schema(properties, required = []) {
 const PAGE = {
   first: whole('How many to give, from 1 to 50. 20 where it is left out.', 1, 50),
   after: text('Where to go on from: the "next" of the answer before.'),
-  query: text('A filter in Shopify\'s search syntax, such as status:active or created_at:>2026-11-01.'),
+};
+
+const SEARCH = {
+  ...PAGE,
+  query: text('A filter in Shopify\'s search syntax, such as status:active.'),
+};
+
+// Orders are found by these filters alone. Each value is one of a fixed
+// list, a date or an order's name, so that no order can be looked for by a
+// customer's email, name or card (DESIGN.md, S36).
+const ORDER_FILTERS = {
+  ...PAGE,
+  status: oneOf('Only orders in this state.', ['open', 'closed', 'cancelled', 'not_closed']),
+  financial_status: oneOf('Only orders whose payment is in this state.', ['paid', 'pending', 'authorized', 'partially_paid', 'partially_refunded', 'refunded', 'voided', 'expired']),
+  fulfillment_status: oneOf('Only orders whose delivery is in this state.', ['unshipped', 'shipped', 'fulfilled', 'partial', 'scheduled', 'on_hold', 'unfulfilled', 'request_declined']),
+  created_from: text('Only orders made at or after this date and time, to the second, with its zone (2026-11-01T00:00:00Z).', { pattern: DATE_TIME, maxLength: 25 }),
+  created_to: text('Only orders made at or before this date and time, to the second, with its zone.', { pattern: DATE_TIME, maxLength: 25 }),
+  name: text('Only the order of this name, such as #1001.', { pattern: ORDER_NAME, maxLength: 31 }),
+  test: flag('True for test orders only, false for real orders only.'),
 };
 
 const DISCOUNT_OPTIONS = {
@@ -87,8 +115,12 @@ function wrong(args, toolSchema) {
     const s = toolSchema.properties[name];
     if (s.type === 'string') {
       if (typeof value !== 'string') return `"${name}" must be text.`;
-      if (value.length < s.minLength || value.length > s.maxLength) return `"${name}" must be from ${s.minLength} to ${s.maxLength} characters long.`;
-      if (TESTS.has(s) && !TESTS.get(s).test(value)) return `"${name}" is not in the form this tool takes. ${s.description}`;
+      if (s.enum) {
+        if (!s.enum.includes(value)) return `"${name}" must be one of: ${s.enum.join(', ')}.`;
+      } else {
+        if (value.length < s.minLength || value.length > s.maxLength) return `"${name}" must be from ${s.minLength} to ${s.maxLength} characters long.`;
+        if (TESTS.has(s) && !TESTS.get(s).test(value)) return `"${name}" is not in the form this tool takes. ${s.description}`;
+      }
     } else if (s.type === 'integer') {
       if (!Number.isSafeInteger(value)) return `"${name}" must be a whole number. ${s.description}`;
       if (value < s.minimum || value > s.maximum) return `"${name}" must be from ${s.minimum} to ${s.maximum}.`;
@@ -194,9 +226,12 @@ const ORDER_FOR_REFUND = `query OrderForRefund($id: ID!) {
   }
 }`;
 
+// The refund's own payments are asked for with it: Shopify's page for a
+// refund says that a refund's being there does not show that the money
+// went back, and that the state of each of its transactions does.
 const REFUND_ORDER = `mutation RefundOrder($input: RefundInput!, $idempotencyKey: String!) {
   refundCreate(input: $input) @idempotent(key: $idempotencyKey) {
-    refund { id createdAt ${SET('totalRefundedSet')} }
+    refund { id createdAt ${SET('totalRefundedSet')} transactions(first: 10) { nodes { id kind status ${SET('amountSet')} } } }
     userErrors { field message }
   }
 }`;
@@ -207,17 +242,34 @@ function page(args) {
   return { first: args.first ?? 20, after: args.after ?? null, query: args.query ?? null };
 }
 
+/** The filters of list_orders as Shopify's search text: each a filter's name, a colon and a value that was held against its list or its form. */
+function orderQuery(args) {
+  const terms = [];
+  for (const filter of ['status', 'financial_status', 'fulfillment_status']) if (args[filter] !== undefined) terms.push(`${filter}:${args[filter]}`);
+  if (args.created_from !== undefined) terms.push(`created_at:>='${args.created_from}'`);
+  if (args.created_to !== undefined) terms.push(`created_at:<='${args.created_to}'`);
+  if (args.name !== undefined) terms.push(`name:${args.name.replace('#', '')}`);
+  if (args.test !== undefined) terms.push(`test:${args.test}`);
+  return terms.length ? terms.join(' ') : null;
+}
+
 function next(pageInfo) {
   return pageInfo?.hasNextPage ? pageInfo.endCursor : null;
 }
 
-/** Shopify's reasons for refusing a change (its userErrors), as one sentence; throws where there are any. */
-function refusedBy(payload, what) {
-  if (!isObject(payload)) throw new ToolError(`Shopify gave no answer for ${what}. Whether the change was made is not known.`);
+/**
+ * Shopify's reasons for refusing a change (its userErrors); throws where
+ * there are any. "Nothing was changed" is said only where the answer holds
+ * no result beside them; with a result, the outcome is not known.
+ */
+function refusedBy(payload, what, result, toRead) {
+  if (!isObject(payload)) throw new ToolError(`Shopify gave no answer for ${what}. Whether the change was made is not known. ${toRead}`);
   const errors = Array.isArray(payload.userErrors) ? payload.userErrors : [];
   if (errors.length === 0) return;
   const said = errors.map((e) => `${Array.isArray(e?.field) && e.field.length ? `${e.field.join('.')}: ` : ''}${typeof e?.message === 'string' ? e.message : 'no reason given'}`).join('; ');
-  throw new ToolError(`Shopify refused ${what}: ${said}. Nothing was changed.`);
+  const made = payload[result];
+  if (made === null || made === undefined || (Array.isArray(made) && made.length === 0)) throw new ToolError(`Shopify refused ${what}: ${said}. Nothing was changed.`);
+  throw new ToolError(`Shopify reported a fault with ${what} (${said}), yet its answer also holds a result. Whether the change was made is not known. ${toRead}`);
 }
 
 function presentment(set) {
@@ -269,13 +321,25 @@ function orderMoneyShown(order) {
   };
 }
 
+/** The shop's currency, read before a change; throws where it is not the one given. */
 async function shopCurrency(admin, given) {
-  const data = await admin.graphql(SHOP_CURRENCY, {});
+  const data = await admin.graphql(SHOP_CURRENCY, {}, { ending: 'Nothing was changed.' });
   const is = data.shop?.currencyCode;
   if (typeof is !== 'string') throw new ToolError('Shopify did not say which currency the shop uses. Nothing was changed.');
-  if (is !== given) throw new ToolError(`The shop's currency is ${is}, not ${given}. Nothing was changed.`);
-  if (places(is) === null) throw new ToolError(`This server does not know how many decimal places ${is} has, so it will not send an amount in it. Nothing was changed.`);
+  if (given !== undefined && is !== given) throw new ToolError(`The shop's currency is ${is}, not ${given}. Nothing was changed.`);
+  if (given !== undefined && places(is) === null) throw new ToolError(`This server does not know how many decimal places ${is} has, so it will not send an amount in it. Nothing was changed.`);
   return is;
+}
+
+/**
+ * The lowest price the server's own settings allow a variant now, in
+ * smallest units: not below the minimum price, and not more than the
+ * largest cut below the present price. Worked in whole numbers.
+ */
+function lowestPrice(present, limits) {
+  const afterCut = (BigInt(present) * BigInt(100 - limits.maxPriceCutPercent) + 99n) / 100n;
+  const least = BigInt(limits.minPriceMinor);
+  return Number(afterCut > least ? afterCut : least);
 }
 
 function discountInput(args, value) {
@@ -291,12 +355,41 @@ function discountInput(args, value) {
   };
 }
 
+const LIST_CODES = 'List the discount codes before trying again.';
+
 async function createDiscount(admin, input) {
-  const data = await admin.graphql(CREATE_DISCOUNT_CODE, { basicCodeDiscount: input }, { change: 'List the discount codes before trying again.' });
-  refusedBy(data.discountCodeBasicCreate, 'the discount code');
+  const data = await admin.graphql(CREATE_DISCOUNT_CODE, { basicCodeDiscount: input }, { change: LIST_CODES });
+  refusedBy(data.discountCodeBasicCreate, 'the discount code', 'codeDiscountNode', LIST_CODES);
   const node = data.discountCodeBasicCreate.codeDiscountNode;
-  if (!isObject(node)) throw new ToolError('Shopify gave no discount code and no reason. List the discount codes before trying again.');
+  if (!isObject(node)) throw new ToolError(`Shopify gave no discount code and no reason. Whether the code was made is not known. ${LIST_CODES}`);
   return discountShown(node);
+}
+
+/**
+ * What became of a refund, from the state of its own transactions as
+ * Shopify reports them. "done" is said only where every one of them
+ * succeeded and they come to the amount asked for.
+ */
+function refundOutcome(refund, order, asked, unit, more) {
+  const amount = toDecimal(asked, unit);
+  const nodes = Array.isArray(refund.transactions?.nodes) ? refund.transactions.nodes : [];
+  const transactions = nodes.map((t) => ({ transaction_id: t?.id ?? null, kind: t?.kind ?? null, status: t?.status ?? null, amount: presentment(t?.amountSet) }));
+  const states = transactions.map((t) => String(t.status)).join(', ');
+  const toRead = 'Read the order to see what was given back.';
+  if (transactions.length === 0) throw new ToolError(`Shopify recorded a refund on order ${order.name} (${refund.id}) and named no payment of it, so whether any money was given back is not known. ${toRead}`);
+  if (transactions.some((t) => t.status === 'FAILURE' || t.status === 'ERROR')) throw new ToolError(`Shopify recorded a refund on order ${order.name} (${refund.id}), and reports that the sending of the money failed (${states}). ${toRead}`);
+  const base = { refund_id: refund.id, order_id: order.id, transactions, ...more };
+  if (transactions.some((t) => t.status !== 'SUCCESS')) {
+    return { not_confirmed: `Shopify recorded a refund of ${amount} ${unit} on order ${order.name}, and has not yet reported the money as sent (${states}). Read the order later to see whether it was.`, ...base };
+  }
+  // Every transaction succeeded: Shopify's own figure is what is told.
+  const sent = transactions.reduce((sum, t) => (sum !== null && t.amount?.currency === unit && t.amount.amount_minor !== null ? sum + t.amount.amount_minor : null), 0);
+  const total = presentment(refund.totalRefundedSet);
+  if (sent !== asked || total?.amount_minor !== asked || total.currency !== unit) {
+    const reported = sent !== null && sent !== asked ? `${toDecimal(sent, unit)} ${unit}` : total ? `${total.amount} ${total.currency}` : 'an amount this server cannot read';
+    throw new ToolError(`Shopify made a refund on order ${order.name} (${refund.id}) and reports ${reported} sent back, where ${amount} ${unit} was asked for. ${toRead}`);
+  }
+  return { done: `${amount} ${unit} was refunded on order ${order.name}.`, refunded: shown({ amount, currencyCode: unit }), ...base };
 }
 
 // --- the tools ---
@@ -309,7 +402,7 @@ export const TOOLS = [
   {
     name: 'list_products',
     description: 'Lists the store\'s products, with the lowest and highest price of each. Gives "next" where there are more.',
-    inputSchema: schema(PAGE),
+    inputSchema: schema(SEARCH),
     annotations: READS,
     async run(args, admin) {
       const data = await admin.graphql(LIST_PRODUCTS, page(args));
@@ -353,15 +446,15 @@ export const TOOLS = [
   },
   {
     name: 'set_variant_price',
-    description: 'Changes the price of one variant of a product. The price is in the shop\'s own currency, which must be named.',
+    description: 'Changes the price of one variant of a product. The price is in the shop\'s own currency, which must be named. The server\'s own settings, which no call can change, set the lowest price it will set and how far below the present price one call may go; unless they say otherwise, a price may be raised and not lowered.',
     inputSchema: schema({
       variant_id: id('ProductVariant', 'The variant.'),
       price_minor: whole(`The new price. ${MINOR}`, 0),
       currency: currency('The currency of the price: the shop\'s own.'),
     }, ['variant_id', 'price_minor', 'currency']),
     annotations: CHANGES,
-    async run(args, admin) {
-      const data = await admin.graphql(READ_VARIANT, { id: args.variant_id });
+    async run(args, admin, limits) {
+      const data = await admin.graphql(READ_VARIANT, { id: args.variant_id }, { ending: 'Nothing was changed.' });
       const v = data.productVariant;
       if (!isObject(v) || typeof v.product?.id !== 'string') throw new ToolError(`The store has no variant ${args.variant_id}. Nothing was changed.`);
       const unit = data.shop?.currencyCode;
@@ -369,24 +462,33 @@ export const TOOLS = [
       if (unit !== args.currency) throw new ToolError(`The shop's currency is ${unit}, not ${args.currency}. Nothing was changed.`);
       const price = toDecimal(args.price_minor, unit);
       if (price === null) throw new ToolError(`This server does not know how many decimal places ${unit} has, so it will not send a price in it. Nothing was changed.`);
-      const changed = await admin.graphql(SET_VARIANT_PRICE, { productId: v.product.id, variants: [{ id: v.id, price }] }, { change: 'Read the product before trying again.' });
-      refusedBy(changed.productVariantsBulkUpdate, 'the price');
+      const name = v.displayName ?? v.id;
+      // The floor: held against the price Shopify has just given, by the server's own settings.
+      const present = toMinor(v.price, unit);
+      if (present === null) throw new ToolError(`Shopify gave the present price of ${name} in a form this server cannot read, so it cannot tell how large a cut this would be. Nothing was changed.`);
+      const lowest = lowestPrice(present, limits);
+      if (args.price_minor < lowest) {
+        const cut = limits.maxPriceCutPercent === 0 ? 'no cut in a price' : `no cut of more than ${limits.maxPriceCutPercent}% of the present price in one call`;
+        throw new ToolError(`The price of ${name} is ${toDecimal(present, unit)} ${unit}, and ${price} ${unit} was asked for. This server's settings allow no price below ${toDecimal(limits.minPriceMinor, unit)} ${unit} and ${cut}, so the lowest it would set now is ${toDecimal(lowest, unit)} ${unit}. Nothing was changed.`);
+      }
+      const toRead = 'Read the product before trying again.';
+      const changed = await admin.graphql(SET_VARIANT_PRICE, { productId: v.product.id, variants: [{ id: v.id, price }] }, { change: toRead });
+      refusedBy(changed.productVariantsBulkUpdate, 'the price', 'productVariants', toRead);
       const now = (changed.productVariantsBulkUpdate.productVariants ?? []).find((x) => x?.id === v.id);
-      const out = {
-        done: `The price of ${v.displayName ?? v.id} is now ${price} ${unit}.`,
+      if (!now || toMinor(now.price, unit) !== args.price_minor) throw new ToolError(`Shopify took the change and reports the price of ${name} as ${typeof now?.price === 'string' ? `${now.price} ${unit}` : 'nothing'}, where ${price} ${unit} was asked for. Read the product to see what it is.`);
+      return {
+        done: `The price of ${name} is now ${price} ${unit}.`,
         variant_id: v.id,
         product_id: v.product.id,
         price: shown({ amount: price, currencyCode: unit }),
-        price_before: typeof v.price === 'string' ? shown({ amount: v.price, currencyCode: unit }) : null,
+        price_before: shown({ amount: v.price, currencyCode: unit }),
       };
-      if (!now || toMinor(now.price, unit) !== args.price_minor) out.warning = `Shopify took the change but reports the price as ${now?.price ?? 'nothing'}. Read the product to see what it is.`;
-      return out;
     },
   },
   {
     name: 'list_discount_codes',
     description: 'Lists the store\'s discount codes: the code, whether it is active, and the percentage or amount off. Gives "next" where there are more.',
-    inputSchema: schema(PAGE),
+    inputSchema: schema(SEARCH),
     annotations: READS,
     async run(args, admin) {
       const data = await admin.graphql(LIST_DISCOUNT_CODES, page(args));
@@ -403,10 +505,10 @@ export const TOOLS = [
     }, ['code', 'percent']),
     annotations: ADDS,
     async run(args, admin) {
+      await shopCurrency(admin); // a reading first: no change is sent until Shopify has just answered with this server's version
       const made = await createDiscount(admin, discountInput(args, { percentage: args.percent / 100 }));
-      const out = { done: `The code ${args.code} now gives ${args.percent}% off.`, ...made };
-      if (made.percent !== args.percent) out.warning = `Shopify made the code but reports ${made.percent ?? 'no percentage'} where ${args.percent} was asked for. List the discount codes to see what it is.`;
-      return out;
+      if (made.percent !== args.percent) throw new ToolError(`Shopify made the code ${args.code} (${made.discount_id}) and reports ${made.percent === undefined ? 'no percentage' : `${made.percent}%`} off, where ${args.percent}% was asked for. List the discount codes to see what it is.`);
+      return { done: `The code ${args.code} now gives ${args.percent}% off.`, ...made };
     },
   },
   {
@@ -423,9 +525,8 @@ export const TOOLS = [
       const unit = await shopCurrency(admin, args.currency);
       const amount = toDecimal(args.amount_minor, unit);
       const made = await createDiscount(admin, discountInput(args, { discountAmount: { amount, appliesOnEachItem: false } }));
-      const out = { done: `The code ${args.code} now gives ${amount} ${unit} off an order.`, ...made };
-      if (made.amount_off?.amount_minor !== args.amount_minor || made.amount_off?.currency !== unit) out.warning = `Shopify made the code but reports ${made.amount_off ? `${made.amount_off.amount} ${made.amount_off.currency}` : 'no amount'} where ${amount} ${unit} was asked for. List the discount codes to see what it is.`;
-      return out;
+      if (made.amount_off?.amount_minor !== args.amount_minor || made.amount_off?.currency !== unit) throw new ToolError(`Shopify made the code ${args.code} (${made.discount_id}) and reports ${made.amount_off ? `${made.amount_off.amount} ${made.amount_off.currency}` : 'no amount'} off, where ${amount} ${unit} was asked for. List the discount codes to see what it is.`);
+      return { done: `The code ${args.code} now gives ${amount} ${unit} off an order.`, ...made };
     },
   },
   {
@@ -434,21 +535,24 @@ export const TOOLS = [
     inputSchema: schema({ discount_id: id('DiscountCodeNode', 'The discount code, by the discount_id that list_discount_codes gives.') }, ['discount_id']),
     annotations: CHANGES,
     async run(args, admin) {
-      const data = await admin.graphql(DEACTIVATE_DISCOUNT_CODE, { id: args.discount_id }, { change: 'List the discount codes before trying again.' });
-      refusedBy(data.discountCodeDeactivate, 'the change to the discount code');
+      await shopCurrency(admin); // a reading first, as for making a code
+      const data = await admin.graphql(DEACTIVATE_DISCOUNT_CODE, { id: args.discount_id }, { change: LIST_CODES });
+      refusedBy(data.discountCodeDeactivate, 'the change to the discount code', 'codeDiscountNode', LIST_CODES);
       const node = data.discountCodeDeactivate.codeDiscountNode;
       if (!isObject(node)) throw new ToolError('Shopify gave no discount code and no reason. List the discount codes to see whether it still works.');
       const made = discountShown(node);
-      return { done: `The discount code ${made.codes?.[0] ?? made.title ?? args.discount_id} can no longer be used.`, ...made };
+      const name = made.codes?.[0] ?? made.title ?? args.discount_id;
+      if (typeof made.status !== 'string' || made.status === 'ACTIVE') throw new ToolError(`Shopify answered, and reports the discount code ${name} as ${made.status ?? 'in no state it names'}. List the discount codes to see whether it can still be used.`);
+      return { done: `The discount code ${name} can no longer be used.`, ...made };
     },
   },
   {
     name: 'list_orders',
-    description: 'Lists the store\'s orders, newest first: the order\'s name, its state, its total and what has been refunded. No customer\'s name, address, email or telephone number is given. Gives "next" where there are more.',
-    inputSchema: schema(PAGE),
+    description: 'Lists the store\'s orders, newest first: the order\'s name, its state, its total and what has been refunded. Orders are found by their state, their date or their name, and by nothing about the customer. No customer\'s name, address, email or telephone number is given. Gives "next" where there are more.',
+    inputSchema: schema(ORDER_FILTERS),
     annotations: READS,
     async run(args, admin) {
-      const data = await admin.graphql(LIST_ORDERS, page(args));
+      const data = await admin.graphql(LIST_ORDERS, { first: args.first ?? 20, after: args.after ?? null, query: orderQuery(args) });
       return {
         orders: (data.orders?.nodes ?? []).map((o) => ({
           order_id: o.id,
@@ -490,7 +594,7 @@ export const TOOLS = [
   },
   {
     name: 'refund_order',
-    description: 'Gives money back on an order: part of what was paid, or all of it. The amount is always stated; to refund the whole order, read it first and give its "paid_and_not_refunded". The money goes back the way it was paid. Nothing is put back into stock, and the customer is told only where "notify" is true.',
+    description: 'Gives money back on an order: part of what was paid, or all of it. The amount is always stated; to refund the whole order, read it first and give its "paid_and_not_refunded". The money goes back the way it was paid. Nothing is put back into stock, and the customer is told only where "notify" is true. The answer says "done" only where Shopify reports the money as sent. Where an answer says the outcome is not known, send the same call again with the "idempotency_key" it names, and Shopify will not make the refund twice.',
     inputSchema: schema({
       order_id: id('Order', 'The order.'),
       amount_minor: whole(`The money to give back. ${MINOR}`, 1),
@@ -498,10 +602,11 @@ export const TOOLS = [
       transaction_id: id('OrderTransaction', 'Which payment to refund, where the order has more than one: a transaction_id that read_order gives.'),
       note: text('A note kept with the refund, for the merchant.'),
       notify: flag('Whether Shopify tells the customer of the refund. False where it is left out.'),
+      idempotency_key: text('Only when sending again a refund whose outcome was not known: the key that answer named, with every other argument as it was. Shopify then treats the two as one refund, for 24 hours. Left out, the server makes a new key.', { pattern: UUID, minLength: 36, maxLength: 36 }),
     }, ['order_id', 'amount_minor', 'currency']),
     annotations: CHANGES,
     async run(args, admin) {
-      const data = await admin.graphql(ORDER_FOR_REFUND, { id: args.order_id });
+      const data = await admin.graphql(ORDER_FOR_REFUND, { id: args.order_id }, { ending: 'Nothing was refunded.' });
       const o = data.order;
       if (!isObject(o)) throw new ToolError(`The store has no order ${args.order_id}. Nothing was refunded.`);
       const unit = o.presentmentCurrencyCode;
@@ -511,8 +616,10 @@ export const TOOLS = [
       const amount = toDecimal(args.amount_minor, unit);
       if (amount === null) throw new ToolError(`This server does not know how many decimal places ${unit} has, so it will not send an amount in it. Nothing was refunded.`);
       if (o.refundable === false) throw new ToolError(`Shopify says order ${o.name} cannot be refunded: it has no payment that can be given back. Nothing was refunded.`);
+      if (o.refundable !== true) throw new ToolError(`Shopify did not say whether order ${o.name} can be refunded. Nothing was refunded.`);
       const left = presentment(o.netPaymentSet);
-      if (left && left.amount_minor !== null && args.amount_minor > left.amount_minor) throw new ToolError(`Order ${o.name} has ${left.amount} ${unit} paid and not refunded, less than the ${amount} ${unit} asked for. Nothing was refunded.`);
+      if (!left || left.amount_minor === null || left.currency !== unit) throw new ToolError(`Shopify did not say, in a form this server can read, how much of order ${o.name} is paid and not refunded. Nothing was refunded.`);
+      if (args.amount_minor > left.amount_minor) throw new ToolError(`Order ${o.name} has ${left.amount} ${unit} paid and not refunded, less than the ${amount} ${unit} asked for. Nothing was refunded.`);
       const paid = payments(o);
       let from;
       if (args.transaction_id !== undefined) {
@@ -531,15 +638,14 @@ export const TOOLS = [
         ...(args.note !== undefined ? { note: args.note } : {}),
         transactions: [{ orderId: o.id, parentId: from.id, kind: 'REFUND', gateway: from.gateway, amount }],
       };
-      // One key for this one request, as Shopify asks of refundCreate; the request is not sent again.
-      const sent = await admin.graphql(REFUND_ORDER, { input, idempotencyKey: randomUUID() }, { change: 'Read the order before trying again.' });
-      refusedBy(sent.refundCreate, 'the refund');
+      // Shopify asks for a key with refundCreate, and treats two requests with one key as one refund for 24 hours. The server sends the request once; the key is named in every answer so that the agent, should it send the call again, can give it.
+      const key = args.idempotency_key ?? randomUUID();
+      const toRead = `Read the order before trying again; to send this same refund again, give "idempotency_key": "${key}" with every other argument as it was, and Shopify will not make it twice.`;
+      const sent = await admin.graphql(REFUND_ORDER, { input, idempotencyKey: key }, { change: toRead });
+      refusedBy(sent.refundCreate, 'the refund', 'refund', toRead);
       const refund = sent.refundCreate.refund;
-      if (!isObject(refund)) throw new ToolError('Shopify gave no refund and no reason. Read the order to see whether money was given back.');
-      const total = presentment(refund.totalRefundedSet);
-      const out = { done: `${amount} ${unit} was refunded on order ${o.name}.`, refund_id: refund.id, order_id: o.id, refunded: shown({ amount, currencyCode: unit }), customer_told: input.notify };
-      if (!total || total.amount_minor !== args.amount_minor || total.currency !== unit) out.warning = `Shopify made the refund but reports its total as ${total ? `${total.amount} ${total.currency}` : 'nothing'}. Read the order to see what was given back.`;
-      return out;
+      if (!isObject(refund)) throw new ToolError(`Shopify gave no refund and no reason. Whether money was given back is not known. ${toRead}`);
+      return refundOutcome(refund, o, args.amount_minor, unit, { customer_told: input.notify, idempotency_key: key });
     },
   },
 ];
@@ -549,9 +655,9 @@ export function toolNamed(name) {
   return TOOLS.find((t) => t.name === name) ?? null;
 }
 
-/** Run one tool: its answer as plain data, or a ToolError in plain words. */
-export async function runTool(tool, args, admin) {
+/** Run one tool: its answer as plain data, or a ToolError in plain words. `limits` are the server's own settings for a price. */
+export async function runTool(tool, args, admin, limits) {
   const problem = wrong(args, tool.inputSchema);
   if (problem) throw new ToolError(`${problem} Nothing was asked of the store.`);
-  return tool.run(args, admin);
+  return tool.run(args, admin, limits);
 }
