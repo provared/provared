@@ -92,13 +92,26 @@ export function startServer(fake, { env = {} } = {}) {
     });
   });
 
+  /** The answer that has this id. One that has not come in 20 seconds is given as {timedOut: true}, so that a test fails where it would have waited for ever. */
+  function answerTo(id) {
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        waiting.delete(id);
+        resolve({ timedOut: true });
+      }, 20000);
+      waiting.set(id, (m) => {
+        clearTimeout(timer);
+        resolve(m);
+      });
+    });
+  }
+
   /** Send one request and wait for its answer. */
   function request(method, params) {
     const id = nextId++;
-    return new Promise((resolve) => {
-      waiting.set(id, resolve);
-      child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, ...(params === undefined ? {} : { params }) })}\n`);
-    });
+    const answer = answerTo(id);
+    child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, ...(params === undefined ? {} : { params }) })}\n`);
+    return answer;
   }
 
   /** Call a tool: {text, isError, data (the text read as JSON, where it is), answer}. */
@@ -120,10 +133,11 @@ export function startServer(fake, { env = {} } = {}) {
     /** Write a line as it is. */
     write: (line) => child.stdin.write(`${line}\n`),
     /** Write text as it is, with no line feed added, and wait for the answer that has this id. */
-    raw: (id, text) => new Promise((resolve) => {
-      waiting.set(id, resolve);
+    raw(id, text) {
+      const answer = answerTo(id);
       child.stdin.write(text);
-    }),
+      return answer;
+    },
     unasked,
     /** Everything the program has written so far, on both outputs. */
     output: () => stdout + stderr,

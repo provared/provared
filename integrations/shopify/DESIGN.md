@@ -17,7 +17,7 @@ documentation.
 Shopify's own MCP server for a store accepts only clients Shopify has set
 up, so the guard cannot stand in front of it. This server reaches the
 same store through the Admin API, with an app the merchant makes for its
-own store, and is small enough to read in full: four files, under 900
+own store, and is small enough to read in full: four files, under 1,200
 lines, no package but Node.js itself.
 
 The guard starts it, one for each session, and stands between it and the
@@ -180,22 +180,27 @@ back into stock, no delivery charge is singled out, and
 `allowOverRefunding` is never sent.
 
 **S20. `refundCreate` is sent with `@idempotent(key: ...)`, the key a
-new random UUID for each request.** Shopify: the key is required from
-version 2026-04, and a random UUID is what it recommends. The key is
-never used twice, because the request is never sent twice (S24).
+new random UUID unless the call gives one.** Shopify: the key is
+required from version 2026-04, a random UUID is what it recommends, and
+its page on idempotency writes the key as a variable of the request, as
+here. The server itself never sends a request twice (S24), so by itself
+the key only meets Shopify's rule; S39 is what makes it of use.
 
 **S21. The server refuses a refund itself, before sending anything,
 where the order was not paid in the shop's own currency, where Shopify
-says it cannot be refunded, or where the amount is more than was paid and
-not refunded.** Plainest. The first is a limit of this version: such an
-order is refunded in the Shopify admin.
+does not say that it can be refunded, where Shopify does not say in a
+form the server can read how much is paid and not refunded, or where
+the amount is more than that.** Plainest. The first is a limit of this
+version: such an order is refunded in the Shopify admin. Where a figure
+cannot be read the refund is not sent; nothing is assumed.
 
 **S22. The customer is told of a refund only where `notify` is true.**
 Plainest: nothing is sent to a customer that was not asked for.
 
-**S23. A list gives 20 unless `first` says otherwise (1 to 50), goes on
-from `after`, and passes `query` to Shopify as it is** (Shopify's search
-syntax). **A product, a variant, a discount code, an order and a payment
+**S23. A list gives 20 unless `first` says otherwise (1 to 50) and goes
+on from `after`. `list_products` and `list_discount_codes` pass `query`
+to Shopify as it is** (Shopify's search syntax); `list_orders` does not
+(S36). **A product, a variant, a discount code, an order and a payment
 are named by Shopify's full id** (`gid://shopify/Order/123`).
 Plainest. Orders come newest first.
 
@@ -216,16 +221,24 @@ endings:
 
 - `Nothing was asked of the store.` The arguments were wrong, or the
   sign-in failed.
-- `Nothing was changed.` / `Nothing was refunded.` The server, or
-  Shopify in its `userErrors`, refused before any change.
-- `The change was not made.` Shopify refused the request itself: its
-  throttling answer (`THROTTLED`, or HTTP 429), a missing access scope
-  (`ACCESS_DENIED`), or HTTP 401, 402, 404, 423 or another answer in
-  the 400s.
+- `Nothing was changed.` / `Nothing was refunded.` The server refused
+  before any change; or the reading it makes before a change failed; or
+  Shopify refused in its `userErrors` and its answer holds no result
+  beside them.
+- `The change was not made.` Shopify refused the request itself, and its
+  answer holds no result: its throttling answer (`THROTTLED`, or HTTP
+  429), a missing access scope (`ACCESS_DENIED`), or HTTP 400, 401, 402,
+  403, 404 or 423.
 - `Whether the change was made is not known.` followed by what to read
-  before trying again. The connection failed, Shopify gave no answer in
-  30 seconds, or it answered with an error of its own (HTTP 500 and up,
-  or any other error in its answer).
+  before trying again. Everything else: the connection failed; Shopify
+  gave no answer in 30 seconds; it answered with an error of its own
+  (HTTP 500 and up, or any other error in its answer); it answered with
+  any other HTTP status (202, 204, 408, 409 among them); an error or a
+  `userErrors` entry stands beside a result in the same answer; or
+  another version of the Admin API answered (S38).
+
+A false "not made" invites a second refund, so it is said only where it
+is known, and "not known" is said in every other case.
 
 A tool that is not one of the ten is a JSON-RPC error (-32602), as the
 protocol says.
@@ -233,7 +246,10 @@ protocol says.
 **S26. The client secret and every access token of the run are taken out
 of every text the server writes, and `[removed]` put in their place.**
 Plainest. The server never writes them itself; this is for what Shopify
-might repeat in an error or in a product's title.
+might repeat in an error or in a product's title. They are taken out of
+Shopify's words before those are cut to length, so that none is cut in
+two, and out of each text of an answer before it is written as JSON, so
+that one holding a quote or a backslash is still found.
 
 **S27. A cancellation stops nothing.** Plainest. A call that has begun is
 finished and answered, so that the outcome of a change is always told.
@@ -242,7 +258,10 @@ finished and answered, so that the outcome of a change is always told.
 arguments** (`order_id`, `amount_minor`, `currency`). Plainest. Money is
 shown three ways together: Shopify's decimal, the whole number, and the
 currency. After a change, the server holds what Shopify reports against
-what was asked, and says so under `warning` where they differ.
+what was asked. It says `done` only where they are the same; where they
+differ the answer is a tool error that gives Shopify's figure, not the
+one asked for (a price, a percentage, an amount off, a code that Shopify
+still reports as active).
 
 ### Access, and what is left out
 
@@ -255,7 +274,7 @@ than 60 days are not reached.
 **S30. Nothing about a customer is asked for: no name, address, email or
 telephone number.** Plainest, and Shopify's terms ask an app to request
 no more data than it needs. The tests look through every request for
-those fields.
+those fields. Nor can an order be looked for by them (S36).
 
 **S31. The server answers `initialize` with the protocol version asked
 for where that is 2025-11-25, 2025-06-18 or 2025-03-26, and with
@@ -276,11 +295,94 @@ three tools that carry money.** The guard. Without them the unit in a
 rule is only a label; with them a call in another currency is refused
 before it reaches this server.
 
-**S34. The example settings give the server 35 seconds to end
+**S34. The example settings give the server 95 seconds to end
 (`shutdownWait`), and a call 230 seconds (`timeout`).** Plainest: a
-little more than one request to Shopify, so that a change in hand when a
-session ends can be answered; the second is the figure of the guard's
-own recipe for claude.ai.
+little more than the three requests a refund can take (a sign-in, the
+reading of the order and the refund itself, 30 seconds each), so that a
+change in hand when a session ends can be answered. It covers one call;
+calls waiting their turn behind it are not answered. The second is the
+figure of the guard's own recipe for claude.ai.
+
+### After the review of 14 November 2026
+
+**S35. A refund is said to be `done` only where Shopify reports the
+money as sent.** Shopify: its page for a refund says that a refund's
+being there does not show that the money went back, and that the state
+of each of its transactions does. The refund's transactions are asked
+for with it. Where every one is `SUCCESS` and they come to the amount
+asked for, the answer says `done` and gives `refunded`. Where one is
+`PENDING`, `AWAITING_RESPONSE` or `UNKNOWN`, the answer has no `done`
+and no `refunded`; under `not_confirmed` it says that the refund is
+recorded and the money not yet reported as sent. Where one is `FAILURE`
+or `ERROR`, where Shopify names no transaction, or where its figures are
+not the amount asked for, the answer is a tool error that gives
+Shopify's figure. Every one of these names the refund, so that it can be
+found.
+
+**S36. `list_orders` takes no search text. Orders are found by seven
+fixed filters: `status`, `financial_status`, `fulfillment_status`,
+`created_from`, `created_to`, `name` and `test`.** Shopify's names and
+values for the first three and its `created_at`, `name` and `test`
+filters. Shopify's search for orders can also filter by a customer's
+email, a customer's id and the last digits of a card, and a bare word
+searches names; an agent could ask which orders match and work a value
+out a little at a time. So the server writes the search text itself:
+each value is one of a fixed list, a date and time, an order's name
+(letters, digits and hyphens) or true or false, and none can hold a
+space, a quote or a colon.
+
+**S37. A line of input ends at a line feed and nowhere else.** The
+protocol: one message to a line. One carriage return before the line
+feed is dropped. A carriage return alone is white space inside a JSON
+message, and U+2028 and U+2029 may stand inside its text; a reader that
+ends a line at them reads one message as several, and a piece of it
+could then be read as a call. The server's own few lines do the
+splitting; Node.js's line reader is not used.
+
+**S38. An answer that does not name version `2026-10` in its
+`X-Shopify-API-Version` header is not used, and no change is sent once
+that is so.** Shopify: when a version is no longer reachable it does not
+refuse; it answers with another and names it in that header. Every tool
+that makes a change makes a reading first, so the check comes before the
+change: `set_variant_price` reads the variant, `refund_order` the order,
+and the three discount-code tools the shop's currency. The server says
+so on its error output. Where the change itself is answered by another
+version, its outcome is said to be not known. An answer with no such
+header is treated the same way.
+
+**S39. `refund_order` takes an optional `idempotency_key`, and every
+answer to a refund names the key it was sent with.** Shopify: for 24
+hours it treats two requests with one key as one refund and answers the
+second with the first's outcome. So after "not known" the agent can send
+the same call again with the key it was told, every other argument as it
+was, and no second refund is made. Without the key, a second call is a
+refund of its own; the server's check (S21) and the permission's limit
+are then all that bound it. The key must be a UUID in lower case.
+
+**S40. The server will not set a price below
+`SHOPIFY_MIN_PRICE_MINOR`, a whole number of the currency's smallest
+unit; 1 unless given.** Plainest and safest: a permission's limits are
+ceilings, so nothing in the guard stops a price being cut, and the floor
+is therefore the server's own setting, which no call can change. With
+nothing set, no price can be made nothing.
+
+**S41. One call may not set a price more than
+`SHOPIFY_MAX_PRICE_CUT_PERCENT` per cent below the present price, a
+whole number from 0 to 100; 0 unless given.** Plainest and safest: with
+nothing set a price may be raised or left, and not lowered at all. The
+present price is the one Shopify gives in the reading just before the
+change. The lowest price allowed is worked in whole numbers and rounded
+up, against the cut; where the present price cannot be read the change
+is not sent. A setting that is not a whole number in its range stops the
+start. The cut is for each call: a permission that allows several calls
+allows several cuts, one after another, down to the lowest price, so a
+permission should also limit how many times the action may be taken
+(`{"action": "shopify.set_variant_price", "count": 5, "per": 86400}`).
+
+**S42. Both settings are written at the start on the error output, and
+the tool's description says that they exist.** Plainest: the agent can
+see why a cut was refused, and the refusal gives the lowest price the
+server would set now.
 
 ## What it does not do
 
@@ -290,8 +392,9 @@ own recipe for claude.ai.
 - It does not look for a member name given twice in a call's arguments;
   the guard refuses such a message before it arrives.
 - A permission's limits are ceilings. A permission can cap a price but
-  cannot stop a price being lowered, and a cap on a refund is on the
-  amount, not on which order.
+  cannot stop a price being lowered; the server's own floor does that
+  (S40, S41), with one lowest price for every product. A cap on a refund
+  is on the amount, not on which order.
 - A limit on `set_variant_price` or on a discount is on each call's
   figure. It says nothing of how much money a discount code goes on to
   give away: that depends on who uses it.

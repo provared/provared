@@ -9,11 +9,13 @@
     "env": {
       "SHOPIFY_SHOP": { "file": "shopify/shop" },
       "SHOPIFY_CLIENT_ID": { "file": "shopify/client-id" },
-      "SHOPIFY_CLIENT_SECRET": { "file": "shopify/client-secret" }
+      "SHOPIFY_CLIENT_SECRET": { "file": "shopify/client-secret" },
+      "SHOPIFY_MIN_PRICE_MINOR": { "file": "shopify/min-price-minor" },
+      "SHOPIFY_MAX_PRICE_CUT_PERCENT": { "file": "shopify/max-price-cut-percent" }
     }
   },
   "sessions": { "max": 8, "idle": 1800000 },
-  "shutdownWait": 35000,
+  "shutdownWait": 95000,
   "oauth": {
     "issuer": "<public https address of the reverse proxy, such as https://guard.example.com>",
     "clients": ["https://claude.ai/oauth/mcp-oauth-client-metadata"],

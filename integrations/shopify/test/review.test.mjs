@@ -45,6 +45,8 @@ test('a refund whose payment Shopify has not yet confirmed is not said to be don
     assert.equal(refund.data.transactions[0].status, state);
     assert.doesNotMatch(refund.text, /was refunded/);
   }
+  // The state of the refund's own transactions is asked for with the refund.
+  assert.match(JSON.parse(fake.of('RefundOrder')[0].body).query, /refund \{ id createdAt totalRefundedSet \{ presentmentMoney \{ amount currencyCode \} \} transactions\(first: 10\) \{ nodes \{ id kind status amountSet \{ presentmentMoney \{ amount currencyCode \} \} \} \} \}/);
 });
 
 test('a refund whose payment Shopify reports as failed is a tool error', async () => {

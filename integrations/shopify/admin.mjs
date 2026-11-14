@@ -173,7 +173,8 @@ export function openAdmin({ origin, clientId, clientSecret, userAgent, log = () 
     if (status >= 500) throw new ToolError(`Shopify had an error (HTTP ${status}).${notKnown}`);
     // Any other answer says nothing sure of what became of the request.
     if (status !== 200) throw new ToolError(`Shopify answered HTTP ${status}, which is neither its answer to a request nor one of its refusals.${notKnown}`);
-    if (answer.version !== API_VERSION) {
+    const ours = answer.version === API_VERSION;
+    if (!ours) {
       const named = answer.version ? `version ${brief(scrub(answer.version)).slice(0, 40)}` : 'no version named';
       log(`Shopify answered with ${named} of its Admin API, not ${API_VERSION}, the version this server was written for. Its answer was not used, and no change is sent while that is so.`);
       throw new ToolError(`Shopify answered with ${named} of its Admin API, not ${API_VERSION}, the version this server was written for and tested with. Its answer was not used.${notKnown}`);

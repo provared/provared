@@ -26,9 +26,10 @@ nothing else.
 
 - One program, `server.mjs`, that speaks the Model Context Protocol
   (revision 2025-11-25) over its standard input and output. Four files,
-  under 900 lines. It needs Node.js 24 and no other package.
+  under 1,200 lines. It needs Node.js 24 and no other package.
 - For one store, named in its settings, and one version of the Admin API
-  (`2026-10`).
+  (`2026-10`). Where Shopify answers with any other version, the server
+  uses no answer and sends no change.
 - It signs in with the app's client ID and client secret, keeps the
   access token in memory, and renews it before it expires.
 - The only requests it makes are to that store's token address and Admin
@@ -69,8 +70,55 @@ came from; where an order has more than one payment, the call names one
 with `transaction_id`. Nothing is put back into stock, and the customer
 is told only where `notify` is true.
 
+The answer to a refund says `done` only where Shopify reports the money
+as sent: every payment of the refund succeeded, and they come to the
+amount asked for. Where Shopify has recorded the refund and not yet
+reported the money as sent, the answer says so under `not_confirmed`
+and does not say `done`. Where Shopify reports that sending the money
+failed, or reports another amount, the answer is an error that gives
+Shopify's figure.
+
+Every answer to a refund names its `idempotency_key`. Where the outcome
+of a refund is not known, the same call sent again with that key (and
+every other argument as it was) is, to Shopify, the same refund for 24
+hours, and is not made twice. Sent again without the key, it is a second
+refund.
+
 No tool gives a customer's name, address, email or telephone number,
-and the server asks Shopify for none of them.
+and the server asks Shopify for none of them. Nor can orders be looked
+for by them: `list_orders` takes no search text, only these filters,
+each from a fixed list or of a fixed form: `status`, `financial_status`,
+`fulfillment_status`, `created_from`, `created_to`, `name` (an order's
+name, such as #1001) and `test`. What a merchant has typed into a
+product's title, a discount code or a refund's note is given as it is.
+
+## The floor under a price
+
+A permission's limits are ceilings: one can cap a price, and none can
+stop a price being cut. So the server has a floor of its own, in its
+settings, which no call can change:
+
+| Setting | What it is | Unless given |
+|---|---|---|
+| `SHOPIFY_MIN_PRICE_MINOR` | The lowest price the server will set, a whole number of the currency's smallest unit | `1`: no price of nothing |
+| `SHOPIFY_MAX_PRICE_CUT_PERCENT` | How far below the present price one call may set a price, a whole number from 0 to 100 | `0`: a price may be raised or left, and not lowered |
+
+**With neither set, the agent cannot lower any price.** To let it, give
+the largest cut: with `20`, a variant at 10.00 GBP can be set to 8.00
+and no lower in one call. The present price is the one Shopify gives
+just before the change. A refusal says the lowest price the server
+would set now.
+
+The cut is for each call. Five calls of 20% each bring 10.00 down to
+3.28, so set the lowest price too, and have the permission limit how
+many times the action may be taken:
+
+```json
+{ "action": "shopify.set_variant_price", "count": 5, "per": 86400 }
+```
+
+The lowest price is one figure for every product in the store. A value
+that is not a whole number in its range stops the server from starting.
 
 ## The access the app needs
 
@@ -119,6 +167,14 @@ You need a Shopify user who may develop apps for the organisation.
    shopify/client-secret   the Client secret
    ```
 
+   and, for the floor under a price (see above), two more, each holding
+   one whole number:
+
+   ```
+   shopify/min-price-minor         the lowest price, in the smallest unit: 100 is 1.00 GBP
+   shopify/max-price-cut-percent   the largest cut in one call: 0 for none, 20 for a fifth
+   ```
+
 Shopify recommends giving such an app a list of the addresses it may be
 used from, so that a stolen token is refused anywhere else. Set it to
 the address of the server the guard runs on.
@@ -142,14 +198,21 @@ part that starts this server:
   "env": {
     "SHOPIFY_SHOP": { "file": "shopify/shop" },
     "SHOPIFY_CLIENT_ID": { "file": "shopify/client-id" },
-    "SHOPIFY_CLIENT_SECRET": { "file": "shopify/client-secret" }
+    "SHOPIFY_CLIENT_SECRET": { "file": "shopify/client-secret" },
+    "SHOPIFY_MIN_PRICE_MINOR": { "file": "shopify/min-price-minor" },
+    "SHOPIFY_MAX_PRICE_CUT_PERCENT": { "file": "shopify/max-price-cut-percent" }
   }
-}
+},
+"shutdownWait": 95000
 ```
 
-The guard reads the three files when it starts and hands their contents
-to the server in its environment; the agent sees none of them. The guard
-starts one server for each session and ends it with the session.
+The guard reads the five files when it starts and hands their contents
+to the server in its environment; the agent sees none of them and can
+change none of them. The guard starts one server for each session and
+ends it with the session. The last two lines of `env` may be left out;
+the server then lowers no price. `shutdownWait` gives a server whose
+session has ended 95 seconds to finish the call it has in hand: a little
+more than the three requests a refund can take.
 
 The part that says what each tool is, and where its amount is read:
 
@@ -194,11 +257,14 @@ it.
 | `SHOPIFY_SHOP` | The store: the part of its address before `.myshopify.com` |
 | `SHOPIFY_CLIENT_ID` or `SHOPIFY_CLIENT_ID_FILE` | The app's client ID, or the file that holds it |
 | `SHOPIFY_CLIENT_SECRET` or `SHOPIFY_CLIENT_SECRET_FILE` | The app's client secret, or the file that holds it |
+| `SHOPIFY_MIN_PRICE_MINOR` | The lowest price it will set; `1` unless given |
+| `SHOPIFY_MAX_PRICE_CUT_PERCENT` | The largest cut in a price in one call, 0 to 100; `0` unless given |
 
 Give one of each pair, not both. The server takes no setting from its
-arguments, so a credential is never on a command line. It writes one
-line to its error output when it starts, naming the store and the
-version of the Admin API, and never the client secret or a token.
+arguments, so a credential is never on a command line. It writes two
+lines to its error output when it starts, naming the store, the version
+of the Admin API and the floor under a price, and never the client
+secret or a token.
 
 ## When something fails
 
@@ -207,19 +273,29 @@ by saying what became of the change:
 
 - `Nothing was asked of the store.` The arguments were wrong, or the
   sign-in failed.
-- `Nothing was changed.` or `Nothing was refunded.` The server or
-  Shopify refused before any change. Shopify's reason is given in its
-  own words.
-- `The change was not made.` Shopify refused the request: it is limiting
-  the app's requests (its throttling answer), the app lacks an access
-  scope, or the access token was not accepted.
-- `Whether the change was made is not known.` The connection failed,
-  Shopify did not answer within 30 seconds, or Shopify had an error of
-  its own. The sentence says what to read before trying again.
+- `Nothing was changed.` or `Nothing was refunded.` The server refused
+  before any change (the floor under a price among its reasons), the
+  reading it makes before a change failed, or Shopify refused and gave
+  no result. Shopify's reason is given in its own words.
+- `The change was not made.` Shopify refused the request and gave no
+  result: it is limiting the app's requests (its throttling answer), the
+  app lacks an access scope, or the access token was not accepted.
+- `Whether the change was made is not known.` Every other case: the
+  connection failed, Shopify did not answer within 30 seconds, Shopify
+  had an error of its own, its answer held an error beside a result, or
+  another version of its Admin API answered. The sentence says what to
+  read before trying again, and for a refund the `idempotency_key` to
+  send it again with.
 
-The server does not try again by itself in any of these cases. Whether
-to send a call again is the agent's choice, and the guard counts a
-second call against the permission as it counted the first.
+"Not made" is said only where it is known. The server does not try
+again by itself in any of these cases. Whether to send a call again is
+the agent's choice, and the guard counts a second call against the
+permission as it counted the first.
+
+After a change, an answer says `done` only where Shopify reports what
+was asked for. Where it reports another price, percentage or amount, or
+a stopped code as still active, the answer is an error that gives what
+Shopify reports.
 
 ## Its limits
 
@@ -230,8 +306,14 @@ second call against the permission as it counted the first.
 - It does not check the permission; the guard does. Started without the
   guard, it does what it is asked.
 - A permission's limits are ceilings. They can cap a refund, a price or
-  a percentage. They cannot stop a price being lowered, and they do not
-  say how much money a discount code goes on to give away.
+  a percentage. They cannot stop a price being lowered; the server's own
+  floor does that, with one lowest price for the whole store and a cut
+  counted call by call. They do not say how much money a discount code
+  goes on to give away.
+- A refund that Shopify has recorded and not yet confirmed is reported
+  as such, once. The server does not look again later; read the order.
+- The server relies on Shopify naming the version that answered. An
+  answer without that name is not used.
 - An order paid in a currency other than the shop's own is not refunded
   here; refund it in the Shopify admin.
 - A percentage is a whole number. A discount of 12.5% cannot be asked

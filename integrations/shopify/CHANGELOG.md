@@ -46,12 +46,63 @@ its tests; it has not been tried against a real store.
   action for each tool and the amount where there is one) and
   `content-rules.example.json` (rules that fix the currency of each tool
   that carries money).
-- **Tests** (`npm test`, 50 tests): the protocol, the sign-in and its
+- **Tests** (`npm test`, 78 tests): the protocol, the sign-in and its
   renewal, a token that stops working mid-session, each tool, calls
   handled one at a time, a refused refund, Shopify's throttling answer,
-  failures with the outcome
-  unknown, a redirect not followed, the client secret in no output, the
-  conversion of money, and the examples held against the server. A job
-  in the repository's tests workflow (`integrations/shopify`) runs them.
+  failures with the outcome unknown, a redirect not followed, the client
+  secret in no output, the conversion of money, the examples held
+  against the server, each finding of the review below, and the floor
+  under a price. A job in the repository's tests workflow
+  (`integrations/shopify`) runs them.
 - `DESIGN.md` gives each tool name, action name and fixed text as a
-  numbered choice (S1 to S34), with where it comes from.
+  numbered choice (S1 to S42), with where it comes from.
+
+### Changed after an independent review, before any release
+
+Each was a fault in the first build; each has a test that fails without
+the change.
+
+- **A refund's answer says what Shopify reports of the money.** The
+  first build said "was refunded" as soon as Shopify gave back a refund.
+  The refund's own transactions are now asked for with it. The answer
+  says `done` only where every one succeeded and they come to the amount
+  asked for; a refund not yet confirmed is told under `not_confirmed`; a
+  failed one, or one for another amount, is a tool error that gives
+  Shopify's figure.
+- **A line of input ends at a line feed alone.** Node.js's line reader
+  also ended a line at a bare carriage return and at U+2028 and U+2029,
+  so one valid message could be read as several, and a piece of it as a
+  call: a refund hidden between two carriage returns in another call was
+  made. The server now splits its input itself.
+- **"The change was not made" and "Nothing was changed" are said only
+  where that is known.** Not where an error (`THROTTLED`,
+  `ACCESS_DENIED`) or a `userErrors` entry stands beside a result in the
+  same answer, and not for an HTTP status that is neither Shopify's
+  answer nor one of its refusals (202, 204, 408, 409): those now say
+  that the outcome is not known.
+- **`list_orders` takes no search text.** It passed the agent's `query`
+  to Shopify, whose search can find orders by a customer's email, id or
+  card. It now takes seven fixed filters (`status`, `financial_status`,
+  `fulfillment_status`, `created_from`, `created_to`, `name`, `test`)
+  and writes the search text itself.
+- **The version of the Admin API that answered is checked.** An answer
+  whose `X-Shopify-API-Version` header is not `2026-10` is not used, and
+  every tool that makes a change makes a reading first, so no change is
+  sent once Shopify answers with another version.
+- **A floor under a price**, in the server's own settings, which no call
+  can change: `SHOPIFY_MIN_PRICE_MINOR` (1 unless given) and
+  `SHOPIFY_MAX_PRICE_CUT_PERCENT` (0 unless given, so a price may be
+  raised and not lowered). The cut is held against the price Shopify
+  gives just before the change.
+- **`refund_order` takes an optional `idempotency_key`**, and every
+  answer to a refund names the key it was sent with, so that a refund
+  whose outcome is not known can be sent again without being made twice.
+- **Smaller points.** A secret that Shopify repeats is taken out before
+  its words are cut to length, and out of each text before an answer is
+  written as JSON. A reading that fails before a change says that
+  nothing was changed. After a price change, a discount code or the
+  stopping of one, `done` is said only where Shopify reports what was
+  asked for. A refund is not sent where the server cannot read how much
+  is paid and not refunded, or whether the order can be refunded. The
+  example gives the server 95 seconds to end, not 35. The documents give
+  the server's size as it is (under 1,200 lines).

@@ -61,7 +61,8 @@ test('each tool that carries money or a percentage has its amount read from a re
 });
 
 test('the example settings start the server with its three settings read from files, and hold no credential', () => {
-  assert.deepEqual(Object.keys(settings.server.env), ['SHOPIFY_SHOP', 'SHOPIFY_CLIENT_ID', 'SHOPIFY_CLIENT_SECRET']);
+  assert.deepEqual(Object.keys(settings.server.env), ['SHOPIFY_SHOP', 'SHOPIFY_CLIENT_ID', 'SHOPIFY_CLIENT_SECRET', 'SHOPIFY_MIN_PRICE_MINOR', 'SHOPIFY_MAX_PRICE_CUT_PERCENT']);
+  assert.ok(settings.shutdownWait >= 90000, 'time for the three requests a refund can take, 30 seconds each');
   for (const [name, from] of Object.entries(settings.server.env)) assert.deepEqual(Object.keys(from), ['file'], `${name} is read from a file`);
   assert.equal(settings.upstream, undefined, 'a local program, not an upstream');
   assert.deepEqual(settings.oauth.clients, ['https://claude.ai/oauth/mcp-oauth-client-metadata']);
@@ -93,4 +94,21 @@ test('DESIGN.md and the README name every tool, every action and every access sc
     assert.ok(design.includes(`\`${scope}\``), `DESIGN.md names ${scope}`);
   }
   assert.ok(read('CHANGELOG.md').includes('0.1.0'));
+});
+
+test('the documents name the settings of the floor under a price and the filters of list_orders, and state the server\'s size truly', () => {
+  const design = read('DESIGN.md');
+  const readme = read('README.md');
+  for (const name of ['SHOPIFY_MIN_PRICE_MINOR', 'SHOPIFY_MAX_PRICE_CUT_PERCENT']) {
+    assert.ok(readme.includes(`\`${name}\``), `the README names ${name}`);
+    assert.ok(design.includes(`\`${name}\``), `DESIGN.md names ${name}`);
+  }
+  const filters = Object.keys(tools.find((t) => t.name === 'list_orders').inputSchema.properties).filter((name) => !['first', 'after'].includes(name));
+  for (const filter of filters) {
+    assert.ok(readme.includes(`\`${filter}\``), `the README names the filter ${filter}`);
+    assert.ok(design.includes(`\`${filter}\``), `DESIGN.md names the filter ${filter}`);
+  }
+  const lines = ['server.mjs', 'admin.mjs', 'tools.mjs', 'money.mjs'].reduce((sum, file) => sum + read(file).split('\n').length - 1, 0);
+  assert.ok(lines < 1200, `${lines} lines`);
+  assert.ok(readme.includes('Four files,\n  under 1,200 lines') && design.includes('four files, under 1,200\nlines'), 'both documents give that figure');
 });
