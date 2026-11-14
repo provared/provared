@@ -116,7 +116,8 @@ link that sets up the owner's passkey, once, within 15 minutes. Where an owner e
 --reset, which removes the owner and ends every connection, with its tokens.
 
 Exit codes: 0 done, or all is well; 1 not done, or something to look at (status: a book that fails its check,
-a call waiting, an agent stopped; compare: a disagreement; acknowledge: a call still waits); 2 the command
+a call waiting, an agent stopped; compare: a disagreement; acknowledge: a call still waits; http, at its stop:
+a connection's end that could not be written to the state file); 2 the command
 could not run; 3 (compare) the calls set aside are the only disagreement.`;
 
 /** What the commands that work on the files say first, on the standard error. */
@@ -342,7 +343,19 @@ async function main(args) {
     const executor = await openHttpExecutor(config, { root });
     await executor.listen();
     const stop = async () => {
-      await executor.close();
+      const { endsNotWritten } = await executor.close();
+      // A connection ended while the executor ran, and the state file could not be written since, even now: the file still holds it, so the next start would bring it back. That must not pass unseen (DESIGN.md, X210).
+      if (endsNotWritten.length > 0) {
+        const one = endsNotWritten.length === 1;
+        process.stderr.write(
+          `provared-mcp-executor: ${endsNotWritten.length} connection${one ? ' was' : 's were'} ended, and ${one ? 'its' : 'their'} end could not be written to the state file (oauth.state), even at this stop:\n` +
+            `${endsNotWritten.map((c) => `  agent "${c.agent}", client "${c.client}" (${c.why})\n`).join('')}` +
+            `The file still holds ${one ? 'it' : 'them'}, so the next start would bring ${one ? 'it' : 'them'} back, with ${one ? 'its' : 'their'} tokens. Before the executor is started again, see that the file can be written and take the entry of ${one ? 'that agent' : 'each of those agents'} out of its "grants"; or run "provared-mcp-executor owner --reset", which removes the owner and ends every connection.\n`,
+          // The process ends only once the text has gone out.
+          () => process.exit(1),
+        );
+        return;
+      }
       process.exit(0);
     };
     process.on('SIGINT', stop);

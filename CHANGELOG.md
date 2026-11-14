@@ -160,7 +160,9 @@
     form, under HMAC-SHA-256 with a key made at each start and never
     written. The state file holds hashes only and is written whole,
     through a new file with mode 0600, synced before it is put in place;
-    memory is changed only once the file is written.
+    memory is changed only once the file is written, but for the end of a
+    connection, which holds at once and is written as soon as it can be
+    (below).
   - **The timeout.** With `oauth`, its default is 230,000 ms, under the
     240 seconds a client gives a tool call. Without, it stays 300,000 ms.
   - **The owner's check, by the owner's passkey** (`owner.mjs`,
@@ -243,6 +245,34 @@
       seconds, not 240 (X213); what a program on the owner's own computer
       does to the pages is outside what the executor sends (X212); the
       tests workflow's note on what `npm ci` installs.
+  - **Changed after a second look at those fixes, before any release**
+    (each fix has a test in `test/review4.test.mjs` that fails without
+    it):
+    - A connection that had been ended could come back. Where the state
+      file could not be written at the moment a connection was ended (a
+      refresh token or a code used twice, or a client off the list at a
+      start), the end held in memory only: the file still held the
+      connection, and the next start brought it back, with its tokens.
+      The executor now tries the write again every second until it is
+      made, and once more when it closes. Where the end is still
+      unwritten then, `close()` gives the connections (`endsNotWritten`),
+      and the command `http` names them on its error output and ends with
+      code 1, not 0. The log says `oauth-state-not-written`,
+      `oauth-state-written` and `oauth-ends-not-written`. Not covered: an
+      executor killed, or without power, while an end is unwritten; the
+      next start then brings the connection back (X210).
+    - A GET stream stayed open after later refreshes had pushed its
+      access token out (a connection keeps its 16 newest). A stream is
+      now held under its token and ended when the executor would no
+      longer take that token, for whatever reason; the log's
+      `stream-ended` names `token-dropped` beside `connection-ended` and
+      `token-expired` (X229).
+    - A transport name outside the executor's form (`Internal`, say), or
+      a ninth name, refused the owner's setup after the passkey had been
+      made. Such a name is now left out and the owner set up (X230).
+    - Two tests that were missing: the answer `not-written` (500) where
+      the state cannot be written at the owner's setup, and no challenge
+      for a request that has ended or been approved.
   - **Two runtime dependencies, approved by the founder:**
     `@microtoll/identity` and `@microtoll/crypto-core`, the founder's own
     packages (Apache 2.0), pinned at exactly 0.1.1 in
@@ -272,6 +302,9 @@
     `test/review3.test.mjs`, 18 tests: the review's findings, among them
     the page's script itself (`owner-page.mjs`), fetched from the executor
     and run on a stand-in page through the package's `createWebAuthn`.
+    `test/review4.test.mjs`, 8 tests: the second look's findings, with the
+    state file made unwritable while a connection is ended, in the
+    executor and in the command as a real process.
     Their shared helpers are in `test/oauth-world.mjs`.
 
 - **`provared-mcp-executor` 0.5.0 (not yet released): `seal`,

@@ -1020,7 +1020,7 @@ export async function openHttpExecutor(config, more = {}) {
       if (h.dropped.length) agent.log({ event: 'headers-dropped', headers: h.dropped });
       const ex = exchange(ctx, { method: req.method, headers: h.headers, kind: req.method === 'GET' ? 'stream' : 'other' });
       res.on('close', () => ex.cancel());
-      // A token is checked when its request arrives, and a stream has no end of its own. So a stream opened with an access token is ended when the token expires and when its connection ends, and no longer holds one of the agent's places (X229). A call already taken is not cut: it ends within the timeout, with its receipt.
+      // A token is checked when its request arrives, and a stream has no end of its own. So a stream opened with an access token is ended when that token stops standing, for whatever reason: it expires, its connection ends, or later tokens push it out; it then no longer holds one of the agent's places (X229). A call already taken is not cut: it ends within the timeout, with its receipt.
       let release = null;
       let expiry = null;
       if (req.method === 'GET' && ctx.token) {
@@ -1030,7 +1030,7 @@ export async function openHttpExecutor(config, more = {}) {
           if (!res.headersSent) refuse(res, 401, null, CODES.invalidRequest, 'The access token this stream was opened with has ended. Sign in again.', { 'www-authenticate': door.challenge(true) });
           else if (!res.writableEnded && !res.destroyed) res.end();
         };
-        release = door.hold(ctx.token.connection, () => endStream('connection-ended'));
+        release = door.hold(ctx.token, endStream);
         expiry = setTimeout(() => endStream('token-expired'), Math.max(0, ctx.token.expires - now()));
         expiry.unref();
       }
@@ -1220,6 +1220,13 @@ export async function openHttpExecutor(config, more = {}) {
      * and the agent answered; a call waiting its turn is not sent and is
      * answered so; then the connections are closed and every agent's writer
      * finishes what it has. The answers are waited for up to STOP_WAIT ms.
+     *
+     * Gives {endsNotWritten}: the connections made through OAuth that were
+     * ended while the executor ran and whose end could not be written to
+     * the state file, even now ({agent, client, why} each; none in the usual
+     * case). The file still holds them, so a start from it would bring them
+     * back: whoever stops the executor must be told (the command "http" says
+     * so and ends with code 1; DESIGN.md, X210).
      */
     async close() {
       stopping = true;
@@ -1243,8 +1250,11 @@ export async function openHttpExecutor(config, more = {}) {
         });
       }
       for (const a of agents.values()) await a.inTurn(() => {});
+      // The front door's last write, while the locks are still held: the end of a connection that the state file does not hold yet.
+      const endsNotWritten = door ? door.close() : [];
       // Nothing more is written: another program may now open the files.
       await releaseAll();
+      return { endsNotWritten };
     },
   };
 }

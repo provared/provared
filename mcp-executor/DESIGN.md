@@ -2362,14 +2362,47 @@ the executor's form stops the start. The codes are kept in memory, and a
 request waiting at the page in its form, under a key made at the start
 (X228), so a start ends them.
 
-Memory never runs ahead of the file. New tokens, a new connection and a
-new owner are in memory only once the file holds them: where the write
-fails, memory is put back as it was, the client is answered 500
-(`server_error`; the owner's setup, `not-written`) and keeps what it had,
-so that its next try is not taken for a token used twice. The end of a
-connection is the one exception: it holds in memory at once, whether or
-not the file could be written, and the file is written again at the next
-change. Each of the three steps of a write is tried again for at most 1
+Memory never runs ahead of the file, with one exception. New tokens, a new
+connection and a new owner are in memory only once the file holds them:
+where the write fails, memory is put back as it was, the client is
+answered 500 (`server_error`; the owner's setup, `not-written`) and keeps
+what it had, so that its next try is not taken for a token used twice.
+
+The exception is the end of a connection: by a refresh token or a code
+used twice, or, at a start, for a client off the list or an agent no
+longer marked (X215). It holds in memory at once, whether or not the file
+could be written, so an ended connection is not used again while the
+executor runs. Where the file could not be written, the file is behind:
+it still holds the connection, and a start from it would bring the
+connection back, with its tokens. So the executor does three things.
+- It tries the write again every second, one try each time with no
+  waiting inside it, until the file is written. The log says
+  `oauth-state-not-written` when the write fails, not again at each try
+  after it, and `oauth-state-written` when the file has caught up. Any
+  other write of the state that succeeds in between brings the file up to
+  date as well.
+- It tries once more when it closes, while the agents' locks are still
+  held.
+- Where the end is still unwritten after that, it does not close quietly.
+  The log says `oauth-ends-not-written`; `close()` gives the connections
+  (`endsNotWritten`: the agent, the client and why each was ended); and the
+  command `http` names them on its error output and ends with code 1, not
+  0. Before the executor is started again, the file must be made writable
+  and those agents' entries taken out of its `grants`, or `owner --reset`
+  run, which removes the owner and ends every connection.
+
+What this does not cover: an executor that is killed, or loses power,
+while an end is unwritten says nothing at its stop, and the next start
+brings the connection back. The end is made lasting only by a write, and
+this choice cannot make a write succeed. Why this way: an ended connection
+must stay ended while the executor is at work, so the end cannot wait for
+the file as a new token does; and the plainest way to make it last is to
+go on trying the one write, and to say so where it never succeeded. The
+other way: a second file of ended connections beside the state, which a
+full disk stops as well, and which would be one more file to keep in step
+with the first.
+
+Each of the three steps of a write is tried again for at most 1
 second while another program holds the file (the executor's other files
 are tried for 10), so that a write that cannot be made is given up well
 inside the 10 seconds a client gives a sign-in request (X213). The file is
@@ -2456,7 +2489,8 @@ settings are read at a start, so a client taken off the list is refused
 from the next start. At that start the executor takes the connections of
 every client no longer on the list, and of every agent no longer marked
 `oauth`, out of the state file. So they are ended for good: putting the
-client back, or marking the agent again, does not bring them back. The two
+client back, or marking the agent again, does not bring them back (where
+the file cannot be written at that start, X210 says what follows). The two
 metadata documents have no CORS headers: the clients this is for read
 them from their servers.
 
@@ -2534,9 +2568,11 @@ Bytes are base64url without padding, written as Node.js writes them. The
 lookup hash is the package's own text, 64 lower-case hexadecimal digits.
 The routing public key is 32 bytes, the PRF salt 32, the recovery salt 16,
 the credential id 1 to 1,023, each wrapped root key 1 to 1,024.
-`transports` is the list the browser gave for the passkey (X230): at most
-8 names, each 1 to 32 lower-case letters, digits or hyphens; it may be
-left out, and is then kept as an empty list. No other
+`transports` is the list the browser gave for the passkey (X230): the
+executor keeps at most 8 names, each 1 to 32 lower-case letters, digits or
+hyphens, and leaves out any other member of the list; it may be left out,
+and is then kept as an empty list; one that is not a list is refused. No
+other
 member is taken; the package's `label` is not sent. The answer is
 `{"owner": "set"}`. A message that is not in this form is refused (400),
 and the link still works. Before it makes the passkey, the page asks
@@ -2652,9 +2688,15 @@ GET stream of server messages has no end of its own, so one opened with an
 access token was held open after the token had expired or its connection
 had ended, went on carrying what the upstream sent, and kept one of the
 agent's places. The executor now ends such a stream when the token it was
-opened with expires, and when its connection ends (a refresh token used
-twice, a code used twice, a new approval of its agent); the log says
-`stream-ended`. A client with a newer token opens it again. A call, or
+opened with stops being one the executor takes, for whatever reason: the
+token expires (`token-expired`); its connection ends, by a refresh token
+used twice, a code used twice or a new approval of its agent
+(`connection-ended`); or later refreshes push the token out, since a
+connection keeps its 16 newest access tokens only (`token-dropped`). The
+stream is held under its token, and after every change of the state the
+executor ends each stream whose token it would now refuse; the token's
+expiry is timed. The log says `stream-ended`, with the reason. A client
+with a newer token opens it again. A call, or
 any other message, that the executor has already taken is not cut: it was
 allowed when it arrived, cutting it would leave a call's outcome unknown,
 and it ends within the executor's `timeout`, with its receipt. A stream
@@ -2671,7 +2713,13 @@ link still works. The package gives the passkey's `transports` (where the
 browser says it is kept: `internal`, `hybrid`, `usb` and so on). The
 executor keeps them with the passkey's unlock method (X219) and the page
 passes them to `evaluatePrf` at each unlock, so that the browser asks in
-the right place. Only the packages' public functions are used. There is
+the right place. At the setup, a name that is not in the executor's form
+(1 to 32 lower-case letters, digits or hyphens), or one past the eighth,
+is left out and the owner is set up without it: by then the passkey has
+been made, the names are a help to the browser and no more, and refusing
+the setup for one left a passkey that opened nothing. Every name WebAuthn
+defines today is in the form. Only the packages' public functions are
+used. There is
 still one passkey and one recovery code (X223). Why: on a device whose own
 passkey gives no PRF the setup otherwise stopped, with no owner and no
 recovery code. Which browsers and authenticators give PRF is theirs to
@@ -2685,6 +2733,10 @@ and a sign-in, a sign-in by the recovery code, and each refusal.
 fetched from the executor as a browser fetches it, on a stand-in page and
 with a stand-in for `navigator.credentials`, through the package's
 `createWebAuthn`. It also reads the headers the pages are sent with.
+`test/review4.test.mjs` makes the state file unwritable (a folder stands
+where its temporary file goes) while a connection is ended, and shows the
+end written by the timer and at the close, and the command's code 1 where
+it could not be; it does not kill the executor or cut its power.
 Outside the tests, the pages were tried once in a real browser, headless
 Chrome 157, at `http://127.0.0.1`: the scripts loaded under the page's
 policy, the form carried the executor's `Origin`, and an approval by the

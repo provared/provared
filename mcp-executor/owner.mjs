@@ -46,7 +46,7 @@ const BODY_TIME = 10 * 1000;
 const HERE = dirname(fileURLToPath(import.meta.url));
 const B64URL = /^[A-Za-z0-9_-]*$/;
 const LOOKUP = /^[0-9a-f]{64}$/;
-/** One of a passkey's transports, as WebAuthn names them ("internal", "hybrid", "usb", …); at most this many are kept (X230). */
+/** One of a passkey's transports, as WebAuthn names them ("internal", "hybrid", "usb", …); at most this many are kept. At the setup a name not in this form is left out; in the state file one stops the start (X230). */
 const TRANSPORT = /^[a-z0-9-]{1,32}$/;
 const MAX_TRANSPORTS = 8;
 const isObject = (v) => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -225,6 +225,8 @@ export function openPasskeyCheck({ issuer, now = Date.now, log = () => {}, store
     if (linkRefused(res, v)) return;
     const rest = { ...v };
     delete rest.code;
+    // By now the passkey has been made, and its transports only help the browser ask in the right place. So a name that is not in the executor's form, or one past the most kept, is left out, and the setup is not refused for it (X230).
+    if (isObject(rest.passkey) && Array.isArray(rest.passkey.transports)) rest.passkey = { ...rest.passkey, transports: rest.passkey.transports.filter((t) => typeof t === 'string' && TRANSPORT.test(t)).slice(0, MAX_TRANSPORTS) };
     const read = readOwner(rest);
     if (read.problem) return refuse(res, 400, 'bad-request', `The owner is not in the form the page sends: ${read.problem}.`);
     try {

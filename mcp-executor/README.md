@@ -407,6 +407,22 @@ settings:
   keep others out of the folder), made sure to be on the disk before it
   takes the old file's place. Where it cannot be written, nothing is
   changed and the client is answered 500: it keeps the tokens it had.
+- The end of a connection is the one change that does not wait for the
+  file. A connection that is ended (a refresh token or a code used twice;
+  at a start, a client off the list or an agent no longer marked) is
+  ended in memory at once, and is not used again while the executor runs.
+  Where the file could not be written at that moment, it still holds the
+  connection, and a start from it would bring the connection back. So the
+  executor tries the write again every second (the log says
+  `oauth-state-not-written` when the write fails, and
+  `oauth-state-written` when it is made), and once more when it is
+  stopped. **If the end is still unwritten then, the executor says so on
+  its error output, names the agent and the client, and ends with code 1,
+  not 0.** Before starting it again, see that the file can be written and
+  take that agent's entry out of the file's `grants`, or run `owner
+  --reset`, which removes the owner and ends every connection. An executor
+  that is killed, or loses power, while an end is unwritten cannot say so:
+  the next start brings that connection back.
 - Each connection is one agent marked `"oauth": true`, with its own slip,
   keys, book and copy, as an agent with a secret. Agents with secrets work
   as before, beside it.
@@ -445,9 +461,10 @@ What happens:
   one. Taking a client off the list, or the `oauth` mark off an agent,
   ends its connections for good at the next start: putting it back does
   not bring them back.
-- A GET stream opened with an access token is ended when that token
-  expires and when its connection ends. A call already taken is finished,
-  within the `timeout`, and receipted.
+- A GET stream opened with an access token is ended when that token is no
+  longer one the executor takes: it expires, its connection ends, or later
+  refreshes push it out (a connection keeps its 16 newest access tokens).
+  A call already taken is finished, within the `timeout`, and receipted.
 - Failed attempts are not counted, and shut nothing: a wrong answer, code
   or token is refused, and the right one passes straight after. What is
   guarded is 128 or 256 random bits, or a signature. A request waiting at
@@ -477,6 +494,8 @@ exactly 0.1.1; they come with the executor when it is installed.
   is closed, nothing is set up, and the page offers a second button: a
   passkey on a phone or a security key. The executor keeps where the
   passkey is (its transports), and the browser is told at each approval.
+  A transport name the executor does not know the form of is left out,
+  and the owner is set up without it.
 - **Approve a connection.** On the page, Approve asks for the passkey. On a
   device without one that gives a PRF, type the recovery code first. The
   page signs a challenge from the executor, which checks the signature.

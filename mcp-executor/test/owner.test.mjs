@@ -321,8 +321,7 @@ test('a setup with an unlock method missing or malformed is refused, and the lin
       'a routing key of 31 bytes': (v) => (v.routingPublicKey = b(new Uint8Array(31))),
       'base64 with padding': (v) => (v.passkey.wrappedRootKey += '='),
       'a member the page does not send': (v) => (v.passkey.label = 'laptop'),
-      'a transport that is not a name': (v) => (v.passkey.transports = ['USB key']),
-      'nine transports': (v) => (v.passkey.transports = Array(9).fill('usb')),
+      // A transport that is not a name, or a ninth, is left out and not refused (review4.test.mjs).
       'transports as a string': (v) => (v.passkey.transports = 'usb'),
       'a method as a string': (v) => (v.recovery = 'x'),
     };

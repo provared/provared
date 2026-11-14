@@ -61,6 +61,8 @@ const FORM_TIME = 10 * 1000;
 const STATE_VERSION = 1;
 /** How long each step of a write of the state file is tried again while another program holds the file, in seconds (X210). */
 const STATE_WAIT = 1;
+/** How often a write of the state file that failed where a connection was ended is tried again, in milliseconds (X210). */
+export const STATE_RETRY = 1000;
 
 const HASH = /^[A-Za-z0-9_-]{43}$/;
 const CHALLENGE = /^[A-Za-z0-9_-]{43}$/;
@@ -143,11 +145,11 @@ export function readOAuthSettings(config, root, s, at, warnings, pathFrom) {
 
 // --- the state file: the connections, and the copies of the client documents ---
 
-/** Write the file whole, through a new temporary file only its owner may read, made sure to be on the disk and then put in place (X210). */
-function writeState(path, text) {
+/** Write the file whole, through a new temporary file only its owner may read, made sure to be on the disk and then put in place (X210). Each step is tried again for "wait" seconds while another program holds the file. */
+function writeState(path, text, wait = STATE_WAIT) {
   const temporary = `${path}.tmp`;
-  untilFree(() => rmSync(temporary, { force: true }), STATE_WAIT);
-  const fd = untilFree(() => openSync(temporary, 'wx', 0o600), STATE_WAIT);
+  untilFree(() => rmSync(temporary, { force: true }), wait);
+  const fd = untilFree(() => openSync(temporary, 'wx', 0o600), wait);
   try {
     writeFileSync(fd, text);
     // On the disk before it takes the old file's place: a power cut then leaves the old file or the new, never an empty one.
@@ -155,7 +157,7 @@ function writeState(path, text) {
   } finally {
     closeSync(fd);
   }
-  untilFree(() => renameSync(temporary, path), STATE_WAIT);
+  untilFree(() => renameSync(temporary, path), wait);
 }
 
 /**
@@ -452,15 +454,42 @@ export function openFrontDoor({ settings, now = Date.now, log = () => {}, ownerC
       for (const h of g.spent) bySpent.set(h, g);
     }
   };
-  const save = () => {
+  // The connections ended in memory whose end the file does not hold yet, since it could not be written: {agent, client, why} each. While there are any, the write is tried again on a timer, and once more at close (X210).
+  let unwritten = [];
+  let retry = null;
+  const save = (wait = STATE_WAIT) => {
     const t = now();
     for (const g of state.grants) g.access = g.access.filter((a) => a.expires > t);
     state.grants = state.grants.filter((g) => g.refreshExpires > t || g.access.length > 0);
     for (const k of Object.keys(state.documents)) if (!o.clients.includes(k)) delete state.documents[k];
     index();
-    writeState(o.state, JSON.stringify(state));
+    writeState(o.state, JSON.stringify(state), wait);
+    // The file now holds all of memory, so every end with it.
+    if (unwritten.length > 0) log({ event: 'oauth-state-written', ends: unwritten.length });
+    unwritten = [];
+    if (retry) clearInterval(retry);
+    retry = null;
   };
   index();
+
+  /** What the access token with this hash stands for, or null: a token the executor issued, not pushed out, not expired, of a connection that stands, for this resource, to a client still on the list, for an agent still marked for connections (X208). */
+  const standsFor = (hash) => {
+    const found = byAccess.get(hash);
+    if (!found || found.expires <= now()) return null;
+    const g = found.grant;
+    if (g.resource !== resource || !o.clients.includes(g.client) || !oauthAgents.includes(g.agent)) return null;
+    return { agent: g.agent, connection: g.id, expires: found.expires, hash };
+  };
+  // The requests held open, each under the access token it came with: {hash, connection, end}, where "end" ends the request (X229).
+  const held = new Set();
+  /** End every request held open whose token no longer stands, for whatever reason: its connection has ended, or later tokens have pushed it out. Called once memory has changed for good. */
+  const endHeld = () => {
+    for (const h of [...held]) {
+      if (standsFor(h.hash)) continue;
+      held.delete(h);
+      h.end(state.grants.some((g) => g.id === h.connection) ? 'token-dropped' : 'connection-ended');
+    }
+  };
   /**
    * Change the state and write it. The new state is in memory only once it
    * is on the disk: where the write fails, memory is put back as it was and
@@ -477,15 +506,18 @@ export function openFrontDoor({ settings, now = Date.now, log = () => {}, ownerC
       index();
       throw e;
     }
+    endHeld();
   };
   const notWritten = (e) => log({ event: 'oauth-state-not-written', problem: e.code ?? e.message });
 
-  // The requests open under each connection, by the connection's id: each a function that ends one (X229).
-  const held = new Map();
-  const endHeld = (id) => {
-    for (const end of [...(held.get(id) ?? [])]) end();
-  };
-  /** End a connection: in memory at once, whether or not the file can be written (it is written again at the next change), and with it the streams open under it. */
+  /**
+   * End a connection, and with it the streams open under it. It is ended in
+   * memory at once, whether or not the file can be written: an ended
+   * connection is never used again while the executor runs. Where the file
+   * could not be written, it is behind, and a start from it would bring the
+   * connection back: so the write is tried again every STATE_RETRY ms, with
+   * no waiting inside a try, until it is made, and once more at close (X210).
+   */
   const revoke = (grant, why) => {
     state.grants = state.grants.filter((g) => g.id !== grant.id);
     index();
@@ -493,9 +525,21 @@ export function openFrontDoor({ settings, now = Date.now, log = () => {}, ownerC
       save();
     } catch (e) {
       notWritten(e);
+      unwritten.push({ agent: grant.agent, client: grant.client, why });
+      if (!retry) {
+        retry = setInterval(() => {
+          try {
+            save(0);
+          } catch {
+            // Still not written: said once, when it failed first; tried again at the next turn.
+          }
+        }, STATE_RETRY);
+        // The timer alone does not keep the program running.
+        retry.unref();
+      }
     }
     log({ event: 'oauth-revoked', agent: grant.agent, client: grant.client, why });
-    endHeld(grant.id);
+    endHeld();
   };
   // At a start, the connections of clients no longer on the list, and of agents no longer marked for connections, are ended, so that putting one back does not bring them back (X215).
   for (const g of [...state.grants]) {
@@ -786,10 +830,8 @@ export function openFrontDoor({ settings, now = Date.now, log = () => {}, ownerC
       }
       c.used = true;
       c.grant = grant.id;
-      for (const old of ended) {
-        log({ event: 'oauth-revoked', agent: old.agent, client: old.client, why: 'replaced' });
-        endHeld(old.id);
-      }
+      // The streams open under the connection before were ended by the change itself.
+      for (const old of ended) log({ event: 'oauth-revoked', agent: old.agent, client: old.client, why: 'replaced' });
       log({ event: 'oauth-connected', agent: grant.agent, client: grant.client });
       return sendJson(res, 200, out);
     }
@@ -853,29 +895,41 @@ export function openFrontDoor({ settings, now = Date.now, log = () => {}, ownerC
      * What an access token stands for, or null: a token the executor
      * issued, not expired, for this resource, to a client still on the list,
      * for an agent still marked for connections (X208). Gives {agent,
-     * connection, expires}: the agent's name, the connection's id (for
-     * "hold") and when the token ends.
+     * connection, expires, hash}: the agent's name, the connection's id,
+     * when the token ends, and the token's hash (for "hold").
      */
-    agentFor(text) {
-      const found = byAccess.get(hashOf(text));
-      if (!found || found.expires <= now()) return null;
-      const g = found.grant;
-      if (g.resource !== resource || !o.clients.includes(g.client) || !oauthAgents.includes(g.agent)) return null;
-      return { agent: g.agent, connection: g.id, expires: found.expires };
+    agentFor: (text) => standsFor(hashOf(text)),
+    /**
+     * Keep a request open under the access token it came with ("token" is
+     * what agentFor gave for it): "end" is called, once, with the reason,
+     * when that token stops standing before its time: "connection-ended" (a
+     * refresh token used twice, a code used twice, a new approval of its
+     * agent) or "token-dropped" (later tokens of its connection pushed it
+     * out). The token's own expiry is the caller's to time. Gives the
+     * function that lets the request go (X229).
+     */
+    hold(token, end) {
+      const h = { hash: token.hash, connection: token.connection, end };
+      held.add(h);
+      return () => held.delete(h);
     },
     /**
-     * Keep a request open under a connection: "end" is called when the
-     * connection ends (a refresh token used twice, a code used twice, a new
-     * approval of its agent). Gives the function that lets it go (X229).
+     * At the executor's close, with the agents' locks still held: where the
+     * end of a connection is still not in the file, the write is tried once
+     * more. Gives the connections whose end is still unwritten ({agent,
+     * client, why} each; none where the file holds all): a start from this
+     * file would bring them back (X210).
      */
-    hold(connection, end) {
-      const set = held.get(connection) ?? new Set();
-      held.set(connection, set);
-      set.add(end);
-      return () => {
-        set.delete(end);
-        if (set.size === 0 && held.get(connection) === set) held.delete(connection);
-      };
+    close() {
+      if (retry) clearInterval(retry);
+      retry = null;
+      if (unwritten.length === 0) return [];
+      try {
+        save();
+      } catch (e) {
+        log({ event: 'oauth-ends-not-written', problem: e.code ?? e.message, connections: unwritten });
+      }
+      return [...unwritten];
     },
     /** The WWW-Authenticate header of a 401 at the MCP endpoint (RFC 9728, section 5.1; RFC 6750). */
     challenge: (tokenGiven) => `Bearer resource_metadata="${resourceMetadataUrl}"${tokenGiven ? ', error="invalid_token"' : ''}`,
