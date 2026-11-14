@@ -109,6 +109,6 @@ test('the documents name the settings of the floor under a price and the filters
     assert.ok(design.includes(`\`${filter}\``), `DESIGN.md names the filter ${filter}`);
   }
   const lines = ['server.mjs', 'admin.mjs', 'tools.mjs', 'money.mjs'].reduce((sum, file) => sum + read(file).split('\n').length - 1, 0);
-  assert.ok(lines < 1200, `${lines} lines`);
-  assert.ok(readme.includes('Four files,\n  under 1,200 lines') && design.includes('four files, under 1,200\nlines'), 'both documents give that figure');
+  assert.ok(lines < 1300, `${lines} lines`);
+  assert.ok(readme.includes('Four files,\n  under 1,300 lines') && design.includes('four files, under 1,300\nlines'), 'both documents give that figure');
 });

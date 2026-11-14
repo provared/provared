@@ -17,7 +17,7 @@ documentation.
 Shopify's own MCP server for a store accepts only clients Shopify has set
 up, so the guard cannot stand in front of it. This server reaches the
 same store through the Admin API, with an app the merchant makes for its
-own store, and is small enough to read in full: four files, under 1,200
+own store, and is small enough to read in full: four files, under 1,300
 lines, no package but Node.js itself.
 
 The guard starts it, one for each session, and stands between it and the
@@ -309,15 +309,18 @@ figure of the guard's own recipe for claude.ai.
 money as sent.** Shopify: its page for a refund says that a refund's
 being there does not show that the money went back, and that the state
 of each of its transactions does. The refund's transactions are asked
-for with it. Where every one is `SUCCESS` and they come to the amount
-asked for, the answer says `done` and gives `refunded`. Where one is
-`PENDING`, `AWAITING_RESPONSE` or `UNKNOWN`, the answer has no `done`
-and no `refunded`; under `not_confirmed` it says that the refund is
-recorded and the money not yet reported as sent. Where one is `FAILURE`
-or `ERROR`, where Shopify names no transaction, or where its figures are
-not the amount asked for, the answer is a tool error that gives
-Shopify's figure. Every one of these names the refund, so that it can be
-found.
+for with it. Where every one is a refund (`REFUND`) with the state
+`SUCCESS` and they come to the amount asked for, the answer says `done`
+and gives `refunded`. Where one is `PENDING`, `AWAITING_RESPONSE` or
+`UNKNOWN`, the answer has no `done` and no `refunded`; under
+`not_confirmed` it says that the refund is recorded and the money not
+yet reported as sent. Where one is `FAILURE` or `ERROR`, where Shopify
+names no transaction or one that is not a refund, where an amount cannot
+be read or is in another currency, or where its figures are not the
+amount asked for (whatever the state), the answer is a tool error. Every
+figure told is Shopify's, never the one asked for. Every one of these
+names the refund, so that it can be found, and an answer that is not an
+error gives the time Shopify made it (`made_at`).
 
 **S36. `list_orders` takes no search text. Orders are found by seven
 fixed filters: `status`, `financial_status`, `fulfillment_status`,
@@ -351,7 +354,8 @@ version, its outcome is said to be not known. An answer with no such
 header is treated the same way.
 
 **S39. `refund_order` takes an optional `idempotency_key`, and every
-answer to a refund names the key it was sent with.** Shopify: for 24
+answer to a refund that was sent to Shopify names the key it was sent
+with, a failure too.** Shopify: for 24
 hours it treats two requests with one key as one refund and answers the
 second with the first's outcome. So after "not known" the agent can send
 the same call again with the key it was told, every other argument as it
@@ -383,6 +387,47 @@ permission should also limit how many times the action may be taken
 the tool's description says that they exist.** Plainest: the agent can
 see why a cut was refused, and the refusal gives the lowest price the
 server would set now.
+
+### After the second review of 14 November 2026
+
+**S43. Where a call gives `idempotency_key` and the server itself
+refuses it, the answer does not end "Nothing was refunded".** Plainest.
+Such a call may be the second sending of a refund whose outcome was not
+known. If the first was made, the order now has less left, and the
+server's own check (S21) refuses the second before Shopify sees the key:
+a whole order refunded, or more than half of what was left. "Nothing was
+refunded" would then read as the first refund not having happened. So
+the answer says `This call sent no refund`, that it may be a second
+sending and that whether the first was made is not known to the server,
+and lists the order's refunds as Shopify has just given them (each with
+its amount and time), or says that the order has none. The server's
+check is kept, not skipped for a call with a key: it does not rest on
+what Shopify does with a key, which has not been tried.
+
+**S44. A new discount code is said to be made only where Shopify reports
+it as asked for: its code (in either case of letters), its limit on
+uses, once for each customer, its end, its start where one was given,
+and a state of `ACTIVE` or `SCHEDULED`.** Shopify's names for the
+states. A difference is a tool error that lists each one. The answer
+says "now gives" for an active code and "will give ... from" its start
+for one that starts later. Two times are the same where they are the
+same instant, however the zone is written.
+
+**S45. What a reading gives is held against the id asked for, and an id
+is written one way.** Plainest. Where Shopify answers the reading of a
+variant, an order, a product or a discount code with another one, or
+with none, nothing is changed and the answer says so. The number in an
+id has no nought before it (`gid://shopify/Order/1001`, never
+`.../01001`), so that a rule of the guard that names a thing by its
+exact text matches every call for it.
+
+**S46. A variable whose name begins `SHOPIFY_` and is not one of the
+server's settings stops the start.** Plainest and safest: a misspelt
+`SHOPIFY_MIN_PRICE_MINOR` would otherwise leave the lowest price at its
+default without a word. Only the variable's name is said, never its
+value. Started by hand on a computer whose environment holds other
+`SHOPIFY_` variables, the server will not start until they are taken
+out; the guard hands it only the variables its settings name.
 
 ## What it does not do
 

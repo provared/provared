@@ -26,7 +26,7 @@ nothing else.
 
 - One program, `server.mjs`, that speaks the Model Context Protocol
   (revision 2025-11-25) over its standard input and output. Four files,
-  under 1,200 lines. It needs Node.js 24 and no other package.
+  under 1,300 lines. It needs Node.js 24 and no other package.
 - For one store, named in its settings, and one version of the Admin API
   (`2026-10`). Where Shopify answers with any other version, the server
   uses no answer and sends no change.
@@ -76,13 +76,25 @@ amount asked for. Where Shopify has recorded the refund and not yet
 reported the money as sent, the answer says so under `not_confirmed`
 and does not say `done`. Where Shopify reports that sending the money
 failed, or reports another amount, the answer is an error that gives
-Shopify's figure.
+Shopify's figure. Every figure in an answer is Shopify's, not the one
+asked for.
 
-Every answer to a refund names its `idempotency_key`. Where the outcome
-of a refund is not known, the same call sent again with that key (and
-every other argument as it was) is, to Shopify, the same refund for 24
-hours, and is not made twice. Sent again without the key, it is a second
-refund.
+Every answer to a refund that was sent to Shopify names its
+`idempotency_key`, a failure too. Where the outcome of a refund is not
+known, the same call sent again with that key (and every other argument
+as it was) is, to Shopify, the same refund for 24 hours, and is not made
+twice. Sent again without the key, it is a second refund.
+
+The server reads the order before it sends anything, the second time as
+the first. Where the first sending was in fact made and little or
+nothing is left on the order, the server refuses the second call itself.
+Its answer then does not say that nothing was refunded. It says that
+this call sent no refund, and lists the order's refunds with their
+amounts and times, which show whether the first was made.
+
+A new discount code is likewise said to be made only where Shopify
+reports it as asked for: its code, its limit on uses, its end and its
+state. A code that starts later is said to give its discount from then.
 
 No tool gives a customer's name, address, email or telephone number,
 and the server asks Shopify for none of them. Nor can orders be looked
@@ -265,6 +277,10 @@ arguments, so a credential is never on a command line. It writes two
 lines to its error output when it starts, naming the store, the version
 of the Admin API and the floor under a price, and never the client
 secret or a token.
+
+Any other variable whose name begins `SHOPIFY_` stops the server from
+starting, so that a setting whose name is misspelt is not passed over.
+The guard hands the server only the variables its settings name.
 
 ## When something fails
 

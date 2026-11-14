@@ -42,7 +42,7 @@ test('Shopify\'s throttling answer on a refund: the refund was not made, and is 
   fake.faults.push({ on: 'RefundOrder', kind: 'errors', errors: THROTTLED });
   const throttled = await server.call('refund_order', REFUND);
   assert.equal(throttled.isError, true);
-  assert.equal(throttled.text, 'Shopify is limiting this app\'s requests just now (THROTTLED). The change was not made. Wait a second or more and send the call again; this server does not try again by itself.');
+  assert.equal(throttled.text, `Shopify is limiting this app's requests just now (THROTTLED). The change was not made. Wait a second or more and send the call again; this server does not try again by itself. This refund was sent with "idempotency_key": "${fake.of('RefundOrder')[0].variables.idempotencyKey}".`);
   assert.equal(fake.of('RefundOrder').length, 1, 'sent once');
   assert.equal(fake.store.orders[0].refunds.length, 0);
   await end();

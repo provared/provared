@@ -237,7 +237,7 @@ test('refund_order: part of an order, as one refund transaction against the paym
   const sent = fake.of('RefundOrder');
   assert.equal(sent.length, 1);
   assert.deepEqual(refund.data, {
-    done: '7.50 GBP was refunded on order #1001.', refunded: gbp('7.50', 750), refund_id: 'gid://shopify/Refund/701', order_id: ORDER_1001,
+    done: '7.50 GBP was refunded on order #1001.', refunded: gbp('7.50', 750), refund_id: 'gid://shopify/Refund/701', made_at: '2026-11-14T12:00:00Z', order_id: ORDER_1001,
     transactions: [{ transaction_id: 'gid://shopify/OrderTransaction/801', kind: 'REFUND', status: 'SUCCESS', amount: gbp('7.50', 750) }],
     customer_told: false, idempotency_key: sent[0].variables.idempotencyKey,
   });
@@ -278,7 +278,7 @@ test('refund_order: a refund Shopify refuses is a tool error in its words, sent 
   const { fake, server, end } = await world();
   const refused = await server.call('refund_order', { order_id: 'gid://shopify/Order/1004', amount_minor: 1000, currency: 'GBP' });
   assert.equal(refused.isError, true);
-  assert.equal(refused.text, 'Shopify refused the refund: transactions: The payment gateway declined the refund. Nothing was changed.');
+  assert.equal(refused.text, `Shopify refused the refund: transactions: The payment gateway declined the refund. Nothing was changed. This refund was sent with "idempotency_key": "${fake.of('RefundOrder')[0].variables.idempotencyKey}".`);
   assert.equal(fake.of('RefundOrder').length, 1, 'the refund was sent once and not again');
   assert.equal(fake.store.orders[3].refunds.length, 0);
   await end();

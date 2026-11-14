@@ -48,11 +48,11 @@ function id(kind, description) {
 }
 
 const ID_PATTERNS = {
-  Product: /^gid:\/\/shopify\/Product\/[0-9]+$/,
-  ProductVariant: /^gid:\/\/shopify\/ProductVariant\/[0-9]+$/,
-  DiscountCodeNode: /^gid:\/\/shopify\/DiscountCodeNode\/[0-9]+$/,
-  Order: /^gid:\/\/shopify\/Order\/[0-9]+$/,
-  OrderTransaction: /^gid:\/\/shopify\/OrderTransaction\/[0-9]+$/,
+  Product: /^gid:\/\/shopify\/Product\/[1-9][0-9]*$/,
+  ProductVariant: /^gid:\/\/shopify\/ProductVariant\/[1-9][0-9]*$/,
+  DiscountCodeNode: /^gid:\/\/shopify\/DiscountCodeNode\/[1-9][0-9]*$/,
+  Order: /^gid:\/\/shopify\/Order\/[1-9][0-9]*$/,
+  OrderTransaction: /^gid:\/\/shopify\/OrderTransaction\/[1-9][0-9]*$/,
 };
 
 const CURRENCY = /^[A-Z]{3}$/;
@@ -209,14 +209,14 @@ const LIST_ORDERS = `query ListOrders($first: Int!, $after: String, $query: Stri
 
 const ORDER_MONEY = `id name test refundable currencyCode presentmentCurrencyCode
     ${SET('currentTotalPriceSet')} ${SET('totalReceivedSet')} ${SET('totalRefundedSet')} ${SET('netPaymentSet')}
-    transactions(first: 50) { id kind status gateway createdAt ${SET('amountSet')} parentTransaction { id } }`;
+    transactions(first: 50) { id kind status gateway createdAt ${SET('amountSet')} parentTransaction { id } }
+    refunds(first: 50) { id createdAt note ${SET('totalRefundedSet')} }`;
 
 const READ_ORDER = `query ReadOrder($id: ID!) {
   order(id: $id) {
     ${ORDER_MONEY}
     createdAt cancelledAt displayFinancialStatus displayFulfillmentStatus
     lineItems(first: 50) { nodes { id title sku quantity ${SET('originalUnitPriceSet')} } pageInfo { hasNextPage } }
-    refunds(first: 50) { id createdAt note ${SET('totalRefundedSet')} }
   }
 }`;
 
@@ -321,6 +321,16 @@ function orderMoneyShown(order) {
   };
 }
 
+/** The refunds an order has, in a sentence, for a refund sent again with its key: they show whether the first sending was made. */
+function refundsSoFar(order) {
+  if (!Array.isArray(order.refunds)) return 'Shopify did not list the order\'s refunds; read the order to see what was given back.';
+  if (order.refunds.length === 0) return `Order ${order.name} has no refund so far.`;
+  return `The refunds of order ${order.name} so far: ${order.refunds.map((r) => {
+    const total = presentment(r?.totalRefundedSet);
+    return `${r?.id} of ${total ? `${total.amount} ${total.currency}` : 'an amount not given'}, made at ${r?.createdAt}`;
+  }).join('; ')}.`;
+}
+
 /** The shop's currency, read before a change; throws where it is not the one given. */
 async function shopCurrency(admin, given) {
   const data = await admin.graphql(SHOP_CURRENCY, {}, { ending: 'Nothing was changed.' });
@@ -366,9 +376,35 @@ async function createDiscount(admin, input) {
 }
 
 /**
+ * Where a discount code as Shopify reports it is not the one asked for:
+ * each difference in a few words. An empty list where there is none. The
+ * percentage or the amount is held by the tool itself.
+ */
+function discountDifferences(made, args) {
+  const out = [];
+  const same = (a, b) => Date.parse(a) === Date.parse(b);
+  if (made.discount_id === null) out.push('no id');
+  if (!(made.codes ?? []).some((c) => typeof c === 'string' && c.toLowerCase() === args.code.toLowerCase())) out.push(`the code ${(made.codes ?? []).join(', ') || 'missing'}`);
+  if ((made.usage_limit ?? null) !== (args.usage_limit ?? null)) out.push(`the limit on uses as ${made.usage_limit ?? 'none'} where ${args.usage_limit ?? 'none'} was asked for`);
+  if (made.once_per_customer !== (args.once_per_customer ?? false)) out.push(`once for each customer as ${made.once_per_customer} where ${args.once_per_customer ?? false} was asked for`);
+  if (args.ends_at === undefined ? made.ends_at !== null : !same(made.ends_at, args.ends_at)) out.push(`its end as ${made.ends_at ?? 'none'} where ${args.ends_at ?? 'none'} was asked for`);
+  if (args.starts_at !== undefined && !same(made.starts_at, args.starts_at)) out.push(`its start as ${made.starts_at ?? 'none'} where ${args.starts_at} was asked for`);
+  if (made.status !== 'ACTIVE' && made.status !== 'SCHEDULED') out.push(`the state ${made.status ?? 'missing'}`);
+  return out;
+}
+
+/** The answer for a discount code that Shopify reports as asked for: "now gives" only for one that is active, "will give" for one that starts later. */
+function discountDone(made, args, off) {
+  const differences = discountDifferences(made, args);
+  if (differences.length > 0) throw new ToolError(`Shopify made the code ${args.code} (${made.discount_id}) and reports it otherwise than was asked: ${differences.join('; ')}. List the discount codes to see what it is.`);
+  return { done: made.status === 'ACTIVE' ? `The code ${args.code} now gives ${off}.` : `The code ${args.code} will give ${off} from ${made.starts_at}.`, ...made };
+}
+
+/**
  * What became of a refund, from the state of its own transactions as
- * Shopify reports them. "done" is said only where every one of them
- * succeeded and they come to the amount asked for.
+ * Shopify reports them. "done" is said only where every one of them is a
+ * refund that succeeded and they come to the amount asked for; every
+ * figure told is Shopify's.
  */
 function refundOutcome(refund, order, asked, unit, more) {
   const amount = toDecimal(asked, unit);
@@ -376,20 +412,22 @@ function refundOutcome(refund, order, asked, unit, more) {
   const transactions = nodes.map((t) => ({ transaction_id: t?.id ?? null, kind: t?.kind ?? null, status: t?.status ?? null, amount: presentment(t?.amountSet) }));
   const states = transactions.map((t) => String(t.status)).join(', ');
   const toRead = 'Read the order to see what was given back.';
-  if (transactions.length === 0) throw new ToolError(`Shopify recorded a refund on order ${order.name} (${refund.id}) and named no payment of it, so whether any money was given back is not known. ${toRead}`);
-  if (transactions.some((t) => t.status === 'FAILURE' || t.status === 'ERROR')) throw new ToolError(`Shopify recorded a refund on order ${order.name} (${refund.id}), and reports that the sending of the money failed (${states}). ${toRead}`);
-  const base = { refund_id: refund.id, order_id: order.id, transactions, ...more };
-  if (transactions.some((t) => t.status !== 'SUCCESS')) {
-    return { not_confirmed: `Shopify recorded a refund of ${amount} ${unit} on order ${order.name}, and has not yet reported the money as sent (${states}). Read the order later to see whether it was.`, ...base };
+  const recorded = `Shopify recorded a refund on order ${order.name} (${refund.id})`;
+  if (transactions.length === 0) throw new ToolError(`${recorded} and named no payment of it, so whether any money was given back is not known. ${toRead}`);
+  if (transactions.some((t) => t.kind !== 'REFUND')) throw new ToolError(`${recorded} and names with it a transaction that is not a refund (${transactions.map((t) => String(t.kind)).join(', ')}), so whether any money was given back is not known. ${toRead}`);
+  if (transactions.some((t) => t.status === 'FAILURE' || t.status === 'ERROR')) throw new ToolError(`${recorded}, and reports that the sending of the money failed (${states}). ${toRead}`);
+  if (transactions.some((t) => t.amount?.currency !== unit || t.amount.amount_minor === null)) throw new ToolError(`${recorded} and gives the amount of its payment in a form this server cannot read, or in another currency than ${unit}, where ${amount} ${unit} was asked for. ${toRead}`);
+  const sent = transactions.reduce((sum, t) => sum + t.amount.amount_minor, 0);
+  const waiting = transactions.some((t) => t.status !== 'SUCCESS');
+  if (sent !== asked) throw new ToolError(`Shopify made a refund on order ${order.name} (${refund.id}) and reports ${toDecimal(sent, unit)} ${unit} ${waiting ? 'to be sent back' : 'sent back'}, where ${amount} ${unit} was asked for. ${toRead}`);
+  const base = { refund_id: refund.id, made_at: refund.createdAt ?? null, order_id: order.id, transactions, ...more };
+  if (waiting) {
+    return { not_confirmed: `Shopify recorded a refund of ${toDecimal(sent, unit)} ${unit} on order ${order.name}, and has not yet reported the money as sent (${states}). Read the order later to see whether it was.`, ...base };
   }
-  // Every transaction succeeded: Shopify's own figure is what is told.
-  const sent = transactions.reduce((sum, t) => (sum !== null && t.amount?.currency === unit && t.amount.amount_minor !== null ? sum + t.amount.amount_minor : null), 0);
+  // Every transaction succeeded: the refund's own total is held against the amount too.
   const total = presentment(refund.totalRefundedSet);
-  if (sent !== asked || total?.amount_minor !== asked || total.currency !== unit) {
-    const reported = sent !== null && sent !== asked ? `${toDecimal(sent, unit)} ${unit}` : total ? `${total.amount} ${total.currency}` : 'an amount this server cannot read';
-    throw new ToolError(`Shopify made a refund on order ${order.name} (${refund.id}) and reports ${reported} sent back, where ${amount} ${unit} was asked for. ${toRead}`);
-  }
-  return { done: `${amount} ${unit} was refunded on order ${order.name}.`, refunded: shown({ amount, currencyCode: unit }), ...base };
+  if (total?.amount_minor !== asked || total.currency !== unit) throw new ToolError(`Shopify made a refund on order ${order.name} (${refund.id}) and reports ${total ? `${total.amount} ${total.currency}` : 'a total this server cannot read'} sent back, where ${amount} ${unit} was asked for. ${toRead}`);
+  return { done: `${toDecimal(sent, unit)} ${unit} was refunded on order ${order.name}.`, refunded: shown({ amount: toDecimal(sent, unit), currencyCode: unit }), ...base };
 }
 
 // --- the tools ---
@@ -430,6 +468,7 @@ export const TOOLS = [
       const data = await admin.graphql(READ_PRODUCT, { id: args.product_id });
       const p = data.product;
       if (!isObject(p)) throw new ToolError(`The store has no product ${args.product_id}.`);
+      if (p.id !== args.product_id) throw new ToolError(`Shopify answered the reading of ${args.product_id} with another product.`);
       const unit = data.shop?.currencyCode;
       const price = (amount) => (typeof amount === 'string' && typeof unit === 'string' ? shown({ amount, currencyCode: unit }) : null);
       return {
@@ -457,6 +496,8 @@ export const TOOLS = [
       const data = await admin.graphql(READ_VARIANT, { id: args.variant_id }, { ending: 'Nothing was changed.' });
       const v = data.productVariant;
       if (!isObject(v) || typeof v.product?.id !== 'string') throw new ToolError(`The store has no variant ${args.variant_id}. Nothing was changed.`);
+      // The variant written is the one asked for, not whichever the reading gave.
+      if (v.id !== args.variant_id) throw new ToolError(`Shopify answered the reading of ${args.variant_id} with another variant (${typeof v.id === 'string' ? v.id : 'one with no id'}). Nothing was changed.`);
       const unit = data.shop?.currencyCode;
       if (typeof unit !== 'string') throw new ToolError('Shopify did not say which currency the shop uses. Nothing was changed.');
       if (unit !== args.currency) throw new ToolError(`The shop's currency is ${unit}, not ${args.currency}. Nothing was changed.`);
@@ -508,7 +549,7 @@ export const TOOLS = [
       await shopCurrency(admin); // a reading first: no change is sent until Shopify has just answered with this server's version
       const made = await createDiscount(admin, discountInput(args, { percentage: args.percent / 100 }));
       if (made.percent !== args.percent) throw new ToolError(`Shopify made the code ${args.code} (${made.discount_id}) and reports ${made.percent === undefined ? 'no percentage' : `${made.percent}%`} off, where ${args.percent}% was asked for. List the discount codes to see what it is.`);
-      return { done: `The code ${args.code} now gives ${args.percent}% off.`, ...made };
+      return discountDone(made, args, `${args.percent}% off`);
     },
   },
   {
@@ -526,7 +567,7 @@ export const TOOLS = [
       const amount = toDecimal(args.amount_minor, unit);
       const made = await createDiscount(admin, discountInput(args, { discountAmount: { amount, appliesOnEachItem: false } }));
       if (made.amount_off?.amount_minor !== args.amount_minor || made.amount_off?.currency !== unit) throw new ToolError(`Shopify made the code ${args.code} (${made.discount_id}) and reports ${made.amount_off ? `${made.amount_off.amount} ${made.amount_off.currency}` : 'no amount'} off, where ${amount} ${unit} was asked for. List the discount codes to see what it is.`);
-      return { done: `The code ${args.code} now gives ${amount} ${unit} off an order.`, ...made };
+      return discountDone(made, args, `${amount} ${unit} off an order`);
     },
   },
   {
@@ -542,6 +583,7 @@ export const TOOLS = [
       if (!isObject(node)) throw new ToolError('Shopify gave no discount code and no reason. List the discount codes to see whether it still works.');
       const made = discountShown(node);
       const name = made.codes?.[0] ?? made.title ?? args.discount_id;
+      if (made.discount_id !== args.discount_id) throw new ToolError(`Shopify answered with another discount code (${made.discount_id ?? 'one with no id'}) than the one asked for. List the discount codes to see which can still be used.`);
       if (typeof made.status !== 'string' || made.status === 'ACTIVE') throw new ToolError(`Shopify answered, and reports the discount code ${name} as ${made.status ?? 'in no state it names'}. List the discount codes to see whether it can still be used.`);
       return { done: `The discount code ${name} can no longer be used.`, ...made };
     },
@@ -579,6 +621,7 @@ export const TOOLS = [
       const data = await admin.graphql(READ_ORDER, { id: args.order_id });
       const o = data.order;
       if (!isObject(o)) throw new ToolError(`The store has no order ${args.order_id}.`);
+      if (o.id !== args.order_id) throw new ToolError(`Shopify answered the reading of ${args.order_id} with another order.`);
       return {
         ...orderMoneyShown(o),
         created_at: o.createdAt,
@@ -606,31 +649,39 @@ export const TOOLS = [
     }, ['order_id', 'amount_minor', 'currency']),
     annotations: CHANGES,
     async run(args, admin) {
-      const data = await admin.graphql(ORDER_FOR_REFUND, { id: args.order_id }, { ending: 'Nothing was refunded.' });
+      // With a key given, this call may be the second sending of a refund whose outcome was not known, and the order may by now show that
+      // refund. So where the server refuses such a call, it says that this call sent no refund and what the order's refunds are, and never
+      // "Nothing was refunded": that would read as the first refund not having been made.
+      const again = args.idempotency_key !== undefined;
+      const sentNone = 'This call sent no refund. A key was given, so it may be a second sending of a refund, and whether the first was made is not known to this server.';
+      let nothing = again ? `${sentNone} Read the order: its refunds show what was given back.` : 'Nothing was refunded.';
+      const data = await admin.graphql(ORDER_FOR_REFUND, { id: args.order_id }, { ending: nothing });
       const o = data.order;
-      if (!isObject(o)) throw new ToolError(`The store has no order ${args.order_id}. Nothing was refunded.`);
+      if (!isObject(o)) throw new ToolError(`The store has no order ${args.order_id}. ${nothing}`);
+      if (o.id !== args.order_id) throw new ToolError(`Shopify answered the reading of ${args.order_id} with another order (${typeof o.id === 'string' ? o.id : 'one with no id'}). ${nothing}`);
+      if (again) nothing = `${sentNone} ${refundsSoFar(o)}`;
       const unit = o.presentmentCurrencyCode;
-      if (typeof unit !== 'string' || typeof o.currencyCode !== 'string') throw new ToolError('Shopify did not say which currency the order was paid in. Nothing was refunded.');
-      if (unit !== o.currencyCode) throw new ToolError(`Order ${o.name} was paid in ${unit} and the shop's currency is ${o.currencyCode}. This server refunds only an order paid in the shop's own currency; refund this one in the Shopify admin. Nothing was refunded.`);
-      if (unit !== args.currency) throw new ToolError(`Order ${o.name} was paid in ${unit}, not ${args.currency}. Nothing was refunded.`);
+      if (typeof unit !== 'string' || typeof o.currencyCode !== 'string') throw new ToolError(`Shopify did not say which currency the order was paid in. ${nothing}`);
+      if (unit !== o.currencyCode) throw new ToolError(`Order ${o.name} was paid in ${unit} and the shop's currency is ${o.currencyCode}. This server refunds only an order paid in the shop's own currency; refund this one in the Shopify admin. ${nothing}`);
+      if (unit !== args.currency) throw new ToolError(`Order ${o.name} was paid in ${unit}, not ${args.currency}. ${nothing}`);
       const amount = toDecimal(args.amount_minor, unit);
-      if (amount === null) throw new ToolError(`This server does not know how many decimal places ${unit} has, so it will not send an amount in it. Nothing was refunded.`);
-      if (o.refundable === false) throw new ToolError(`Shopify says order ${o.name} cannot be refunded: it has no payment that can be given back. Nothing was refunded.`);
-      if (o.refundable !== true) throw new ToolError(`Shopify did not say whether order ${o.name} can be refunded. Nothing was refunded.`);
+      if (amount === null) throw new ToolError(`This server does not know how many decimal places ${unit} has, so it will not send an amount in it. ${nothing}`);
+      if (o.refundable === false) throw new ToolError(`Shopify says order ${o.name} cannot be refunded: it has no payment that can be given back. ${nothing}`);
+      if (o.refundable !== true) throw new ToolError(`Shopify did not say whether order ${o.name} can be refunded. ${nothing}`);
       const left = presentment(o.netPaymentSet);
-      if (!left || left.amount_minor === null || left.currency !== unit) throw new ToolError(`Shopify did not say, in a form this server can read, how much of order ${o.name} is paid and not refunded. Nothing was refunded.`);
-      if (args.amount_minor > left.amount_minor) throw new ToolError(`Order ${o.name} has ${left.amount} ${unit} paid and not refunded, less than the ${amount} ${unit} asked for. Nothing was refunded.`);
+      if (!left || left.amount_minor === null || left.currency !== unit) throw new ToolError(`Shopify did not say, in a form this server can read, how much of order ${o.name} is paid and not refunded. ${nothing}`);
+      if (args.amount_minor > left.amount_minor) throw new ToolError(`Order ${o.name} has ${left.amount} ${unit} paid and not refunded, less than the ${amount} ${unit} asked for. ${nothing}`);
       const paid = payments(o);
       let from;
       if (args.transaction_id !== undefined) {
         from = paid.find((t) => t.id === args.transaction_id);
-        if (!from) throw new ToolError(`${args.transaction_id} is not a successful payment of order ${o.name}. Nothing was refunded.`);
+        if (!from) throw new ToolError(`${args.transaction_id} is not a successful payment of order ${o.name}. ${nothing}`);
       } else {
-        if (paid.length === 0) throw new ToolError(`Order ${o.name} has no successful payment to refund. Nothing was refunded.`);
-        if (paid.length > 1) throw new ToolError(`Order ${o.name} has ${paid.length} payments. Say which to refund with "transaction_id": ${paid.map((t) => `${t.id} (${presentment(t.amountSet)?.amount ?? '?'} ${unit})`).join(', ')}. Nothing was refunded.`);
+        if (paid.length === 0) throw new ToolError(`Order ${o.name} has no successful payment to refund. ${nothing}`);
+        if (paid.length > 1) throw new ToolError(`Order ${o.name} has ${paid.length} payments. Say which to refund with "transaction_id": ${paid.map((t) => `${t.id} (${presentment(t.amountSet)?.amount ?? '?'} ${unit})`).join(', ')}. ${nothing}`);
         from = paid[0];
       }
-      if (typeof from.gateway !== 'string' || from.gateway === '') throw new ToolError(`Shopify did not say how the payment ${from.id} was taken, so it cannot be refunded here. Nothing was refunded.`);
+      if (typeof from.gateway !== 'string' || from.gateway === '') throw new ToolError(`Shopify did not say how the payment ${from.id} was taken, so it cannot be refunded here. ${nothing}`);
       const input = {
         orderId: o.id,
         currency: unit,
@@ -641,11 +692,17 @@ export const TOOLS = [
       // Shopify asks for a key with refundCreate, and treats two requests with one key as one refund for 24 hours. The server sends the request once; the key is named in every answer so that the agent, should it send the call again, can give it.
       const key = args.idempotency_key ?? randomUUID();
       const toRead = `Read the order before trying again; to send this same refund again, give "idempotency_key": "${key}" with every other argument as it was, and Shopify will not make it twice.`;
-      const sent = await admin.graphql(REFUND_ORDER, { input, idempotencyKey: key }, { change: toRead });
-      refusedBy(sent.refundCreate, 'the refund', 'refund', toRead);
-      const refund = sent.refundCreate.refund;
-      if (!isObject(refund)) throw new ToolError(`Shopify gave no refund and no reason. Whether money was given back is not known. ${toRead}`);
-      return refundOutcome(refund, o, args.amount_minor, unit, { customer_told: input.notify, idempotency_key: key });
+      try {
+        const sent = await admin.graphql(REFUND_ORDER, { input, idempotencyKey: key }, { change: toRead });
+        refusedBy(sent.refundCreate, 'the refund', 'refund', toRead);
+        const refund = sent.refundCreate.refund;
+        if (!isObject(refund)) throw new ToolError(`Shopify gave no refund and no reason. Whether money was given back is not known. ${toRead}`);
+        return refundOutcome(refund, o, args.amount_minor, unit, { customer_told: input.notify, idempotency_key: key });
+      } catch (e) {
+        // Every answer to a refund that was sent names the key it was sent with, a failure too.
+        if (e instanceof ToolError && !e.message.includes(key)) throw new ToolError(`${e.message} This refund was sent with "idempotency_key": "${key}".`);
+        throw e;
+      }
     },
   },
 ];

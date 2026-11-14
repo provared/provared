@@ -55,7 +55,7 @@ test('a refund whose payment Shopify reports as failed is a tool error', async (
     fake.store.orders[0].paymentState = state;
     const refund = await server.call('refund_order', { ...REFUND, amount_minor: 100 });
     assert.equal(refund.isError, true);
-    assert.match(refund.text, new RegExp(`^Shopify recorded a refund on order #1001 \\(gid://shopify/Refund/70\\d\\), and reports that the sending of the money failed \\(${state}\\)\\. Read the order to see what was given back\\.$`));
+    assert.match(refund.text, new RegExp(`^Shopify recorded a refund on order #1001 \\(gid://shopify/Refund/70\\d\\), and reports that the sending of the money failed \\(${state}\\)\\. Read the order to see what was given back\\. This refund was sent with "idempotency_key": "[0-9a-f-]{36}"\\.$`));
     assert.doesNotMatch(refund.text, /was refunded/);
   }
 });
@@ -84,9 +84,10 @@ test('a refund for which Shopify reports another amount, or names no payment, is
     assert.doesNotMatch(refund.text, /was refunded/);
     said.push(refund.text);
   }
-  assert.equal(said[0], 'Shopify made a refund on order #1001 (gid://shopify/Refund/701) and reports 0.00 GBP sent back, where 1.00 GBP was asked for. Read the order to see what was given back.');
-  assert.equal(said[1], 'Shopify made a refund on order #1001 (gid://shopify/Refund/702) and reports 25.00 GBP sent back, where 1.00 GBP was asked for. Read the order to see what was given back.');
-  for (const text of said.slice(2)) assert.match(text, /^Shopify recorded a refund on order #1001 \(gid:\/\/shopify\/Refund\/70\d\) and named no payment of it, so whether any money was given back is not known\./);
+  const keys = fake.of('RefundOrder').map((r) => r.variables.idempotencyKey);
+  assert.equal(said[0], `Shopify made a refund on order #1001 (gid://shopify/Refund/701) and reports 0.00 GBP sent back, where 1.00 GBP was asked for. Read the order to see what was given back. This refund was sent with "idempotency_key": "${keys[0]}".`);
+  assert.equal(said[1], `Shopify made a refund on order #1001 (gid://shopify/Refund/702) and reports 25.00 GBP sent back, where 1.00 GBP was asked for. Read the order to see what was given back. This refund was sent with "idempotency_key": "${keys[1]}".`);
+  for (const [i, text] of said.slice(2).entries()) assert.equal(text.replace(/Refund\/70\d/, 'Refund/70N'), `Shopify recorded a refund on order #1001 (gid://shopify/Refund/70N) and named no payment of it, so whether any money was given back is not known. Read the order to see what was given back. This refund was sent with "idempotency_key": "${keys[i + 2]}".`);
 });
 
 // --- one message is one line ---

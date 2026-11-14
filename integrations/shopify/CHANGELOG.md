@@ -46,16 +46,16 @@ its tests; it has not been tried against a real store.
   action for each tool and the amount where there is one) and
   `content-rules.example.json` (rules that fix the currency of each tool
   that carries money).
-- **Tests** (`npm test`, 78 tests): the protocol, the sign-in and its
+- **Tests** (`npm test`, 90 tests): the protocol, the sign-in and its
   renewal, a token that stops working mid-session, each tool, calls
   handled one at a time, a refused refund, Shopify's throttling answer,
   failures with the outcome unknown, a redirect not followed, the client
   secret in no output, the conversion of money, the examples held
-  against the server, each finding of the review below, and the floor
+  against the server, each finding of the two reviews below, and the floor
   under a price. A job in the repository's tests workflow
   (`integrations/shopify`) runs them.
 - `DESIGN.md` gives each tool name, action name and fixed text as a
-  numbered choice (S1 to S42), with where it comes from.
+  numbered choice (S1 to S46), with where it comes from.
 
 ### Changed after an independent review, before any release
 
@@ -105,4 +105,33 @@ the change.
   asked for. A refund is not sent where the server cannot read how much
   is paid and not refunded, or whether the order can be refunded. The
   example gives the server 95 seconds to end, not 35. The documents give
-  the server's size as it is (under 1,200 lines).
+  the server's size as it is (under 1,300 lines).
+
+### Changed after a second review, before any release
+
+Each has a test that fails without the change.
+
+- **A refund sent again with its key is not told "Nothing was
+  refunded".** Where the first sending had been made and the order had
+  too little left (a whole order, or more than half of what remained),
+  the server's own check refused the second call with that ending, which
+  read as the refund not having happened. Where a call gives a key, a
+  refusal of the server's now says that this call sent no refund, and
+  lists the order's refunds with their amounts and times.
+- **A refund's answer takes every figure from Shopify.** A refund not
+  yet confirmed whose amount is not the one asked for is a tool error,
+  as a confirmed one is; a transaction that is not a refund, or whose
+  amount cannot be read, is a tool error that says so. An answer gives
+  the time Shopify made the refund.
+- **Every answer to a refund that was sent names its key**, the failures
+  too.
+- **A new discount code is held against what was asked:** its code, its
+  limit on uses, once for each customer, its end, its start and its
+  state. A code that starts later is said to give its discount from
+  then, not now.
+- **What a reading gives is held against the id asked for** (a variant,
+  an order, a product, a discount code), and the number in an id may
+  have no nought before it.
+- **A variable that begins `SHOPIFY_` and is not one of the server's
+  settings stops the start**, so that a misspelt floor is not passed
+  over.

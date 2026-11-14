@@ -43,6 +43,7 @@ It takes no arguments but --version and --help. Its settings are read from its e
   SHOPIFY_MIN_PRICE_MINOR      the lowest price it will set, a whole number of the currency's smallest unit (1 unless given)
   SHOPIFY_MAX_PRICE_CUT_PERCENT  how far below the present price one call may set a price, a whole number from 0 to 100
                                (0 unless given: a price may be raised, not lowered)
+Any other variable whose name begins SHOPIFY_ stops the start, so that a misspelt setting is not passed over.
 `;
 
 function stop(message) {
@@ -91,11 +92,18 @@ function wholeNumber(env, name, unless, most) {
   return value;
 }
 
+/** Every setting the server reads. A variable that begins SHOPIFY_ and is none of these stops the start: a misspelt limit must not be passed over. */
+const SETTINGS = ['SHOPIFY_SHOP', 'SHOPIFY_CLIENT_ID', 'SHOPIFY_CLIENT_ID_FILE', 'SHOPIFY_CLIENT_SECRET', 'SHOPIFY_CLIENT_SECRET_FILE', 'SHOPIFY_MIN_PRICE_MINOR', 'SHOPIFY_MAX_PRICE_CUT_PERCENT', 'SHOPIFY_TEST_ORIGIN'];
+
 function main() {
   const argv = process.argv.slice(2);
   if (argv.length === 1 && argv[0] === '--version') return void process.stdout.write(`${VERSION}\n`);
   if (argv.length === 1 && argv[0] === '--help') return void process.stdout.write(USAGE);
   if (argv.length > 0) stop('takes no arguments but --version and --help. Its settings, and the files that hold the client ID and the client secret, are named in its environment.');
+
+  // Only the name of such a variable is said, never its value.
+  const unknown = Object.keys(process.env).filter((name) => name.toUpperCase().startsWith('SHOPIFY_') && !SETTINGS.includes(name));
+  if (unknown.length > 0) stop(`${unknown.map((name) => name.slice(0, 60)).join(', ')}: not a setting of this server, so it will not start. Its settings are ${SETTINGS.slice(0, -1).join(', ')}. Take the variable out, or correct its name.`);
 
   const { shop, origin, madeUp } = storeOrigin(process.env);
   const clientId = credential(process.env, 'SHOPIFY_CLIENT_ID');
