@@ -80,6 +80,19 @@ stand-in client. It has not been tried with claude.ai itself.
   A request under an ended session is answered 404, after which a client
   is to begin a new session. Whether claude.ai does so has not been
   tried.
+- **Which revisions of MCP a local program is served on.** In front of a
+  local program the guard serves clients and programs that speak revision
+  2025-11-25 of the MCP specification (and 2025-06-18 and 2025-03-26,
+  which have the same transport). Revision 2026-07-28, which has no
+  sessions, is not yet supported in this mode: a request whose
+  `MCP-Protocol-Version` header names it is refused with 400, and a
+  program that speaks it alone cannot be served. In front of an upstream
+  HTTP server the header goes on to the upstream, which answers for it.
+- **A tool's question needs the stream.** What a local program sends of
+  its own (the progress of a call, a question a tool asks during it) goes
+  on the session's GET stream. Where the client has none open it is
+  dropped, and a call that waits for an answer to such a question ends at
+  the guard's `timeout`.
 - **No one-command setup yet.** The keys, the permission and the proxy are
   set up by hand, as for any agent over HTTP.
 

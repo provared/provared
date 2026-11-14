@@ -277,7 +277,11 @@ What the executor does with each request:
 - One message per POST, read as strictly as a line on stdio: a batch, a
   repeated member name, an id that is not text or a whole number, a number
   beyond 2^53 - 1, or a shape that is not a message is refused (400) and
-  goes no further. A `tools/call` sent as a notification is dropped (202).
+  goes no further. So is a message with a member at its top level other
+  than the six of JSON-RPC, or whose `params` hold two names that differ
+  only in capitals (see `tools` under "The settings"). A request's method
+  sent with no id, such as a `tools/call` sent as a notification, is not
+  sent on and is refused (400).
 - The upstream's answer comes back as it came: a JSON body, or a stream of
   events forwarded one by one as they arrive. The response under the call's
   id is the outcome and ends the call; a response under another id is never
@@ -409,26 +413,55 @@ What is different from an upstream HTTP server:
   as for a session that does not exist, and nothing reaches the program.
   So no agent's messages or answers pass through a program that serves
   another. A message with no session, other than that `initialize`, is
-  refused with 400; so the executor serves only clients that begin a
-  session, not the session-less requests of the 2026-07-28 revision.
+  refused with 400.
+- **Which revisions of MCP.** In front of a local program the executor
+  serves clients and programs that speak revision 2025-11-25 of the
+  specification (and 2025-06-18 and 2025-03-26, which have the same
+  transport). Revision 2026-07-28, which has no sessions, is not yet
+  supported in this mode: a client that speaks it alone cannot use a
+  local program, and a program that speaks it alone, and so answers
+  `initialize` with an error, cannot be served. A request whose
+  `MCP-Protocol-Version` header names a version other than those three is
+  refused with 400, unless it is the version the session's program
+  answered `initialize` with; a request with no such header is taken.
 - **The same check and the same records.** A `tools/call` goes through the
   same rules, check, receipt, countersignature and copy, under the slip
   and into the book of the agent that sent it. The program is sent the
   call under an id of the executor's own.
 - **Answers.** A request is answered with one JSON body. A notification,
-  or the agent's response to a request of the program's, is answered 202.
-  The program's own requests and notifications go on the session's GET
-  stream; a session has one, a later GET taking the place of the earlier,
-  and where none is open they are dropped and the log says so. Nothing is
-  replayed.
-- **When a session ends**, its program is ended: its input is closed, and
-  where it has not ended `shutdownWait` milliseconds later it is ended by
-  force. A session ends when the agent sends DELETE under it (204); when
-  its program ends by itself; when it has been idle; when it makes room
-  for a new one; when the connection made through OAuth it was begun
-  under ends (a refreshed token goes on with the same session); and when
-  the executor stops. A request under an ended session is answered 404,
-  and the client begins a new one.
+  or the agent's response to a request of the program's, is answered 202
+  once it is written to the program; one that is not written is answered
+  with an error: 400 for a request's method sent with no id, which is
+  never sent on, 503 where the program is not reading, 502 where it has
+  ended. The program's own requests and notifications, the progress of a
+  call and a question a tool asks during it among them, go on the
+  session's GET stream; a session has one, a later GET taking the place
+  of the earlier, and where none is open they are dropped and the log
+  says so, at most once a second with a count. So a client must keep the
+  stream open to be asked anything by a tool. Nothing is replayed.
+- **When a session ends**, its program is ended: its input is closed;
+  where it has not ended `shutdownWait` milliseconds later it is sent
+  SIGTERM, which a program may ignore; and where it is still running
+  after a second wait (`shutdownWait` again, and at most 5 seconds) it is
+  sent SIGKILL, which it cannot. On Windows the first of the two is
+  already final. A session ends when the agent sends DELETE under it
+  (204); when its program ends by itself; when it has been idle; when it
+  makes room for a new one; when the connection made through OAuth it was
+  begun under ends (a refreshed token goes on with the same session);
+  when its program is not reading or writes without pause (below); and
+  when the executor stops. Once the stop has begun no program is started:
+  an `initialize` that arrives then is answered 503. The stop waits for
+  the programs for the two waits and 2 seconds more, and then finishes
+  whether or not each has gone, saying in the log how many have not. A
+  request under an ended session is answered 404, and the client begins a
+  new one.
+- **A program that misbehaves.** Where more than 16 MiB already wait to
+  be written to a program that is not reading, the next message for it is
+  refused with 503 and not held, and the session is ended. A program that
+  writes more than 1,000 messages that answer nothing in flight in each
+  of 5 seconds running has its session ended. One read of a program's
+  output is handled at a time, so that one agent's program does not hold
+  up another agent's requests.
 - **A program that ends with a call in flight** gives the receipt it gives
   on stdio: the agent is answered with the error "The tool server ended
   before it answered this call, so its outcome is not known." and the
@@ -437,27 +470,34 @@ What is different from an upstream HTTP server:
   answers `initialize`, begins no session: the agent is answered 502 (504
   where it gave no answer within `timeout`) and told why.
 - **The limits.** `sessions.max` (default 8, from 1 to 256) is the most
-  sessions one agent may have at once. An agent at its most that begins
-  another has its own session that has been quiet longest ended to make
-  room; where each of its sessions has a message in hand, the new one is
-  refused with 503. `sessions.idle` (default 1,800,000 ms, half an hour;
+  sessions one agent may have at once, and the most programs the executor
+  runs for it: the program of a session that has ended counts until it
+  has gone. An agent at its most that begins another has its own session
+  that has been quiet longest ended to make room, and the new one is
+  begun once that program has gone; where each of its sessions has a
+  message in hand, or no program goes in time, the new one is refused
+  with 503. `sessions.idle` (default 1,800,000 ms, half an hour;
   from a second to a day) is how long a session is kept after the agent's
   last message under it; the time does not run while a call is with the
   program, and an open GET stream does not keep a session. A request
   other than a call that the program does not answer within `timeout` is
-  answered 504.
+  answered 504, and the program is told that it is cancelled.
 - **Cancelling** is as on stdio: the agent's `notifications/cancelled` is
   written to the program under the executor's id for the call. Closing
   the connection does not cancel a call.
 
 What each program writes to its standard error goes to the executor's,
-among the executor's own log lines.
+among the executor's own log lines, in whole lines (a line of more than
+64 KiB is dropped).
 
 What it does not do: the program's credentials are not looked for in what
 it answers (as on stdio; the replacing described above is for the
 upstream's token); every session's program is given the same environment
 and folder, and the executor does not keep the programs from each other
-on the disk; and no session outlives the executor.
+on the disk; no session outlives the executor; and a call that asks for a
+task (`params.task`) is checked and receipted as any call, with the
+task's handle as its result, while the later requests for the task's
+result pass with no receipt (the same on every transport).
 
 `provared-mcp-executor init --http --demo` writes settings of this kind
 for the demonstration's made-up server (the tools `echo` and `add`, which
@@ -709,10 +749,17 @@ holds the settings for particular clients.
   arguments (`pointer`), or the length of the list there (`count`). A call
   whose amount cannot be read is refused, and so is one whose arguments
   name one member twice in one object, or two that differ only in capitals
-  (`total` and `TOTAL`): a server may read the other one. (A member
-  name given twice exactly is refused in every message; names that differ
-  only in capitals are refused only where a rule reads the amount from the
-  arguments.)
+  (`total` and `TOTAL`): a server may read the other one. A member name
+  given twice exactly is refused in every message. So is every message of
+  the agent's whose `params` hold, in one object at any depth, two names
+  that differ only in capitals; a `tools/call` that writes `name`,
+  `arguments` or `_meta` in other capitals; and a message with a member
+  at its top level other than `jsonrpc`, `id`, `method`, `params`,
+  `result` and `error`. The agent is answered with the error -32600 and
+  nothing is sent to the server. Why: a tool server whose JSON reader
+  ignores capitals takes `Method` for `method` and `Name` for `name`, so
+  such a message was one thing to the executor and another to that server
+  (DESIGN.md, X241). Versions up to 0.4.1 did not refuse them.
 - `contentRules`: optional; the path of a file of rules on the content of
   a change, tested before a call is let through (see "Rules on the content
   of a change" below). Its fingerprint is named in every receipt and
@@ -733,7 +780,14 @@ holds the settings for particular clients.
   true. Off, the stub names the identifier under `executor.call` alone.
 - `denialsPerHour`: the most denials written in any hour (default 600).
 - `shutdownWait`: how long the server is given to exit after its input is
-  closed before it is ended (default 5,000 milliseconds).
+  closed before it is ended (default 5,000 milliseconds). It is then sent
+  SIGTERM and, where it is still running after a second wait (the same
+  again, and at most 5 seconds), SIGKILL.
+- Each message is written to the server as one line under every way of
+  ending a line: a carriage return between its values becomes a space,
+  and U+0085, U+2028 and U+2029 in a text are written as their JSON
+  escapes, so that a server that ends a line at one of them reads one
+  message and not several (DESIGN.md, X248).
 - `maxWaiting`: the most tool calls in progress or waiting their turn at
   once (default 16; 1 to 1,000). A call past it is answered with error 1001
   and nothing is written. At most 256 `tools/list` requests may wait for

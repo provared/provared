@@ -130,6 +130,117 @@
   date. It shows only that the stub existed by the stamp's time: it catches
   forward dating, not back dating. No code changes.
 
+- **`provared-mcp-executor` 0.5.0 (not yet released): the findings of an
+  independent review of the local program, one of them a serious weakness
+  that every version up to 0.4.1 has.** What changes, in `mcp-executor/`
+  (`DESIGN.md`, section 10.2, X241 to X248):
+  - **Security: a message whose names differ only in capitals from the
+    ones the executor reads is refused (X241).** The executor reads member
+    names exactly. Some JSON readers do not: the standard JSON reader of
+    the Go language takes `Method` for `method` and `Name` for `name` in
+    the fields it knows, the later one winning. In front of a tool server
+    with such a reader, `{"method":"ping","Method":"tools/call", ...}` was
+    a ping to the executor, passed on with no check and no receipt, and a
+    tool call to the server; `{"name":"echo","Name":"order", ...}` was
+    checked and receipted as `echo`, and run as `order`. Who was exposed:
+    anyone who runs the executor, on any transport, in front of a tool
+    server whose JSON reader ignores capitals; a server that reads names
+    exactly (Node.js, Python) is not affected, and which MCP servers read
+    names that way was not checked. Now refused, with -32600 and nothing
+    sent on (`readMessage` in `jsonrpc.mjs`): a message with a member at
+    its top level other than `jsonrpc`, `id`, `method`, `params`, `result`
+    and `error`, from the agent or from the server; a message of the
+    agent's whose `params` hold, in one object at any depth, two names
+    that differ only in capitals (or in the long s, or the Kelvin sign);
+    a `tools/call` that writes `name`, `arguments` or `_meta` in other
+    capitals, a `notifications/cancelled` that writes `requestId` so, and
+    a `tools/call` whose `_meta` writes `red.prova/call-id` or
+    `traceparent` so. A server's answer with such a top-level member is
+    treated as any line that cannot be read; a filtered `tools/list`
+    shows no tool with a second name in other capitals and leaves out a
+    second list. **What changes for a caller:** arguments with two names
+    in one object that differ only in capitals are refused in every call,
+    with -32600 and no denial; before, they were refused with a denial,
+    and only where a rule read the amount or the content from the
+    arguments. `misspelt` is a new export of
+    `provared-mcp-executor/jsonrpc`. The same fix is on the branch for
+    0.4.2.
+  - **Security: one message, one line (X248).** A message written to a
+    program's standard input is made one line under every way of ending a
+    line, and stays the same JSON (`oneLine` in `jsonrpc.mjs`): a line
+    feed or a carriage return between its values becomes a space, and
+    U+0085, U+2028 and U+2029 in a text are written as their JSON
+    escapes. Before, over HTTP in front of a local program, a body with a
+    whole `tools/call` between two line feeds was one `ping` to the
+    executor and three lines to the program, the second a call that was
+    never checked; and a body set out over several lines was never
+    answered. That mode is not in any published version. On stdio, in
+    every published version, the same holds with carriage returns in
+    front of a server that ends a line at a bare carriage return (one
+    that reads with `node:readline`), and a text with U+2028 left a call
+    unanswered and recorded as "outcome not known". The demonstration's
+    made-up server (`demo/server.mjs`) now ends a line at a line feed
+    alone, where it read with `node:readline`.
+  - **A program that will not end (X242).** A program still running
+    `shutdownWait` after its input was closed is sent SIGTERM, and one
+    still running after a second wait (`shutdownWait` again, at most 5
+    seconds) is sent SIGKILL, on stdio and for each session's program.
+    Before, a program that took no notice of SIGTERM was never ended, and
+    the HTTP executor's stop never finished. The stop now always
+    finishes: it waits for the programs for the two waits and 2 seconds
+    more, and says in the log how many are still there
+    (`servers-not-ended`).
+  - **`sessions.max` bounds an agent's programs (X243).** The program of
+    an ended session counts until it has gone, and one whose `initialize`
+    is not answered counts too. An `initialize` that needs room now waits
+    until a program of the agent's has gone, and is refused with 503
+    where none goes in time. Before, 40 programs ran under a limit of 2.
+  - **A program that is not reading (X244).** Where more than 16 MiB
+    already wait to be written to a program, the next message is refused
+    with 503, not held, and the session is ended. Before, such messages
+    were held in memory without limit.
+  - **A program that writes without pause (X245).** One read of a
+    program's output is handled at a time; a line that goes nowhere is
+    logged at most once a second for each session and kind, with a
+    `count`; and a program that writes more than 1,000 messages that
+    answer nothing in flight in each of 5 seconds running has its session
+    ended (`server-flooding`). Before, one agent's program made another
+    agent wait seconds, and each dropped message cost a line of the log.
+  - **No program is started once the stop has begun (X246).** An
+    `initialize` whose body arrives then is answered 503. Before, it
+    started a program that outlived the executor.
+  - **Against the specification, revision 2025-11-25 (X247).** In front
+    of a local program, a request whose `MCP-Protocol-Version` names a
+    version the executor does not serve is refused with 400 (it serves
+    2025-11-25, 2025-06-18 and 2025-03-26, and the version a session's
+    program answered `initialize` with); a request's method sent with no
+    id is refused with 400, where it was answered 202, in front of a
+    local program and of an upstream; a notification or a response that
+    could not be written to the program is answered 503 or 502, not 202;
+    a request other than a call that the program has not answered at
+    `timeout` is cancelled for the program. Stated and not changed:
+    every message of a program goes on the session's GET stream, since
+    nothing says which request it belongs to; and calls that ask for a
+    task are checked and receipted as any call. The design, the README
+    and the recipe now say that this mode serves clients and programs
+    that speak 2025-11-25, and that revision 2026-07-28 is not yet
+    supported in it.
+  - **A program's standard error** is written on in whole lines, so that
+    it never runs into a line of the executor's own; a line of more than
+    64 KiB is dropped.
+  - **Four claims corrected:** "ended by force" (it was SIGTERM alone);
+    the programs beside `sessions.max` (they had no limit); "answered 202
+    once it is written" (202 was also the answer where it was not); and
+    a session's end "when the executor stops" (a late `initialize`
+    outlived it). Each is now true as written.
+  - **Tests.** `test/names.test.mjs` (6), `test/lines.test.mjs` (5) and
+    `test/http-local-faults.test.mjs` (23), with the made-up servers'
+    new ways of misbehaving. The ten faults that the review put into the
+    code and that passed every test are each caught now, and each fix
+    was undone once to see a test fail. Two of them, the SIGKILL on
+    stdio at the client's end and at the executor's stop, fail a test on
+    Linux only: on Windows the first signal already ends a program.
+
 - **`provared-mcp-executor` 0.5.0 (not yet released): over HTTP, the tool
   server may be a local program.** The HTTP executor could stand only in
   front of an upstream HTTP MCP server, so a tool server that is a program

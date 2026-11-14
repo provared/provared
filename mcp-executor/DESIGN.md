@@ -448,11 +448,21 @@ one. The executor starts **one program for each MCP session**, and a
 session is one agent's.
 
 The rules of the Streamable HTTP transport followed here are those of
-revision 2025-11-25, the one with sessions. Its text was not among the
-sources of section 3 and was not fetched for this step, which makes no
-request to an outside service: the rules are given below as the builder
-holds them, and each is to be checked against the published text. Where
-the choice is the plainest option and not the specification's, it says so.
+revision 2025-11-25, the one with sessions. **This mode serves clients and
+programs that speak 2025-11-25** (and the two revisions before it that
+have the same transport, 2025-06-18 and 2025-03-26). **Revision
+2026-07-28, which is published and drops sessions, is not yet supported
+here:** a client that speaks only that revision cannot use a local
+program, and a program that speaks only that revision, and so answers
+`initialize` with an error, cannot be served (X247). Its text was not
+among the sources of section 3 and was not fetched by the builder, who
+makes no request to an outside service: X232 to X240 give the rules as the
+builder held them. An independent review then read the published text on
+14 November 2026 (revision 2025-11-25: the pages on transports, lifecycle,
+cancellation and the base protocol; revision 2026-07-28: versioning and
+Streamable HTTP). It found X232 to X237 in agreement with the text but for
+six differences, which X247 lists with what was done about each. Where a
+choice is the plainest option and not the specification's, it says so.
 
 **X231. One upstream: `upstream` or `server`, never both.** The HTTP
 settings name either `upstream.url` (and its credential) or a `server`
@@ -483,16 +493,22 @@ it, other than the initialisation, with 400, and an ended session with
 404, after which the client begins a new one. The 400 for an `initialize`
 under a session is the plainest option. A request of the 2026-07-28
 revision, which has no sessions, is therefore refused in front of a local
-program: the executor serves the session era only there.
+program: the executor serves the session era only there, and a request
+whose `MCP-Protocol-Version` header names 2026-07-28 is refused with 400
+(X247).
 
 **X233. One answer to a request, and one stream for the program's own
 messages.** A request is answered with one JSON body, under the agent's
 id; the answer to `tools/list` is filtered as on stdio. A notification, or
 the agent's response to a request of the program's, is answered 202 once
-it is written to the program. The program's own requests and
+it is written to the program; one that is not written is answered with an
+error, never 202 (X247: 400 for a request's method sent with no id, which
+is not sent on; 503 where the program is not reading, X244; 502 where it
+has ended). The program's own requests and
 notifications go on the session's GET stream, as events with no id; where
 the agent has no stream open they are dropped, and the log says so
-(`server-message-dropped`). A session has one stream: a later GET takes
+(`server-message-dropped`, at most once a second for each session, with
+the count: X245). A session has one stream: a later GET takes
 the place of the earlier, which is ended. Nothing is replayed. A response
 of the program that answers nothing in flight (it came after a timeout or
 a cancellation) is dropped, and so is a line that cannot be read as a
@@ -503,16 +519,24 @@ stream, and a client takes both; a notification or a response with 202;
 the server may send its requests and notifications on the GET stream, and
 must not send a response there. One stream, no replay and the dropping
 are the plainest options: the specification lets a server keep several
-streams and replay, and requires neither.
+streams and replay, and requires neither. The specification also says
+that the messages on the GET stream should be unrelated to a request of
+the client's that is running, and puts those that belong to a request on
+that request's own answer, sent as a stream. Here every message of the
+program goes on the GET stream, whatever it belongs to: X247 says why.
 
 **X234. When a session ends, and how.** A session ends when the agent
 sends DELETE under it (answered 204); when its program ends by itself;
 when it has been idle (X235); when it makes room for a new one (X235);
 when the connection made through OAuth it was begun under ends; when a
-message names it under another connection than its own; and when the
-executor stops. However it ends, it is forgotten at once, its stream is
+message names it under another connection than its own; when its program
+is not reading (X244) or writes without pause (X245); and when the
+executor stops, after which no program is started (X246). However it
+ends, it is forgotten at once, its stream is
 closed, and its program's input is closed; a program that has not ended
-`shutdownWait` later is ended by force, as on stdio. A call still with the
+`shutdownWait` later is ended by force, as on stdio: it is sent SIGTERM,
+which a program may ignore, and after a second wait SIGKILL, which it
+cannot (X242). A call still with the
 program when the program ends is settled as on stdio, with the same text
 in its receipt ("The tool server ended before it answered this call…",
 `SERVER_ENDED`); at the executor's stop the calls are settled first, as
@@ -521,7 +545,8 @@ session begun under a connection belongs to it, so the next connection
 approved for the same agent (X201) must not carry it on; `oauth.mjs`
 tells the sessions of a connection's end (`watch`), and the check on each
 message stands behind that; while `watch` works the check is never
-reached, so no test fails without it. An access token's end does not end the
+reached through the executor, so it is tested on `local.mjs` alone
+(`test/http-local-faults.test.mjs`). An access token's end does not end the
 session: the next token of the same connection goes on with it. The
 specification lets a server end a session at any time; the rest is the
 plainest option. The one difference from X229 is stated: there, a call
@@ -531,12 +556,13 @@ ended, unless the program answers before it ends.
 
 **X235. The limits: `sessions.max` and `sessions.idle`.** An agent may
 have `sessions.max` sessions at once (8 unless the settings say otherwise;
-1 to 256), so the executor runs at most that many programs for each agent,
-and beside them, for at most `shutdownWait` each, those of sessions just
-ended. Where an agent at its most begins another, its own session that
-has been quiet longest, with no message in hand, is ended to make room;
-where each of them has a message in hand, the `initialize` is refused with
-503, and none is ended. Another agent's sessions are never counted and
+1 to 256), and the executor runs at most that many programs for each
+agent, the programs of sessions just ended, which have not gone yet, among
+them (X243). Where an agent at its most begins another, its own session
+that has been quiet longest, with no message in hand, is ended to make
+room, and the new session is begun once a program of the agent's has
+gone; where each of them has a message in hand, or no program goes in
+time, the `initialize` is refused with 503. Another agent's sessions are never counted and
 never ended. A session is ended once `sessions.idle` milliseconds have
 passed since the agent's last message under it (30 minutes unless the
 settings say otherwise; a second to a day); while a message is in hand,
@@ -561,8 +587,10 @@ executor's `timeout` the program is sent the cancellation, as on stdio.
 Closing the connection is not a cancellation (X111, the legacy rule): the
 call runs on, bounded by `timeout`, and its outcome is recorded. A request
 other than a call that the program has not answered within `timeout` is
-answered 504, and a later answer is dropped; `initialize` is such a
-request, and then no session is begun. Why: stdio's rules, with the one
+answered 504, the program is sent the cancellation for it under the
+executor's id (X247), and a later answer is dropped; `initialize` is such
+a request, is never cancelled, and then no session is begun and the
+program is ended. Why: stdio's rules, with the one
 addition that a request must end, since an HTTP request cannot wait for
 ever.
 
@@ -582,7 +610,11 @@ nowhere, since a program takes no headers. The programs are not kept from
 each other by the executor: each is given the same environment and the
 same folder, and what they share on the disk is theirs to keep apart.
 What each writes to its standard error goes to the executor's, among the
-executor's own log lines, with nothing to say which session wrote it.
+executor's own log lines, with nothing to say which session wrote it: in
+whole lines, each with its line feed, so that a line of a program's never
+runs into a line of the executor's own (a line of more than 64 KiB is
+dropped, and what a program writes with no line feed is written on when
+the program ends).
 Nothing of a session outlives the executor: after a restart every
 session id is unknown, and the client begins again. A restart still
 writes the receipt of a call that was with a program, from the agent's
@@ -598,6 +630,243 @@ made-up credential the made-up server asks for. Unlike `demo`, nothing is
 signed by a stand-in: the keys, the permission and the owner are set up as
 for any agent over HTTP. Why: so that the sign-in can be tried from a
 client with no tool server of anyone's behind it.
+
+### 10.2 After the review of the local program
+
+An independent review of section 10.1 as built found one serious weakness
+that every transport has, and that the published versions up to 0.4.1
+have too (X241); five things a program or an agent could do to the
+executor as a whole (X242 to X246); and where 10.1 differs from the
+published specification (X247). X248 came from a second review, of a tool
+server. The tests are `test/names.test.mjs`, `test/lines.test.mjs` and
+`test/http-local-faults.test.mjs`.
+
+**X241. A message is refused where a name in it differs only in capitals
+from one the executor reads.** Three rules, in `readMessage`
+(`jsonrpc.mjs`), the same on stdio, over HTTP in front of an upstream, and
+over HTTP in front of a local program:
+
+- At its top level a message has the members `jsonrpc`, `id`, `method`,
+  `params`, `result` and `error`, written exactly so, and no other. A
+  message with any other member is refused. This holds for the agent's
+  messages and for the server's.
+- The agent's `params` hold, in one object at any depth (so in
+  `arguments` and in `_meta` too), no two names that are one once folded,
+  as X8 folds them: capitals, the long s and `s`, the Kelvin sign and `k`.
+- In the `params` of a `tools/call` the names `name`, `arguments` and
+  `_meta`, and in those of a `notifications/cancelled` the name
+  `requestId`, are written exactly: a name that is one of them once
+  folded, and is not written so, is refused (`Arguments` with no
+  `arguments`). In the `_meta` of a `tools/call` the same holds for
+  `red.prova/call-id` and `traceparent` (`handleCall` in `executor.mjs`).
+
+The agent is answered with the error -32600 (over HTTP, with 400), as for
+a member name given twice, which the executor has refused from the start,
+and nothing is sent to the server. A message of the server's that the
+first rule refuses is treated as any line the executor cannot read: a
+call's receipt says the answer could not be read and names no result, and
+the line goes to the agent as it was. In a `tools/list` answer that the
+executor filters, a tool with a second name in other capitals is not
+shown, and a member that is `tools` once folded, and is not `tools`, is
+left out.
+
+Why: the review ran a tool that no rule names through a made-up server
+whose JSON reader takes member names without regard to capitals, the
+later one winning, as the standard JSON reader of the Go language does
+for the fields it knows. `{"method":"ping","Method":"tools/call", ...}`
+was a ping to the executor, passed on with no check and no receipt, and a
+tool call to that server. `{"name":"echo","Name":"order", ...}` was
+checked and receipted as `echo`, and run as `order`. Every version up to
+0.4.1 has this weakness where it stands in front of such a server; 0.4.2
+has the same fix. A server that reads names exactly, as the JSON readers
+of Node.js and Python do, is not affected. Which MCP servers read names
+without regard to capitals was not checked.
+
+No denial is written for such a message: it has two readings, and a
+denial would name a tool and an amount that may not be the ones meant.
+X8's refusal of such arguments, and the content rules' own, stay in the
+code for a caller of `amountOf` and `testCall`; through the executor they
+are no longer reached, since the message is refused before any rule is
+read.
+
+What this does not cover. Only capitals and the two letters above are
+folded: a reader that takes two names for one in another way (by leaving
+out `_` or `-`, or by a Unicode normal form) is not covered. Nothing is
+checked in the `result` or `error` of the agent's own answers to a
+server's requests, where the executor reads nothing. A lone name in the
+arguments in other capitals (`Total` where a rule reads `/total`) is not
+refused here: the amount is then not found and the call is refused (X8),
+and a content rule compares names exactly, as the README says. The cost:
+arguments that rightly hold two names that differ only in capitals in one
+object (`path` and `PATH`) can no longer be sent.
+
+The other ways. Refuse only at the top level and one level deep in a
+tool call's `params`, the review's smallest fix: not taken, since a
+server that folds names folds them at every depth of the arguments it
+reads into its own types. Or fold names in the executor and read as such
+a server would: not taken, since the executor would then differ from the
+servers that read names exactly.
+
+**X242. A program that will not end: SIGTERM, then SIGKILL, and a stop
+that always finishes.** A program still running `shutdownWait` after its
+input was closed is sent SIGTERM; one still running after a second wait is
+sent SIGKILL, which no program can ignore. The second wait is
+`shutdownWait` again, and at most 5 seconds (`KILL_WAIT`). The same on
+stdio (`executor.mjs`) and for each session's program (`local.mjs`). On
+Windows the first is already final. The executor's stop waits for the
+programs for the two waits and 2 seconds more (`CLOSE_MARGIN`); where one
+is still there, the log says how many (`servers-not-ended`) and the stop
+goes on: the server is closed, the writers finish, the OAuth state's last
+write is made and the locks are given up. Why: as built, a program that
+took no notice of SIGTERM ran on with its credentials after its session
+had ended, and the executor's stop then never finished (the review ran
+it on Linux). The order is the specification's for stdio: close the
+input, then SIGTERM, then SIGKILL. The second wait takes no setting of
+its own: the plainest option. A program that the system will not end even
+then is not ended by the executor.
+
+**X243. `sessions.max` bounds an agent's programs, not only its
+sessions.** An agent never has more than `sessions.max` programs running:
+those of its sessions, one whose `initialize` is not answered yet among
+them, and those of sessions that have ended and whose programs have not
+gone yet. Where an agent at its most begins another session, room is made
+as X235 says, and the `initialize` then waits until one of the agent's
+programs has gone; a session just begun, whose first message is not yet
+in hand, makes no room. Where no program goes within the two waits of
+X242 and 2 seconds more, the `initialize` is refused with 503. Why: as
+built, a session that made room was forgotten at once and its program ran
+on for up to `shutdownWait`, so one agent that sent `initialize` again
+and again had 40 programs running under a limit of 2 (the review ran it).
+The other way, the review's: refuse past twice the limit; not taken,
+since the settings' owner is told one number, and it should hold. The
+cost: an `initialize` that needs room takes as long as the program that
+makes it takes to end.
+
+**X244. What waits to be written to a program that is not reading is
+bounded.** Before a message is written to a program, the bytes already
+waiting for it are counted (`child.stdin.writableLength`). Where they are
+more than 16 MiB (`BACKLOG_LIMIT`, the bound X113 gives for an agent that
+is not reading), nothing is written, the session is ended and its program
+is ended by force at once, and the agent is answered 503: a request, a
+notification and a response alike. A tool call that could not be written
+is receipted as one that could not be sent. So the executor holds at most
+the bound and one message more for each session. Why: as built, a
+notification was answered 202 and held in memory without limit, and 30
+notifications of 8 MiB to a program that read nothing took the executor's
+memory from 99 to 367 MiB (the review ran it). The other way: hold the
+agent's request until the program reads again; not taken, since a
+program that far behind is not serving its session.
+
+**X245. A program that writes without pause.** Three things. One read of
+a program's output is handled at a time, and everything else that waits
+is taken before the next (`pause` and `setImmediate`), so that another
+agent's request is not held up. A line of a program that goes nowhere (a
+message of its own with no stream open, an answer to nothing in flight, a
+line that cannot be read or is too long) is logged at most once a second
+for each session and each kind, with the count since the last such line
+of the log. And a program that writes more than 1,000 messages that
+answer nothing in flight in each of 5 seconds running has its session
+ended and is ended by force at once (`FLOOD_PER_SECOND`, `FLOOD_SECONDS`;
+`server-flooding` in the log); a call that was with it is receipted as
+for any program that ends. Messages that reach an open stream are counted
+too: they cost the executor the same. Why: as built, 400,000
+notifications of one agent's program made another agent's `ping` wait
+4,457 ms on Windows, and the log gained 400,000 lines, 42 MiB (the review
+ran it). The numbers are the builder's: no source gives them. A program
+that writes a great deal for less than 5 seconds is not ended.
+
+**X246. No program is started once the stop has begun.** `close()` tells
+the sessions at once (`noMore`), and `begin` refuses from then on: an
+`initialize` whose body arrives after the stop began, or that was waiting
+for room (X243), is answered 503 and starts nothing. Why: as built, the
+one look at the stop came before the body was read, so such an
+`initialize` started a program after the stop had taken its list of
+programs, and that program outlived the executor (the review ran it).
+
+**X247. Where section 10.1 differs from the specification, revision
+2025-11-25, and what was done.** As the review read the text:
+
+1. *The protocol-version header.* "If the server receives a request with
+   an invalid or unsupported `MCP-Protocol-Version`, it MUST respond with
+   400 Bad Request." Followed. In front of a local program no one else
+   reads the header, so the executor answers for it: a request, of any
+   method, whose header names a version other than 2025-11-25, 2025-06-18
+   or 2025-03-26 (`LOCAL_VERSIONS`, the revisions with this transport and
+   sessions) is refused with 400 and starts nothing, unless the version is
+   the one its session's program answered `initialize` with. A request
+   with no such header is taken, as the specification allows. The last
+   exception is the builder's: a program that answers with an earlier
+   version, to a client that goes along with it, is still served. In
+   front of an upstream the header goes on to the upstream, which answers
+   for it, as before.
+2. *202 where the message was not accepted.* "If the server cannot accept
+   the input, it MUST return an HTTP error status code." Followed. A
+   request's method sent with no id is not sent on, as before, and is now
+   refused with 400, in front of a local program and of an upstream; a
+   notification or a response that could not be written to the program is
+   answered 503 (the program is not reading, X244) or 502 (it has ended).
+3. *Messages that belong to a request.* The text puts them on the answer
+   to that request, sent as a stream, and says the messages on the GET
+   stream should be unrelated to a request that is running. Not followed,
+   and it cannot be from here: a program on stdio writes its requests and
+   notifications on one output, and nothing in a request of the program's
+   says which request of the agent's it belongs to. So every message of
+   the program goes on the session's GET stream, the progress of a call
+   and a question a tool asks during it among them. A client must have
+   the stream open to be asked: where it is not, the question is dropped
+   and the call waits out `timeout`.
+4. *The timeout of a request other than a call.* "The sender SHOULD issue
+   a cancellation notification for that request." Followed: at `timeout`
+   the program is sent `notifications/cancelled` under the executor's id
+   for the request. `initialize` is not cancelled, as the specification
+   forbids; the program is ended.
+5. *Ending a program.* Close the input, then SIGTERM, then SIGKILL.
+   Followed: X242.
+6. *Not in this design:* calls that ask for a task (`params.task`,
+   `tasks/result`, `tasks/cancel`). Such a call is checked and receipted
+   as any call; its receipt's result is the task's handle, not the tool's
+   result, and the later requests for the result pass with no receipt.
+   The same on every transport.
+
+The 204 for a DELETE and the 400 for an `initialize` that names a session
+are the builder's: the text names no status for either.
+
+Revision 2026-07-28 is published and marked current. For Streamable HTTP
+it has no sessions, no GET stream and no DELETE, and no `initialize`:
+each request carries its version. Section 10.1 is the earlier way
+throughout, which that revision still allows a server to offer. In front
+of a local program revision 2026-07-28 is not yet supported: a client
+that speaks it and the earlier way falls back to `initialize` (read, not
+tried: the 400 it is given carries -32600); a client that speaks it alone
+cannot use a local program; and a program that speaks it alone, and so
+answers `initialize` with an error, cannot be served.
+
+**X248. One message, one line, under every way of ending a line.** A
+message the executor writes to a program's standard input, on stdio and
+for a session's program, is first made one line (`oneLine` in
+`jsonrpc.mjs`), and is still the same JSON: a line feed or a carriage
+return between its values becomes a space, and U+0085, U+2028 and U+2029
+in a text are written as the escapes `\u0085`, `\u2028` and `\u2029`.
+The demonstration's made-up server (`demo/server.mjs`) ends a line at a
+line feed alone, where it read with `node:readline` before. Why: a review
+of a tool server found that `node:readline` ends a line at a bare
+carriage return, U+2028 and U+2029 as well as at a line feed. Through the
+executor on stdio, a call with U+2028 in a text argument reached such a
+server as two lines, was not answered, and was recorded as "outcome not
+known". The builder then found two worse cases. On stdio, a message with
+a whole `tools/call` between two carriage returns, where JSON allows
+them, was one `ping` to the executor and, to such a server, three lines,
+the second a call the executor never checked. And over HTTP in front of a
+local program, a body may hold line feeds between its values, which were
+written to the program as they came: the same message, with line feeds,
+ran an unchecked call on any program that reads lines, and a body set out
+over several lines was never answered. Neither was in a published
+version's HTTP mode, which has no local program; the stdio case is in
+every published version, and in 0.4.2, in front of a server that ends a
+line at a bare carriage return. U+0085 is escaped as well because some
+line readers end a line there. The other way: refuse such messages; not
+taken, since each is valid JSON and a body over several lines is
+ordinary.
 
 ## 11. F-157: rules on the content of a change
 
@@ -883,7 +1152,8 @@ from the arguments, an object that names one member twice once folded
 (`total` and `TOTAL`; the long s and `s`; the Kelvin sign and `k`) gives
 no amount and the call is refused, as the gateway refuses such bodies.
 Why: a server written in a language whose JSON reader folds names could
-act on the other value. The other way: trust the exact names.
+act on the other value. The other way: trust the exact names. (Such
+arguments are now refused in every call, before any rule is read: X241.)
 
 **X9. The executor refuses to start unless the permission fits it.** The
 slip's `agent.keys` must be the keys the executor holds for the agent; the
