@@ -551,11 +551,15 @@ into the record.
 - That a `when` reads a value of another kind: a `matches` is met only by
   text, so a path given as a list does not match and the rule does not
   apply (X77).
-- That a member is named as the program reads it: names in the content
-  are compared exactly, so a lone `SCAN` passes an `absent` or `orAbsent`
-  test on `/scan` (X77).
-- That content nested in content is read: `as: "json"` reads one layer,
-  so JSON text inside a JSON string is a string to the rule (X77).
+- That a member is named as the program reads it, beyond the way to the
+  pointers a rule reads: on that way a name in other capitals is refused
+  as unreadable (X249, from 0.4.2; before, a lone `SCAN` passed an
+  `absent` or `orAbsent` test on `/scan`, X77); elsewhere the rule does
+  not see it.
+- That content nested in content is read: `as: "json"` reads one layer.
+  JSON text where the rule's pointer walks on is refused as unreadable
+  (X249, from 0.4.2); JSON text in a member the rule does not walk
+  through is a string to the rule (X77).
 - Anything about a call to a tool the rule does not name, or a tool whose
   arguments are not plain data.
 - That the rules were right, or were applied. The record holds the
