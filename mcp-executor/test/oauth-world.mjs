@@ -37,11 +37,18 @@ export function freePort() {
 
 /** A server of client metadata documents: GET /client is the document; "mode" makes it fail in one way. */
 export async function startDocuments() {
-  const d = { mode: 'ok', hits: 0, extra: {}, cache: null };
-  const server = http.createServer((req, res) => {
+  const d = { mode: 'ok', hits: 0, extra: {}, cache: null, delay: 0 };
+  const server = http.createServer(async (req, res) => {
     d.hits += 1;
     const id = `${d.base}${req.url}`;
+    // "delay": the answer comes this many milliseconds late, so that requests made together overlap.
+    if (d.delay) await new Promise((done) => setTimeout(done, d.delay));
     if (d.mode === 'down') return res.destroy();
+    // "gone": the client has withdrawn its document; "fault": its server says the fault is its own.
+    if (d.mode === 'gone' || d.mode === 'fault') {
+      res.writeHead(d.mode === 'gone' ? 404 : 503);
+      return res.end();
+    }
     if (d.mode === 'redirect') {
       res.writeHead(302, { location: `${d.base}/elsewhere` });
       return res.end();
@@ -146,14 +153,14 @@ export async function discover(w) {
   return { resource: prm.resource, prm, server, challenge: first.headers.get('www-authenticate') };
 }
 
-/** The owner's page for a request: {status, request (its id), page}. */
+/** The owner's page for a request: {status, request (the form's request field, under the executor's seal), page}. */
 export async function ask(w, url) {
   const r = await send('GET', url);
   const m = /name="request" value="([^"]+)"/.exec(r.body);
   return { ...r, request: m?.[1] };
 }
 
-/** The owner's answer on the page: the 303, and the parameters it sends the browser back with. "fields" are the owner's check's. */
+/** The owner's answer on the page: the 303, and the parameters it sends the browser back with. "fields" are the owner's check's; "origin" is what a browser would send, which the tests of the page's own headers show to be the issuer. */
 export async function answer(w, id, { owner = OWNER_WORD, agent = 'conn', decision = 'approve', origin = w.issuer, fields = { owner } } = {}) {
   const r = await send('POST', `${w.issuer}/oauth/authorize`, { headers: { 'content-type': 'application/x-www-form-urlencoded', ...(origin ? { origin } : {}) }, body: new URLSearchParams({ request: id, agent, decision, ...fields }).toString() });
   const back = r.headers.location ? new URL(r.headers.location) : null;

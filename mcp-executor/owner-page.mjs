@@ -10,13 +10,15 @@
 
 import { createCryptoCore } from './lib/crypto-core/index.js';
 import * as id from './lib/identity/index.js';
-import { NAMESPACE, RP_NAME, setUp, signIn, userName, FIELD_CHALLENGE, FIELD_SIGNATURE } from './steps.js';
+import { NAMESPACE, RP_NAME, ON_DEVICE, ELSEWHERE, ELSEWHERE_AFTER, setUp, signIn, userName, FIELD_CHALLENGE, FIELD_SIGNATURE } from './steps.js';
 
 const cc = createCryptoCore({ namespace: NAMESPACE });
 const webauthn = id.createWebAuthn({ rpName: RP_NAME });
 const passkey = {
-  create: () => webauthn.createPasskeyWithPrf(userName(location.host)),
-  evaluate: (credentialId, prfSalt) => webauthn.evaluatePrf(credentialId, prfSalt),
+  // On the device itself, or on a phone or a security key (X230): the package's own two attachments.
+  create: (attachment) => webauthn.createPasskeyWithPrf(userName(location.host), { attachment }),
+  // The transports the passkey was made with tell the browser where to ask for it.
+  evaluate: (credentialId, prfSalt, transports) => webauthn.evaluatePrf(credentialId, prfSalt, transports),
 };
 
 /** POST a JSON value to one of the executor's own addresses; its JSON answer, or an Error with its message. */
@@ -44,20 +46,29 @@ if (setupButton) {
   const code = location.hash.slice(1);
   history.replaceState(null, '', location.pathname);
   if (code === '') say('This page needs the link the command printed, with its code after the #.');
-  setupButton.addEventListener('click', async () => {
-    setupButton.disabled = true;
-    say('Making the passkey…');
+  // The second button is shown only once the passkey on this device has failed in a way that a phone or a security key may not (X230).
+  const elsewhereButton = document.getElementById('owner-setup-elsewhere');
+  const buttons = [setupButton, elsewhereButton].filter(Boolean);
+  const make = async (attachment) => {
+    for (const b of buttons) b.disabled = true;
+    say(attachment === ELSEWHERE ? 'Waiting for the phone or the security key…' : 'Making the passkey…');
     try {
-      const { recoveryCode } = await setUp({ cc, id, passkey, code, send });
+      const { recoveryCode } = await setUp({ cc, id, passkey, code, send, attachment });
       const shown = document.getElementById('owner-recovery');
       shown.textContent = recoveryCode;
       shown.hidden = false;
       say('The owner is set up. Write the recovery code down now: it is shown once, and it is the only way in if the passkey is lost or the executor\'s address changes.');
     } catch (e) {
-      setupButton.disabled = false;
+      for (const b of buttons) b.disabled = false;
       problem(e);
+      if (attachment === ON_DEVICE && elsewhereButton && ELSEWHERE_AFTER.includes(e?.code)) {
+        elsewhereButton.hidden = false;
+        say(`Not done: ${e.message}. Nothing was set up. The passkey may be kept on a phone or a security key instead: press the second button.`);
+      }
     }
-  });
+  };
+  setupButton.addEventListener('click', () => make(ON_DEVICE));
+  if (elsewhereButton) elsewhereButton.addEventListener('click', () => make(ELSEWHERE));
 }
 
 // The authorisation page: "Approve" first proves the owner, then sends the form.
@@ -72,6 +83,8 @@ if (form && form.elements[FIELD_CHALLENGE]) {
     try {
       const recoveryCode = document.getElementById('owner-recovery-code')?.value ?? '';
       const fields = await signIn({ cc, id, passkey, recoveryCode, request: form.elements.request.value, origin: location.origin, send });
+      // The request comes back with its challenge sealed in, and takes the place of the one the form had (X221).
+      form.elements.request.value = fields.request;
       form.elements[FIELD_CHALLENGE].value = fields[FIELD_CHALLENGE];
       form.elements[FIELD_SIGNATURE].value = fields[FIELD_SIGNATURE];
       proved = true;

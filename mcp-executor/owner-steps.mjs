@@ -30,18 +30,28 @@ export const RP_NAME = 'provared-mcp-executor';
 export const userName = (host) => `Owner of ${host}`;
 
 /**
+ * Where a passkey is made (X230): on the device itself, the package's
+ * default, or on a phone or a security key. The second is offered where the
+ * first fails with one of the package's codes in ELSEWHERE_AFTER: the device
+ * gives no PRF, or its prompt was closed or refused.
+ */
+export const ON_DEVICE = 'platform';
+export const ELSEWHERE = 'cross-platform';
+export const ELSEWHERE_AFTER = ['prf-unsupported', 'not-allowed'];
+
+/**
  * Make the owner: a new identity, its root key wrapped by the passkey's PRF
  * output and by a new recovery code, and the public half and the two
  * wrapped copies sent to the executor (X219). Gives {recoveryCode}, to be
  * shown once.
  *
- * passkey.create() -> {credentialId, prfSalt, prfOutput32}
+ * passkey.create(attachment) -> {credentialId, prfSalt, prfOutput32, transports}
  * send(path, value) -> the executor's JSON answer, or throws
  */
-export async function setUp({ cc, id, passkey, code, send }) {
+export async function setUp({ cc, id, passkey, code, send, attachment = ON_DEVICE }) {
   // First whether the link still works, so that no passkey is made for a setup the executor would refuse.
   await send(LINK_PATH, { code });
-  const made = await passkey.create();
+  const made = await passkey.create(attachment);
   const identity = await id.createIdentity(cc);
   const byPasskey = await id.wrapRootKeyWithPrf(cc, identity.rootKey, made.prfOutput32, made.credentialId, made.prfSalt);
   const { method: byCode, displayString } = await id.wrapRootKeyWithNewRecoveryCode(cc, identity.rootKey);
@@ -49,7 +59,8 @@ export async function setUp({ cc, id, passkey, code, send }) {
   await send(SETUP_PATH, {
     code,
     routingPublicKey: b(identity.routing.publicKeyRaw),
-    passkey: { credentialId: b(byPasskey.credentialId), prfSalt: b(byPasskey.prfSalt), wrappedRootKey: b(byPasskey.wrappedRootKey) },
+    // The transports say where the passkey is kept; they go back to the browser at each unlock, so that it asks in the right place (X230).
+    passkey: { credentialId: b(byPasskey.credentialId), prfSalt: b(byPasskey.prfSalt), wrappedRootKey: b(byPasskey.wrappedRootKey), transports: [...(made.transports ?? [])] },
     recovery: { salt: b(byCode.salt), lookupHash: byCode.lookupHash, wrappedRootKey: b(byCode.wrappedRootKey) },
   });
   return { recoveryCode: displayString };
@@ -59,9 +70,11 @@ export async function setUp({ cc, id, passkey, code, send }) {
  * Prove the owner at the authorisation page: open the root key with the
  * passkey's PRF output, or with the recovery code where one is given, then
  * sign the executor's challenge for this request with the routing key
- * (X221, X222). Gives the two fields the page sends.
+ * (X221, X222). "request" is the form's request field. Gives the fields the
+ * page puts in the form: the request with its challenge sealed in, in place
+ * of the one it had, and the check's two.
  *
- * passkey.evaluate(credentialId, prfSalt) -> {prfOutput32}
+ * passkey.evaluate(credentialId, prfSalt, transports) -> {prfOutput32}
  */
 export async function signIn({ cc, id, passkey, recoveryCode = '', request, origin, send }) {
   const f = cc.fromBase64Url;
@@ -73,12 +86,12 @@ export async function signIn({ cc, id, passkey, recoveryCode = '', request, orig
   } else {
     const m = await send(PASSKEY_PATH, {});
     const method = { type: id.METHOD_PASSKEY, label: null, wrappedRootKey: f(m.wrappedRootKey), credentialId: f(m.credentialId), prfSalt: f(m.prfSalt) };
-    const { prfOutput32 } = await passkey.evaluate(method.credentialId, method.prfSalt);
+    const { prfOutput32 } = await passkey.evaluate(method.credentialId, method.prfSalt, Array.isArray(m.transports) ? m.transports : []);
     rootKey = await id.unwrapRootKeyWithPrf(cc, method, prfOutput32);
   }
   const identity = await id.identityFromRootKey(cc, rootKey);
   // The challenge is asked for last, so that its two minutes are not spent at the passkey.
-  const { challenge } = await send(CHALLENGE_PATH, { request });
+  const { challenge, request: withChallenge } = await send(CHALLENGE_PATH, { request });
   const signature = await cc.signBytes(identity.routing.privateKey, await id.authMessage(cc, origin, f(challenge)));
-  return { [FIELD_CHALLENGE]: challenge, [FIELD_SIGNATURE]: cc.toBase64Url(signature) };
+  return { request: withChallenge, [FIELD_CHALLENGE]: challenge, [FIELD_SIGNATURE]: cc.toBase64Url(signature) };
 }

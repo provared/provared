@@ -357,8 +357,8 @@ export async function openHttpExecutor(config, more = {}) {
   const credential = offline ? null : readUpstreamCredential(settings);
   if (credential && credential.token.length < 16) warnings.push('upstream.credential: the token is shorter than 16 characters, so any text of the upstream\'s that happens to hold it is replaced on its way to an agent.');
   const admin = settings.admin ? Buffer.from(settings.admin.secretHash) : null;
-  // The OAuth front door (oauth.mjs), where the settings name "oauth": its state file is read now, before any lock is taken. "ownerCheck" is the owner's check at its page: left out (as the command "http" leaves it), the one by the owner's passkey (owner.mjs); null, none.
-  const door = settings.oauth && !offline ? openFrontDoor({ settings, now, log, ownerCheck: more.ownerCheck }) : null;
+  // The OAuth front door (oauth.mjs), where the settings name "oauth": opened below, once every agent's lock is held.
+  let door = null;
   const agents = new Map();
   /** Give up every lock taken so far: at close, and where the opening fails part-way. */
   const releases = [];
@@ -379,6 +379,8 @@ export async function openHttpExecutor(config, more = {}) {
       agent.sessions = new Set();
       agents.set(name, agent);
     }
+    // The front door's state file is read only now, with the locks held: the command "owner" works on it under the same locks, so what it wrote is what is read, and nothing it writes later is undone. "ownerCheck" is the owner's check at its page: left out (as the command "http" leaves it), the one by the owner's passkey (owner.mjs); null, none.
+    if (settings.oauth && !offline) door = openFrontDoor({ settings, now, log, ownerCheck: more.ownerCheck });
   } catch (e) {
     await releaseAll();
     throw e;
@@ -467,12 +469,14 @@ export async function openHttpExecutor(config, more = {}) {
     agent.sessions.delete(id);
   };
 
+  /** Who a bearer secret signs in: {agent, token}, where "token" is null for an agent's own secret and {connection, expires} for an access token; or null. */
   const signedIn = (header) => {
     const given = Buffer.from(secretHash(header));
-    for (const agent of agents.values()) if (agent.hash && given.length === agent.hash.length && timingSafeEqual(given, agent.hash)) return agent;
+    for (const agent of agents.values()) if (agent.hash && given.length === agent.hash.length && timingSafeEqual(given, agent.hash)) return { agent, token: null };
     // Else an access token the front door issued, for one agent marked "oauth".
-    const name = door?.agentFor(header);
-    return name ? (agents.get(name) ?? null) : null;
+    const token = door?.agentFor(header) ?? null;
+    const agent = token ? agents.get(token.agent) : null;
+    return agent ? { agent, token } : null;
   };
   /** The bearer secret of a request: exactly one Authorization header, "Bearer <secret>". */
   const bearer = (req) => {
@@ -976,7 +980,8 @@ export async function openHttpExecutor(config, more = {}) {
     }
     // Who is calling: the agent's own secret, in the one Authorization header. The secret itself is never logged.
     const secret = bearer(req);
-    const agent = secret ? signedIn(secret) : null;
+    const who = secret ? signedIn(secret) : null;
+    const agent = who?.agent ?? null;
     if (!agent) {
       log({ event: 'not-signed-in' });
       // With OAuth, the challenge names the resource's metadata, where a client learns how to sign in (RFC 9728).
@@ -998,7 +1003,7 @@ export async function openHttpExecutor(config, more = {}) {
       return refuse(res, 503, null, CODES.notRecorded, `This agent already has ${MAX_OPEN} requests in flight, the most it may have. Try again when one has ended.`, { connection: 'close' });
     }
     agent.open += 1;
-    const ctx = { req, res, agent, upstream: null, streaming: false, finalEvent: null };
+    const ctx = { req, res, agent, token: who.token, upstream: null, streaming: false, finalEvent: null };
     try {
       await one(ctx, sessionIds[0]);
     } finally {
@@ -1015,7 +1020,26 @@ export async function openHttpExecutor(config, more = {}) {
       if (h.dropped.length) agent.log({ event: 'headers-dropped', headers: h.dropped });
       const ex = exchange(ctx, { method: req.method, headers: h.headers, kind: req.method === 'GET' ? 'stream' : 'other' });
       res.on('close', () => ex.cancel());
-      await ex.end;
+      // A token is checked when its request arrives, and a stream has no end of its own. So a stream opened with an access token is ended when the token expires and when its connection ends, and no longer holds one of the agent's places (X229). A call already taken is not cut: it ends within the timeout, with its receipt.
+      let release = null;
+      let expiry = null;
+      if (req.method === 'GET' && ctx.token) {
+        const endStream = (why) => {
+          agent.log({ event: 'stream-ended', why });
+          ex.cancel();
+          if (!res.headersSent) refuse(res, 401, null, CODES.invalidRequest, 'The access token this stream was opened with has ended. Sign in again.', { 'www-authenticate': door.challenge(true) });
+          else if (!res.writableEnded && !res.destroyed) res.end();
+        };
+        release = door.hold(ctx.token.connection, () => endStream('connection-ended'));
+        expiry = setTimeout(() => endStream('token-expired'), Math.max(0, ctx.token.expires - now()));
+        expiry.unref();
+      }
+      try {
+        await ex.end;
+      } finally {
+        release?.();
+        if (expiry) clearTimeout(expiry);
+      }
       if (req.method === 'DELETE' && sessionId && res.statusCode < 300) forgetSession(sessionId, agent);
       return;
     }

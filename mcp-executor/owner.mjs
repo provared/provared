@@ -21,6 +21,11 @@
 //   POST /oauth/owner/passkey          the passkey's wrapped copy (X220)
 //   POST /oauth/owner/recovery         the recovery code's wrapped copy, by its lookup hash (X220)
 //   POST /oauth/owner/challenge        a challenge for one request at the page (X221)
+//
+// No failed attempt is counted here (X211): the setup link's code, the
+// recovery code and the challenge are 128 or 256 random bits, and the answer
+// is a signature, so none can be guessed, and a count could only shut the
+// owner out.
 
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
@@ -35,14 +40,15 @@ export { NAMESPACE, OWNER_PATH };
 /** How long a setup link and a challenge last, in milliseconds (X218, X221). */
 export const SETUP_LIFE = 15 * 60 * 1000;
 export const CHALLENGE_LIFE = 2 * 60 * 1000;
-/** The most challenges kept at once; past it the oldest goes. */
-export const MAX_CHALLENGES = 1000;
 const BODY_LIMIT = 16 * 1024;
 const BODY_TIME = 10 * 1000;
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const B64URL = /^[A-Za-z0-9_-]*$/;
 const LOOKUP = /^[0-9a-f]{64}$/;
+/** One of a passkey's transports, as WebAuthn names them ("internal", "hybrid", "usb", …); at most this many are kept (X230). */
+const TRANSPORT = /^[a-z0-9-]{1,32}$/;
+const MAX_TRANSPORTS = 8;
 const isObject = (v) => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /** The bytes a base64url text stands for, where it is written as the executor writes it and its length is within [least, most]; else null. */
@@ -59,16 +65,21 @@ const only = (v, keys) => isObject(v) && Object.keys(v).length === keys.length &
 /**
  * The owner as the executor keeps it, or {problem} (X219): the routing
  * public key, and the two unlock methods as the package makes them, in
- * base64url (the lookup hash in the package's hexadecimal).
+ * base64url (the lookup hash in the package's hexadecimal). With the
+ * passkey, where the browser gave them, its transports: where the passkey
+ * is kept, which the browser is told again at each unlock (X230). An owner
+ * written without them reads as having none.
  */
 export function readOwner(v) {
   if (!only(v, ['routingPublicKey', 'passkey', 'recovery'])) return { problem: 'the owner is not {routingPublicKey, passkey, recovery}' };
   if (!bytesOf(v.routingPublicKey, 32)) return { problem: 'routingPublicKey is not 32 bytes in base64url' };
   const p = v.passkey;
-  if (!only(p, ['credentialId', 'prfSalt', 'wrappedRootKey'])) return { problem: 'passkey is not {credentialId, prfSalt, wrappedRootKey}' };
+  if (!only(p, ['credentialId', 'prfSalt', 'wrappedRootKey']) && !only(p, ['credentialId', 'prfSalt', 'wrappedRootKey', 'transports'])) return { problem: 'passkey is not {credentialId, prfSalt, wrappedRootKey} with, where there are any, transports' };
   if (!bytesOf(p.credentialId, 1, 1023)) return { problem: 'passkey.credentialId is not 1 to 1023 bytes in base64url' };
   if (!bytesOf(p.prfSalt, 32)) return { problem: 'passkey.prfSalt is not 32 bytes in base64url' };
   if (!bytesOf(p.wrappedRootKey, 1, 1024)) return { problem: 'passkey.wrappedRootKey is not 1 to 1024 bytes in base64url' };
+  const transports = p.transports ?? [];
+  if (!Array.isArray(transports) || transports.length > MAX_TRANSPORTS || !transports.every((t) => typeof t === 'string' && TRANSPORT.test(t))) return { problem: `passkey.transports is not a list of at most ${MAX_TRANSPORTS} names of transports` };
   const r = v.recovery;
   if (!only(r, ['salt', 'lookupHash', 'wrappedRootKey'])) return { problem: 'recovery is not {salt, lookupHash, wrappedRootKey}' };
   if (!bytesOf(r.salt, 16)) return { problem: 'recovery.salt is not 16 bytes in base64url' };
@@ -77,7 +88,7 @@ export function readOwner(v) {
   return {
     owner: {
       routingPublicKey: v.routingPublicKey,
-      passkey: { credentialId: p.credentialId, prfSalt: p.prfSalt, wrappedRootKey: p.wrappedRootKey },
+      passkey: { credentialId: p.credentialId, prfSalt: p.prfSalt, wrappedRootKey: p.wrappedRootKey, transports: [...transports] },
       recovery: { salt: r.salt, lookupHash: r.lookupHash, wrappedRootKey: r.wrappedRootKey },
     },
   };
@@ -149,20 +160,24 @@ export const cryptoCore = () => (core ??= createCryptoCore({ namespace: NAMESPAC
  *
  * issuer     the executor's public address: the origin bound into every signature
  * store      {owner() -> the owner or null, setup() -> {hash, expires} or null, setOwner(owner)}: the front door's state file
- * failures   the front door's count of failed attempts at the owner's check (X211)
- * isRequest  whether an id names a request waiting at the page
+ * withNote   (request, note) -> the same waiting request with the note sealed into it, as the text for the page's form; null where the text is not a request waiting at the page (X228)
  * page, json the front door's ways to answer with a page and with JSON
  * hashOf     SHA-256 in base64url, as the front door keeps its hashes
  */
-export function openPasskeyCheck({ issuer, now = Date.now, log = () => {}, store, failures, isRequest, page, json, hashOf }) {
+export function openPasskeyCheck({ issuer, now = Date.now, log = () => {}, store, withNote, page, json, hashOf }) {
   const cc = cryptoCore();
   const files = pageFiles();
   const host = new URL(issuer).host;
-  /** The challenges given out, by their text: {request, expires}; each is taken out at its first use (X221). */
-  const challenges = new Map();
+  /**
+   * A challenge is not kept here: it is sealed into its request, in the
+   * page's form (X221). Kept here, until they end, are only the challenges
+   * whose signature passed, so that none passes twice. Only the owner can
+   * add to them, so they need no cap.
+   */
+  const used = new Map();
   const tidy = () => {
     const t = now();
-    for (const [k, c] of challenges) if (c.expires <= t) challenges.delete(k);
+    for (const [k, expires] of used) if (expires <= t) used.delete(k);
   };
   const refuse = (res, status, code, message, extra = {}) => {
     log({ event: 'oauth-refused', code });
@@ -173,6 +188,8 @@ export function openPasskeyCheck({ issuer, now = Date.now, log = () => {}, store
     `<p>This page makes the owner of the executor at ${host}: a key that never leaves this browser, a passkey that opens it, and a recovery code that opens it too. The executor keeps only the key's public half and the two locked copies.</p>`,
     `<p>The passkey belongs to ${host}. If the executor's public address changes, the passkey no longer opens the key, and only the recovery code does.</p>`,
     '<p><button type="button" id="owner-setup">Make the passkey</button></p>',
+    // Shown by the page's script where the passkey on this device could not be used (X230).
+    '<p><button type="button" id="owner-setup-elsewhere" hidden>Use a passkey on a phone or a security key</button></p>',
     '<p id="owner-status" role="status"></p>',
     '<pre id="owner-recovery" hidden></pre>',
     `<script type="module" src="${OWNER_PATH}/page.js"></script>`,
@@ -190,7 +207,6 @@ export function openPasskeyCheck({ issuer, now = Date.now, log = () => {}, store
       return true;
     }
     if (!isObject(v) || typeof v.code !== 'string' || !sameText(hashOf(v.code), setup.hash)) {
-      failures.failed();
       refuse(res, 403, 'setup-refused', 'This is not the code of the setup link.');
       return true;
     }
@@ -211,7 +227,12 @@ export function openPasskeyCheck({ issuer, now = Date.now, log = () => {}, store
     delete rest.code;
     const read = readOwner(rest);
     if (read.problem) return refuse(res, 400, 'bad-request', `The owner is not in the form the page sends: ${read.problem}.`);
-    store.setOwner({ ...read.owner, created: now() });
+    try {
+      store.setOwner({ ...read.owner, created: now() });
+    } catch {
+      // The state file could not be written: there is no owner, and the link still works.
+      return refuse(res, 500, 'not-written', 'The executor could not write its state, so no owner was set up. The link still works: try again.');
+    }
     log({ event: 'owner-set' });
     json(res, 200, { owner: 'set' });
   }
@@ -226,18 +247,14 @@ export function openPasskeyCheck({ issuer, now = Date.now, log = () => {}, store
     }
     if (path === RECOVERY_PATH) {
       if (!only(v, ['lookupHash']) || typeof v.lookupHash !== 'string' || !LOOKUP.test(v.lookupHash)) return refuse(res, 400, 'bad-request', 'Send {"lookupHash": "<64 hexadecimal digits>"}.');
-      if (!sameText(v.lookupHash, owner.recovery.lookupHash)) {
-        failures.failed();
-        return refuse(res, 404, 'not-found', 'That recovery code is not the owner\'s.');
-      }
+      if (!sameText(v.lookupHash, owner.recovery.lookupHash)) return refuse(res, 404, 'not-found', 'That recovery code is not the owner\'s.');
       return json(res, 200, owner.recovery);
     }
-    if (!only(v, ['request']) || typeof v.request !== 'string' || !isRequest(v.request)) return refuse(res, 400, 'bad-request', 'Send {"request": "<the id of a request waiting at the page>"}.');
-    tidy();
-    if (challenges.size >= MAX_CHALLENGES) challenges.delete(challenges.keys().next().value);
+    // The challenge: sealed into the request it is for, which the page puts in its form in place of the one it had. A request so has one challenge, and a new one takes the old one's place; nothing is kept here (X221).
     const challenge = randomBytes(32).toString('base64url');
-    challenges.set(challenge, { request: v.request, expires: now() + CHALLENGE_LIFE });
-    return json(res, 200, { challenge });
+    const request = only(v, ['request']) && typeof v.request === 'string' ? withNote(v.request, { challenge, expires: now() + CHALLENGE_LIFE }) : null;
+    if (request === null) return refuse(res, 400, 'bad-request', 'Send {"request": "<the request of a page waiting for the owner, as its form holds it>"}.');
+    return json(res, 200, { challenge, request });
   }
 
   return {
@@ -252,17 +269,25 @@ export function openPasskeyCheck({ issuer, now = Date.now, log = () => {}, store
         '<p id="owner-status" role="status"></p>',
         `<script type="module" src="${OWNER_PATH}/page.js"></script>`,
       ].join('\n'),
-    /** The signature over this executor's own challenge for this request, by the owner's routing key, with the issuer as the origin (X222). */
-    async check(fields, { request, origin }) {
+    /**
+     * The signature over this executor's own challenge for this request, by
+     * the owner's routing key, with the issuer as the origin (X222). "note"
+     * is what the request's seal holds of the check's: its one challenge and
+     * when that ends. The signature is checked before anything is counted or
+     * kept, and a challenge passes once.
+     */
+    async check(fields, { origin, note }) {
+      tidy();
       const text = fields.get(FIELD_CHALLENGE) ?? '';
-      const given = challenges.get(text);
-      challenges.delete(text);
-      if (!given || given.expires <= now() || given.request !== request) return false;
+      if (!isObject(note) || typeof note.challenge !== 'string' || !sameText(text, note.challenge) || !(note.expires > now()) || used.has(text)) return false;
       const owner = store.owner();
       const nonce = bytesOf(text, 32);
       const signature = bytesOf(fields.get(FIELD_SIGNATURE) ?? '', 64);
       if (!owner || !nonce || !signature) return false;
-      return (await verifyAuthSignature(cc, bytesOf(owner.routingPublicKey, 32), origin, nonce, signature)) === true;
+      if ((await verifyAuthSignature(cc, bytesOf(owner.routingPublicKey, 32), origin, nonce, signature)) !== true) return false;
+      if (used.has(text)) return false;
+      used.set(text, note.expires);
+      return true;
     },
     owns: (path) => path === OWNER_PATH || path.startsWith(`${OWNER_PATH}/`),
     async take(req, res, path) {
@@ -282,10 +307,6 @@ export function openPasskeyCheck({ issuer, now = Date.now, log = () => {}, store
       if (req.headers.origin !== issuer) {
         req.resume();
         return refuse(res, 403, 'origin-refused', 'Only the executor\'s own pages may send this.');
-      }
-      if (failures.locked()) {
-        req.resume();
-        return refuse(res, 429, 'too-many-attempts', 'Too many failed attempts. Wait, then begin again.', { 'retry-after': String(failures.retryAfter()) });
       }
       const v = await readJson(req);
       if (v === undefined) return refuse(res, 400, 'bad-request', 'The body must be JSON (application/json), at most 16 KiB.');

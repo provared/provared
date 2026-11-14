@@ -15,7 +15,7 @@ import { test } from 'node:test';
 const { checkBook } = await import('provared');
 const { httpWorld, call, request } = await import('./http-world.mjs');
 const { readHttpSettings } = await import('../http.mjs');
-const { ACCESS_LIFE, CODE_LIFE, DOCUMENT_KEPT, OWNER_FAILURES, TOKEN_FAILURES, OAUTH_TIMEOUT } = await import('../oauth.mjs');
+const { ACCESS_LIFE, CODE_LIFE, DOCUMENT_KEPT, DOCUMENT_RETRY, OAUTH_TIMEOUT } = await import('../oauth.mjs');
 const { CALLBACK, oauthWorld, reopen, send, json, pkce, authorizeUrl, discover, ask, answer, token, connect, bearer } = await import('./oauth-world.mjs');
 
 test('the whole flow: discovery, the owner\'s page, the code, the tokens, a tool call receipted in the connection\'s own book, a refresh; an agent with a secret works as before', async () => {
@@ -207,34 +207,15 @@ test('an access token serves only its own resource, client and agent, and only w
 
     // Approved again for the same agent: the earlier connection ends.
     const c2 = await connect(w);
-    assert.equal((await call(w, bearer(r.access_token), 'echo', {})).status, 401);
-    assert.equal((await call(w, bearer(c2.access), 'echo', {})).status, 200);
+    const c3 = await connect(w);
+    assert.equal((await call(w, bearer(c2.access), 'echo', {})).status, 401);
+    assert.equal((await call(w, bearer(c3.access), 'echo', {})).status, 200);
+    assert.ok(w.logs.some((e) => e.event === 'oauth-revoked' && e.why === 'replaced'));
   } finally {
     await w.close();
   }
 });
 
-test('too many failed attempts: the owner\'s check, then the token endpoint, refuse even a right answer for a while', async () => {
-  const w = await oauthWorld();
-  try {
-    const d = await discover(w);
-    const page = await ask(w, authorizeUrl(w, d, { pkce: pkce() }));
-    for (let i = 0; i < OWNER_FAILURES.most; i += 1) assert.equal((await answer(w, page.request, { owner: 'wrong' })).status, 403);
-    const locked = await answer(w, page.request);
-    assert.equal(locked.status, 429, 'even the right word, while locked');
-    assert.ok(Number(locked.headers['retry-after']) > 0);
-    w.clock.offset += OWNER_FAILURES.window;
-    const later = await ask(w, authorizeUrl(w, d, { pkce: pkce() }));
-    assert.equal((await answer(w, later.request)).status, 303, 'after the window, the right word passes');
-
-    for (let i = 0; i < TOKEN_FAILURES.most; i += 1) assert.equal((await token(w, { grant_type: 'refresh_token', refresh_token: 'guess', client_id: w.docs.client })).status, 400);
-    const t = await token(w, { grant_type: 'refresh_token', refresh_token: 'guess', client_id: w.docs.client });
-    assert.equal(t.status, 429);
-    assert.equal(json(t).error, 'temporarily_unavailable');
-  } finally {
-    await w.close();
-  }
-});
 
 test('the client\'s document: fetched once and kept; refetched after it expires; where the fetch then fails, the copy is used; none, too large, redirected or not its own is refused', async () => {
   const w = await oauthWorld();
@@ -250,6 +231,8 @@ test('the client\'s document: fetched once and kept; refetched after it expires;
     assert.equal((await ask(w, authorizeUrl(w, d, { pkce: p }))).status, 200, 'a failed fetch does not stop a known client');
     assert.equal(w.docs.hits, 2);
     assert.ok(w.logs.some((e) => e.event === 'oauth-document-copy'));
+    // No new fetch for a minute after one that failed (test/review3.test.mjs); then the document is fetched again.
+    w.clock.offset += DOCUMENT_RETRY;
     w.docs.mode = 'ok';
     w.docs.extra = { redirect_uris: ['https://client.example/new'] };
     assert.equal((await ask(w, authorizeUrl(w, d, { pkce: p }))).status, 400, 'a document fetched again is the one used');

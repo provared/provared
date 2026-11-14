@@ -2231,11 +2231,19 @@ It has its own slip, keys, book and copy, exactly as an agent with a
 secret. The owner chooses the agent on the page. Approving a connection
 for an agent ends any connection it had before, with its tokens. Agents
 with secrets work as before, beside them. Why: the receipts then say which
-connection acted, and nothing about the rules or the records changes. No
+agent acted, and nothing about the rules or the records changes. No
 standard covers this; it is the plainest. The other way: one agent made
 for each approval, with its own permission; that needs a person to sign a
 permission at approval, which the passkey page of the library does
 elsewhere.
+
+An approval leaves no mark in the agent's book. Approvals, new
+connections and their ends go to the executor's log only, and there is no
+record of a new kind for them. So the receipts say which agent acted, not
+which connection or which client. Where an agent is approved again,
+perhaps for another client, the calls before and after stand in one book
+with nothing between them: someone who reads the book alone cannot tell
+that the connection changed.
 
 **X202. The issuer is the public address the settings name.**
 `oauth.issuer` is an origin with no path: `https://…`, or
@@ -2267,15 +2275,25 @@ size the draft suggests a server limit itself to), within 5 seconds, and
 only an answer of 200 in JSON. Why: the draft's advice, and the plainest
 bounds.
 
-**X205. A document is kept, and its copy outlives a failed fetch.** It is
-kept for its `Cache-Control: max-age`, held between 5 minutes and 24
-hours, or 1 hour where none is given. Then it is fetched again. Where that
-fetch fails (no answer, not 200, too large, not JSON), the copy kept is
-used, however old, and the log says so; a document that arrives but does
-not pass X203 is refused. The copies are in the state file (X210), so they
-outlive a start. Why: a client whose document was out of reach for a
-moment was otherwise stopped, though nothing about it had changed. The
-other way: refuse once the copy has expired.
+**X205. A document is kept, and its copy outlives a fetch that got no
+answer.** It is kept for its `Cache-Control: max-age`, held between 5
+minutes and 24 hours, or 1 hour where none is given; one sent with
+`no-store` or `no-cache` is kept for the 5 minutes. Then it is fetched
+again. Where that fetch gets no answer, or an answer of 500 or above, the
+copy kept is used while it is no more than 7 days old, and the log says
+so. Any other failure refuses the request, copy or no copy: an answer that
+is not 200 (a 404 or a 410 among them: the client has withdrawn its
+document), a redirection, a document too large, not JSON, or one that does
+not pass X203. The executor makes one fetch at a time for each client, and
+after a fetch that failed it makes no other for a minute: requests in that
+minute get the answer the failed fetch gave. The copies are in the state
+file (X210), so they outlive a start. Why: a client whose document was out
+of reach for a moment was otherwise stopped, though nothing about it had
+changed; a client that has withdrawn its document must not stay usable for
+ever; and no one should be able to make the executor call a client's
+server as often as they call the executor. The draft asks for a longest
+age and names none; a week is the executor's. The other way: refuse once
+the copy has expired.
 
 **X206. The redirect address is matched exactly.** The text the client
 sends must be one of the document's `redirect_uris`, character for
@@ -2292,20 +2310,32 @@ only. A PKCE challenge is required, with `code_challenge_method=S256`:
 `plain` is refused, and so is a challenge with no method named, since the
 standard's default for that is `plain`. `resource` must be given and be
 the executor's resource, or the answer is `invalid_target`, as the MCP
-specification has a client always send it. `state` comes back as it was,
-and `iss` with it (RFC 9207). A request waits at the page for 10 minutes.
+specification has a client always send it. Its scheme and host may be in
+capitals, as that specification asks a server to take them; the path is
+compared as it is, so a path with a slash added is another resource.
+`state` comes back as it was, and `iss` with it (RFC 9207). A request
+waits at the page for 10 minutes, in the page's form (X228). An approved
+request is answered once: the same form sent again gets no second code. A
+refusal is not kept, so the same page may still be approved after it.
 A code lasts 60 seconds, is kept only as its hash and in memory, and is
-used once, by the client it was given to, with the same redirect address
-and the right verifier. A code used a second time is refused, and the
-tokens it gave are revoked (OAuth 2.1, section 4.1.3). A parameter given
-twice is refused.
+used once, by the client it was given to, with the right verifier. The
+token request need not send `redirect_uri`, which OAuth 2.1 takes out of
+it, since PKCE ties the code to the client that asked; where it is sent,
+it must be the one the code was given for. A code used a second time is
+refused, and where that request is otherwise right (the client, the
+redirect address where sent, the verifier) the tokens the code gave are
+revoked (OAuth 2.1, section 4.1.3). A used code shown by someone who has
+no verifier ends nothing: the code is in the address at the client's
+callback, and seeing it proves nothing. A parameter given twice is
+refused.
 
 **X208. An access token is random, opaque and short-lived.** 32 random
 bytes in base64url. The executor keeps only its SHA-256, as it keeps the
 agents' secrets. It is bound to the resource, the client and the one
 agent, and lasts 1 hour. At each request the executor checks that it has
 not expired, that the resource is still the executor's, that the client
-is still on the list and that the agent is still marked `oauth`. A
+is still on the list and that the agent is still marked `oauth`. A stream
+held open is ended with its token (X229). A
 refused token gets 401 with `error="invalid_token"` (RFC 6750, section
 3.1) beside `resource_metadata`. The upstream never sees it: as for a
 secret, the agent's `Authorization` is removed and the executor's own
@@ -2324,51 +2354,96 @@ whole.** `oauth.state` (default `oauth-state.json`) holds each connection
 (its agent, client, resource, scope, the hashes of its tokens and their
 ends), the copies of the clients' documents, and the owner (X226). No
 token is in it. It is
-written through a new temporary file with mode 0600, which is then put in
-its place, so a stop part-way leaves the old file or the new. On Windows
-the mode does nothing: the folder's own permissions must keep others out.
-A file not in the executor's form stops the start. What waits at the page
-and the codes are kept in memory, so a start ends them.
+written through a new temporary file with mode 0600, which is made sure to
+be on the disk (`fsync`) and then put in its place, so a stop part-way, or
+a power cut, leaves the old file or the new. On Windows the mode does
+nothing: the folder's own permissions must keep others out. A file not in
+the executor's form stops the start. The codes are kept in memory, and a
+request waiting at the page in its form, under a key made at the start
+(X228), so a start ends them.
 
-**X211. Failed attempts are counted for the whole executor.** At the
-owner's check, after 5 failures in 15 minutes, every answer is refused for
-the rest of the 15 minutes. At `/oauth/token`, after 20 failures in a
-minute, every request is refused for the rest of the minute. Each refusal
-is 429 with `Retry-After`; the token endpoint's says
-`temporarily_unavailable`. Why: behind a reverse proxy every request comes
-from the proxy, so a count by address counts nothing. The cost: anyone
-who can reach the executor can hold the page or the token endpoint shut
-for a while. The other way: a count by the address a proxy reports, which
-the executor would have to trust.
+Memory never runs ahead of the file. New tokens, a new connection and a
+new owner are in memory only once the file holds them: where the write
+fails, memory is put back as it was, the client is answered 500
+(`server_error`; the owner's setup, `not-written`) and keeps what it had,
+so that its next try is not taken for a token used twice. The end of a
+connection is the one exception: it holds in memory at once, whether or
+not the file could be written, and the file is written again at the next
+change. Each of the three steps of a write is tried again for at most 1
+second while another program holds the file (the executor's other files
+are tried for 10), so that a write that cannot be made is given up well
+inside the 10 seconds a client gives a sign-in request (X213). The file is
+read only once every agent's lock is held (`lock.mjs`), as the command
+`owner` writes it under the same locks: so what that command wrote is what
+a start reads, and a start cannot undo it.
+
+**X211. Failed attempts are not counted, and shut nothing.** Until this
+choice was changed, 5 failures at the owner's check in 15 minutes, or 20 at
+`/oauth/token` in a minute, shut that address for everyone for the rest of
+the time. A count by address counts nothing behind a reverse proxy, where
+every request comes from the proxy, so the count was for the whole
+executor; and so anyone who could reach the executor could keep the owner
+from being set up, keep the owner from approving, and keep a client from
+refreshing, for as long as they liked, with a few requests. The count
+bought nothing in return. Everything it guarded is 128 or 256 random bits
+(the setup link's code, the recovery code, a challenge, a code, a token)
+or a signature, none of which can be guessed at any rate. So a request
+that proves itself is never refused for what others sent before it: the
+token, the code or the signature is checked, and nothing else decides. The
+cost: a check given through the interface of X212 gets no protection from
+the executor against guessing, so what it asks for must not be guessable.
+The other way: a count by the address a proxy reports, which the executor
+would have to trust.
 
 **X212. The owner's check, behind one interface, at a page that runs
 nothing of anyone else's.** The page is plain HTML: no style, no image, no
 inline script, under a Content-Security-Policy of `default-src 'none'`,
 `frame-ancestors 'none'` and `form-action` the executor and the client's
 redirect origin. The owner's answer must come with an `Origin` that is the
-issuer, and names the request by a random identifier. The check itself is
-one object given to the executor (`ownerCheck`): `form()` gives the HTML of
-its fields on the page, and `check(fields, {request, origin})` says whether
-they prove the owner. A check may also run a script from the executor's
-own address (`scripts`) and answer at addresses of its own (`owns`,
-`take`). Left out, as the command `http` leaves it, the check is the one by
-the owner's passkey (section 14.1). Given as `null`, there is none, and the
-page approves nothing (503). The other tests use a test check.
+issuer; `null`, which a browser sends for a page of no known origin, is
+never taken. So the pages are sent with `Referrer-Policy: same-origin`:
+under `no-referrer` a browser sends a page's own form with `Origin: null`
+(the Fetch standard), and no answer could be approved from a browser at
+all. With `same-origin` the form carries the executor's origin, and still
+no referrer goes to another site. The 303 that sends the browser back to
+the client keeps `no-referrer`. The answer names the request by the form's
+`request` field (X228), which holds a random identifier. The page cannot
+tell whose request it is: listing a client admits that client as a whole,
+not one account at it, so anyone with an account there can begin a request
+and send its link to the owner. The page therefore says: "Approve only a
+connection you began yourself, just now." The check itself is one object
+given to the executor (`ownerCheck`): `form()` gives the HTML of its
+fields on the page, and `check(fields, {request, origin, note})` says
+whether they prove the owner; `note` is what the check itself had sealed
+into the request, or null. A check may also run a script from the
+executor's own address (`scripts`) and answer at addresses of its own
+(`owns`, `take`). Left out, as the command `http` leaves it, the check is
+the one by the owner's passkey (section 14.1). Given as `null`, there is
+none, and the page approves nothing (503). The other tests use a test
+check. What the executor sends is all that this choice covers: a program
+on the owner's own computer that changes the pages a browser shows can
+still add a script of its own to them.
 
 **X213. The time limits.** A client gives a tool call up to 240 seconds,
-as it does a sign-in request and a refresh. With `oauth`, the executor's
-`timeout` is 230,000 ms unless the settings say otherwise, so that the
-executor answers a slow call, with its receipt, before the client gives
-up; a `timeout` above 240,000 ms is warned about. Without `oauth` the
-default stays 300,000 ms. The executor answers a sign-in request or a
-refresh at once, except where it must fetch a document (5 seconds, X204).
+but a sign-in request and a refresh far less: 10 and 30 seconds. With
+`oauth`, the executor's `timeout` is 230,000 ms unless the settings say
+otherwise, so that the executor answers a slow call, with its receipt,
+before the client gives up; a `timeout` above 240,000 ms is warned about.
+Without `oauth` the default stays 300,000 ms. The token endpoint and the
+two metadata addresses make no request to anyone, and answer at once; a
+write of the state that cannot be made is given up within about 3 seconds
+(X210). Only the page fetches a document (5 seconds, X204), and the
+owner's browser asks for the page, not the client.
 
 **X214. The executor has no scopes.** It names none in its metadata. A
 `scope` the client asks for is kept with the approval and given back as it
 was; it means nothing to the executor, since what an agent may do is its
-permission. Why: RFC 6749 lets a server give back the scope asked for, and
-a scope of the executor's own would be a second permission beside the
-signed one. The other way: refuse any scope (`invalid_scope`).
+permission. An empty `scope=` is no scope: RFC 6749's grammar has no empty
+one, so none is kept and none is given back, and a refresh that sends it
+where none was approved is taken. Why: RFC 6749 lets a server give back
+the scope asked for, and a scope of the executor's own would be a second
+permission beside the signed one. The other way: refuse any scope
+(`invalid_scope`).
 
 **X215. What the metadata says, and what it does not.** The server's
 metadata names the two endpoints, `code` only, `query` only, the two grant
@@ -2376,7 +2451,12 @@ types, `S256` only, `none` only, `client_id_metadata_document_supported`
 and `authorization_response_iss_parameter_supported`. It names no
 registration endpoint and no revocation endpoint (a connection ends by
 reuse, by a new approval, by the client being taken off the list, or by
-removing it from the state file while the executor is stopped). The two
+removing it from the state file while the executor is stopped). The
+settings are read at a start, so a client taken off the list is refused
+from the next start. At that start the executor takes the connections of
+every client no longer on the list, and of every agent no longer marked
+`oauth`, out of the state file. So they are ended for good: putting the
+client back, or marking the agent again, does not bring them back. The two
 metadata documents have no CORS headers: the clients this is for read
 them from their servers.
 
@@ -2408,19 +2488,21 @@ The flow, as built:
    `<issuer>/oauth/owner#<code>`. It works once, for 15 minutes. So no one
    who merely finds the address can claim the executor.
 2. **The setup page.** In the browser: a passkey made with
-   `createWebAuthn` (`createPasskeyWithPrf`, which gives its PRF output);
-   `createIdentity`; `wrapRootKeyWithPrf`; and
+   `createWebAuthn` (`createPasskeyWithPrf`, which gives its PRF output),
+   on the device itself or, where that fails, on a phone or a security key
+   (X230); `createIdentity`; `wrapRootKeyWithPrf`; and
    `wrapRootKeyWithNewRecoveryCode`, whose code is shown once. The page
    sends the executor the routing public key and the two unlock methods,
    which are ciphertext.
 3. **The authorisation page.** When the owner presses Approve, the page
-   fetches the passkey's unlock method. The passkey's PRF output opens the
-   root key (`unwrapRootKeyWithPrf`), and `identityFromRootKey` gives the
-   routing key. Where a device has no PRF, the owner types the recovery
-   code instead: the page fetches that unlock method by the code's lookup
-   hash and opens the root key with `unwrapRootKeyWithRecoveryCode`. The
-   page then asks for a challenge, and signs `authMessage(origin, nonce)`
-   with the routing key (`signBytes`).
+   fetches the passkey's unlock method. The passkey's PRF output
+   (`evaluatePrf`) opens the root key (`unwrapRootKeyWithPrf`), and
+   `identityFromRootKey` gives the routing key. Where a device has no PRF,
+   the owner types the recovery code instead: the page fetches that unlock
+   method by the code's lookup hash and opens the root key with
+   `unwrapRootKeyWithRecoveryCode`. The page then asks for a challenge,
+   and signs `authMessage(origin, nonce)` with the routing key
+   (`signBytes`).
 4. **The check.** The executor checks the signature with
    `verifyAuthSignature`, against the stored routing public key, with the
    issuer as the origin and its own challenge as the nonce.
@@ -2446,11 +2528,15 @@ secret, which needs that secret set up first.
 
 **X219. The setup message.** `POST /oauth/owner/setup`, JSON:
 `{"code", "routingPublicKey", "passkey": {"credentialId", "prfSalt",
-"wrappedRootKey"}, "recovery": {"salt", "lookupHash", "wrappedRootKey"}}`.
+"wrappedRootKey", "transports"}, "recovery": {"salt", "lookupHash",
+"wrappedRootKey"}}`.
 Bytes are base64url without padding, written as Node.js writes them. The
 lookup hash is the package's own text, 64 lower-case hexadecimal digits.
 The routing public key is 32 bytes, the PRF salt 32, the recovery salt 16,
-the credential id 1 to 1,023, each wrapped root key 1 to 1,024. No other
+the credential id 1 to 1,023, each wrapped root key 1 to 1,024.
+`transports` is the list the browser gave for the passkey (X230): at most
+8 names, each 1 to 32 lower-case letters, digits or hyphens; it may be
+left out, and is then kept as an empty list. No other
 member is taken; the package's `label` is not sent. The answer is
 `{"owner": "set"}`. A message that is not in this form is refused (400),
 and the link still works. Before it makes the passkey, the page asks
@@ -2461,25 +2547,35 @@ are the packages' own unlock methods, and nothing else; the bounds are the
 packages' sizes, and WebAuthn's for a credential id.
 
 **X220. The unlock methods, fetched by the page.** `POST
-/oauth/owner/passkey` with `{}` gives the passkey's three members. `POST
+/oauth/owner/passkey` with `{}` gives the passkey's four members. `POST
 /oauth/owner/recovery` with `{"lookupHash"}` gives the recovery code's
-three members, only where the lookup hash is the owner's; otherwise 404,
-counted as a failed attempt (X211). Why: as the packages' own lookup, the
-recovery code's wrapped copy goes only to someone who knows the code. The
-passkey's opens only with the passkey.
+three members, only where the lookup hash is the owner's; otherwise 404.
+Why: as the packages' own lookup, the recovery code's wrapped copy goes
+only to someone who knows the code. The passkey's opens only with the
+passkey.
 
 **X221. The challenge.** `POST /oauth/owner/challenge` with `{"request"}`,
-the id of a request waiting at the page, gives `{"challenge"}`: 32 random
-bytes in base64url. It lasts 2 minutes, is kept in memory, belongs to that
-request, and is taken out at its first use, whether the check then passes
-or not. At most 1,000 are kept; past that the oldest goes. The page asks
-for it only once the root key is open, so its 2 minutes are not spent at
-the passkey.
+the `request` field of a page waiting for the owner, gives `{"challenge",
+"request"}`: 32 random bytes in base64url, and the same request with that
+challenge and its end sealed into it (X228). The page puts the new request
+in its form in place of the one it had. So a request has one challenge,
+and a new one takes the old one's place. The challenge lasts 2 minutes and
+belongs to that request alone, since it is under the request's seal. The
+executor keeps nothing of a challenge it gives out. It keeps, until they
+end, only the challenges whose signature passed, so that none passes
+twice; only the owner can add to them, so there is no cap, and nothing
+anyone sends can push the owner's challenge out. A wrong signature spends
+nothing. Until this choice was changed, the challenges were kept in
+memory, at most 1,000, and 1,000 requests from anyone pushed the owner's
+out. The page asks for the challenge only once the root key is open, so
+its 2 minutes are not spent at the passkey.
 
 **X222. The answer's two fields.** The page fills `owner_challenge` and
 `owner_signature` (64 bytes in base64url) in the form, beside the request,
 the agent and the decision. The check passes only where the challenge is
-the executor's, not expired, for this request, and the signature verifies.
+the one sealed into this request, has not expired and has not passed
+before, and the signature verifies. The signature is checked before
+anything is kept.
 
 **X223. One owner; a reset ends every connection.** While an owner exists,
 `owner` is refused, and so is a setup message (409). `owner --reset`
@@ -2505,7 +2601,8 @@ sends it.
 given `rpName: 'provared-mcp-executor'` and no `rpId`, so the browser ties
 the passkey to the page's host, the issuer's. Its user name is `Owner of
 <host>`. The passkey is made on the device itself (the package's default,
-`platform`). After a change of public address the passkey no longer opens
+`platform`) or, where that fails, on a phone or a security key (X230).
+After a change of public address the passkey no longer opens
 the root key, and only the recovery code does. The owner then signs in with
 the recovery code, or resets the owner (X223) to make a passkey at the new
 address. The founder accepted this.
@@ -2518,15 +2615,83 @@ whose owner or setup is not in this form stops the start.
 
 **X227. The answers of the owner's addresses.** JSON
 `{"error", "message"}`, with the codes `origin-refused` (403),
-`too-many-attempts` (429, with `Retry-After`), `bad-request` (400),
-`owner-exists` (409), `setup-ended` (403: no link, or it has ended),
-`setup-refused` (403: not the link's code, counted as a failed attempt),
-`no-owner` (409) and `not-found` (404). Failed attempts here count with the
-owner's check's (X211).
+`bad-request` (400), `owner-exists` (409), `setup-ended` (403: no link, or
+it has ended), `setup-refused` (403: not the link's code), `no-owner`
+(409), `not-found` (404) and `not-written` (500: the state file could not
+be written, so no owner was set up, and the link still works). No failed
+attempt is counted (X211).
+
+**X228. A request waiting at the page is kept in the page's form, under
+the executor's seal.** The hidden field `request` holds the request's
+fields (a random identifier of 32 bytes, the client, the redirect address,
+`state`, the PKCE challenge, the scope, its end, and what the owner's check
+has noted in it, X221) as a JWS in compact form with `HS256` (RFC 7515;
+RFC 7518, section 3.2): the fields as JSON, under HMAC-SHA-256 (RFC 2104).
+The header is always `{"alg":"HS256"}`; it is under the MAC with the
+fields, and the executor never reads an algorithm from it, so a text with
+any other header does not pass. The key is 32 random bytes that the
+executor makes at each start,
+holds in memory and never writes down. The executor reads a request back
+only where the MAC is its own (compared in constant time), the request has
+not ended and it has not been approved before. Nothing of a waiting
+request is kept in memory. The fields are not secret: the browser sent
+them all in the address. Why: until this choice was changed, the waiting
+requests were kept in memory, at most 1,000, the oldest dropped; anyone
+can ask for a page, so 1,000 requests from anyone pushed the owner's page
+out. With nothing kept, there is nothing to push out. What is kept in
+memory is made only by an answer that passed the owner's check: the
+identifiers of approved requests, until they would have ended, and the
+codes. A start makes a new key, so it ends every waiting request, as it
+did before. HMAC-SHA-256 is Node.js's own; no cryptography is new. The
+other way: keep the requests in memory and count them for each address,
+which behind a proxy counts nothing (X211).
+
+**X229. A stream opened with an access token ends with the token and with
+the connection.** A token is checked when its request arrives (X208). The
+GET stream of server messages has no end of its own, so one opened with an
+access token was held open after the token had expired or its connection
+had ended, went on carrying what the upstream sent, and kept one of the
+agent's places. The executor now ends such a stream when the token it was
+opened with expires, and when its connection ends (a refresh token used
+twice, a code used twice, a new approval of its agent); the log says
+`stream-ended`. A client with a newer token opens it again. A call, or
+any other message, that the executor has already taken is not cut: it was
+allowed when it arrived, cutting it would leave a call's outcome unknown,
+and it ends within the executor's `timeout`, with its receipt. A stream
+opened with an agent's own secret is not touched. No standard covers this.
+
+**X230. The passkey may be kept on a phone or a security key.** The setup
+page first asks for a passkey on the device itself (X225). Where that
+fails with the package's code `prf-unsupported` (the device's passkey
+gives no PRF) or `not-allowed` (its prompt was closed or refused), the
+page offers a second button, which asks for one on a phone or a security
+key: the package's own `createPasskeyWithPrf(name, {attachment:
+'cross-platform'})`. Nothing was set up by the first try, and the setup
+link still works. The package gives the passkey's `transports` (where the
+browser says it is kept: `internal`, `hybrid`, `usb` and so on). The
+executor keeps them with the passkey's unlock method (X219) and the page
+passes them to `evaluatePrf` at each unlock, so that the browser asks in
+the right place. Only the packages' public functions are used. There is
+still one passkey and one recovery code (X223). Why: on a device whose own
+passkey gives no PRF the setup otherwise stopped, with no owner and no
+recovery code. Which browsers and authenticators give PRF is theirs to
+say: no passkey has been tried here, on any of them (below).
 
 What the tests show, and what they do not. `test/owner.test.mjs` runs the
 page's own steps (`owner-steps.mjs`) in Node.js, with the packages' own
 functions and a stand-in passkey that gives a made-up PRF output: a setup
-and a sign-in, a sign-in by the recovery code, and each refusal. The
-passkey ceremony itself, in a real browser with a real authenticator, has
-not been tried; the recipe's README says how to try it by hand.
+and a sign-in, a sign-in by the recovery code, and each refusal.
+`test/review3.test.mjs` runs the page's script itself (`owner-page.mjs`),
+fetched from the executor as a browser fetches it, on a stand-in page and
+with a stand-in for `navigator.credentials`, through the package's
+`createWebAuthn`. It also reads the headers the pages are sent with.
+Outside the tests, the pages were tried once in a real browser, headless
+Chrome 157, at `http://127.0.0.1`: the scripts loaded under the page's
+policy, the form carried the executor's `Origin`, and an approval by the
+recovery code went through to a token and a tool call. A passkey cannot be
+made at an IP address, so the passkey ceremony itself has not been tried,
+with any browser or authenticator; the recipe's README says how to try it
+by hand. In that run a client whose callback sent the browser on to
+another host was stopped by the page's own `form-action`, after the code
+had reached the callback: the executor does not yet answer that case, and
+the recipe says to watch for it.

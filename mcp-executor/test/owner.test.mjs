@@ -22,7 +22,7 @@ import * as id from '@microtoll/identity';
 
 const { call } = await import('./http-world.mjs');
 const { readHttpSettings } = await import('../http.mjs');
-const { makeOwnerSetup, OWNER_FAILURES } = await import('../oauth.mjs');
+const { makeOwnerSetup } = await import('../oauth.mjs');
 const { CHALLENGE_LIFE, SETUP_LIFE, cryptoCore } = await import('../owner.mjs');
 const { NAMESPACE, FIELD_CHALLENGE, FIELD_SIGNATURE, SETUP_PATH, PASSKEY_PATH, CHALLENGE_PATH, setUp, signIn } = await import('../owner-steps.mjs');
 const { oauthWorld, reopen, send, json, pkce, authorizeUrl, discover, ask, answer, connect, bearer, CALLBACK } = await import('./oauth-world.mjs');
@@ -40,10 +40,11 @@ function fakePasskey() {
     made: 0,
     create: async () => {
       p.made += 1;
-      return { credentialId, prfSalt: new Uint8Array(randomBytes(32)), prfOutput32 };
+      return { credentialId, prfSalt: new Uint8Array(randomBytes(32)), prfOutput32, transports: ['internal'] };
     },
-    evaluate: async (cid) => {
+    evaluate: async (cid, salt, transports) => {
       assert.deepEqual(cid, credentialId, 'the page asks the passkey the executor keeps');
+      assert.deepEqual(transports, ['internal'], 'and tells the browser where it is kept');
       return { prfOutput32 };
     },
   };
@@ -93,10 +94,6 @@ async function waiting(w) {
   return page.request;
 }
 const state = (w) => JSON.parse(readFileSync(w.statePath, 'utf8'));
-/** Past the window of failed attempts, so that the next refusals are counted afresh (X211). */
-const rest = (w) => {
-  w.clock.offset += OWNER_FAILURES.window;
-};
 
 test('the namespace is "provared-mcp-executor", in the executor and in the page, and a signature under another namespace is refused', async () => {
   assert.equal(NAMESPACE, 'provared-mcp-executor');
@@ -189,41 +186,49 @@ test('refused at the authorisation page: a signature over another origin, by ano
     // By another key: an identity that is not the owner's.
     request = await waiting(w);
     const stranger = await id.createIdentity(cc);
-    const { challenge } = await sender(w)(CHALLENGE_PATH, { request });
-    const signature = await cc.signBytes(stranger.routing.privateKey, await id.authMessage(cc, w.issuer, cc.fromBase64Url(challenge)));
-    await refused(request, { [FIELD_CHALLENGE]: challenge, [FIELD_SIGNATURE]: cc.toBase64Url(signature) });
-    rest(w);
+    const given = await sender(w)(CHALLENGE_PATH, { request });
+    const signature = await cc.signBytes(stranger.routing.privateKey, await id.authMessage(cc, w.issuer, cc.fromBase64Url(given.challenge)));
+    await refused(request, { request: given.request, [FIELD_CHALLENGE]: given.challenge, [FIELD_SIGNATURE]: cc.toBase64Url(signature) });
 
-    // A challenge is used once: the first use, with a broken signature, spends it, and the right signature then fails.
+    // A broken signature is refused.
     request = await waiting(w);
     const good = await prove(request);
     await refused(request, { ...good, [FIELD_SIGNATURE]: cc.toBase64Url(new Uint8Array(64)) });
-    await refused(request, good);
     // Expired: two minutes later.
     request = await waiting(w);
     const late = await prove(request);
     w.clock.offset += CHALLENGE_LIFE;
     await refused(request, late);
-    rest(w);
-    // For another request.
+    // For another request: the first request's challenge and signature, sent with the second request.
     const first = await waiting(w);
     const second = await waiting(w);
-    await refused(second, await prove(first));
+    const forFirst = await prove(first);
+    await refused(second, { [FIELD_CHALLENGE]: forFirst[FIELD_CHALLENGE], [FIELD_SIGNATURE]: forFirst[FIELD_SIGNATURE] });
+    // And with the second request once it has a challenge of its own.
+    const forSecond = await sender(w)(CHALLENGE_PATH, { request: second });
+    await refused(second, { request: forSecond.request, [FIELD_CHALLENGE]: forFirst[FIELD_CHALLENGE], [FIELD_SIGNATURE]: forFirst[FIELD_SIGNATURE] });
     // Never given: a challenge the executor did not make, and none at all.
     request = await waiting(w);
     const made = await prove(request);
     await refused(request, { ...made, [FIELD_CHALLENGE]: Buffer.from(randomBytes(32)).toString('base64url') });
-    rest(w);
     request = await waiting(w);
     await refused(request, {});
-    // A challenge only for a request waiting at the page.
+    // The request's seal: a request changed by one character, or one this executor never sealed, is not known, and gets no challenge.
+    const changed = `${made.request.slice(0, -1)}${made.request.endsWith('A') ? 'B' : 'A'}`;
+    assert.equal((await answer(w, changed, { fields: { [FIELD_CHALLENGE]: made[FIELD_CHALLENGE], [FIELD_SIGNATURE]: made[FIELD_SIGNATURE] } })).status, 400);
+    assert.deepEqual(await refusal(sender(w)(CHALLENGE_PATH, { request: changed })), { status: 400, code: 'bad-request' });
     assert.deepEqual(await refusal(sender(w)(CHALLENGE_PATH, { request: 'A'.repeat(43) })), { status: 400, code: 'bad-request' });
 
-    // After all that, the right answer passes.
+    // After all that, with no wait, the right answer passes: failed attempts are not counted (X211).
     request = await waiting(w);
-    const a = await answer(w, request, { fields: await prove(request) });
+    const right = await prove(request);
+    const a = await answer(w, request, { fields: right });
     assert.equal(a.status, 303);
     assert.ok(a.params.code);
+    // A challenge passes once, and an approved request is answered once: the same form again gets no second code.
+    const again = await answer(w, request, { fields: right });
+    assert.equal(again.status, 400, again.body);
+    assert.equal(again.headers.location, undefined);
   } finally {
     await w.close();
   }
@@ -316,6 +321,9 @@ test('a setup with an unlock method missing or malformed is refused, and the lin
       'a routing key of 31 bytes': (v) => (v.routingPublicKey = b(new Uint8Array(31))),
       'base64 with padding': (v) => (v.passkey.wrappedRootKey += '='),
       'a member the page does not send': (v) => (v.passkey.label = 'laptop'),
+      'a transport that is not a name': (v) => (v.passkey.transports = ['USB key']),
+      'nine transports': (v) => (v.passkey.transports = Array(9).fill('usb')),
+      'transports as a string': (v) => (v.passkey.transports = 'usb'),
       'a method as a string': (v) => (v.recovery = 'x'),
     };
     for (const [what, change] of Object.entries(wrong)) {
@@ -327,6 +335,7 @@ test('a setup with an unlock method missing or malformed is refused, and the lin
     assert.equal(state(w).owner, null);
     assert.deepEqual(await sender(w)(SETUP_PATH, right()), { owner: 'set' });
     assert.equal(state(w).owner.routingPublicKey, b(identity.routing.publicKeyRaw));
+    assert.deepEqual(state(w).owner.passkey.transports, [], 'a passkey sent with no transports is kept as having none');
     // A state file whose owner is not in the executor's form stops the start.
     await w.executor.close();
     w.executor = null;
