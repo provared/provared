@@ -118,9 +118,15 @@ jobs:
   # repository's own library (test/local-library.mjs in each folder); the
   # conformance kit loads the library's files from this repository
   # directly. So they test the library as it is in this commit, not a
-  # published version. Nothing is installed, but for the MCP executor's two
-  # runtime dependencies (@microtoll/identity and @microtoll/crypto-core),
-  # which come from its package-lock.json at exact versions.
+  # published version. Nothing is installed, but for the MCP executor:
+  # "npm ci" there installs what its package-lock.json names, at exact
+  # versions. That is its two runtime dependencies (@microtoll/identity and
+  # @microtoll/crypto-core) and, since the lock file names it too, a
+  # published "provared" (0.7.0). The tests do not use that copy: a test
+  # file that uses the library loads test/local-library.mjs first, which
+  # points the name at this repository's library. A program started in
+  # that folder without that file would load the published copy, and not
+  # fail.
   javascript-packages:
     name: ${{ matrix.package }}
     runs-on: ubuntu-latest

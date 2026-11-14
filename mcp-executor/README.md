@@ -397,12 +397,16 @@ settings:
   `http://127.0.0.1:<port>` is taken without HTTPS, for tests.
 - `clients` lists the clients that may connect, each by the https URL of
   its client metadata document. With none, no client can connect. There is
-  no other way to register a client.
+  no other way to register a client. The list admits a client as a whole,
+  not one account at it: anyone with an account at a listed client can
+  begin a connection, and only the owner's approval makes it one.
 - `state` is the file that holds the connections and the owner (default
   `oauth-state.json`). It holds only hashes of tokens, and of the owner
   only a public key and ciphertext. The executor writes
   it whole, through a new file that only its owner may read (on Windows,
-  keep others out of the folder).
+  keep others out of the folder), made sure to be on the disk before it
+  takes the old file's place. Where it cannot be written, nothing is
+  changed and the client is answered 500: it keeps the tokens it had.
 - Each connection is one agent marked `"oauth": true`, with its own slip,
   keys, book and copy, as an agent with a secret. Agents with secrets work
   as before, beside it.
@@ -416,29 +420,46 @@ What happens:
 - The client sends the person to `/oauth/authorize`. The executor fetches
   the client's document (over HTTPS, at most 5 KiB, within 5 seconds, no
   redirection followed), keeps it for its `Cache-Control` age (5 minutes
-  to 24 hours; 1 hour by default), and keeps a copy: where a later fetch
-  fails, the copy is used. The redirect address must be one the document
-  names, exactly (only an address written `http://127.0.0.1` or
-  `http://[::1]` may differ in its port). PKCE is required, with S256 only.
-  The `resource` must be the executor's endpoint.
+  to 24 hours; 1 hour by default; 5 minutes for `no-store`), and keeps a
+  copy. Where a later fetch gets no answer, or a 5xx, the copy is used
+  while it is no more than 7 days old. Any other failure, a 404 among
+  them, refuses the client. One fetch is made at a time for each client,
+  and none for a minute after one that failed. The redirect address must
+  be one the document names, exactly (only an address written
+  `http://127.0.0.1` or `http://[::1]` may differ in its port). PKCE is
+  required, with S256 only. The `resource` must be the executor's
+  endpoint; its scheme and host may be in capitals.
 - The page shows the owner which client asks and which agent it would
-  become, and asks for the owner's passkey (below). With
-  the owner's approval the browser goes back to the client with a code,
-  which lasts 60 seconds and works once. A code used twice revokes what it
-  gave.
+  become, and asks for the owner's passkey (below). It cannot tell whose
+  request it is, so **approve only a connection you began yourself, just
+  now**: a page that came as a link from someone else is to be refused.
+  With the owner's approval the browser goes back to the client with a
+  code, which lasts 60 seconds and works once. A code used twice by its
+  client revokes what it gave; a used code shown without its PKCE verifier
+  is refused and ends nothing.
 - At `/oauth/token` the code becomes an access token (1 hour) and a refresh
   token (30 days). Both are random and kept only as hashes. The access
   token works only at this endpoint, for this client and this agent. Each
   refresh gives a new refresh token; an old one used again ends the
   connection. Approving a new connection for the same agent ends the old
-  one; taking a client off the list ends its connections.
-- After 5 failed owner's checks in 15 minutes, or 20 failed token requests
-  in a minute, the executor refuses everything there for the rest of that
-  time (429). It counts for the whole executor, not for each address, as
-  behind a proxy every request comes from the proxy. So anyone who can
-  reach it can hold it shut for a while.
+  one. Taking a client off the list, or the `oauth` mark off an agent,
+  ends its connections for good at the next start: putting it back does
+  not bring them back.
+- A GET stream opened with an access token is ended when that token
+  expires and when its connection ends. A call already taken is finished,
+  within the `timeout`, and receipted.
+- Failed attempts are not counted, and shut nothing: a wrong answer, code
+  or token is refused, and the right one passes straight after. What is
+  guarded is 128 or 256 random bits, or a signature. A request waiting at
+  the page is kept in the page's form, under a key the executor makes at
+  each start and never writes down, so nothing anyone sends can push the
+  owner's page out, and a start ends the pages that wait.
 - With `oauth`, the `timeout` default is 230,000 ms, under the 240 seconds
-  a client gives a tool call; a longer one is warned about.
+  a client gives a tool call; a longer one is warned about. The token
+  endpoint and the metadata make no request to anyone, and answer at once.
+- An approval leaves no mark in the agent's book: approvals, new
+  connections and their ends are in the executor's log only. The receipts
+  say which agent acted, not which connection or client.
 
 The owner's check is by the owner's passkey (DESIGN.md, section 14.1). It
 uses two packages, `@microtoll/identity` and `@microtoll/crypto-core`, at
@@ -451,6 +472,11 @@ exactly 0.1.1; they come with the executor when it is installed.
   hold the passkey. The page makes a passkey, a key that never leaves the
   browser, and a recovery code, shown once: write it down. The executor
   keeps only the key's public half and two locked copies of the key.
+- **Where the device's own passkey cannot be used.** The passkey must give
+  the PRF extension. Where the one on the device gives none, or its prompt
+  is closed, nothing is set up, and the page offers a second button: a
+  passkey on a phone or a security key. The executor keeps where the
+  passkey is (its transports), and the browser is told at each approval.
 - **Approve a connection.** On the page, Approve asks for the passkey. On a
   device without one that gives a PRF, type the recovery code first. The
   page signs a challenge from the executor, which checks the signature.
@@ -461,12 +487,21 @@ exactly 0.1.1; they come with the executor when it is installed.
   prints a new link.
 - The pages run only the executor's own scripts, from its own address:
   the page's script and the two packages' files. Nothing is loaded from
-  anywhere else.
+  anywhere else. That is true of what the executor sends: a program on the
+  owner's own computer that changes the pages a browser shows can still
+  add a script of its own, and the owner's key is opened in that page.
 
 The program's interface takes another check, or none
-(`openHttpExecutor(settings, {ownerCheck})`). The passkey ceremony has
-been tried only with a stand-in passkey in the tests, not yet in a real
-browser. There is no revocation endpoint, no dynamic
+(`openHttpExecutor(settings, {ownerCheck})`); the executor counts no
+failed attempts, so what such a check asks for must not be guessable. The
+tests run the page's script on a stand-in page, with a stand-in passkey.
+In a real browser the pages have been tried once, outside the tests, in
+headless Chrome 157 at `http://127.0.0.1`: the scripts loaded under the
+page's policy, and an approval by the recovery code went through to a
+token and a tool call. A passkey cannot be made at an IP address, so the
+passkey ceremony has not been tried, with any browser or authenticator.
+There is no
+revocation endpoint, no dynamic
 client registration, and no OAuth towards the upstream: the upstream still
 gets the executor's fixed token. The folder `recipes/` in the repository
 holds the settings for particular clients.

@@ -135,7 +135,7 @@
   signs in only through OAuth could not connect. No record of a new kind
   and no cryptography of the executor's own: tokens are random bytes, kept
   as their SHA-256. What changes, in `mcp-executor/` (DESIGN.md, section
-  14, choices X201 to X216):
+  14, choices X201 to X216, X228 and X229):
   - **The settings.** `"oauth": {"issuer", "clients", "state"}`: the
     public address (https, or `http://127.0.0.1:<port>` for tests), the
     URLs of the clients' metadata documents that may connect (none, then
@@ -147,21 +147,30 @@
     resource's metadata; the owner's page at `/oauth/authorize`; codes and
     refresh tokens at `/oauth/token`. A client's document is fetched over
     HTTPS (5 KiB, 5 seconds, no redirection), kept for its cache age, and
-    its copy used where a later fetch fails. The redirect address is
-    matched exactly, but for the port of a loopback IP address. PKCE with
-    S256 only. Codes last 60 seconds and work once. Access tokens last an
-    hour, for one resource, client and agent. Refresh tokens are rotated
-    at each use, and one used twice ends the connection. Failed attempts
-    are limited. The state file holds hashes only and is written whole,
-    through a new file with mode 0600.
+    its copy used, for at most 7 days, where a later fetch gets no answer
+    or a 5xx; any other failure refuses the client. One fetch is made at
+    a time for each client, and none for a minute after one that failed.
+    The redirect address is matched exactly, but for the port of a
+    loopback IP address. PKCE with S256 only. Codes last 60 seconds and
+    work once. Access tokens last an hour, for one resource, client and
+    agent. Refresh tokens are rotated at each use, and one used twice ends
+    the connection. A GET stream opened with an access token ends with the
+    token and with the connection. Failed attempts are not counted and
+    shut nothing. A request waiting at the page is kept in the page's
+    form, under HMAC-SHA-256 with a key made at each start and never
+    written. The state file holds hashes only and is written whole,
+    through a new file with mode 0600, synced before it is put in place;
+    memory is changed only once the file is written.
   - **The timeout.** With `oauth`, its default is 230,000 ms, under the
     240 seconds a client gives a tool call. Without, it stays 300,000 ms.
   - **The owner's check, by the owner's passkey** (`owner.mjs`,
     `owner-steps.mjs`, `owner-page.mjs`; DESIGN.md, section 14.1, choices
-    X217 to X227). The command `http` uses it. `provared-mcp-executor owner
+    X217 to X227 and X230). The command `http` uses it.
+    `provared-mcp-executor owner
     --config …`, on a stopped executor, prints a link that works once,
-    within 15 minutes. Its page makes a passkey (PRF), a key that stays in
-    the browser, and a recovery code shown once, and sends the executor
+    within 15 minutes. Its page makes a passkey (PRF), on the device or,
+    where that fails, on a phone or a security key; a key that stays in
+    the browser; and a recovery code shown once. It sends the executor
     only the key's public half and two locked copies of the key. At the
     authorisation page the passkey, or the recovery code, opens the key in
     the browser, which signs a challenge of the executor's (32 bytes, once,
@@ -170,6 +179,70 @@
     owner and ends every connection. The pages run only the executor's own
     scripts, from its own address. The passkey belongs to the issuer's
     host: after a change of address only the recovery code opens the key.
+  - **Changed after a review, before any release** (the commits before
+    these had the faults; each fix has a test in `test/review3.test.mjs`
+    that fails without it):
+    - The owner could approve nothing from a real browser. The pages were
+      sent with `Referrer-Policy: no-referrer`, under which a browser
+      sends a page's own form with `Origin: null`, and the executor
+      refused it. The pages are now sent with `same-origin`; the 303 to
+      the client keeps `no-referrer`; `null` is still never taken. The
+      test reads the header. Outside the tests, headless Chrome 157 then
+      sent the form with the executor's `Origin`, at the local address,
+      and an approval by the recovery code went through.
+    - Anyone could hold the setup, the approval and the token endpoint
+      shut, for as long as they liked: 5 failed owner's checks in 15
+      minutes, or 20 failed token requests in a minute, shut that address
+      for everyone, and 1,000 requests pushed the owner's waiting page, or
+      its challenge, out of memory. Failed attempts are no longer counted
+      (X211): what was guarded is 128 or 256 random bits, or a signature.
+      A waiting request is now kept in the page's form under
+      HMAC-SHA-256, as a JWS with HS256 (X228), and its one challenge is
+      sealed into it (X221), so nothing is kept that anyone can push out.
+      The answer `too-many-attempts` (429) is gone.
+    - A GET stream opened with an access token stayed open after the
+      token had expired or the connection had ended. It is now ended
+      (X229). A call already taken is still finished and receipted.
+    - The page now says: "Approve only a connection you began yourself,
+      just now." The settings' list admits a client as a whole, not one
+      account at it (X212).
+    - On a device whose own passkey gives no PRF, the setup stopped, with
+      no owner. The setup page now offers a passkey on a phone or a
+      security key after `prf-unsupported` or `not-allowed`, and the
+      passkey's `transports` are kept and given back to the browser at
+      each unlock (X230). The setup message's `passkey` may hold
+      `transports` (X219).
+    - Where the state file could not be written during a refresh, the
+      client's next try was taken for a token used twice, and its
+      connection ended. Memory is now changed only once the file is
+      written; the client gets 500 `server_error` and keeps what it had.
+      The new file is synced before it takes the old one's place. A write
+      is tried for 1 second a step, not 10 (X210).
+    - A used code shown again by anyone ended the connection. It now does
+      so only where the request is otherwise right: the client and the
+      PKCE verifier (X207).
+    - A client taken off the list and put back got its old connections
+      back. At a start, the connections of clients no longer on the list,
+      and of agents no longer marked `oauth`, are now taken out of the
+      state file (X215).
+    - The state file was read before the agents' locks were taken, so an
+      `owner --reset` at that moment could be undone. It is now read once
+      the locks are held (X210).
+    - Every request at the page could make a fetch of the client's
+      document; a 404 counted as a moment out of reach, so a withdrawn
+      document stayed usable for ever; `no-store` was kept an hour. See
+      the front door above (X205).
+    - Three places stricter than the standards: the token request needed
+      `redirect_uri`, which OAuth 2.1 takes out of it; `resource` in
+      capitals was refused; an empty `scope=` was kept and given back.
+      `redirect_uri` is now checked only where sent, the scheme and host
+      of `resource` may be in capitals, and an empty scope is no scope
+      (X207, X214).
+    - Said, not changed: an approval leaves no mark in the agent's book
+      (X201); a client gives a sign-in request and a refresh 10 and 30
+      seconds, not 240 (X213); what a program on the owner's own computer
+      does to the pages is outside what the executor sends (X212); the
+      tests workflow's note on what `npm ci` installs.
   - **Two runtime dependencies, approved by the founder:**
     `@microtoll/identity` and `@microtoll/crypto-core`, the founder's own
     packages (Apache 2.0), pinned at exactly 0.1.1 in
@@ -179,18 +252,27 @@
     `@microtoll/blind-store` is not used. The tests workflow installs them
     for this package alone (`npm ci --ignore-scripts`).
   - **Not built:** no upstream OAuth, no one-command setup, no dynamic
-    client registration, no revocation endpoint. The passkey ceremony has
-    not been tried in a real browser: the tests use a stand-in passkey.
+    client registration, no revocation endpoint. No passkey has been
+    tried, in any browser or with any authenticator: the tests use a
+    stand-in page and a stand-in passkey. Where a client's callback sends the
+    browser on to another site, the page's own policy (`form-action`)
+    stops the browser there, though the connection was made; the recipe
+    says to watch for it.
   - **A recipe**, `mcp-executor/recipes/claude-ai/`: the settings for one
-    client, with its limits, and the steps to try the passkey by hand.
-  - **Tests**: `test/oauth.test.mjs`, 11 tests: the whole flow in plain
+    client, with its limits, and the steps to try the passkey by hand,
+    with what to watch the first time.
+  - **Tests**: `test/oauth.test.mjs`, 10 tests: the whole flow in plain
     HTTP requests, and each refusal. `test/owner.test.mjs`, 9 tests: the
     page's own steps with the packages' functions and a made-up PRF
     output; a setup and a sign-in, by the passkey and by the recovery code;
-    and each refusal (another origin, another key, a challenge used twice,
-    expired or for another request, a setup link used twice or expired, a
-    second setup, an unlock method missing or malformed). Their shared
-    helpers are in `test/oauth-world.mjs`.
+    and each refusal (another origin, another key, a challenge that has
+    expired, is for another request or was never given, a request whose
+    seal is broken, an answer sent twice, a setup link used twice or
+    expired, a second setup, an unlock method missing or malformed).
+    `test/review3.test.mjs`, 18 tests: the review's findings, among them
+    the page's script itself (`owner-page.mjs`), fetched from the executor
+    and run on a stand-in page through the package's `createWebAuthn`.
+    Their shared helpers are in `test/oauth-world.mjs`.
 
 - **`provared-mcp-executor` 0.5.0 (not yet released): `seal`,
   `acknowledge` and `status`.** The executor could not seal a book, and a
