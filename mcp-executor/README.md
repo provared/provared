@@ -461,6 +461,14 @@ The settings (`executor-http.example.json` is a start): `name`, `service`,
 - `denialsPerHour`: the most denials written in any hour (default 600).
 - `shutdownWait`: how long the server is given to exit after its input is
   closed before it is ended (default 5,000 milliseconds).
+- From 0.4.2, each message is written to the server as one line under
+  every way of ending a line: a carriage return between its values
+  becomes a space, and U+0085, U+2028 and U+2029 in a text are written as
+  their JSON escapes. A server that ends a line at a bare carriage
+  return, as one that reads with `node:readline` or in text mode with
+  universal newlines does, therefore reads one message and not several,
+  of which one could be a call the executor never checked (DESIGN.md,
+  X248). Versions up to 0.4.1 wrote the agent's message as it came.
 - `maxWaiting`: the most tool calls in progress or waiting their turn at
   once (default 16; 1 to 1,000). A call past it is answered with error 1001
   and nothing is written. At most 256 `tools/list` requests may wait for

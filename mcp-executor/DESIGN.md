@@ -1827,3 +1827,43 @@ servers that read names exactly. `test/names.test.mjs` sends each such
 message on stdio and over HTTP, in front of a made-up server that reads
 names without regard to capitals, and reads that server's own record of
 what it ran.
+
+**X248. One message, one line, under every way of ending a line
+(0.4.2).** The number is the one this choice has in the later design, as
+for X241. A message the executor writes to the tool server's standard
+input is first made one line (`oneLine` in `jsonrpc.mjs`, used by
+`toServer` in `executor.mjs`), and is still the same JSON: a line feed or
+a carriage return between its values, where alone JSON allows them
+outside a text, becomes a space; and U+0085, U+2028 and U+2029, which
+JSON allows only inside a text, are written as their JSON escapes. The
+agent's own text is changed in nothing else.
+
+Why: the executor ends a line at a line feed alone, as the specification
+frames stdio, and some readers end one at more. `node:readline` ends a
+line at a bare carriage return, U+2028 and U+2029; a reader in text mode
+with universal newlines, which is how Python reads its standard input,
+ends one at a bare carriage return. A message of the agent's with a whole
+`tools/call` between two carriage returns, inside a list in the `params`
+of a `ping`, was one `ping` to the executor, passed on with no check, and
+three lines to such a server, the second a call that the executor never
+saw: it ran with no receipt and no denial, and its answer came back to
+the agent (run, in front of a made-up server reading each way). A text
+argument with U+2028 in it reached a server that reads with
+`node:readline` as two lines: no call was hidden, since the quotation
+marks of a text within a text are escaped, but the call was not answered
+and was recorded as "outcome not known". Every version from 0.1.0 to
+0.4.1 wrote the agent's text to the server as it came. A server that ends
+a line at a line feed alone is not affected. Which MCP servers read which
+way was not checked. U+0085 is escaped as well because some line readers
+end a line there.
+
+Over HTTP the executor sends the upstream a body, not lines, and nothing
+changes. The demonstration's made-up server (`demo/server.mjs`) still
+reads with `node:readline`; behind the executor it is now sent one line
+for each message.
+
+The other way: refuse a message with a carriage return between its
+values. Not taken: it is valid JSON, and the same message on one line is
+plainer than a refusal. `test/lines.test.mjs` sends such messages in
+front of the made-up server reading each of the two ways, and reads its
+own record of what it read.

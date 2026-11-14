@@ -2,12 +2,46 @@
 
 ## Not yet released
 
-- **`provared-mcp-executor` 0.4.2 (not yet released): a security fix. In
-  front of a tool server whose JSON reader ignores capitals, an agent
-  could run a tool that no rule names, with no receipt, or a tool other
-  than the one its receipt names. 0.4.2 refuses the messages that did
-  it.**
-  - **What was weak.** The executor reads member names exactly. Some
+- **`provared-mcp-executor` 0.4.2 (not yet released): a security fix for
+  two weaknesses. In front of a tool server whose JSON reader ignores
+  capitals, or of one that ends a line at a bare carriage return, an
+  agent could run a tool that no rule names, with no receipt; in front of
+  the first, also a tool other than the one its receipt names. 0.4.2
+  refuses the messages that did the first, and writes every message to
+  the server as one line, which ends the second. Every version from 0.1.0
+  to 0.4.1 has both weaknesses.**
+  - **The second weakness: one message read as several lines.** The
+    executor ends a line at a line feed alone. Some readers end one at a
+    bare carriage return too: `node:readline` does (and at U+2028 and
+    U+2029), and so does a reader in text mode with universal newlines,
+    which is how Python reads its standard input. JSON allows a carriage
+    return between its values. So one line of the agent's,
+    `{"jsonrpc":"2.0","id":"outer","method":"ping","params":{"a":[<CR>{"jsonrpc":"2.0","id":"hidden","method":"tools/call","params":{"name":"order","arguments":{"total":999999}}}<CR>]}}`,
+    was a `ping` to the executor, which passed it on with no check, and
+    three lines to such a server, the second a call of `order` for
+    999,999: it ran, with no receipt and no denial, and its answer came
+    back to the agent. A text argument with U+2028 in it reached a server
+    that reads with `node:readline` as two lines, was not answered, and
+    was recorded as "outcome not known". **Who was exposed:** anyone who
+    runs the executor on stdio in front of a tool server that ends a line
+    at a bare carriage return. A server that ends a line at a line feed
+    alone is not affected. Which MCP servers read which way was not
+    checked. Over HTTP the executor sends the upstream a body, not lines,
+    and is not affected. **What 0.4.2 does** (`oneLine` in
+    `mcp-executor/jsonrpc.mjs`, used by `toServer` in
+    `mcp-executor/executor.mjs`; `mcp-executor/DESIGN.md`, X248): every
+    message written to the server's standard input is first made one
+    line, and is still the same JSON: a line feed or a carriage return
+    between its values becomes a space, and U+0085, U+2028 and U+2029 in
+    a text are written as their JSON escapes. `oneLine` is a new export
+    of `provared-mcp-executor/jsonrpc`. **Tests:**
+    `mcp-executor/test/lines.test.mjs` sends such messages in front of
+    the made-up server reading each of the two ways (`FAKE_LINE_ENDS` in
+    `test/fake-server.mjs`); both of those tests fail without the fix.
+    The demonstration's made-up server (`demo/server.mjs`) still reads
+    with `node:readline`; behind the executor it is now sent one line
+    for each message.
+  - **The first weakness: what was weak.** The executor reads member names exactly. Some
     JSON readers do not: the standard JSON reader of the Go language
     takes `Method` for `method` and `Name` for `name` in the fields it
     knows, the later one winning. A message with both was therefore one
@@ -25,7 +59,7 @@
     in member names. A server that reads names exactly, as the JSON
     readers of Node.js and Python do, is not affected. Which MCP servers
     read names without regard to capitals was not checked. Every
-    version up to 0.4.1 has the weakness: `readMessage` in
+    version from 0.1.0 to 0.4.1 has the weakness: `readMessage` in
     `mcp-executor/jsonrpc.mjs` has looked only for a name given twice
     exactly since the first version.
   - **What 0.4.2 does** (`readMessage` in `mcp-executor/jsonrpc.mjs`,
