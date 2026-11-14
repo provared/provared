@@ -130,6 +130,62 @@
   date. It shows only that the stub existed by the stamp's time: it catches
   forward dating, not back dating. No code changes.
 
+- **`provared-mcp-executor` 0.5.0 (not yet released): the fixes of 0.4.2
+  carried over, and the findings of a re-check of the local program.**
+  What changes, in `mcp-executor/` (`DESIGN.md`, section 10.2, X249 to
+  X253, and X241 to X248 as corrected):
+  - **Carried over from 0.4.2, for every transport, a local program
+    among them.** A rule on content refuses, as unreadable and with a
+    denial, a call where a member on the way to a pointer the rule reads
+    is written in other capitals (`Path` for `/path`), or where the way
+    stops at a value that is neither an object nor a list (X249); before,
+    both were taken for absent, and in front of a server that ignores
+    capitals a rule could be skipped. A message nested more than 256
+    levels deep is not read: the agent's is refused, the server's is a
+    line the executor cannot read; and the two older refusals name their
+    request (X250). A list of tools that the executor is to filter and
+    cannot read is not handed to the agent: its request is answered with
+    the error -32603 (X250). Which servers are known to be exposed, the
+    wider folding, and "one line" for a reader of UTF-8, are said as in
+    the 0.4.2 entry.
+  - **A program's exit does not overtake its last lines (X251).** The
+    calls that were with a program are settled once its output has ended,
+    not at its exit. Before, in front of a local program on Linux, a
+    program that wrote 1,500 notifications, then its answer, and ended
+    lost the answer 20 times in 20: the call was receipted as "ended
+    before it answered". The same order is now kept on stdio.
+  - **The stop reaches what a program started, on Linux and macOS
+    (X252).** A program is started as the leader of a process group of
+    its own, and SIGTERM and SIGKILL go to the group; what a program
+    leaves in its group counts as the program until it has gone. Before,
+    a server behind a launcher that passes no signal on was never
+    signalled, was not counted by `sessions.max`, and outlived the stop
+    with its credentials. **On Windows** the executor ends the one
+    process it started, and what that process started is ended only
+    where Windows ties it to its parent: name the server itself in
+    `server.command`, not a launcher. **What changes for whoever runs
+    it:** on Linux and macOS the tool server is no longer in the
+    executor's own process group, on stdio as over HTTP.
+  - **The flood rule is counted by the clock's seconds (X245).** More
+    than 1,000 messages in each of 5 seconds running, as the documents
+    said; before, the count ran over windows of one to two seconds and
+    ended a program writing about half as much in bursts.
+  - **A method in other capitals is refused (X253):** `Tools/Call`, and
+    the other three methods the executor acts on, with -32600; and with
+    `"unlisted": "forward"`, a call whose tool name is a ruled tool's in
+    other capitals.
+  - **Tests.** `test/deep.test.mjs` (5), `test/list.test.mjs` (8, three
+    of them in front of a local program), two more in
+    `test/content-rules.test.mjs` and in `test/names.test.mjs`, and six
+    more in `test/http-local-faults.test.mjs`, three of them on
+    `local.mjs` alone with the clock in the test's hands: the five
+    faults that the re-check put into the code and that passed every
+    test are each caught now. The test of the launcher runs on Linux and
+    macOS only. Three tests that depended on the computer's speed no
+    longer do (`seal.test.mjs`, `http.test.mjs`, and the timeouts of
+    1,000 ms where a test starts a program), and the made-up server's
+    log is read in whole lines.
+
 - **`provared-mcp-executor` 0.5.0 (not yet released): the findings of an
   independent review of the local program, one of them a serious weakness
   that every version up to 0.4.1 has.** What changes, in `mcp-executor/`

@@ -679,8 +679,9 @@ tool call to that server. `{"name":"echo","Name":"order", ...}` was
 checked and receipted as `echo`, and run as `order`. Every version up to
 0.4.1 has this weakness where it stands in front of such a server; 0.4.2
 has the same fix. A server that reads names exactly, as the JSON readers
-of Node.js and Python do, is not affected. Which MCP servers read names
-without regard to capitals was not checked.
+of Node.js and Python do, is not affected. Servers built on the official
+Go SDK before 1.3.1 ignore capitals (GHSA-wvj2-96wp-fq3f); other servers
+have not been checked.
 
 No denial is written for such a message: it has two readings, and a
 denial would name a tool and an amount that may not be the ones meant.
@@ -689,14 +690,21 @@ code for a caller of `amountOf` and `testCall`; through the executor they
 are no longer reached, since the message is refused before any rule is
 read.
 
-What this does not cover. Only capitals and the two letters above are
-folded: a reader that takes two names for one in another way (by leaving
+What this does not cover. The folding is that of capitals and a little
+wider: besides the two letters above it makes one of the sharp s and
+`ss`, of the dotless i, the dotted capital I and `i`, and of the
+ligatures and their letters, so `Masse` and `Maße` in one object are
+refused too; it errs on the side of refusing, and the refusal says
+"differ only in capitals, or in letters that some readers take as the
+same". A reader that takes two names for one in another way (by leaving
 out `_` or `-`, or by a Unicode normal form) is not covered. Nothing is
 checked in the `result` or `error` of the agent's own answers to a
 server's requests, where the executor reads nothing. A lone name in the
 arguments in other capitals (`Total` where a rule reads `/total`) is not
 refused here: the amount is then not found and the call is refused (X8),
-and a content rule compares names exactly, as the README says. The cost:
+and a rule on content refuses a call where such a name stands on the way
+to a pointer the rule reads (X249). The method, and a tool's name, in
+other capitals: X253. The cost:
 arguments that rightly hold two names that differ only in capitals in one
 object (`path` and `PATH`) can no longer be sent.
 
@@ -713,7 +721,9 @@ input was closed is sent SIGTERM; one still running after a second wait is
 sent SIGKILL, which no program can ignore. The second wait is
 `shutdownWait` again, and at most 5 seconds (`KILL_WAIT`). The same on
 stdio (`executor.mjs`) and for each session's program (`local.mjs`). On
-Windows the first is already final. The executor's stop waits for the
+Linux and macOS both signals go to the program's whole process group, so
+to whatever the program started; on Windows the first is already final,
+and it ends the one process the executor started (X252). The executor's stop waits for the
 programs for the two waits and 2 seconds more (`CLOSE_MARGIN`); where one
 is still there, the log says how many (`servers-not-ended`) and the stop
 goes on: the server is closed, the writers finish, the OAuth state's last
@@ -729,7 +739,9 @@ then is not ended by the executor.
 sessions.** An agent never has more than `sessions.max` programs running:
 those of its sessions, one whose `initialize` is not answered yet among
 them, and those of sessions that have ended and whose programs have not
-gone yet. Where an agent at its most begins another session, room is made
+gone yet. A program is the process the executor started and, on Linux and
+macOS, whatever that process started and left in its group (X252); on
+Windows, the one process. Where an agent at its most begins another session, room is made
 as X235 says, and the `initialize` then waits until one of the agent's
 programs has gone; a session just begun, whose first message is not yet
 in hand, makes no room. Where no program goes within the two waits of
@@ -768,7 +780,14 @@ of the log. And a program that writes more than 1,000 messages that
 answer nothing in flight in each of 5 seconds running has its session
 ended and is ended by force at once (`FLOOD_PER_SECOND`, `FLOOD_SECONDS`;
 `server-flooding` in the log); a call that was with it is receipted as
-for any program that ends. Messages that reach an open stream are counted
+for any program that ends. The seconds are the clock's, counted from the
+session's start: the first, the second, and so on. A second that holds
+1,000 or fewer, or none, breaks the run, so a program that writes evenly
+is ended only above 1,000 a second, and one that writes in bursts only
+where a burst of more than 1,000 falls in each of five seconds one after
+another. (As first built the count ran over windows of one to two
+seconds, and ended a program writing 1,001 at once every 1.9 seconds,
+about half the stated rate; a re-check ran it.) Messages that reach an open stream are counted
 too: they cost the executor the same. Why: as built, 400,000
 notifications of one agent's program made another agent's `ping` wait
 4,457 ms on Windows, and the log gained 400,000 lines, 42 MiB (the review
@@ -841,7 +860,11 @@ tried: the 400 it is given carries -32600); a client that speaks it alone
 cannot use a local program; and a program that speaks it alone, and so
 answers `initialize` with an error, cannot be served.
 
-**X248. One message, one line, under every way of ending a line.** A
+**X248. One message, one line, for a reader of UTF-8.** This makes a
+message one line for a reader that takes the bytes as UTF-8; one that
+takes them as another encoding may still cut a line inside a character
+beyond ASCII, inside a text, where quotation marks are escaped, so it can
+spoil a message and cannot hide a call. A
 message the executor writes to a program's standard input, on stdio and
 for a session's program, is first made one line (`oneLine` in
 `jsonrpc.mjs`), and is still the same JSON: a line feed or a carriage
@@ -862,11 +885,198 @@ written to the program as they came: the same message, with line feeds,
 ran an unchecked call on any program that reads lines, and a body set out
 over several lines was never answered. Neither was in a published
 version's HTTP mode, which has no local program; the stdio case is in
-every published version, and in 0.4.2, in front of a server that ends a
-line at a bare carriage return. U+0085 is escaped as well because some
-line readers end a line there. The other way: refuse such messages; not
+every published version up to 0.4.1, in front of a server that ends a
+line at a bare carriage return; 0.4.2 has the same fix. A text reader
+with universal newlines ends a line there too, which Python's
+`io.TextIOWrapper` gives unless told otherwise, as the official Python
+SDK's stdio server uses, and how Python opens its standard input on
+Windows: servers built on the official Python SDK read standard input
+through `io.TextIOWrapper`, so they end a line at a bare carriage return;
+other servers have not been checked. U+0085 is escaped as well because
+some line readers end a line there. The other way: refuse such messages; not
 taken, since each is valid JSON and a body over several lines is
 ordinary.
+
+**X249. A rule on content does not take for absent what it cannot read
+exactly (0.4.2).** Where a rule reads a pointer, in a `when` or
+a `test`, two things on the way to it are now `content-unreadable`, and
+the call is refused with a denial (`unreadableAt` and `holds` in
+`rules.mjs`):
+
+- An object on the way holds a member that is the pointer's name once
+  folded (as X241 folds) and is not written as the rule reads it: `Path`
+  where the rule reads `/path`, `SCAN` in the content where it reads
+  `/scan`.
+- The way stops, with names still to follow, at a value that is neither
+  an object nor a list: a text, a number, true, false or null.
+
+Why: an independent review of 0.4.2 ran the README's own example rules
+in front of the made-up server that ignores capitals. `write_file` with
+`Path` in place of `path` was let through and receipted as an allowed
+change, since the rule's `when` found no `path` and the rule did not
+apply, and the server wrote the file with the scan on; an `edit_file`
+under `Path`, and a lone `SCAN` inside the content, passed too. Every
+version with rules on content, from 0.2.0 to 0.4.1, does the same. X241
+could not catch it: the message has one reading of its tool and one
+spelling of each name, and only a rule knows which names matter. The
+second came from the same review: a rule that tests `/debug` in `options`
+refused `{"options":{"debug":true}}` and let through the same object
+given as a text that holds JSON, which a server may read as the object
+(as the reviewer recalls of one SDK; not run).
+
+A denial is written here, unlike X241: the tool and the rule are known,
+and only the content could not be read. What stays as it was: a member
+that is simply not there is absent, and `orAbsent` and `absent` hold for
+it; a list that is asked for a member by name has none; and a rule sees
+a name in other capitals only on the way to a pointer it reads. The cost:
+a call whose arguments rightly hold a name that differs only in capitals
+from one a rule reads, in the object the rule reads it from, is refused.
+
+The other way: fold names in the rule's own reading, so that `/path`
+finds `Path`. Not taken: a server that reads names exactly would then
+act on what the rule did not test. `test/content-rules.test.mjs` runs
+both, the first in front of the made-up server that ignores capitals.
+
+**X250. Reading a message never ends the executor, and a refusal names
+its request where it can (0.4.2).** The check of X241 for two names that
+are one once folded walks the message's text as it came
+(`foldedInParams` in `jsonrpc.mjs`), as `repeatedName` does, and calls
+nothing that calls itself. `readMessage` also catches whatever its
+reading throws and refuses the line; no line is known to reach that. The
+refusals for a member name given twice, and for a whole number beyond
+2^53 - 1, are answered under the request's id where the text has one
+top-level `id` that is text or a whole number every reader holds exactly
+(`topLevelId`); before, under no id.
+
+A message nested more than 256 levels deep, objects and lists together
+and the message itself the first, is not read at all (`MAX_DEPTH` and
+`deeperThan` in `jsonrpc.mjs`, which walks the text and calls nothing
+that calls itself). The agent's is refused with -32600 under its id, and
+nothing is sent to the server. The server's is a line the executor
+cannot read, as X241 treats a member it does not know: where it answers
+a call, the receipt says the answer could not be read and names no
+result, and the line goes to the agent as it was; where it answers
+another request, it is handed on as it was; a notification or a request
+of the server's is handed on as it was.
+
+One answer is not handed on: the server's answer to a `tools/list` that
+the executor is to filter (`hideUnlisted`) and cannot read, whether it
+is nested too deeply, names a member twice, holds no `tools` list in its
+result or, over HTTP, comes under another id or is no message. Handed on
+as it was, it would show the agent the tools the executor is to hide. The
+agent's request is answered with the error -32603 under its id, with the
+words of `LIST_NOT_READ`, and the log says `tools-list-not-read`
+(`executor.mjs` on stdio; `http.mjs` for a JSON body, for an event, and
+for the answer of a local program).
+The server's own error to `tools/list` goes on as it is. Before, in
+every version, such a list was handed on unfiltered. What stays: a line
+of the server's that the executor cannot match to any request (an id
+given twice, or no id), and an event under another id, are handed on as
+they were, and may hold anything the server chooses to write.
+`test/list.test.mjs` runs each on stdio and over HTTP.
+
+Why: the same review found that the first build of 0.4.2, never
+released, wrote the `params` out afresh to look for such names, which
+calls itself once for each level of nesting: one line of 10 KB, 5,000
+levels deep, overflowed the stack where the lines are read and ended the
+executor on stdio (over HTTP it answered 500 and went on). The walk
+closed that one place, and others were left, on both sides: an agent's
+cancellation of a call in flight is written afresh for the server; a
+server's error is written out for the receipt, and its list of tools is
+written afresh once filtered. Each calls itself in the same way: one
+deep answer of the server's ended the executor (run), and the agent's
+cancellation is the same code path (read, not run on its own). A limit where the message
+is read closes them together, and whatever is written later. 256 is the
+builder's number: it is far below the depth at which any of these
+overflows (some thousands), and above what the library fingerprints: the
+fingerprint of a call's arguments, and of its result, takes 64 levels.
+Between the two, as before, a call whose arguments nest too deeply is
+answered with error 1001 and not sent, and a result that nests too
+deeply is receipted as a result that could not be fingerprinted. The
+receipt's text for an answer that could not be read names three reasons
+(not JSON, a name given twice, not a response) and not this one; the
+text is left as it is, since its fingerprint is what receipts name. And
+a client on stdio that is answered under no id cannot match the answer
+to its request, and waits out its own timeout.
+
+The other way: catch the error at each place that writes a value out.
+Not taken: each new place would need its own, and the stack's depth
+where one is reached is not the same from one run to the next.
+`test/deep.test.mjs` sends 200,000 levels each way on stdio and over
+HTTP: the agent's requests, a call and a cancellation, and the server's
+result, error, list of tools and notification.
+
+X249 and X250 hold in front of a local program as elsewhere: its calls go
+through the same rules, its lines are read by the same `readMessage`, and
+its answer to a `tools/list` that cannot be read is answered with the
+same error (`answerLocal` in `http.mjs`; `test/list.test.mjs`).
+
+**X251. A program's exit does not overtake its last lines.** The calls
+that were with a program are settled once its output has ended, not when
+the process exits: at the exit the executor goes on reading what the
+program wrote, for at most a second more (`OUTPUT_WAIT`) where something
+the program started still holds its output open. The same on stdio. Why:
+a re-check ran a program that writes 1,500 notifications, then its
+answer, and ends. With one read of its output handled at a time (X245),
+the exit was seen before the answer was read: on Linux 0 of 20 such
+answers reached the agent, each call was receipted as "ended before it
+answered", and the answer was dropped as late. The record erred on the
+careful side, but the tool had done its work, and an agent told otherwise
+may do it twice. On stdio there is no pause between reads and no lost
+answer was seen; the same order is kept there, since an exit can be seen
+before the last of the output is read. `test/http-local-faults.test.mjs`
+runs such a program; the test fails without the fix on Linux, and on
+Windows it passes either way.
+
+**X252. The stop reaches what a program started, on Linux and macOS.**
+There the executor starts a program as the leader of a process group of
+its own (`detached`), and SIGTERM and SIGKILL (X242) go to the group
+(`signalProgram` in `executor.mjs`): to the program, and to whatever it
+started that has not left the group. Where the program itself has gone
+and something is left in its group, that is sent SIGTERM, and SIGKILL
+after the second wait; until it has gone it counts as the program still
+running, for `sessions.max` (X243) and for the stop. On stdio what is
+left is sent SIGKILL when the server has gone. Why: a re-check put a
+launcher in front of the server, one that passes no signal on, as a shell
+script that does not `exec` its server does. The signals reached the
+launcher alone: with `sessions.max` 2, eight real servers were alive, and
+all eight outlived the executor's stop, each with the credentials in its
+environment. What this costs: a program is no longer in the executor's
+own process group, so a signal sent to the executor's group from a
+terminal (Ctrl-C) reaches the executor alone, which then ends the program
+as it ends any. What it does not cover: a process that leaves the group
+(one that starts a session of its own, as a daemon does) is not reached.
+
+**On Windows** there are no such groups, and the executor ends the one
+process it started. What that process started is ended only where the
+system ties it to its parent: Node.js ties its children to itself there,
+and a re-check saw the real servers behind a launcher written in Node.js
+end with it; other launchers (`cmd.exe`, a virtual environment's
+`python.exe`) were not tried. So on Windows the signals, the count of
+`sessions.max` and "no program outlives the stop" hold for the process
+the executor starts: name the server itself in `server.command`, not a
+launcher. The other way, to end the tree with the system's own command
+for it: not taken, since it starts a program of the system's for each
+end, and was not tried. The test (a launcher that passes no signal on,
+`test/launcher.mjs`) runs on Linux and macOS and is skipped on Windows.
+
+**X253. A method, and with `forward` a tool's name, in other capitals.**
+X241 folds the names of members, not their values. Two values are now
+held to the same rule. A message of the agent's whose method is
+`tools/call`, `tools/list`, `initialize` or `notifications/cancelled`
+once folded, and is not written so, is refused with -32600 (`readMessage`
+in `jsonrpc.mjs`): the executor acts on those four, and would pass
+`Tools/Call` by as a method it does not know. And where the settings send
+a tool with no rule on unchecked (`"unlisted": "forward"`), a call whose
+tool name is a ruled tool's once folded, and is not written so, is
+refused with -32600 and not sent on (`handleCall`); with the default,
+`refuse`, it is refused as a tool with no rule, as before. Why: a
+re-check sent `{"method":"Tools/Call", ...}`: answered with the program's
+own result, no receipt, no denial, and a made-up program that reads the
+method without regard to capitals ran the call. No MCP server is known
+to read a method or a tool's name so; the usual SDKs compare them
+exactly. What stays: any other method in other capitals is sent on as it
+is, as any method the executor does not act on.
 
 ## 11. F-157: rules on the content of a change
 
@@ -1009,11 +1219,14 @@ into the record.
 - That a `when` reads a value of another kind: a `matches` is met only by
   text, so a path given as a list does not match and the rule does not
   apply (X77).
-- That a member is named as the program reads it: names in the content
-  are compared exactly, so a lone `SCAN` passes an `absent` or `orAbsent`
-  test on `/scan` (X77).
-- That content nested in content is read: `as: "json"` reads one layer,
-  so JSON text inside a JSON string is a string to the rule (X77).
+- That a member is named as the program reads it, beyond the way to the
+  pointers a rule reads: on that way a name in other capitals is refused
+  as unreadable (X249; before, a lone `SCAN` passed an `absent` or
+  `orAbsent` test on `/scan`, X77); elsewhere the rule does not see it.
+- That content nested in content is read: `as: "json"` reads one layer.
+  JSON text where the rule's pointer walks on is refused as unreadable
+  (X249); JSON text in a member the rule does not walk through is a
+  string to the rule (X77).
 - Anything about a call to a tool the rule does not name, or a tool whose
   arguments are not plain data.
 - That the rules were right, or were applied. The record holds the

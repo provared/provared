@@ -443,8 +443,16 @@ What is different from an upstream HTTP server:
   where it has not ended `shutdownWait` milliseconds later it is sent
   SIGTERM, which a program may ignore; and where it is still running
   after a second wait (`shutdownWait` again, and at most 5 seconds) it is
-  sent SIGKILL, which it cannot. On Windows the first of the two is
-  already final. A session ends when the agent sends DELETE under it
+  sent SIGKILL, which it cannot. On Linux and macOS both signals go to
+  the program's whole process group, so to whatever the program started,
+  a server behind a launcher among them; and what a program leaves in
+  its group when it has gone is ended too, and counts as the program
+  until then. On Windows the first of the two is already final, and it
+  ends the one process the executor started: what that process started
+  is ended only where Windows ties it to its parent, as it does for a
+  launcher written in Node.js. So on Windows name the server itself in
+  `server.command`, not a launcher that starts it. A session ends when
+  the agent sends DELETE under it
   (204); when its program ends by itself; when it has been idle; when it
   makes room for a new one; when the connection made through OAuth it was
   begun under ends (a refreshed token goes on with the same session);
@@ -459,9 +467,18 @@ What is different from an upstream HTTP server:
   be written to a program that is not reading, the next message for it is
   refused with 503 and not held, and the session is ended. A program that
   writes more than 1,000 messages that answer nothing in flight in each
-  of 5 seconds running has its session ended. One read of a program's
-  output is handled at a time, so that one agent's program does not hold
-  up another agent's requests.
+  of 5 seconds running has its session ended: seconds by the clock,
+  counted from the session's start, so that one second with 1,000 or
+  fewer breaks the run. One read of a program's output is handled at a
+  time, so that one agent's program does not hold up another agent's
+  requests; and the calls that were with a program are settled once its
+  output has been read to the end, so that an answer written just before
+  the program ended is not lost.
+- **A list of tools the executor cannot read** (nested more than 256
+  levels deep, a member named twice, no `tools` in the result) is not
+  handed to the agent where the executor is to filter it (`hideUnlisted`):
+  the request is answered with the error -32603. The same in front of an
+  upstream and on stdio.
 - **A program that ends with a call in flight** gives the receipt it gives
   on stdio: the agent is answered with the error "The tool server ended
   before it answered this call, so its outcome is not known." and the
@@ -759,7 +776,16 @@ holds the settings for particular clients.
   nothing is sent to the server. Why: a tool server whose JSON reader
   ignores capitals takes `Method` for `method` and `Name` for `name`, so
   such a message was one thing to the executor and another to that server
-  (DESIGN.md, X241). Versions up to 0.4.1 did not refuse them.
+  (DESIGN.md, X241). Versions up to 0.4.1 did not refuse them. Refused in
+  the same way: a method that is `tools/call`, `tools/list`, `initialize`
+  or `notifications/cancelled` in other capitals (`Tools/Call`); with
+  `"unlisted": "forward"`, a call whose tool name is a ruled tool's in
+  other capitals; and a message nested more than 256 levels deep, which
+  from the server is treated as any line the executor cannot read
+  (DESIGN.md, X250 and X253). The folding is a little wider than
+  capitals: it also makes one of the long s and `s`, the Kelvin sign and
+  `k`, the sharp s and `ss`, the dotless i and `i`, and the ligatures and
+  their letters.
 - `contentRules`: optional; the path of a file of rules on the content of
   a change, tested before a call is let through (see "Rules on the content
   of a change" below). Its fingerprint is named in every receipt and
@@ -783,11 +809,18 @@ holds the settings for particular clients.
   closed before it is ended (default 5,000 milliseconds). It is then sent
   SIGTERM and, where it is still running after a second wait (the same
   again, and at most 5 seconds), SIGKILL.
-- Each message is written to the server as one line under every way of
-  ending a line: a carriage return between its values becomes a space,
-  and U+0085, U+2028 and U+2029 in a text are written as their JSON
-  escapes, so that a server that ends a line at one of them reads one
-  message and not several (DESIGN.md, X248).
+- Each message is written to the server as one line: a carriage return
+  between its values becomes a space, and U+0085, U+2028 and U+2029 in a
+  text are written as their JSON escapes, so that a server that ends a
+  line at one of them reads one message and not several, of which one
+  could be a call the executor never checked (DESIGN.md, X248).
+  `node:readline` ends a line at a bare carriage return, and so does a
+  text reader with universal newlines, which Python's `io.TextIOWrapper`
+  gives unless told otherwise, as the official Python SDK's stdio server
+  uses, and how Python opens its standard input on Windows. This holds
+  for a server that reads its input as UTF-8; one that reads it as
+  another encoding may still cut a line inside a character beyond ASCII,
+  which can spoil a message and cannot hide a call.
 - `maxWaiting`: the most tool calls in progress or waiting their turn at
   once (default 16; 1 to 1,000). A call past it is answered with error 1001
   and nothing is written. At most 256 `tools/list` requests may wait for
@@ -941,15 +974,26 @@ sent on with no content rule tested.
   other value that is not text does not match, so the rule does not apply
   and the call goes on to the next rule. Where a server could take a path
   of another kind, close the tool with a rule with no `test`.
-- That a member is named as the program reads it. Names inside the
-  content are compared exactly: `"SCAN": true` is not `scan`, so it passes
-  an `absent` test, or an `orAbsent` one, on `/scan` (two members that
-  differ only in capitals in one object are refused as unreadable, but a
-  lone `SCAN` is not). A program that reads names without regard to
-  capitals acts on what the rule did not see.
-- That content nested in content is read. `as: "json"` reads one layer: a
-  JSON text inside a JSON string (`"{\"scan\": true}"` as the content's
-  text) is a string to the rule, and its tests on `/scan` find nothing.
+- That a member is named as the program reads it, beyond the way to the
+  pointers a rule reads. Where a rule reads a pointer and an object on
+  the way to it holds a member that is the pointer's name in other
+  capitals, the call is refused as unreadable: `Path` where the rule
+  reads `/path`, and `"SCAN": true` in the content where it tests `/scan`
+  (versions up to 0.4.1 took both for absent, so that in front of a
+  program that reads names without regard to capitals the rule was
+  skipped). A rule still does not see such a name in an object it does
+  not walk through, and it folds capitals only: a program that takes two
+  names for one in some other way acts on what the rule did not see.
+- That a value of another kind is read as the program reads it. Where
+  the way to a pointer stops, with names still to follow, at a value that
+  is neither an object nor a list (a text, a number, true, false or
+  null), the call is refused as unreadable: a program may read a text
+  that holds JSON as the object. So a JSON text inside a JSON string
+  (`"{\"scan\": true}"` as the content's text) is refused where a rule
+  tests `/scan`. What stays: a list that is asked for a member by name is
+  taken as having none, and `as: "json"` reads one layer, so JSON held as
+  text in a member the rule does not walk through is a string to the
+  rule.
 - That the rules were right, or were applied. The record holds the
   fingerprint of the rules file and, in a denial, of the rule that
   refused; it does not hold the rules, and a receipt shows only that the
