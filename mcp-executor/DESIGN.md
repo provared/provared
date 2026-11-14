@@ -1797,8 +1797,9 @@ tool call to that server. `{"name":"echo","Name":"order", ...}` was
 checked and receipted as `echo`, and run as `order`. Every version up to
 0.4.1 has this weakness where it stands in front of such a server. A
 server that reads names exactly, as the JSON readers of Node.js and
-Python do, is not affected. Which MCP servers read names without regard
-to capitals was not checked.
+Python do, is not affected. Servers built on the official Go SDK before
+1.3.1 ignore capitals (GHSA-wvj2-96wp-fq3f); other servers have not been
+checked.
 
 No denial is written for such a message: it has two readings, and a
 denial would name a tool and an amount that may not be the ones meant.
@@ -1807,14 +1808,20 @@ code for a caller of `amountOf` and `testCall`; through the executor they
 are no longer reached, since the message is refused before any rule is
 read.
 
-What this does not cover. Only capitals and the two letters above are
-folded: a reader that takes two names for one in another way (by leaving
+What this does not cover. The folding is that of capitals and a little
+wider: besides the two letters above it makes one of the sharp s and
+`ss`, of the dotless i, the dotted capital I and `i`, and of the
+ligatures and their letters, so `Masse` and `Maße` in one object are
+refused too; it errs on the side of refusing, and the refusal says
+"differ only in capitals, or in letters that some readers take as the
+same". A reader that takes two names for one in another way (by leaving
 out `_` or `-`, or by a Unicode normal form) is not covered. Nothing is
 checked in the `result` or `error` of the agent's own answers to a
 server's requests, where the executor reads nothing. A lone name in the
 arguments in other capitals (`Total` where a rule reads `/total`) is not
 refused here: the amount is then not found and the call is refused (X8),
-and a content rule compares names exactly, as the README says. The cost:
+and a rule on content refuses a call where such a name stands on the way
+to a pointer the rule reads (X249). The cost:
 arguments that rightly hold two names that differ only in capitals in one
 object (`path` and `PATH`) can no longer be sent.
 
@@ -1828,21 +1835,31 @@ message on stdio and over HTTP, in front of a made-up server that reads
 names without regard to capitals, and reads that server's own record of
 what it ran.
 
-**X248. One message, one line, under every way of ending a line
-(0.4.2).** The number is the one this choice has in the later design, as
-for X241. A message the executor writes to the tool server's standard
-input is first made one line (`oneLine` in `jsonrpc.mjs`, used by
-`toServer` in `executor.mjs`), and is still the same JSON: a line feed or
-a carriage return between its values, where alone JSON allows them
-outside a text, becomes a space; and U+0085, U+2028 and U+2029, which
-JSON allows only inside a text, are written as their JSON escapes. The
-agent's own text is changed in nothing else.
+**X248. One message, one line, for a reader of UTF-8 (0.4.2).** The
+number is the one this choice has in the later design, as for X241. A
+message the executor writes to the tool server's standard input is first
+made one line (`oneLine` in `jsonrpc.mjs`, used by `toServer` in
+`executor.mjs`), and is still the same JSON: a line feed or a carriage
+return between its values, where alone JSON allows them outside a text,
+becomes a space; and U+0085, U+2028 and U+2029, which JSON allows only
+inside a text, are written as their JSON escapes. The agent's own text is
+changed in nothing else. This makes the message one line for a reader
+that takes the bytes as UTF-8 and ends a line at any of those. A reader
+that takes the bytes as another encoding may still cut a line inside a
+character beyond ASCII (one that reads Latin-1 and ends a line at the
+byte 0x85 does); such a cut falls inside a text, where quotation marks
+are escaped, so it can spoil a message and cannot hide a call. The other
+way, to write every character beyond ASCII as an escape, was not taken
+for 0.4.2: it would change the bytes of every message with such a
+character, for a reader that no server is known to be.
 
 Why: the executor ends a line at a line feed alone, as the specification
 frames stdio, and some readers end one at more. `node:readline` ends a
-line at a bare carriage return, U+2028 and U+2029; a reader in text mode
-with universal newlines, which is how Python reads its standard input,
-ends one at a bare carriage return. A message of the agent's with a whole
+line at a bare carriage return, U+2028 and U+2029; a text reader with
+universal newlines, which Python's `io.TextIOWrapper` gives unless told
+otherwise, as the official Python SDK's stdio server uses, and how Python
+opens its standard input on Windows, ends one at a bare carriage return.
+A message of the agent's with a whole
 `tools/call` between two carriage returns, inside a list in the `params`
 of a `ping`, was one `ping` to the executor, passed on with no check, and
 three lines to such a server, the second a call that the executor never
@@ -1853,9 +1870,11 @@ argument with U+2028 in it reached a server that reads with
 marks of a text within a text are escaped, but the call was not answered
 and was recorded as "outcome not known". Every version from 0.1.0 to
 0.4.1 wrote the agent's text to the server as it came. A server that ends
-a line at a line feed alone is not affected. Which MCP servers read which
-way was not checked. U+0085 is escaped as well because some line readers
-end a line there.
+a line at a line feed alone is not affected. Servers built on the
+official Python SDK read standard input through `io.TextIOWrapper`, so
+they end a line at a bare carriage return; other servers have not been
+checked. U+0085 is escaped as well because some line readers end a line
+there.
 
 Over HTTP the executor sends the upstream a body, not lines, and nothing
 changes. The demonstration's made-up server (`demo/server.mjs`) still
@@ -1867,3 +1886,66 @@ values. Not taken: it is valid JSON, and the same message on one line is
 plainer than a refusal. `test/lines.test.mjs` sends such messages in
 front of the made-up server reading each of the two ways, and reads its
 own record of what it read.
+
+**X249. A rule on content does not take for absent what it cannot read
+exactly (0.4.2).** The number follows X248, so that it names the same
+choice in the later design. Where a rule reads a pointer, in a `when` or
+a `test`, two things on the way to it are now `content-unreadable`, and
+the call is refused with a denial (`unreadableAt` and `holds` in
+`rules.mjs`):
+
+- An object on the way holds a member that is the pointer's name once
+  folded (as X241 folds) and is not written as the rule reads it: `Path`
+  where the rule reads `/path`, `SCAN` in the content where it reads
+  `/scan`.
+- The way stops, with names still to follow, at a value that is neither
+  an object nor a list: a text, a number, true, false or null.
+
+Why: an independent review of 0.4.2 ran the README's own example rules
+in front of the made-up server that ignores capitals. `write_file` with
+`Path` in place of `path` was let through and receipted as an allowed
+change, since the rule's `when` found no `path` and the rule did not
+apply, and the server wrote the file with the scan on; an `edit_file`
+under `Path`, and a lone `SCAN` inside the content, passed too. Every
+version with rules on content, from 0.2.0 to 0.4.1, does the same. X241
+could not catch it: the message has one reading of its tool and one
+spelling of each name, and only a rule knows which names matter. The
+second came from the same review: a rule that tests `/debug` in `options`
+refused `{"options":{"debug":true}}` and let through the same object
+given as a text that holds JSON, which a server may read as the object
+(as the reviewer recalls of one SDK; not run).
+
+A denial is written here, unlike X241: the tool and the rule are known,
+and only the content could not be read. What stays as it was: a member
+that is simply not there is absent, and `orAbsent` and `absent` hold for
+it; a list that is asked for a member by name has none; and a rule sees
+a name in other capitals only on the way to a pointer it reads. The cost:
+a call whose arguments rightly hold a name that differs only in capitals
+from one a rule reads, in the object the rule reads it from, is refused.
+
+The other way: fold names in the rule's own reading, so that `/path`
+finds `Path`. Not taken: a server that reads names exactly would then
+act on what the rule did not test. `test/content-rules.test.mjs` runs
+both, the first in front of the made-up server that ignores capitals.
+
+**X250. Reading a message never ends the executor, and a refusal names
+its request where it can (0.4.2).** The check of X241 for two names that
+are one once folded walks the message's text as it came
+(`foldedInParams` in `jsonrpc.mjs`), as `repeatedName` does, and calls
+nothing that calls itself. `readMessage` also catches whatever its
+reading throws and refuses the line; no line is known to reach that. The
+refusals for a member name given twice, and for a whole number beyond
+2^53 - 1, are answered under the request's id where the text has one
+top-level `id` that is text or a whole number every reader holds exactly
+(`topLevelId`); before, under no id.
+
+Why: the same review found that the first build of 0.4.2, never
+released, wrote the `params` out afresh to look for such names, which
+calls itself once for each level of nesting: one line of 10 KB, 5,000
+levels deep, overflowed the stack where the lines are read and ended the
+executor on stdio (over HTTP it answered 500 and went on). A call of a
+rule's tool nested that deeply is still not sent: its arguments cannot
+be fingerprinted at that depth, and the agent is answered with error
+1001. And a client on stdio that is answered under no id cannot match
+the answer to its request, and waits out its own timeout.
+`test/deep.test.mjs` sends 200,000 levels on stdio and over HTTP.

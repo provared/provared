@@ -461,14 +461,19 @@ The settings (`executor-http.example.json` is a start): `name`, `service`,
 - `denialsPerHour`: the most denials written in any hour (default 600).
 - `shutdownWait`: how long the server is given to exit after its input is
   closed before it is ended (default 5,000 milliseconds).
-- From 0.4.2, each message is written to the server as one line under
-  every way of ending a line: a carriage return between its values
-  becomes a space, and U+0085, U+2028 and U+2029 in a text are written as
-  their JSON escapes. A server that ends a line at a bare carriage
-  return, as one that reads with `node:readline` or in text mode with
-  universal newlines does, therefore reads one message and not several,
-  of which one could be a call the executor never checked (DESIGN.md,
-  X248). Versions up to 0.4.1 wrote the agent's message as it came.
+- From 0.4.2, each message is written to the server as one line: a
+  carriage return between its values becomes a space, and U+0085, U+2028
+  and U+2029 in a text are written as their JSON escapes. A server that
+  ends a line at a bare carriage return therefore reads one message and
+  not several, of which one could be a call the executor never checked
+  (DESIGN.md, X248). `node:readline` ends a line there, and so does a
+  text reader with universal newlines, which Python's `io.TextIOWrapper`
+  gives unless told otherwise, as the official Python SDK's stdio server
+  uses, and how Python opens its standard input on Windows. This holds
+  for a server that reads its input as UTF-8; one that reads it as
+  another encoding may still cut a line inside a character beyond ASCII,
+  which can spoil a message and cannot hide a call. Versions up to 0.4.1
+  wrote the agent's message as it came.
 - `maxWaiting`: the most tool calls in progress or waiting their turn at
   once (default 16; 1 to 1,000). A call past it is answered with error 1001
   and nothing is written. At most 256 `tools/list` requests may wait for
@@ -622,15 +627,26 @@ sent on with no content rule tested.
   other value that is not text does not match, so the rule does not apply
   and the call goes on to the next rule. Where a server could take a path
   of another kind, close the tool with a rule with no `test`.
-- That a member is named as the program reads it. Names inside the
-  content are compared exactly: `"SCAN": true` is not `scan`, so it passes
-  an `absent` test, or an `orAbsent` one, on `/scan` (two members that
-  differ only in capitals in one object are refused as unreadable, but a
-  lone `SCAN` is not). A program that reads names without regard to
-  capitals acts on what the rule did not see.
-- That content nested in content is read. `as: "json"` reads one layer: a
-  JSON text inside a JSON string (`"{\"scan\": true}"` as the content's
-  text) is a string to the rule, and its tests on `/scan` find nothing.
+- That a member is named as the program reads it, beyond the way to the
+  pointers a rule reads. From 0.4.2, where a rule reads a pointer and an
+  object on the way to it holds a member that is the pointer's name in
+  other capitals, the call is refused as unreadable: `Path` where the
+  rule reads `/path`, and `"SCAN": true` in the content where it tests
+  `/scan` (versions up to 0.4.1 took both for absent, so that in front of
+  a program that reads names without regard to capitals the rule was
+  skipped). A rule still does not see such a name in an object it does
+  not walk through, and it folds capitals only: a program that takes two
+  names for one in some other way acts on what the rule did not see.
+- That a value of another kind is read as the program reads it. From
+  0.4.2, where the way to a pointer stops, with names still to follow, at
+  a value that is neither an object nor a list (a text, a number, true,
+  false or null), the call is refused as unreadable: a program may read
+  a text that holds JSON as the object. So a JSON text inside a JSON
+  string (`"{\"scan\": true}"` as the content's text) is refused where a
+  rule tests `/scan`. What stays: a list that is asked for a member by
+  name is taken as having none, and `as: "json"` reads one layer, so
+  JSON held as text in a member the rule does not walk through is a
+  string to the rule.
 - That the rules were right, or were applied. The record holds the
   fingerprint of the rules file and, in a denial, of the rule that
   refused; it does not hold the rules, and a receipt shows only that the

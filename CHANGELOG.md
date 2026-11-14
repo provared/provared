@@ -6,16 +6,19 @@
   two weaknesses. In front of a tool server whose JSON reader ignores
   capitals, or of one that ends a line at a bare carriage return, an
   agent could run a tool that no rule names, with no receipt; in front of
-  the first, also a tool other than the one its receipt names. 0.4.2
-  refuses the messages that did the first, and writes every message to
-  the server as one line, which ends the second. Every version from 0.1.0
+  the first, also a tool other than the one its receipt names, or a
+  change that a rule on content forbids. 0.4.2 refuses the messages that
+  did the first, and writes every message to the server as one line,
+  which ends the second. Every version from 0.1.0
   to 0.4.1 has both weaknesses.**
   - **The second weakness: one message read as several lines.** The
     executor ends a line at a line feed alone. Some readers end one at a
     bare carriage return too: `node:readline` does (and at U+2028 and
-    U+2029), and so does a reader in text mode with universal newlines,
-    which is how Python reads its standard input. JSON allows a carriage
-    return between its values. So one line of the agent's,
+    U+2029), and so does a text reader with universal newlines, which
+    Python's `io.TextIOWrapper` gives unless told otherwise, as the
+    official Python SDK's stdio server uses, and how Python opens its
+    standard input on Windows. JSON allows a carriage return between its
+    values. So one line of the agent's,
     `{"jsonrpc":"2.0","id":"outer","method":"ping","params":{"a":[<CR>{"jsonrpc":"2.0","id":"hidden","method":"tools/call","params":{"name":"order","arguments":{"total":999999}}}<CR>]}}`,
     was a `ping` to the executor, which passed it on with no check, and
     three lines to such a server, the second a call of `order` for
@@ -25,16 +28,22 @@
     was recorded as "outcome not known". **Who was exposed:** anyone who
     runs the executor on stdio in front of a tool server that ends a line
     at a bare carriage return. A server that ends a line at a line feed
-    alone is not affected. Which MCP servers read which way was not
-    checked. Over HTTP the executor sends the upstream a body, not lines,
+    alone is not affected. Servers built on the official Python SDK read
+    standard input through `io.TextIOWrapper`, so they end a line at a
+    bare carriage return; other servers have not been checked. Over HTTP
+    the executor sends the upstream a body, not lines,
     and is not affected. **What 0.4.2 does** (`oneLine` in
     `mcp-executor/jsonrpc.mjs`, used by `toServer` in
     `mcp-executor/executor.mjs`; `mcp-executor/DESIGN.md`, X248): every
     message written to the server's standard input is first made one
     line, and is still the same JSON: a line feed or a carriage return
     between its values becomes a space, and U+0085, U+2028 and U+2029 in
-    a text are written as their JSON escapes. `oneLine` is a new export
-    of `provared-mcp-executor/jsonrpc`. **Tests:**
+    a text are written as their JSON escapes. This makes it one line for
+    a reader that takes the bytes as UTF-8. A reader that takes them as
+    another encoding may still cut a line inside a character beyond
+    ASCII; such a cut falls inside a text, where quotation marks are
+    escaped, so it can spoil a message and cannot hide a call. `oneLine`
+    is a new export of `provared-mcp-executor/jsonrpc`. **Tests:**
     `mcp-executor/test/lines.test.mjs` sends such messages in front of
     the made-up server reading each of the two ways (`FAKE_LINE_ENDS` in
     `test/fake-server.mjs`); both of those tests fail without the fix.
@@ -53,12 +62,22 @@
     `{"method":"notifications/initialized","Method":"tools/call","ID":13, ...}`
     likewise; and `{"name":"echo","Name":"order","arguments":{},"Arguments":{"total":999999}}`
     was checked, receipted and countersigned as `echo` with no
-    arguments, and run as `order` for 999,999.
+    arguments, and run as `order` for 999,999. **A rule on the content
+    of a change could be skipped the same way.** A rule reads the
+    arguments by the names it is given. With the README's own example
+    rules, `write_file` with `{"Path":"config/settings.json","content":"{\"scan\":true}"}`
+    was let through and receipted as an allowed change: the rule's
+    `when` found no `path`, so the rule did not apply, and such a server
+    read `Path` as `path` and wrote the file with the scan on. An
+    `edit_file` of `settings.json` under `Path`, and a lone `"SCAN": true`
+    inside the content, passed in the same way. Rules on content came
+    with 0.2.0, and every version from then to 0.4.1 does this.
   - **Who was exposed.** Anyone who runs the executor, on stdio or over
     HTTP, in front of a tool server whose JSON reader ignores capitals
     in member names. A server that reads names exactly, as the JSON
-    readers of Node.js and Python do, is not affected. Which MCP servers
-    read names without regard to capitals was not checked. Every
+    readers of Node.js and Python do, is not affected. Servers built on
+    the official Go SDK before 1.3.1 ignore capitals
+    (GHSA-wvj2-96wp-fq3f); other servers have not been checked. Every
     version from 0.1.0 to 0.4.1 has the weakness: `readMessage` in
     `mcp-executor/jsonrpc.mjs` has looked only for a name given twice
     exactly since the first version.
@@ -80,23 +99,61 @@
     the answer could not be read and names no result. In a `tools/list`
     answer that the executor filters, a tool with a second name in other
     capitals is not shown, and a second list (`Tools`) is left out.
+  - **What 0.4.2 does for the rules on content** (`unreadableAt` and
+    `holds` in `mcp-executor/rules.mjs`; DESIGN.md, X249). Where a rule
+    reads a pointer, in its `when` or its `test`, and an object on the
+    way holds a member that is the pointer's name in other capitals and
+    is not written as the rule reads it, the call is refused as
+    `content-unreadable`, with a denial: `Path` where the rule reads
+    `/path`, `SCAN` in the content where it reads `/scan`. So is a call
+    where the way to the pointer stops, with names still to follow, at a
+    value that is neither an object nor a list: a rule that tests
+    `/debug` in `options` refused `{"options":{"debug":true}}` and let
+    through `{"options":"{\"debug\":true}"}`, a text that a server may
+    read as the object. Such a value was taken for absent before.
+  - **The reading never ends the executor** (`foldedInParams` and
+    `readMessage` in `mcp-executor/jsonrpc.mjs`; DESIGN.md, X250). The
+    check for names in other capitals walks the message's text as it
+    came, and calls nothing that calls itself: a message 200,000 levels
+    deep is read, refused or answered with an error, on stdio and over
+    HTTP. (As first built for 0.4.2, and never released, the check wrote
+    the `params` out afresh, and one line 5,000 levels deep ended the
+    executor on stdio.) The two older refusals, for a member name given
+    twice and for a whole number beyond 2^53 - 1, are now answered under
+    the request's id where it can be found; before, under no id, so that
+    a client on stdio waited out its own timeout.
   - **What changes for a caller.** Arguments with two names in one
     object that differ only in capitals (`path` and `PATH`) are now
     refused in every call, with -32600 and no denial; before, they were
     refused, with a denial, only where a rule read the amount or the
-    content from the arguments. `misspelt` is a new export of
-    `provared-mcp-executor/jsonrpc`.
-  - **What it does not cover.** Only capitals and those two letters are
-    folded; a reader that takes two names for one in some other way is
-    not covered. A content rule still compares names exactly, as the
-    README says.
+    content from the arguments. A call that a rule on content cannot read
+    exactly, in the two ways above, is now refused where it was let
+    through. `misspelt`, `foldedInParams` and `oneLine` are new exports
+    of `provared-mcp-executor/jsonrpc`, and `unreadableAt` of
+    `provared-mcp-executor/rules`.
+  - **What it does not cover.** The folding is that of capitals and a
+    little wider: it also makes one of the long s and `s`, the Kelvin
+    sign and `k`, the sharp s and `ss`, the dotless i, the dotted capital
+    I and `i`, and the ligatures and their letters, so that `Masse` and
+    `Maße` in one object are refused too. It errs on the side of
+    refusing. A reader that takes two names for one in some other way is
+    not covered. A rule on content sees a name in other capitals only on
+    the way to a pointer it reads: a rule that tests `/scan` does not see
+    `SCAN` in an object it does not walk through. A list that is asked
+    for a member by name is still taken as having none.
   - **Tests.** `mcp-executor/test/names.test.mjs` sends eleven such
     messages on stdio and over HTTP, in front of the made-up servers
     reading names without regard to capitals (`FAKE_FOLD` in
     `test/fake-server.mjs`, `foldNames()` in `test/fake-http-server.mjs`),
     and reads each server's own record of what it ran; each of its five
     tests fails without the fix. Two older tests that expected a denial
-    for such arguments now expect the error.
+    for such arguments now expect the error. Two new tests in
+    `test/content-rules.test.mjs` run the rules' cases, the first in
+    front of the made-up server that ignores capitals; and
+    `test/deep.test.mjs` (4 tests) sends 200,000 levels of nesting on
+    stdio and over HTTP, and reads the ids of the older refusals; an
+    older test that expected such a refusal under no id now expects the
+    request's. Each of these fixes was undone once to see a test fail.
   - **Versions.** 0.4.2 in `mcp-executor/package.json` and
     `mcp-executor/server.json` (both fields).
 
