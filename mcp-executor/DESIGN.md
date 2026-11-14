@@ -653,7 +653,10 @@ denials and, from 0.5.0, seals.
 
 **X1. A package of its own, `mcp-executor/`, named `provared-mcp-executor`,
 depending on `provared` 0.7.0 (`^0.7.0`; it was `>0.6.0 <0.8.0` until
-0.7.0 was cut, and `^0.6.0` until the reserved names of X12 came).** Two files are copies of the gateway's
+0.7.0 was cut, and `^0.6.0` until the reserved names of X12 came).** From
+0.5.0 it also depends on `@microtoll/identity` and `@microtoll/crypto-core`,
+at exactly 0.1.1, for the owner's check over OAuth (section 14.1), installed
+from its `package-lock.json`. Two files are copies of the gateway's
 (`files.mjs`; `test/local-library.mjs`), held identical by a test. Why: the
 package works by name once installed; copying keeps the two executors from
 depending on each other. The other way: an export from the gateway
@@ -2319,7 +2322,8 @@ from its issue, and a refresh keeps the scope of the approval.
 **X210. The state is one file only the executor may read, written
 whole.** `oauth.state` (default `oauth-state.json`) holds each connection
 (its agent, client, resource, scope, the hashes of its tokens and their
-ends) and the copies of the clients' documents. No token is in it. It is
+ends), the copies of the clients' documents, and the owner (X226). No
+token is in it. It is
 written through a new temporary file with mode 0600, which is then put in
 its place, so a stop part-way leaves the old file or the new. On Windows
 the mode does nothing: the folder's own permissions must keep others out.
@@ -2338,16 +2342,18 @@ for a while. The other way: a count by the address a proxy reports, which
 the executor would have to trust.
 
 **X212. The owner's check, behind one interface, at a page that runs
-nothing.** The page is plain HTML: no script, no style, no image, under a
-Content-Security-Policy of `default-src 'none'`, `frame-ancestors
-'none'` and `form-action` the executor and the client's redirect origin.
-The owner's answer must come with an `Origin` that is the issuer, and
-names the request by a random identifier. The check itself is one object
-given to the executor (`ownerCheck`): `form()` gives the HTML of its fields
-on the page, and `check(fields, {request, origin})` says whether they
-prove the owner. None is built in yet, so a start from the command has
-none, and its page approves nothing (503). The tests use a test check.
-How the founder's engine packages would fill it is below, pending.
+nothing of anyone else's.** The page is plain HTML: no style, no image, no
+inline script, under a Content-Security-Policy of `default-src 'none'`,
+`frame-ancestors 'none'` and `form-action` the executor and the client's
+redirect origin. The owner's answer must come with an `Origin` that is the
+issuer, and names the request by a random identifier. The check itself is
+one object given to the executor (`ownerCheck`): `form()` gives the HTML of
+its fields on the page, and `check(fields, {request, origin})` says whether
+they prove the owner. A check may also run a script from the executor's
+own address (`scripts`) and answer at addresses of its own (`owns`,
+`take`). Left out, as the command `http` leaves it, the check is the one by
+the owner's passkey (section 14.1). Given as `null`, there is none, and the
+page approves nothing (503). The other tests use a test check.
 
 **X213. The time limits.** A client gives a tool call up to 240 seconds,
 as it does a sign-in request and a refresh. With `oauth`, the executor's
@@ -2379,64 +2385,148 @@ TLS. A proxy in front of it must give it HTTPS at the issuer's address and
 pass the path and the `Origin` header on unchanged. Why: certificates are
 the proxy's work. The settings' `listen` stays the local address.
 
-### 14.1 The owner's check with the engine packages: PENDING, the founder chooses
+### 14.1 The owner's check by the owner's passkey
 
-A proposal, not built. The founder's own packages `@microtoll/identity`
-and `@microtoll/crypto-core` 0.1.1 (Apache 2.0) would fill the interface of
-X212. Read: their published README files, `FORMATS.md` and exports. In
-their design the person's passkey (its PRF output) unlocks a root key in
-the browser; the server never verifies a passkey; a connection is proved
-by a signature over a challenge with the page's origin bound in.
+Built from 0.5.0 (`owner.mjs`, `owner-steps.mjs`, `owner-page.mjs`), as
+the founder approved it. It fills the interface of X212. The founder's own
+packages `@microtoll/identity` and `@microtoll/crypto-core` (Apache 2.0)
+do the cryptography, through their public functions only. They are
+runtime dependencies, pinned at exactly 0.1.1, installed from the
+package's `package-lock.json`: an exception, approved by the founder, to
+the guard's rule of no runtime dependency but `provared`. Neither has
+dependencies of its own. No code of theirs is copied into the repository,
+and `@microtoll/blind-store` is not used.
 
-- **Dependencies.** The two packages would become runtime dependencies of
-  the guard, pinned at exactly 0.1.1, as `provared-connect` pins them. This
-  is an exception to the guard's rule of no runtime dependency but
-  `provared`, and the founder must approve it. Neither has dependencies of
-  its own. `@microtoll/blind-store`'s server code (AGPL) is not used.
-- **The owner's identity, made once.** A command on the server
-  (`provared-mcp-executor owner --config …`) prints a one-time setup link,
-  `<issuer>/oauth/owner#<code>`, which works once and for 15 minutes. So no
-  one who merely finds the address can claim it. On that page, in the
-  browser: `createIdentity`, a passkey made with `createWebAuthn` (its PRF
-  output), `wrapRootKeyWithPrf`, and `wrapRootKeyWithNewRecoveryCode`, whose
-  code is shown once. The page sends the executor the routing public key
-  and the two unlock methods, which are ciphertext.
-- **At the authorisation page.** The executor gives a 32-byte challenge,
-  used once, for 2 minutes. In the browser the passkey's PRF output opens
-  the root key (`unwrapRootKeyWithPrf`), `identityFromRootKey` gives the
-  routing key, and that key signs `authMessage(origin, nonce)`. The
-  executor checks the signature with `verifyAuthSignature`, against the
-  routing public key, the issuer as the origin, and its own challenge.
-- **Where a device has no PRF,** the recovery code opens the root key
-  (`unwrapRootKeyWithRecoveryCode`), and the same signature follows.
-- **What the executor stores:** the routing public key and the unlock
-  methods as the package makes them (ciphertext, the passkey's credential
-  id and PRF salt, the recovery code's lookup hash). Nothing that opens
-  them.
-- **How the page is served.** The packages' own browser files from the
-  executor itself, at its own origin, with the page's script as a file of
-  the executor's: no outside script, no inline script, under
-  `default-src 'none'; script-src 'self'; connect-src 'self'`, with
-  `form-action` and `frame-ancestors` as in X212.
+In the packages' design the owner's passkey (its PRF output) opens a root
+key in the browser, and the server never verifies a passkey. A sign-in is
+proved by a signature over a challenge, with the page's origin bound in.
 
-Tried, outside the repository: in Node.js 24.19.0, the published 0.1.1
-packages' own functions made an identity, wrapped and unwrapped its root
-key with a made-up PRF output, and `verifyAuthSignature` passed a
-signature over one origin and refused it over another; a recovery code
-opened the same root key. So the executor's half runs in Node 24.
+The flow, as built:
 
-Why it is not built, and what is missing:
+1. **The setup link.** On the server, with the executor stopped,
+   `provared-mcp-executor owner --config …` prints a link,
+   `<issuer>/oauth/owner#<code>`. It works once, for 15 minutes. So no one
+   who merely finds the address can claim the executor.
+2. **The setup page.** In the browser: a passkey made with
+   `createWebAuthn` (`createPasskeyWithPrf`, which gives its PRF output);
+   `createIdentity`; `wrapRootKeyWithPrf`; and
+   `wrapRootKeyWithNewRecoveryCode`, whose code is shown once. The page
+   sends the executor the routing public key and the two unlock methods,
+   which are ciphertext.
+3. **The authorisation page.** When the owner presses Approve, the page
+   fetches the passkey's unlock method. The passkey's PRF output opens the
+   root key (`unwrapRootKeyWithPrf`), and `identityFromRootKey` gives the
+   routing key. Where a device has no PRF, the owner types the recovery
+   code instead: the page fetches that unlock method by the code's lookup
+   hash and opens the root key with `unwrapRootKeyWithRecoveryCode`. The
+   page then asks for a challenge, and signs `authMessage(origin, nonce)`
+   with the routing key (`signBytes`).
+4. **The check.** The executor checks the signature with
+   `verifyAuthSignature`, against the stored routing public key, with the
+   issuer as the origin and its own challenge as the nonce.
 
-1. The namespace given to `createCryptoCore` prefixes every key
-   derivation label. No design fixes the guard's, and a label is not the
-   builder's to invent.
-2. The founder's approval of the two dependencies.
-3. The executor's own wire for the setup and for the unlock methods: the
-   packages' high-level session speaks `@microtoll/blind-store`'s protocol,
-   whose server is not to be used, so the shape of what the page sends and
-   fetches would be the executor's own, and must be fixed first.
-4. The passkey is bound to the issuer's host (the WebAuthn relying party).
-   A change of public address loses it; only the recovery code would then
-   open the root key. The founder should accept that, or say otherwise.
-5. The tests run no browser, so the page's half (the passkey ceremony)
-   could be tried only by hand.
+**X217. The namespace is `provared-mcp-executor`.** The executor and the
+page call `createCryptoCore({ namespace: 'provared-mcp-executor' })`, with
+every other option at the package's default (PBKDF2 at 310,000 iterations,
+hybrid sealing off). The namespace begins every key derivation label, so it
+never changes once an owner exists; a test pins it, in the executor and in
+the page's script. Why: the founder's choice, the package's name.
+
+**X218. The setup link, from a command on a stopped executor.** `owner`
+opens the files for itself alone, as a command with `--offline` does
+(`lock.mjs`), so it is refused while the executor runs, and the state file
+has one writer at a time. The code is 32 random bytes in base64url; the
+state file keeps only its SHA-256 and its end, 15 minutes after the
+command. It is in the link's fragment, which a browser does not send in
+the address: the page sends it in the setup message. It is spent when an
+owner is set up. A new `owner` before then replaces it. Why: the plainest
+way to get a secret from the server to the owner's browser once. The other
+way: a command that asks the running executor with the administrator's
+secret, which needs that secret set up first.
+
+**X219. The setup message.** `POST /oauth/owner/setup`, JSON:
+`{"code", "routingPublicKey", "passkey": {"credentialId", "prfSalt",
+"wrappedRootKey"}, "recovery": {"salt", "lookupHash", "wrappedRootKey"}}`.
+Bytes are base64url without padding, written as Node.js writes them. The
+lookup hash is the package's own text, 64 lower-case hexadecimal digits.
+The routing public key is 32 bytes, the PRF salt 32, the recovery salt 16,
+the credential id 1 to 1,023, each wrapped root key 1 to 1,024. No other
+member is taken; the package's `label` is not sent. The answer is
+`{"owner": "set"}`. A message that is not in this form is refused (400),
+and the link still works. Before it makes the passkey, the page asks
+`POST /oauth/owner/link` with `{"code"}` whether the link still works
+(`{"link": "open"}`, or the refusal the setup would get), so that no
+passkey is made for a setup the executor would refuse. Why: the members
+are the packages' own unlock methods, and nothing else; the bounds are the
+packages' sizes, and WebAuthn's for a credential id.
+
+**X220. The unlock methods, fetched by the page.** `POST
+/oauth/owner/passkey` with `{}` gives the passkey's three members. `POST
+/oauth/owner/recovery` with `{"lookupHash"}` gives the recovery code's
+three members, only where the lookup hash is the owner's; otherwise 404,
+counted as a failed attempt (X211). Why: as the packages' own lookup, the
+recovery code's wrapped copy goes only to someone who knows the code. The
+passkey's opens only with the passkey.
+
+**X221. The challenge.** `POST /oauth/owner/challenge` with `{"request"}`,
+the id of a request waiting at the page, gives `{"challenge"}`: 32 random
+bytes in base64url. It lasts 2 minutes, is kept in memory, belongs to that
+request, and is taken out at its first use, whether the check then passes
+or not. At most 1,000 are kept; past that the oldest goes. The page asks
+for it only once the root key is open, so its 2 minutes are not spent at
+the passkey.
+
+**X222. The answer's two fields.** The page fills `owner_challenge` and
+`owner_signature` (64 bytes in base64url) in the form, beside the request,
+the agent and the decision. The check passes only where the challenge is
+the executor's, not expired, for this request, and the signature verifies.
+
+**X223. One owner; a reset ends every connection.** While an owner exists,
+`owner` is refused, and so is a setup message (409). `owner --reset`
+removes the owner and every connection, with its tokens, then prints a new
+link. Why: a second setup would let whoever opens it approve connections;
+a new owner should not inherit the old one's connections.
+
+**X224. The pages' files come from the executor.** It serves
+`owner-page.mjs` as `/oauth/owner/page.js`, `owner-steps.mjs` as
+`/oauth/owner/steps.js`, and the `.js` files of each package's `src/`
+under `/oauth/owner/lib/crypto-core/` and `/oauth/owner/lib/identity/`,
+read once at the start, as `text/javascript` with `nosniff` and
+`no-store`; any other path there is 404. The setup page and the
+authorisation page are served under `default-src 'none'; script-src 'self';
+connect-src 'self'; form-action 'self'` (and the client's origin, at the
+authorisation page); `frame-ancestors 'none'; base-uri 'none'`. They load
+one module script by its address, and nothing inline. Every `POST` under
+`/oauth/owner/` must come with an `Origin` that is the issuer, in JSON of
+at most 16 KiB. The recovery code's box has no name, so the form never
+sends it.
+
+**X225. The passkey belongs to the issuer's host.** `createWebAuthn` is
+given `rpName: 'provared-mcp-executor'` and no `rpId`, so the browser ties
+the passkey to the page's host, the issuer's. Its user name is `Owner of
+<host>`. The passkey is made on the device itself (the package's default,
+`platform`). After a change of public address the passkey no longer opens
+the root key, and only the recovery code does. The owner then signs in with
+the recovery code, or resets the owner (X223) to make a passkey at the new
+address. The founder accepted this.
+
+**X226. The owner is kept in the state file.** Beside the connections:
+`owner` (the routing public key, the two unlock methods as in X219, and
+when it was made) and `setup` (the link's hash and end). Nothing that opens
+them is kept. A file written before them reads as having neither; one
+whose owner or setup is not in this form stops the start.
+
+**X227. The answers of the owner's addresses.** JSON
+`{"error", "message"}`, with the codes `origin-refused` (403),
+`too-many-attempts` (429, with `Retry-After`), `bad-request` (400),
+`owner-exists` (409), `setup-ended` (403: no link, or it has ended),
+`setup-refused` (403: not the link's code, counted as a failed attempt),
+`no-owner` (409) and `not-found` (404). Failed attempts here count with the
+owner's check's (X211).
+
+What the tests show, and what they do not. `test/owner.test.mjs` runs the
+page's own steps (`owner-steps.mjs`) in Node.js, with the packages' own
+functions and a stand-in passkey that gives a made-up PRF output: a setup
+and a sign-in, a sign-in by the recovery code, and each refusal. The
+passkey ceremony itself, in a real browser with a real authenticator, has
+not been tried; the recipe's README says how to try it by hand.

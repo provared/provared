@@ -16,6 +16,7 @@
 //   GET  /oauth/owner/page.js          the pages' script (owner-page.mjs)
 //   GET  /oauth/owner/steps.js         its steps (owner-steps.mjs)
 //   GET  /oauth/owner/lib/<package>/…  the two packages' own files
+//   POST /oauth/owner/link             whether the setup link still works (X219)
 //   POST /oauth/owner/setup            the new owner (X219)
 //   POST /oauth/owner/passkey          the passkey's wrapped copy (X220)
 //   POST /oauth/owner/recovery         the recovery code's wrapped copy, by its lookup hash (X220)
@@ -27,7 +28,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createCryptoCore } from '@microtoll/crypto-core';
 import { verifyAuthSignature } from '@microtoll/identity';
-import { CHALLENGE_PATH, FIELD_CHALLENGE, FIELD_SIGNATURE, NAMESPACE, OWNER_PATH, PASSKEY_PATH, RECOVERY_PATH, SETUP_PATH } from './owner-steps.mjs';
+import { CHALLENGE_PATH, FIELD_CHALLENGE, FIELD_SIGNATURE, LINK_PATH, NAMESPACE, OWNER_PATH, PASSKEY_PATH, RECOVERY_PATH, SETUP_PATH } from './owner-steps.mjs';
 
 export { NAMESPACE, OWNER_PATH };
 
@@ -177,15 +178,35 @@ export function openPasskeyCheck({ issuer, now = Date.now, log = () => {}, store
     `<script type="module" src="${OWNER_PATH}/page.js"></script>`,
   ].join('\n');
 
-  /** POST /oauth/owner/setup (X219): once, with the link's code, while no owner exists. */
-  function setUp(res, v) {
-    if (store.owner()) return refuse(res, 409, 'owner-exists', 'An owner is already set up on this executor. A second setup is refused unless the owner is reset on the server.');
+  /** Whether a setup with this code is refused: no, while no owner exists and the link's code is given before it ends (X218, X223). Answers the refusal. */
+  function linkRefused(res, v) {
+    if (store.owner()) {
+      refuse(res, 409, 'owner-exists', 'An owner is already set up on this executor. A second setup is refused unless the owner is reset on the server.');
+      return true;
+    }
     const setup = store.setup();
-    if (!setup || setup.expires <= now()) return refuse(res, 403, 'setup-ended', 'This setup link has been used or has ended. Make a new one on the server.');
+    if (!setup || setup.expires <= now()) {
+      refuse(res, 403, 'setup-ended', 'This setup link has been used or has ended. Make a new one on the server.');
+      return true;
+    }
     if (!isObject(v) || typeof v.code !== 'string' || !sameText(hashOf(v.code), setup.hash)) {
       failures.failed();
-      return refuse(res, 403, 'setup-refused', 'This is not the code of the setup link.');
+      refuse(res, 403, 'setup-refused', 'This is not the code of the setup link.');
+      return true;
     }
+    return false;
+  }
+
+  /** POST /oauth/owner/link (X219): whether the link still works, before the page makes a passkey. */
+  function linkOpen(res, v) {
+    if (linkRefused(res, v)) return;
+    if (!only(v, ['code'])) return refuse(res, 400, 'bad-request', 'Send {"code": "<the code after the # of the link>"}.');
+    json(res, 200, { link: 'open' });
+  }
+
+  /** POST /oauth/owner/setup (X219): once, with the link's code, while no owner exists. */
+  function setUp(res, v) {
+    if (linkRefused(res, v)) return;
     const rest = { ...v };
     delete rest.code;
     const read = readOwner(rest);
@@ -253,9 +274,9 @@ export function openPasskeyCheck({ issuer, now = Date.now, log = () => {}, store
         res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8', 'content-length': file.length, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
         return res.end(req.method === 'HEAD' ? undefined : file);
       }
-      if (req.method !== 'POST' || ![SETUP_PATH, PASSKEY_PATH, RECOVERY_PATH, CHALLENGE_PATH].includes(path)) {
+      if (req.method !== 'POST' || ![LINK_PATH, SETUP_PATH, PASSKEY_PATH, RECOVERY_PATH, CHALLENGE_PATH].includes(path)) {
         req.resume();
-        return json(res, 405, { error: 'not-allowed', message: 'The owner\'s addresses take GET for the pages and their files, and POST for the four exchanges.' });
+        return json(res, 405, { error: 'not-allowed', message: 'The owner\'s addresses take GET for the pages and their files, and POST for the five exchanges.' });
       }
       // As the owner's answer at the page (X212): only from the executor's own pages.
       if (req.headers.origin !== issuer) {
@@ -268,6 +289,7 @@ export function openPasskeyCheck({ issuer, now = Date.now, log = () => {}, store
       }
       const v = await readJson(req);
       if (v === undefined) return refuse(res, 400, 'bad-request', 'The body must be JSON (application/json), at most 16 KiB.');
+      if (path === LINK_PATH) return linkOpen(res, v);
       if (path === SETUP_PATH) return setUp(res, v);
       return unlock(res, path, v);
     },

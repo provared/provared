@@ -34,14 +34,20 @@ const cc = createCryptoCore({ namespace: NAMESPACE });
 function fakePasskey() {
   const credentialId = new Uint8Array(randomBytes(16));
   const prfOutput32 = new Uint8Array(randomBytes(32));
-  return {
+  const p = {
     prfOutput32,
-    create: async () => ({ credentialId, prfSalt: new Uint8Array(randomBytes(32)), prfOutput32 }),
+    /** How many passkeys were made. */
+    made: 0,
+    create: async () => {
+      p.made += 1;
+      return { credentialId, prfSalt: new Uint8Array(randomBytes(32)), prfOutput32 };
+    },
     evaluate: async (cid) => {
       assert.deepEqual(cid, credentialId, 'the page asks the passkey the executor keeps');
       return { prfOutput32 };
     },
   };
+  return p;
 }
 /** A device with no PRF: every use of the passkey fails. */
 const noPasskey = { create: async () => { throw new Error('no PRF'); }, evaluate: async () => { throw new Error('no PRF'); } };
@@ -231,10 +237,13 @@ test('the setup link: used twice, expired, the wrong code, or not from the execu
     assert.deepEqual(await refusal(setUp({ cc, id, passkey: fakePasskey(), code: w.code, send: sender(w, 'https://elsewhere.example') })), { status: 403, code: 'origin-refused' });
     // The wrong code.
     assert.deepEqual(await refusal(setUp({ cc, id, passkey: fakePasskey(), code: Buffer.from(randomBytes(32)).toString('base64url'), send: sender(w) })), { status: 403, code: 'setup-refused' });
-    // Used twice: the second is refused, and the owner is the first.
+    // Used twice: the second is refused before a passkey is made, and the owner is the first.
     await setUpOwner(w);
     const owner = state(w).owner;
-    assert.deepEqual(await refusal(setUp({ cc, id, passkey: fakePasskey(), code: w.code, send: sender(w) })), { status: 409, code: 'owner-exists' });
+    const second = fakePasskey();
+    assert.deepEqual(await refusal(setUp({ cc, id, passkey: second, code: w.code, send: sender(w) })), { status: 409, code: 'owner-exists' });
+    assert.equal(second.made, 0, 'no passkey was made');
+    assert.deepEqual(await refusal(sender(w)(SETUP_PATH, { code: w.code })), { status: 409, code: 'owner-exists' });
     assert.deepEqual(state(w).owner, owner);
   } finally {
     await w.close();
@@ -243,7 +252,11 @@ test('the setup link: used twice, expired, the wrong code, or not from the execu
   const late = await ownerWorld();
   try {
     late.clock.offset += SETUP_LIFE;
-    assert.deepEqual(await refusal(setUp({ cc, id, passkey: fakePasskey(), code: late.code, send: sender(late) })), { status: 403, code: 'setup-ended' });
+    const passkey = fakePasskey();
+    assert.deepEqual(await refusal(setUp({ cc, id, passkey, code: late.code, send: sender(late) })), { status: 403, code: 'setup-ended' });
+    assert.equal(passkey.made, 0, 'no passkey was made');
+    // The message itself is refused too, without the page's first question.
+    assert.deepEqual(await refusal(sender(late)(SETUP_PATH, { code: late.code })), { status: 403, code: 'setup-ended' });
     assert.equal(state(late).owner, null);
   } finally {
     await late.close();

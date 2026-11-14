@@ -122,7 +122,9 @@ npm install -g provared-mcp-executor
 Or from a copy of the repository: in `mcp-executor`, `npm pack`, then
 `npm install -g ./provared-mcp-executor-0.5.0.tgz`.
 
-It needs Node.js 24.7 or later, and depends only on the `provared` library,
+It needs Node.js 24.7 or later. For the owner's check over OAuth it
+depends on `@microtoll/identity` and `@microtoll/crypto-core`, at exactly
+0.1.1 (Apache 2.0). Otherwise it depends only on the `provared` library,
 at version 0.7.0 or a later 0.7 version (`^0.7.0`): its receipts name
 `provared.tool-name` and `provared.tool-result`, which the format reserved
 in 0.7.0 and which a checker of 0.5.0 or 0.6.0 refuses (0.4.0 and
@@ -396,8 +398,9 @@ settings:
 - `clients` lists the clients that may connect, each by the https URL of
   its client metadata document. With none, no client can connect. There is
   no other way to register a client.
-- `state` is the file that holds the connections (default
-  `oauth-state.json`). It holds only hashes of tokens. The executor writes
+- `state` is the file that holds the connections and the owner (default
+  `oauth-state.json`). It holds only hashes of tokens, and of the owner
+  only a public key and ciphertext. The executor writes
   it whole, through a new file that only its owner may read (on Windows,
   keep others out of the folder).
 - Each connection is one agent marked `"oauth": true`, with its own slip,
@@ -419,7 +422,7 @@ What happens:
   `http://[::1]` may differ in its port). PKCE is required, with S256 only.
   The `resource` must be the executor's endpoint.
 - The page shows the owner which client asks and which agent it would
-  become, and asks for the owner's check. The page runs no script. With
+  become, and asks for the owner's passkey (below). With
   the owner's approval the browser goes back to the client with a code,
   which lasts 60 seconds and works once. A code used twice revokes what it
   gave.
@@ -437,11 +440,33 @@ What happens:
 - With `oauth`, the `timeout` default is 230,000 ms, under the 240 seconds
   a client gives a tool call; a longer one is warned about.
 
-What is not built yet: the owner's check itself. The page takes one through
-the program's interface (`openHttpExecutor(settings, {ownerCheck})`), and
-the tests use a test one; the command `http` has none, so its page
-approves nothing. The check by the owner's passkey is a proposal, pending
-(DESIGN.md, section 14.1). There is no revocation endpoint, no dynamic
+The owner's check is by the owner's passkey (DESIGN.md, section 14.1). It
+uses two packages, `@microtoll/identity` and `@microtoll/crypto-core`, at
+exactly 0.1.1; they come with the executor when it is installed.
+
+- **Set up the owner, once.** With the executor stopped, run
+  `provared-mcp-executor owner --config executor-http.json`. It prints a
+  link, `<issuer>/oauth/owner#<code>`, which works once, within 15
+  minutes. Start the executor and open the link in the browser that is to
+  hold the passkey. The page makes a passkey, a key that never leaves the
+  browser, and a recovery code, shown once: write it down. The executor
+  keeps only the key's public half and two locked copies of the key.
+- **Approve a connection.** On the page, Approve asks for the passkey. On a
+  device without one that gives a PRF, type the recovery code first. The
+  page signs a challenge from the executor, which checks the signature.
+- **The passkey belongs to the issuer's address.** If the public address
+  changes, only the recovery code opens the key.
+- **One owner.** `owner` is refused while an owner exists. `owner --reset`
+  removes the owner and ends every connection, with its tokens, then
+  prints a new link.
+- The pages run only the executor's own scripts, from its own address:
+  the page's script and the two packages' files. Nothing is loaded from
+  anywhere else.
+
+The program's interface takes another check, or none
+(`openHttpExecutor(settings, {ownerCheck})`). The passkey ceremony has
+been tried only with a stand-in passkey in the tests, not yet in a real
+browser. There is no revocation endpoint, no dynamic
 client registration, and no OAuth towards the upstream: the upstream still
 gets the executor's fixed token. The folder `recipes/` in the repository
 holds the settings for particular clients.

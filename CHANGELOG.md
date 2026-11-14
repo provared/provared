@@ -156,16 +156,41 @@
     through a new file with mode 0600.
   - **The timeout.** With `oauth`, its default is 230,000 ms, under the
     240 seconds a client gives a tool call. Without, it stays 300,000 ms.
-  - **Not built:** the owner's check itself. The page takes one through
-    `openHttpExecutor(settings, {ownerCheck})`; the command `http` has
-    none, so its page approves nothing. A check by the owner's passkey is
-    proposed, pending (DESIGN.md, section 14.1). No upstream OAuth, no
-    one-command setup, no dynamic client registration, no revocation
-    endpoint.
+  - **The owner's check, by the owner's passkey** (`owner.mjs`,
+    `owner-steps.mjs`, `owner-page.mjs`; DESIGN.md, section 14.1, choices
+    X217 to X227). The command `http` uses it. `provared-mcp-executor owner
+    --config …`, on a stopped executor, prints a link that works once,
+    within 15 minutes. Its page makes a passkey (PRF), a key that stays in
+    the browser, and a recovery code shown once, and sends the executor
+    only the key's public half and two locked copies of the key. At the
+    authorisation page the passkey, or the recovery code, opens the key in
+    the browser, which signs a challenge of the executor's (32 bytes, once,
+    2 minutes) with the issuer bound in; the executor checks the signature.
+    One owner: a second setup is refused, and `owner --reset` removes the
+    owner and ends every connection. The pages run only the executor's own
+    scripts, from its own address. The passkey belongs to the issuer's
+    host: after a change of address only the recovery code opens the key.
+  - **Two runtime dependencies, approved by the founder:**
+    `@microtoll/identity` and `@microtoll/crypto-core`, the founder's own
+    packages (Apache 2.0), pinned at exactly 0.1.1 in
+    `mcp-executor/package.json` and installed from its new
+    `package-lock.json`. Only their public functions are called, with the
+    namespace `provared-mcp-executor`. No code of theirs is copied, and
+    `@microtoll/blind-store` is not used. The tests workflow installs them
+    for this package alone (`npm ci --ignore-scripts`).
+  - **Not built:** no upstream OAuth, no one-command setup, no dynamic
+    client registration, no revocation endpoint. The passkey ceremony has
+    not been tried in a real browser: the tests use a stand-in passkey.
   - **A recipe**, `mcp-executor/recipes/claude-ai/`: the settings for one
-    client, with its limits.
+    client, with its limits, and the steps to try the passkey by hand.
   - **Tests**: `test/oauth.test.mjs`, 11 tests: the whole flow in plain
-    HTTP requests, and each refusal.
+    HTTP requests, and each refusal. `test/owner.test.mjs`, 9 tests: the
+    page's own steps with the packages' functions and a made-up PRF
+    output; a setup and a sign-in, by the passkey and by the recovery code;
+    and each refusal (another origin, another key, a challenge used twice,
+    expired or for another request, a setup link used twice or expired, a
+    second setup, an unlock method missing or malformed). Their shared
+    helpers are in `test/oauth-world.mjs`.
 
 - **`provared-mcp-executor` 0.5.0 (not yet released): `seal`,
   `acknowledge` and `status`.** The executor could not seal a book, and a

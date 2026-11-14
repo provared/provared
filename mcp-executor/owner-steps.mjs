@@ -15,6 +15,7 @@ export const NAMESPACE = 'provared-mcp-executor';
 
 /** The executor's addresses for the owner's check (X218). */
 export const OWNER_PATH = '/oauth/owner';
+export const LINK_PATH = `${OWNER_PATH}/link`;
 export const SETUP_PATH = `${OWNER_PATH}/setup`;
 export const PASSKEY_PATH = `${OWNER_PATH}/passkey`;
 export const RECOVERY_PATH = `${OWNER_PATH}/recovery`;
@@ -38,6 +39,8 @@ export const userName = (host) => `Owner of ${host}`;
  * send(path, value) -> the executor's JSON answer, or throws
  */
 export async function setUp({ cc, id, passkey, code, send }) {
+  // First whether the link still works, so that no passkey is made for a setup the executor would refuse.
+  await send(LINK_PATH, { code });
   const made = await passkey.create();
   const identity = await id.createIdentity(cc);
   const byPasskey = await id.wrapRootKeyWithPrf(cc, identity.rootKey, made.prfOutput32, made.credentialId, made.prfSalt);
