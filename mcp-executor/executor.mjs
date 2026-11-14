@@ -30,7 +30,7 @@ import { basename, delimiter, dirname, isAbsolute, resolve } from 'node:path';
 import { argumentsFingerprint, checkBook, countersign, denialCodes, entryLine, fingerprint, fromBase64url, identifierFingerprint, openRecorder, randomId, thumbprint } from 'provared';
 import { loadCopyKey, openCopy, readCopy, unfinished } from './copy.mjs';
 import { aboutSlip, bookFile, loadKeyFile, readIfThere, slipFrom, untilFree } from './files.mjs';
-import { CODES, MAX_LINE_BYTES, idKey, isId, notificationLine, readLines, readMessage, repeatedName, responseLine, responseText, spliceId, topLevelId, unsafeInteger } from './jsonrpc.mjs';
+import { CODES, MAX_LINE_BYTES, foldName, idKey, isId, misspelt, notificationLine, readLines, readMessage, repeatedName, responseLine, responseText, spliceId, topLevelId, unsafeInteger } from './jsonrpc.mjs';
 import { RULES_DOCUMENT, RULE_DOCUMENT, RULES_ENTRY_PREFIX, TOOL_NAME, lookUp, readPointer, readRules, rulesFingerprint, statesContentRules, testCall } from './rules.mjs';
 
 /** The document, in each stub and denial, whose fingerprint is that of the executor's own identifier for the call (a label, not a reserved name). */
@@ -794,8 +794,10 @@ export function filteredList(text, m, clientId, settings) {
   } catch {
     exact = m;
   }
-  const shown = exact.result.tools.filter((t) => isObject(t) && typeof t.name === 'string' && settings.tools.has(t.name));
-  return { text: JSON.stringify({ ...exact, id: clientId, result: { ...exact.result, tools: shown } }), hidden: exact.result.tools.length - shown.length };
+  // A tool with a second name in other capitals ("Name") is not shown, and a second list ("Tools") is left out: a client that ignores capitals would read those, and not what was filtered here (X241).
+  const shown = exact.result.tools.filter((t) => isObject(t) && typeof t.name === 'string' && settings.tools.has(t.name) && misspelt(t, ['name']) === null);
+  const rest = Object.fromEntries(Object.entries(exact.result).filter(([name]) => name === 'tools' || foldName(name) !== 'tools'));
+  return { text: JSON.stringify({ ...exact, id: clientId, result: { ...rest, tools: shown } }), hidden: exact.result.tools.length - shown.length };
 }
 
 /**
@@ -835,6 +837,8 @@ export function callCore({ settings, content, executorKeys, now }) {
     if (typeof name !== 'string' || !TOOL_NAME.test(name)) return answerError(CODES.invalidParams, 'The tool name must be 1 to 128 letters, digits, underscores, hyphens or full stops.');
     if (Object.hasOwn(params, 'arguments') && !isObject(params.arguments)) return answerError(CODES.invalidParams, 'The arguments must be an object.');
     if (Object.hasOwn(params, '_meta') && !isObject(params._meta)) return answerError(CODES.invalidParams, 'The _meta member must be an object.');
+    // The two names the executor reads or writes in _meta, written exactly: a server that ignores capitals would take another spelling for the executor's own (X241).
+    if (isObject(params._meta) && misspelt(params._meta, [CALL_META, 'traceparent']) !== null) return answerError(CODES.invalidRequest, `The _meta member holds a name that differs only in capitals from one the executor reads or writes (${CALL_META}, traceparent), which two readers may read differently.`);
     const serverId = link.newServerId();
     const call = { id, serverId, state: 'queued', cancelled: false, settle: null, timer: null };
     const callId = randomId();

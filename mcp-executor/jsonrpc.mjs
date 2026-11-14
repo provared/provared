@@ -131,6 +131,29 @@ export function repeatedName(text, fold = false) {
   return null;
 }
 
+/**
+ * The first name of an object that is not one of "names" as written, yet
+ * is one of them once folded (foldName): "Name" or "NAME" for "name". Null
+ * where there is none. A reader that ignores capitals would take such a
+ * member for the one the executor reads, and the executor would not.
+ */
+export function misspelt(object, names) {
+  const folded = new Set(names.map(foldName));
+  for (const key of Object.keys(object)) {
+    if (!names.includes(key) && folded.has(foldName(key))) return key;
+  }
+  return null;
+}
+
+/** The members of a JSON-RPC message. A message with any other member at its top level is refused. */
+const MEMBERS = new Set(['jsonrpc', 'id', 'method', 'params', 'result', 'error']);
+
+/** The members of "params" that the executor itself reads, by method: each must be spelt exactly. */
+const READ_IN_PARAMS = new Map([
+  ['tools/call', ['name', 'arguments', '_meta']],
+  ['notifications/cancelled', ['requestId']],
+]);
+
 const SAFE = BigInt(Number.MAX_SAFE_INTEGER);
 
 /**
@@ -182,9 +205,18 @@ export function idKey(id) {
  * (two readers may take the first or the last, so the method the executor
  * reads could differ from the one the server acts on); an id that is not
  * text or a whole number; a message that is neither request, notification
- * nor response. With "strictNumbers" (the default, for the agent's lines)
- * a whole number beyond 2^53 - 1 anywhere in the line is refused too; the
- * server's lines are read without it, and handed on as raw bytes.
+ * nor response; a member at the top level other than "jsonrpc", "id",
+ * "method", "params", "result" and "error" (a reader that ignores capitals
+ * takes "Method" for "method", so a message with both, or with "Method"
+ * beside a result, is one message to the executor and another to such a
+ * reader). With "strictNumbers" (the default, for the agent's lines) three
+ * more are refused: a whole number beyond 2^53 - 1 anywhere in the line;
+ * "params" that hold, in one object at any depth, two names that are one
+ * once folded (foldName); and, in the "params" of a tools/call or of a
+ * notifications/cancelled, a name that is one of those the executor reads
+ * once folded but is not written as the executor reads it ("Arguments").
+ * The server's lines are read without those three, and handed on as raw
+ * bytes.
  */
 export function readMessage(line, { strictNumbers = true } = {}) {
   let text;
@@ -206,6 +238,12 @@ export function readMessage(line, { strictNumbers = true } = {}) {
   if (strictNumbers && unsafeInteger(text) !== null) return { refused: { code: CODES.invalidRequest, message: 'The message holds a whole number beyond 9,007,199,254,740,991, which two readers may hold differently.' }, id: null };
   const id = Object.hasOwn(message, 'id') ? message.id : undefined;
   const knownId = isId(id) ? id : null;
+  if (Object.keys(message).some((name) => !MEMBERS.has(name))) return { refused: { code: CODES.invalidRequest, message: 'The message has a member at its top level other than "jsonrpc", "id", "method", "params", "result" and "error", written exactly so. A reader that ignores capitals may take such a member for one of them, so the message is not read.' }, id: knownId };
+  if (strictNumbers && message.params !== null && typeof message.params === 'object' && !Array.isArray(message.params)) {
+    if (repeatedName(JSON.stringify(message.params), true) !== null) return { refused: { code: CODES.invalidRequest, message: 'The params hold two member names in one object that differ only in capitals, which two readers may read differently.' }, id: knownId };
+    const read = READ_IN_PARAMS.get(message.method);
+    if (read && misspelt(message.params, read) !== null) return { refused: { code: CODES.invalidRequest, message: `The params hold a member whose name differs only in capitals from one the executor reads (${read.join(', ')}), which two readers may read differently.` }, id: knownId };
+  }
   if (message.jsonrpc !== '2.0') return { refused: { code: CODES.invalidRequest, message: 'The message does not say "jsonrpc": "2.0".' }, id: knownId };
   if (id !== undefined && !isId(id)) return { refused: { code: CODES.invalidRequest, message: 'The id must be text or a whole number.' }, id: null };
   const hasMethod = Object.hasOwn(message, 'method');

@@ -149,15 +149,15 @@ test('content a rule cannot read exactly refuses the call: not JSON, a member na
     await expectUnreadable({ path: 'settings.json', content: '{"scan": false, "n": 9007199254740993}' }, 'the content at "/content" holds a whole number beyond');
     await expectUnreadable({ path: 'settings.json' }, 'nothing is found at "/content" in the arguments');
     await expectUnreadable({ path: 'settings.json', content: { scan: false } }, 'what is found at "/content" in the arguments is not text');
-    // The arguments themselves: two names that differ only in capitals, where a rule reads them.
+    // The arguments themselves: two names that differ only in capitals. The message is not read at all (X241), so it reaches no rule and no denial is written.
     const answer = await w.client.call('write_file', { path: 'notes.txt', PATH: 'settings.json', content: '{}' });
-    assert.equal(answer.result._meta['red.prova/refused'], 'content-unreadable');
-    assert.match(answer.result.content[0].text, /the arguments name one member twice in one object, or two that differ only in capitals/);
+    assert.equal(answer.error.code, -32600);
+    assert.match(answer.error.message, /two member names in one object that differ only in capitals/);
     // A byte-order mark at the start of the content is not JSON either.
     await expectUnreadable({ path: 'settings.json', content: '\uFEFF{"scan": false}' }, 'the content at "/content" is not JSON');
     assert.equal(w.fakeSeen().filter((s) => s.seen?.method === 'tools/call').length, 0, 'none reached the server');
     const checked = await bookOf(w);
-    assert.equal(checked.entries.filter((e) => e.kind === 'denial').length, 8);
+    assert.equal(checked.entries.filter((e) => e.kind === 'denial').length, 7);
     assert.ok(checked.entries.filter((e) => e.kind === 'denial').every((d) => d.content.source === 'rule' && docs(d)[RULE_DOCUMENT] !== undefined));
   } finally {
     await w.close();

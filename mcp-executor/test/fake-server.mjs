@@ -34,8 +34,16 @@ const send = (m) => process.stdout.write(`${JSON.stringify(m)}\n`);
 const result = (id, r) => send({ jsonrpc: '2.0', id, result: r });
 const failure = (id, code, message) => send({ jsonrpc: '2.0', id, error: { code, message } });
 
-function onMessage(m) {
+// With FAKE_FOLD the server reads member names without regard to capitals, the last one winning, as some JSON readers do for the fields they know.
+const fold = (o) => (o && typeof o === 'object' && !Array.isArray(o) ? Object.fromEntries(Object.entries(o).map(([k, v]) => [k.toLowerCase().toUpperCase().toLowerCase(), v])) : o);
+
+function onMessage(given) {
+  let m = given;
   log({ seen: m });
+  if (process.env.FAKE_FOLD) {
+    m = fold(m);
+    if (m.params) m.params = { ...fold(m.params), arguments: fold(fold(m.params).arguments) };
+  }
   if (Object.hasOwn(m, 'result') || Object.hasOwn(m, 'error')) {
     // A client's answer to a request of this server (legacy era).
     const waiting = pendingAsks.get(m.id);
@@ -59,6 +67,10 @@ function onMessage(m) {
     // The answer written as raw text, so that the number is exact: a whole number beyond 2^53 - 1 in a tool's definition.
     return process.stdout.write(`{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"resultType":"complete","tools":[{"name":"error","description":"A protocol error.","inputSchema":{"type":"object"}},{"name":"hidden","description":"No rule.","inputSchema":{"type":"object"},"ordinal":1234567890123456789},{"name":"big","description":"A large answer.","inputSchema":{"type":"object"},"ordinal":1234567890123456789}]}}\n`);
   }
+  if (method === 'tools/list' && process.env.FAKE_CAPITAL_LIST) {
+    // A list with names in other capitals: a tool the executor shows under one name and a client that ignores capitals reads under another, and a second list.
+    return process.stdout.write(`{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"tools":[{"name":"echo","inputSchema":{"type":"object"}},{"name":"order","Name":"hidden","inputSchema":{"type":"object"}},{"name":"slow","NAME":"hidden","inputSchema":{"type":"object"}}],"Tools":[{"name":"hidden","inputSchema":{"type":"object"}}],"TOOLS":[]}}\n`);
+  }
   if (method === 'tools/list') {
     const page = params.cursor === 'page2' ? TOOLS.slice(5) : TOOLS.slice(0, 5);
     return result(id, { resultType: 'complete', tools: page, ...(params.cursor === 'page2' ? {} : { nextCursor: 'page2' }) });
@@ -66,6 +78,7 @@ function onMessage(m) {
   if (method === 'tools/call') {
     const name = params.name;
     const args = params.arguments ?? {};
+    if (process.env.FAKE_FOLD) log({ ran: name, args });
     const text = (t) => result(id, { resultType: 'complete', content: [{ type: 'text', text: t }] });
     if (name === 'echo') return result(id, { resultType: 'complete', content: [{ type: 'text', text: JSON.stringify(args) }], structuredContent: { args, meta: params._meta ?? null, token: process.env.FAKE_TOKEN ?? null, agentSecret: process.env.AGENT_SECRET ?? null, passed: process.env.PASSED_THROUGH ?? null } });
     if (name === 'order') return text(`Ordered for ${args.total}.`);
@@ -88,6 +101,9 @@ function onMessage(m) {
       return;
     }
     if (name === 'bigint') return process.stdout.write(`{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"resultType":"complete","content":[{"type":"text","text":"ok"}],"structuredContent":{"snowflake":1234567890123456789,"ratio":1.50}}}\n`);
+    // A second result, or a second id, under a name in other capitals: a client that ignores capitals would read the second.
+    if (name === 'capresult') return process.stdout.write(`{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"content":[{"type":"text","text":"the result"}]},"Result":{"content":[{"type":"text","text":"the other result"}]}}\n`);
+    if (name === 'capid') return process.stdout.write(`{"jsonrpc":"2.0","id":${JSON.stringify(id)},"ID":"someone-else","result":{"content":[{"type":"text","text":"the result"}]}}\n`);
     if (name === 'twoids') return process.stdout.write(`{"jsonrpc":"2.0","id":${JSON.stringify(id)},"id":${JSON.stringify(id)},"result":{"resultType":"complete","content":[]}}\n`);
     if (name === 'batch') return process.stdout.write(`[{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"resultType":"complete","content":[]}}]\n`);
     if (name === 'garbage') return process.stdout.write(`{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"resultType":"complete","a":1,"a":2}}\n`);
