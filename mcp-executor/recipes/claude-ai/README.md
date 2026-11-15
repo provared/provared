@@ -159,16 +159,22 @@ address as a passkey's site. So try it at the proxy's https address. Below,
    the passkey (this device, a phone, a security key). The page then shows
    a recovery code: write it down, then press Continue. The browser goes
    back to claude.ai, which shows the connector as connected. The guard's
-   log shows `"event":"owner-set"` and `"event":"oauth-approved"`, and the
-   state file (`oauth-state.json`) has an `owner`. A tool call then gets a
-   receipt in that agent's book. Note which browser and which place for
-   the passkey worked.
+   log shows `"event":"owner-set"` and `"event":"oauth-approved"` with
+   `"by":"setup"`, and the state file (`oauth-state.json`) has an `owner`.
+   A tool call then gets a receipt in that agent's book. Note which
+   browser and which place for the passkey worked.
 
    If claude.ai's page was opened before the link, it says that the guard
-   has no owner yet. Open the link in the same browser within 10 minutes
-   and press "Review the connection that is waiting": the same page comes
-   back, and Approve there is the one prompt. To make the passkey without
-   approving anything, press "Make the passkey" on the setup page instead.
+   has no owner yet. Press "Keep this connection for the setup link" on
+   it, open the link in the same browser within 10 minutes and press
+   "Review the connection that is waiting": the same page comes back, and
+   Approve there is the one prompt. To make the passkey without approving
+   anything, press "Make the passkey" on the setup page instead.
+
+   If the page says that the guard's answer did not arrive, press again.
+   Where it then says that an owner is already set up, the setup
+   finished and only the recovery code was not shown: the passkey
+   approves; `owner --reset` and a new setup give a code.
 
    Two things to watch, the first time:
    - **The answer is refused** with "The answer must come from the
@@ -189,11 +195,15 @@ address as a passkey's site. So try it at the proxy's https address. Below,
      same: claude.ai got the code. Note the address the browser was sent
      on to; the guard does not yet answer that case.
 6. Open the setup link again. The page says that an owner is already set
-   up.
+   up, and that the link is of no more use.
 7. Begin the connection again from claude.ai, and press Approve: one
-   passkey prompt, and the browser goes back to claude.ai. Then once more,
-   in a browser without the passkey: type the recovery code in its box,
-   then press Approve. It is approved with no prompt.
+   passkey prompt, and the browser goes back to claude.ai (the log:
+   `"by":"passkey"`). Then once more, in a browser without the passkey:
+   type the recovery code in its box, then press Approve. No prompt
+   follows. The guard shows a new recovery code: the one you typed is
+   spent. Write the new one down and press Continue; the browser goes back
+   to claude.ai (the log: `"owner-recovery-spent"`, then `"by":"recovery"`).
+   The old code, typed again, is refused.
 8. Look at the headers: `curl -sI https://guard.example.com/oauth/owner`
    shows `content-security-policy: default-src 'none'; script-src 'self';
    connect-src 'self'; form-action 'self'; frame-ancestors 'none';

@@ -248,6 +248,34 @@ test('N4: where the state cannot be written at the owner\'s setup, the answer is
   }
 });
 
+test('where the state cannot be written when a recovery code is typed, the page says so, nothing is approved, and the code is not spent', async () => {
+  const w = await ownerWorld();
+  let restore = () => {};
+  try {
+    const { recoveryCode } = await setUpOwner(w);
+    const kept = state(w).owner.recoveryHash;
+    const request = await waiting(w);
+    restore = withFs({ renameSync: (real) => (from, to) => {
+      if (String(to) === w.statePath) throw Object.assign(new Error('the file is held'), { code: 'EBUSY' });
+      return real(from, to);
+    } });
+    const failed = await answer(w, request, { fields: { owner_recovery: recoveryCode } });
+    restore();
+    restore = () => {};
+    assert.equal(failed.status, 500, failed.body);
+    assert.match(failed.body, /could not write its state, so the recovery code was not spent and nothing was approved/);
+    assert.equal(w.logs.some((e) => e.event === 'owner-recovery-spent' || e.event === 'oauth-approved'), false);
+    assert.equal(state(w).owner.recoveryHash, kept, 'the file holds the code\'s hash still');
+    // And memory with it: the same code, typed again, is taken.
+    const again = await answer(w, request, { fields: { owner_recovery: recoveryCode } });
+    assert.equal(again.status, 200, again.body);
+    assert.notEqual(state(w).owner.recoveryHash, kept);
+  } finally {
+    restore();
+    await w.close();
+  }
+});
+
 test('N4: a challenge is given only for a request that waits: not for one that has ended, nor for one already approved', async () => {
   const w = await ownerWorld();
   try {

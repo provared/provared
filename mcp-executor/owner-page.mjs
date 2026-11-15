@@ -13,10 +13,13 @@ import { createPasskey, signChallengeWithPasskey } from './lib/provared/passkey-
 import { fromBase64url, sha256, toBase64url } from './lib/provared/encoding.js';
 import { LINK_PATH, RP_NAME, STORE_CODE, STORE_WAITING, FIELD_CHALLENGE, FIELD_AUTHENTICATOR_DATA, FIELD_CLIENT_DATA, FIELD_SIGNATURE, setUp, signIn, userName } from './steps.js';
 
+/** Whether this page has made a passkey: then an answer that does not arrive may be that of a setup that finished (X280). */
+let madeHere = false;
 const passkey = {
   // One passkey for this address, wherever the browser offers to keep it: on this device, a phone or a security key (X275).
   create: async () => {
     const made = await createPasskey({ name: userName(location.host), site: RP_NAME });
+    madeHere = true;
     return { credentialId: made.credentialId, key: made.key };
   },
   // The passkey signs the SHA-256 of the executor's challenge: what the library's check takes a passkey to have signed (X273).
@@ -68,6 +71,12 @@ const say = (text) => {
   if (status) status.textContent = text;
 };
 const problem = (e) => say(`Not done: ${e?.message ?? e}`);
+/** What went wrong at a setup. Where a passkey was made and the executor's answer then did not arrive, the setup may have finished all the same: the page says so, and the next press finds out. Where an owner exists, the executor's own words say what that means (X280). */
+const setupProblem = (e) => {
+  if (e?.code === 'owner-exists') say(e.message);
+  else if (madeHere && e?.code === undefined) say(`Not known: the executor's answer did not arrive (${e?.message ?? e}). A passkey was made here, so the setup may have finished. Press again to find out.`);
+  else problem(e);
+};
 /** Show the recovery code, once. */
 const showRecovery = (code) => {
   const shown = document.getElementById('owner-recovery');
@@ -112,8 +121,10 @@ if (setupButton) {
     setupButton.disabled = true;
     say('Making the passkey…');
     try {
+      // The passkey alone: no request goes with it, so nothing is approved, whatever waits.
       const { recoveryCode } = await setUp({ passkey, code, send });
       store.drop(STORE_CODE);
+      store.drop(STORE_WAITING);
       showRecovery(recoveryCode);
       const review = document.getElementById('owner-review');
       if (review) review.hidden = true;
@@ -123,7 +134,7 @@ if (setupButton) {
     } catch (e) {
       if (LINK_OVER.includes(e?.code)) store.drop(STORE_CODE);
       else setupButton.disabled = false;
-      problem(e);
+      setupProblem(e);
     }
   });
 }
@@ -135,8 +146,9 @@ if (form && form.elements[FIELD_CHALLENGE]) {
   const first = document.getElementById('owner-first');
   let code = '';
   /** Whether this browser holds a setup link that still works: asked once, when the page opens. */
+  const keep = document.getElementById('owner-keep');
   const ready = (async () => {
-    if (!first) return store.drop(STORE_WAITING);
+    if (!first) return;
     code = store.get(STORE_CODE);
     if (code !== '') {
       try {
@@ -147,13 +159,18 @@ if (form && form.elements[FIELD_CHALLENGE]) {
       }
     }
     if (code !== '') {
-      store.drop(STORE_WAITING);
       first.textContent = `This executor has no owner yet, and this browser holds its setup link. Approve makes the owner's passkey for ${location.host} and approves this connection, in one prompt. If you did not begin this connection yourself, refuse, and make the passkey at the setup link instead.`;
-    } else {
-      // Left for the setup page, which shows it to the owner again while it still waits.
-      store.set(STORE_WAITING, form.elements.request.value);
+    } else if (keep) {
+      keep.hidden = false;
     }
   })();
+  // The request is kept for the setup page only when the owner presses this, on the page that shows it. A page that merely opens keeps nothing: so no other page, opened in this browser by anyone, can put its request in this one's place (X272).
+  if (keep) {
+    keep.addEventListener('click', () => {
+      store.set(STORE_WAITING, form.elements.request.value);
+      say('Kept in this browser. Now open the setup link here, within 10 minutes of this page opening: it shows this connection again.');
+    });
+  }
   let proved = false;
   let busy = false;
   let owner = !first;
@@ -164,7 +181,7 @@ if (form && form.elements[FIELD_CHALLENGE]) {
     if (!owner) {
       event.preventDefault();
       await ready;
-      if (code === '') return say('Not done: this executor has no owner yet. Open the setup link in this browser first.');
+      if (code === '') return say('Not done: this executor has no owner yet. Press "Keep this connection for the setup link", then open the setup link in this browser.');
       busy = true;
       say('Making the owner\'s passkey…');
       try {
@@ -184,7 +201,9 @@ if (form && form.elements[FIELD_CHALLENGE]) {
         }
       } catch (e) {
         if (LINK_OVER.includes(e?.code)) store.drop(STORE_CODE);
-        problem(e);
+        // An owner exists: where it is the one just made here, whose answer was lost, Approve now asks its passkey, as at any later approval.
+        if (e?.code === 'owner-exists') owner = true;
+        setupProblem(e);
       }
       busy = false;
       return;

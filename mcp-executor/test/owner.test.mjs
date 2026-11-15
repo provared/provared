@@ -14,14 +14,15 @@ import './local-library.mjs'; // first: "provared" is this repository's own libr
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const { call } = await import('./http-world.mjs');
 const { REQUEST_LIFE, makeOwnerSetup, readIssuer } = await import('../oauth.mjs');
-const { CHALLENGE_LIFE, RECOVERY_BYTES, SETUP_LIFE, base32 } = await import('../owner.mjs');
+const { CHALLENGE_LIFE, RECOVERY_BYTES, SETUP_LIFE, base32, passkeyChecks } = await import('../owner.mjs');
 const { FIELD_CHALLENGE, FIELD_AUTHENTICATOR_DATA, FIELD_CLIENT_DATA, FIELD_SIGNATURE, FIELD_RECOVERY, SETUP_PATH, CHALLENGE_PATH, LINK_PATH, STORE_CODE, STORE_WAITING, setUp } = await import('../owner-steps.mjs');
 const { reopen, send, pkce, authorizeUrl, discover, ask, answer, connect, token, json, bearer, CALLBACK } = await import('./oauth-world.mjs');
 const { ownerWorld, softPasskey, setUpOwner, prove, sender, refusal, waiting, state, pageScript, runPage, softCredentials, softStorage } = await import('./owner-world.mjs');
@@ -100,7 +101,10 @@ test('setup, then an approval with the passkey: the pages run only the executor\
     assert.equal((await call(w, bearer(access), 'echo', { a: 1 })).status, 200);
     assert.equal(passkey.signed, 1, 'one prompt for the approval');
     assert.ok(w.logs.some((e) => e.event === 'owner-set' && e.approves === false));
-    assert.ok(w.logs.some((e) => e.event === 'oauth-approved' && e.agent === 'conn'));
+    assert.ok(w.logs.some((e) => e.event === 'oauth-approved' && e.agent === 'conn' && e.by === 'passkey'), 'the log says which proof approved');
+    // The JSON answers are not to be read as anything else.
+    assert.equal((await send('POST', `${w.issuer}/oauth/owner/link`, { headers: { 'content-type': 'application/json', origin: w.issuer }, body: '{}' })).headers['x-content-type-options'], 'nosniff');
+    assert.equal((await send('GET', `${w.issuer}/.well-known/oauth-authorization-server`)).headers['x-content-type-options'], 'nosniff');
   } finally {
     await w.close();
   }
@@ -151,6 +155,7 @@ test('one prompt the first time, the setup link first: the setup message that ma
     // The approval is the owner's to send, or not: nothing has gone to the client yet.
     assert.equal(w.logs.some((e) => e.event === 'oauth-approved'), false);
     await callsATool(w, await answer(w, done.request, { fields: {} }), p);
+    assert.ok(w.logs.some((e) => e.event === 'oauth-approved' && e.by === 'setup'), 'the log says which proof approved');
     assert.deepEqual([passkey.made, passkey.signed], [1, 0], 'one prompt: the passkey was made, and never asked to sign');
     // Approved once: the same form again gets no second code.
     const again = await answer(w, done.request, { fields: {} });
@@ -203,6 +208,7 @@ test('one prompt the first time, by the page\'s script as served, the setup link
   const page = await runPage(w, script, { html, path: '/oauth/authorize', credentials, storage, after });
   assert.match(page.el['owner-first'].textContent, /Approve makes the owner's passkey for .* and approves this connection, in one prompt/);
   assert.equal(storage.getItem(STORE_WAITING), null);
+  assert.equal(page.el['owner-keep'].hidden, true, 'nothing to keep: the setup link is already here');
   // Refuse is sent as it is: no passkey is made for it.
   let stopped = false;
   await page.form.fire('submit', { submitter: { value: 'refuse' }, preventDefault: () => (stopped = true) });
@@ -238,17 +244,23 @@ test('one prompt the first time, by the page\'s script as served, the authorisat
   const d = await discover(w);
   const p = pkce();
   const first = await ask(w, authorizeUrl(w, d, { pkce: p }));
-  // The authorisation page, with no owner and no setup link in this browser: Approve does nothing, and the request is left for the setup page.
+  // The authorisation page, with no owner and no setup link in this browser: Approve does nothing, and the page keeps nothing by opening.
   const early = await runPage(w, script, { html: first.body, path: '/oauth/authorize', credentials, storage, after });
   assert.match(first.body, /<p id="owner-first">This executor has no owner yet, so nothing can be approved here\./);
   assert.equal(early.el['owner-first'].textContent, '', 'the script leaves the executor\'s own words as they are');
-  assert.equal(storage.getItem(STORE_WAITING), first.request);
+  assert.equal(storage.kept.size, 0, 'a page that opens keeps nothing in the browser\'s storage');
+  assert.equal(early.el['owner-keep'].hidden, false, 'the owner is offered to keep the request');
   let prevented = false;
   await early.form.fire('submit', { submitter: { value: 'approve' }, preventDefault: () => (prevented = true) });
   assert.equal(prevented, true);
   assert.match(early.el['owner-status'].textContent, /^Not done: this executor has no owner yet/);
   assert.equal(credentials.made.length, 0);
   assert.equal(state(w).owner, null);
+  assert.equal(storage.kept.size, 0);
+  // The owner presses "Keep this connection for the setup link": only then is the request left for the setup page.
+  await early.el['owner-keep'].fire('click');
+  assert.equal(storage.getItem(STORE_WAITING), first.request);
+  assert.match(early.el['owner-status'].textContent, /^Kept in this browser\./);
 
   // The setup link, opened second: it offers the waiting request for review, named by its client's host.
   const setupHtml = (await send('GET', `${w.issuer}/oauth/owner`)).body;
@@ -278,6 +290,105 @@ test('one prompt the first time, by the page\'s script as served, the authorisat
   assert.equal(prevented, false);
   await callsATool(w, await answer(w, page.form.elements.request.value, { fields: formFields(page) }), p);
   assert.deepEqual([credentials.made.length, credentials.asked.length], [1, 0], 'one prompt in all');
+});
+
+test('no other page can put its request in the place of the one the owner kept: a page that merely opens keeps nothing, and the setup link shows the owner\'s own', async (t) => {
+  const w = await ownerWorld();
+  const after = pages(t, w);
+  const script = await pageScript(w);
+  const credentials = softCredentials(w);
+  const storage = softStorage();
+  const d = await discover(w);
+  const mine = pkce();
+  const theirs = pkce();
+  // Someone else's request, opened in this browser before the owner's own (a link, a redirect, a pop-up): nothing pressed, nothing kept.
+  const before = await ask(w, authorizeUrl(w, d, { pkce: theirs, state: 'someone-elses-first' }));
+  await runPage(w, script, { html: before.body, path: '/oauth/authorize', credentials, storage, after });
+  assert.equal(storage.kept.size, 0);
+  // The owner's own page, and the owner's press.
+  const own = await ask(w, authorizeUrl(w, d, { pkce: mine, state: 'the-owners-own' }));
+  const ownPage = await runPage(w, script, { html: own.body, path: '/oauth/authorize', credentials, storage, after });
+  await ownPage.el['owner-keep'].fire('click');
+  assert.equal(storage.getItem(STORE_WAITING), own.request);
+  // Someone else's request again, opened after it: the owner's own stays.
+  const planted = await ask(w, authorizeUrl(w, d, { pkce: theirs, state: 'someone-elses' }));
+  await runPage(w, script, { html: planted.body, path: '/oauth/authorize', credentials, storage, after });
+  assert.equal(storage.getItem(STORE_WAITING), own.request, 'the request the owner kept is still the one kept');
+  const setupHtml = (await send('GET', `${w.issuer}/oauth/owner`)).body;
+  const setup = await runPage(w, script, { html: setupHtml, hash: `#${w.code}`, path: '/oauth/owner', credentials, storage, after });
+  assert.equal(setup.el['owner-review-request'].value, own.request, 'the setup page offers the owner\'s own request');
+  const shown = await answer(w, own.request, { decision: 'show', fields: {} });
+  const page = await runPage(w, script, { html: shown.body, path: '/oauth/authorize', credentials, storage, after });
+  const submitter = { value: 'approve', textContent: 'Approve' };
+  await page.form.fire('submit', { submitter, preventDefault: () => {} });
+  await page.form.fire('submit', { submitter, preventDefault: () => {} });
+  const a = await answer(w, page.form.elements.request.value, { fields: formFields(page) });
+  assert.equal(a.params.state, 'the-owners-own');
+  await callsATool(w, a, mine);
+  assert.equal((await token(w, { grant_type: 'authorization_code', code: a.params.code, client_id: w.docs.client, code_verifier: theirs.verifier })).status, 400, 'the other party gets nothing');
+});
+
+test('"Make the passkey" on the setup page, pressed while a request waits, makes the owner and approves nothing', async (t) => {
+  const w = await ownerWorld();
+  const after = pages(t, w);
+  const script = await pageScript(w);
+  const credentials = softCredentials(w);
+  const storage = softStorage();
+  const d = await discover(w);
+  const first = await ask(w, authorizeUrl(w, d, { pkce: pkce() }));
+  const early = await runPage(w, script, { html: first.body, path: '/oauth/authorize', credentials, storage, after });
+  await early.el['owner-keep'].fire('click');
+  const setupHtml = (await send('GET', `${w.issuer}/oauth/owner`)).body;
+  const setup = await runPage(w, script, { html: setupHtml, hash: `#${w.code}`, path: '/oauth/owner', credentials, storage, after });
+  assert.equal(setup.el['owner-review'].hidden, false, 'the waiting request is offered');
+  await setup.el['owner-setup'].fire('click');
+  assert.match(setup.el['owner-status'].textContent, /^The owner is set up\./);
+  assert.ok(w.logs.some((e) => e.event === 'owner-set' && e.approves === false), 'the setup was sent with no request');
+  assert.equal(w.logs.some((e) => e.event === 'owner-set' && e.approves === true), false);
+  assert.equal(setup.el['owner-review'].hidden, true);
+  assert.equal(storage.kept.size, 0, 'neither the spent code nor the request is kept');
+  // The request that waited is as it was: not approved, and still the owner's to approve with the passkey.
+  assert.equal((await answer(w, first.request, { fields: {} })).status, 403);
+  assert.equal(w.logs.some((e) => e.event === 'oauth-approved'), false);
+});
+
+test('a setup whose answer is lost: the page says the setup may have finished, the next press says it did and how to get a recovery code, and the passkey just made approves', async (t) => {
+  const w = await ownerWorld();
+  const after = pages(t, w);
+  const script = await pageScript(w);
+  const credentials = softCredentials(w);
+  const storage = softStorage();
+  const setupHtml = (await send('GET', `${w.issuer}/oauth/owner`)).body;
+  await runPage(w, script, { html: setupHtml, hash: `#${w.code}`, path: '/oauth/owner', credentials, storage, after });
+  const d = await discover(w);
+  const p = pkce();
+  const html = (await ask(w, authorizeUrl(w, d, { pkce: p }))).body;
+  let lost = true;
+  const page = await runPage(w, script, { html, path: '/oauth/authorize', credentials, storage, after, lose: (to) => lost && to === SETUP_PATH });
+  const submitter = { value: 'approve', textContent: 'Approve' };
+  // The executor makes the owner; its answer, with the recovery code, never arrives.
+  await page.form.fire('submit', { submitter, preventDefault: () => {} });
+  assert.ok(state(w).owner, 'the owner was set up');
+  assert.match(page.el['owner-status'].textContent, /^Not known: the executor's answer did not arrive \(Failed to fetch\)\. A passkey was made here, so the setup may have finished\. Press again to find out\.$/);
+  assert.equal(page.el['owner-recovery'].hidden, true, 'no recovery code was seen');
+  lost = false;
+  // Pressed again: an owner exists. The words are of a setup that finished, not of someone else's.
+  await page.form.fire('submit', { submitter, preventDefault: () => {} });
+  const said = page.el['owner-status'].textContent;
+  assert.match(said, /^An owner is already set up on this executor, so this setup link is of no more use\. If you made the passkey here a moment ago and saw no recovery code, the setup finished but its answer did not arrive: your passkey is the owner's and approves connections\. To get a recovery code, run "provared-mcp-executor owner --reset" on the server and set up again\./);
+  assert.doesNotMatch(said, /^Not done/);
+  assert.equal(credentials.made.length, 1, 'no second passkey was made');
+  assert.equal(storage.getItem(STORE_CODE), null);
+  // Pressed once more: the passkey just made is the owner's, and approves this connection as at any later approval.
+  let prevented = false;
+  await page.form.fire('submit', { submitter, preventDefault: () => (prevented = true) });
+  assert.equal(prevented, true);
+  assert.equal(credentials.asked.length, 1);
+  assert.equal(page.form.submitted, submitter, page.el['owner-status'].textContent);
+  await callsATool(w, await answer(w, page.form.elements.request.value, { fields: formFields(page) }), p);
+  assert.ok(w.logs.some((e) => e.event === 'oauth-approved' && e.by === 'passkey'));
+  // The same on the setup page, where the passkey is made alone: the executor's own words for a link that finds an owner.
+  assert.deepEqual(await refusal(sender(w)(LINK_PATH, { code: w.code })), { status: 409, code: 'owner-exists' });
 });
 
 test('the setup link takes only a request that still waits: one that has ended is not offered, and is not shown again', async (t) => {
@@ -423,29 +534,75 @@ test('refused at the authorisation page: a passkey used at another origin, for a
   }
 });
 
-test('the recovery code approves a connection in the passkey\'s place, as often as it is typed; another code is refused; it sets up no new passkey', async () => {
+/** The owner's answer by a recovery code: the page that shows the new code, with what its Continue would send. {paused (the answer), fresh (the new code), request, agent, p (the client's PKCE)}. */
+async function typeRecovery(w, typed) {
+  const p = pkce();
+  const page = await ask(w, authorizeUrl(w, await discover(w), { pkce: p }));
+  const paused = await answer(w, page.request, { fields: { [FIELD_RECOVERY]: typed } });
+  const field = (name) => new RegExp(`<input type="hidden" name="${name}" value="([^"]+)">`).exec(paused.body)?.[1];
+  return { paused, fresh: /<pre id="owner-recovery">([^<]+)<\/pre>/.exec(paused.body)?.[1], request: field('request'), agent: field('agent'), p, first: page.request };
+}
+
+test('the recovery code approves one connection in the passkey\'s place and is then spent: a new one is shown before the browser goes on; another code is refused; it sets up no new passkey', async () => {
   const w = await ownerWorld();
   try {
     const { passkey, recoveryCode } = await setUpOwner(w);
-    const { access } = await connect(w, { prove: () => ({ [FIELD_RECOVERY]: recoveryCode }) });
-    assert.equal((await call(w, bearer(access), 'echo', {})).status, 200);
-    // As a person types it: in small letters, with spaces for the hyphens.
-    await connect(w, { prove: () => ({ [FIELD_RECOVERY]: ` ${recoveryCode.toLowerCase().replaceAll('-', ' ')} ` }) });
+    const before = state(w).owner;
+    // Typed in its box: nothing is approved yet. The code is spent, and a page shows the new one, with Continue.
+    const one = await typeRecovery(w, recoveryCode);
+    assert.equal(one.paused.status, 200, one.paused.body);
+    assert.ok(one.paused.body.includes('<h1>Write down your new recovery code</h1>'));
+    assert.match(one.fresh, RECOVERY_SHOWN);
+    assert.notEqual(one.fresh, recoveryCode);
+    assert.equal(one.agent, 'conn');
+    assert.match(one.paused.body, /<button type="submit" name="decision" value="approve">Continue<\/button>/);
+    assert.match(one.paused.headers['content-security-policy'], /^default-src 'none'; form-action 'self' https:\/\/client\.example; frame-ancestors 'none'; base-uri 'none'$/);
+    assert.doesNotMatch(one.paused.body, /<script/);
+    assert.equal(w.logs.some((e) => e.event === 'oauth-approved'), false, 'not approved until the owner continues');
+    assert.ok(w.logs.some((e) => e.event === 'owner-recovery-spent'));
+    const after = state(w).owner;
+    assert.notEqual(after.recoveryHash, before.recoveryHash, 'the new code\'s hash is in the old one\'s place');
+    assert.deepEqual({ ...after, recoveryHash: before.recoveryHash }, before, 'and nothing else of the owner changed');
+    const text = readFileSync(w.statePath, 'utf8');
+    assert.equal(text.includes(one.fresh) || text.includes(one.fresh.replaceAll('-', '')), false, 'no recovery code in the file');
+    // The request as the first page had it is not approved by this: only the one on the page that shows the new code.
+    assert.equal((await answer(w, one.first, { fields: {} })).status, 403);
+    // Continue: the connection is made, and the log says by which proof.
+    await callsATool(w, await answer(w, one.request, { agent: one.agent, fields: {} }), one.p);
+    assert.ok(w.logs.some((e) => e.event === 'oauth-approved' && e.by === 'recovery'));
+    assert.equal((await answer(w, one.request, { agent: one.agent, fields: {} })).status, 400, 'approved once');
+    // Spent: the code that was typed approves nothing more, whoever types it.
+    assert.equal((await typeRecovery(w, recoveryCode)).paused.status, 403);
+    // The new code works, once, as a person types it: in small letters, with spaces for the hyphens.
+    const two = await typeRecovery(w, ` ${one.fresh.toLowerCase().replaceAll('-', ' ')} `);
+    assert.equal(two.paused.status, 200, two.paused.body);
+    await callsATool(w, await answer(w, two.request, { agent: two.agent, fields: {} }), two.p);
+    assert.equal((await typeRecovery(w, one.fresh)).paused.status, 403);
     assert.equal(passkey.signed, 0, 'the passkey was not asked');
-    // Another code, of the same form and of none; and a wrong code is not made right by the passkey's fields beside it.
-    const other = recoveryCode.replace(/.$/, (c) => (c === 'A' ? 'B' : 'A'));
-    for (const wrong of [other, other.replaceAll('-', ''), 'AAAA', '0', recoveryCode.slice(0, -1), `${recoveryCode}A`, state(w).owner.recoveryHash]) {
+    // The same code sent twice at once is spent once: one page with a new code, one refusal.
+    const p = pkce();
+    const page = await ask(w, authorizeUrl(w, await discover(w), { pkce: p }));
+    const twice = await Promise.all([1, 2].map(() => answer(w, page.request, { fields: { [FIELD_RECOVERY]: two.fresh } })));
+    assert.deepEqual(twice.map((r) => r.status).sort(), [200, 403]);
+    const current = /<pre id="owner-recovery">([^<]+)<\/pre>/.exec(twice.find((r) => r.status === 200).body)[1];
+    // Another code, of the same form and of none; and a wrong code is not made right by the passkey's fields beside it. None of them spends anything.
+    const kept = state(w).owner.recoveryHash;
+    const other = current.replace(/.$/, (c) => (c === 'A' ? 'B' : 'A'));
+    for (const wrong of [other, other.replaceAll('-', ''), 'AAAA', '0', current.slice(0, -1), `${current}A`, kept]) {
       const request = await waiting(w);
       assert.equal((await answer(w, request, { fields: { [FIELD_RECOVERY]: wrong } })).status, 403, wrong);
       assert.equal((await answer(w, request, { fields: { ...(await prove(w, passkey)(request)), [FIELD_RECOVERY]: wrong } })).status, 403, wrong);
     }
-    // Wrong codes shut nothing (X211): the right one passes straight after.
-    const request = await waiting(w);
-    assert.equal((await answer(w, request, { fields: { [FIELD_RECOVERY]: recoveryCode } })).status, 303);
-    // It approves; it does not set up: the owner and the passkey stay as they were.
-    const owner = state(w).owner;
-    assert.deepEqual(await refusal(sender(w)(SETUP_PATH, { code: recoveryCode, credentialId: 'AAAA', key: (await softPasskey(w)).key })), { status: 409, code: 'owner-exists' });
-    assert.deepEqual(state(w).owner, owner);
+    assert.equal(state(w).owner.recoveryHash, kept);
+    // Wrong codes shut nothing (X211): the right one passes straight after. A page whose Continue is not pressed within the request's 10 minutes approves nothing.
+    const last = await typeRecovery(w, current);
+    assert.equal(last.paused.status, 200);
+    w.clock.offset += REQUEST_LIFE;
+    assert.equal((await answer(w, last.request, { agent: last.agent, fields: {} })).status, 400);
+    // It approves; it does not set up: the owner's passkey stays as it was.
+    assert.deepEqual(await refusal(sender(w)(SETUP_PATH, { code: last.fresh, credentialId: 'AAAA', key: (await softPasskey(w)).key })), { status: 409, code: 'owner-exists' });
+    assert.equal(state(w).owner.credentialId, before.credentialId);
+    assert.deepEqual(state(w).owner.key, before.key);
   } finally {
     await w.close();
   }
@@ -466,6 +623,29 @@ test('a recovery code is 20 random bytes in base32, as RFC 4648 writes it: the s
     }
   }
   assert.equal(codes.size, 3);
+});
+
+test('the library\'s passkey checks are found where the executor looks for them, and a library without them stops the start with its reason', async () => {
+  const real = fileURLToPath(new URL('../../src/', import.meta.url));
+  const found = await passkeyChecks(real);
+  assert.equal(typeof found.checkAssertion, 'function');
+  assert.equal(typeof found.checkKey, 'function');
+  assert.deepEqual(found.PASSKEY_METHODS, ['ES256', 'RS256', 'Ed25519']);
+  // A library whose files are not there, and one whose files no longer hold the names.
+  const reason = /the "provared" library at .* does not have the passkey checks this version was built with \(checkAssertion in webauthn\.js; checkKey and PASSKEY_METHODS in keys\.js\)\. Install the version of "provared" that this package's package\.json names\. Nothing was started\./;
+  const empty = mkdtempSync(join(tmpdir(), 'provared-no-library-'));
+  await assert.rejects(passkeyChecks(empty), reason);
+  const other = mkdtempSync(join(tmpdir(), 'provared-other-library-'));
+  writeFileSync(join(other, 'package.json'), '{"type":"module"}');
+  writeFileSync(join(other, 'webauthn.js'), 'export const checkPasskey = () => "valid";\n');
+  writeFileSync(join(other, 'keys.js'), 'export const PASSKEY_METHODS = ["ES256"];\nexport function checkKey() {}\n');
+  await assert.rejects(passkeyChecks(other), reason);
+  // The package names one exact version of the library: the one these checks were read in.
+  const named = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).dependencies;
+  assert.deepEqual(named, { provared: '0.7.0' });
+  const locked = JSON.parse(readFileSync(new URL('../package-lock.json', import.meta.url), 'utf8')).packages;
+  assert.equal(locked[''].dependencies.provared, '0.7.0');
+  assert.equal(locked['node_modules/provared'].version, '0.7.0');
 });
 
 test('the setup link: used twice, expired, the wrong code, or not from the executor\'s page, it is refused', async () => {
@@ -649,7 +829,8 @@ test('the form the page sends: the request, the check\'s four fields and, once t
     await setUpOwner(w);
     const page = await ask(w, authorizeUrl(w, d, { pkce: pkce(), redirect_uri: CALLBACK }));
     assert.deepEqual(names(page.body), ['request', ...FOUR, FIELD_RECOVERY]);
-    assert.ok(page.body.includes(`<input type="text" name="${FIELD_RECOVERY}" id="owner-recovery-code" autocomplete="off" spellcheck="false">`));
+    // The box does not show what is typed, and the browser is asked not to keep it.
+    assert.ok(page.body.includes(`<input type="password" name="${FIELD_RECOVERY}" id="owner-recovery-code" autocomplete="off" spellcheck="false">`));
   } finally {
     await w.close();
   }

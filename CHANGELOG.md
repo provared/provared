@@ -524,9 +524,9 @@
       three values (X274).
     - The recovery code is 160 random bits, made by the executor, in 32
       characters of base32, shown once; only its SHA-256 is kept. Typed
-      at the authorisation page it approves that connection, as often as
-      it is typed. It makes no new passkey: for that the owner is reset
-      (X276).
+      at the authorisation page it approves that connection (once: see
+      the review below). It makes no new passkey: for that the owner is
+      reset (X276).
     - One call makes the passkey, with no authenticator named, so the
       browser offers the device, a phone or a security key itself. The
       second button and the passkey's transports are gone (X275).
@@ -545,6 +545,50 @@
       installed them. The executor's only runtime dependency is
       `provared` again.
     - Each check was undone once, to see its test fail, and put back.
+  - **Changed after an independent review of the plain passkey, before
+    any release** (the commits before these had the faults; each fix has
+    a test that fails without it):
+    - Any page could put its own request in the place of the one the
+      owner had begun. Where there was no owner, the authorisation page
+      kept its request in the browser's storage as it opened, with nothing
+      pressed; a second such page, opened in the same browser by anyone,
+      took the first one's place, and the setup page then offered it as
+      "the connection that is waiting". The page now keeps its request
+      only when the owner presses "Keep this connection for the setup
+      link" on it; a page that merely opens keeps nothing and takes
+      nothing out (X272).
+    - A recovery code worked for ever, from anywhere, and the log did not
+      tell its approvals from a passkey's. A code is now spent by its
+      first use: the executor writes a new code's hash in its place and
+      shows the new code on a page of its own, whose Continue then
+      approves, as the first approval does. The log's line for an
+      approval says by which proof: `"by": "passkey"`, `"recovery"` or
+      `"setup"`, and `owner-recovery-spent` when a code is used. The box
+      is `type="password"` (X274, X276).
+    - Where the answer to the setup was lost on its way, the next press
+      said only that an owner was already set up and a second setup
+      refused, as if someone else had taken the executor. The page now
+      says that the answer did not arrive and the setup may have
+      finished; the executor's message for an owner that exists says that
+      the setup finished, that the passkey approves, and that `owner
+      --reset` and a new setup give a recovery code; and Approve on that
+      page then asks the passkey just made (X280).
+    - The library was named at `^0.7.0`, though the executor takes two
+      functions from its files that it does not name among its exports.
+      It is now named at exactly `0.7.0`, in `package.json` and
+      `package-lock.json`; where the functions are not found, nothing
+      starts, and the message says what was looked for (X281). The next
+      release of the library should name `checkAssertion` and `checkKey`
+      among its exports.
+    - Tests that were missing: "Make the passkey" pressed while a request
+      waits approves nothing; two answers with one challenge checked at
+      the same moment; a setup's or a recovery code's note for another
+      owner; the three faults above.
+    - Smaller: the JSON answers are sent with `X-Content-Type-Options:
+      nosniff`; X221 and the README no longer say that a new challenge
+      ends an earlier one, or that the browser's storage is emptied when
+      a code ends; the design names a limit of the library's check of
+      `crossOrigin` (X270).
   - **Not built:** no upstream OAuth, no one-command setup, no dynamic
     client registration, no revocation endpoint. No passkey on a device
     (a computer's own, a phone, a security key) has been tried, and no client
@@ -559,7 +603,7 @@
     client, with its limits, and the steps to try the passkey by hand,
     with what to watch the first time.
   - **Tests**: `test/oauth.test.mjs`, 10 tests: the whole flow in plain
-    HTTP requests, and each refusal. `test/owner.test.mjs`, 18 tests: the
+    HTTP requests, and each refusal. `test/owner.test.mjs`, 22 tests: the
     page's own steps, and the page's script itself (`owner-page.mjs`)
     fetched from the executor and run on a stand-in page with the
     library's `passkey-browser.js` as served, with a software passkey;
@@ -571,8 +615,8 @@
     seal is broken or that has ended, an answer sent twice, a setup link
     used twice, expired or wrong, a second setup, a passkey missing or
     malformed, a state file in the earlier form).
-    `test/review3.test.mjs`, 16 tests: the review's findings.
-    `test/review4.test.mjs`, 6 tests: the second look's findings, with the
+    `test/review3.test.mjs`, 17 tests: the review's findings.
+    `test/review4.test.mjs`, 7 tests: the second look's findings, with the
     state file made unwritable while a connection is ended, in the
     executor and in the command as a real process.
     Their shared helpers are in `test/oauth-world.mjs` and

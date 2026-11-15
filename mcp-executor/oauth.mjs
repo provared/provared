@@ -374,7 +374,7 @@ function sendPage(res, status, title, body, { formTo = [], scripts = false } = {
 function sendJson(res, status, value, extra = {}) {
   if (res.headersSent) return;
   const text = Buffer.from(`${JSON.stringify(value)}\n`);
-  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'content-length': text.length, 'cache-control': 'no-store', pragma: 'no-cache', ...extra });
+  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'content-length': text.length, 'cache-control': 'no-store', pragma: 'no-cache', 'x-content-type-options': 'nosniff', ...extra });
   res.end(text);
 }
 
@@ -596,6 +596,10 @@ export function openFrontDoor({ settings, now = Date.now, log = () => {}, ownerC
         state.owner = owner;
         state.setup = null;
       }),
+      /** A new recovery code's hash in place of the one just used: the old code is spent by the same write (X276). */
+      setRecovery: (recoveryHash) => change(() => {
+        state.owner = { ...state.owner, recoveryHash };
+      }),
     },
     /** The same waiting request with a note of the check's own sealed into it, as the text for the form; null where the text is not a waiting request. */
     withNote: (text, note) => {
@@ -765,13 +769,30 @@ export function openFrontDoor({ settings, now = Date.now, log = () => {}, ownerC
     if (!ownerCheck) return problemPage(res, 503, 'No owner\'s check is set up on this executor, so no connection can be approved.');
     const agent = form.get('agent');
     if (!oauthAgents.includes(agent)) return problemPage(res, 400, 'That is not an agent for connections.');
+    // What the check says (X212): true, or the name of the proof that passed; a page to show before the approval, whose Continue sends the request again; a problem of the executor's own; anything else is a refusal.
     let proved = false;
     try {
-      proved = (await ownerCheck.check(form, { request: r.id, origin: issuer, note: r.note ?? null })) === true;
+      proved = await ownerCheck.check(form, { request: r.id, origin: issuer, note: r.note ?? null });
     } catch {
       proved = false;
     }
-    if (!proved) {
+    if (isObject(proved) && typeof proved.problem === 'string') {
+      log({ event: 'oauth-refused', code: 'not-written' });
+      return problemPage(res, 500, proved.problem);
+    }
+    if (isObject(proved) && isObject(proved.pause) && typeof proved.pause.request === 'string') {
+      // Nothing is approved yet, and nothing kept: the page's form holds the request, as the first page's did.
+      const { title, body, request } = proved.pause;
+      return sendPage(res, 200, title, [
+        body,
+        `<form method="post" action="${OAUTH_PATH}/authorize">`,
+        `<input type="hidden" name="request" value="${escape(request)}">`,
+        `<input type="hidden" name="agent" value="${escape(agent)}">`,
+        '<p><button type="submit" name="decision" value="approve">Continue</button></p>',
+        '</form>',
+      ].join('\n'), { formTo: [new URL(r.redirectUri).origin] });
+    }
+    if (proved !== true && (typeof proved !== 'string' || proved === '')) {
       log({ event: 'oauth-refused', code: 'owner-not-proved' });
       return problemPage(res, 403, 'The owner\'s check did not pass. Go back and try again.');
     }
@@ -780,7 +801,8 @@ export function openFrontDoor({ settings, now = Date.now, log = () => {}, ownerC
     answered.set(r.id, r.expires);
     const code = newToken();
     codes.set(hashOf(code), { client: r.client, redirectUri: r.redirectUri, challenge: r.challenge, scope: r.scope, agent, expires: now() + CODE_LIFE, used: false, grant: null });
-    log({ event: 'oauth-approved', agent, client: r.client });
+    // With which proof it was approved, where the check names it: the passkey, the recovery code, or the setup that made the owner (X274).
+    log({ event: 'oauth-approved', agent, client: r.client, ...(typeof proved === 'string' ? { by: proved } : {}) });
     back(res, r.redirectUri, { code, state: r.state });
   }
 

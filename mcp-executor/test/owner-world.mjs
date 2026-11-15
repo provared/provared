@@ -175,10 +175,11 @@ export function softStorage() {
  * sent: every element with an id, and the authorisation form with its
  * hidden fields. Gives {el (the elements by id), form, replaced (what
  * history.replaceState was given)}. The globals a page has are set for the
- * run, and put back by "after".
+ * run, and put back by "after". "lose" says, for an address, whether the
+ * executor's answer to the page is lost on its way.
  */
 let runs = 0;
-export async function runPage(w, script, { html, hash = '', path, credentials, storage = softStorage(), after }) {
+export async function runPage(w, script, { html, hash = '', path, credentials, storage = softStorage(), after, lose = () => false }) {
   const el = {};
   for (const m of html.matchAll(/<(\w+)[^>]*\sid="([^"]+)"([^>]*)>/g)) el[m[2]] = element({ hidden: /\shidden(\s|$)/.test(` ${m[3]}`) });
   let form = null;
@@ -199,6 +200,8 @@ export async function runPage(w, script, { html, hash = '', path, credentials, s
     // The page's fetch: to the executor's own address, with the Origin a browser gives a page's own request.
     fetch: async (to, o) => {
       const r = await send(o.method, `${w.issuer}${to}`, { headers: { ...o.headers, origin: w.issuer }, body: o.body });
+      // "lose": the executor took the request, and its answer never reached the page, as when the connection drops.
+      if (lose(to)) throw new TypeError('Failed to fetch');
       return { ok: r.status >= 200 && r.status < 300, status: r.status, json: async () => JSON.parse(r.body) };
     },
   };

@@ -9,8 +9,9 @@
 // check of a passkey's signature (checkAssertion: Web Authentication Level
 // 3, section 7.2), against the public key it keeps, with its public address
 // as the origin and that address's host as the relying party. A recovery
-// code, made here and shown once, approves a connection in the passkey's
-// place; only its SHA-256 is kept.
+// code, made here and shown once, approves one connection in the passkey's
+// place and is then spent, a new one being made in its place; only its
+// SHA-256 is kept.
 //
 // What it serves, beside the front door's addresses:
 //
@@ -40,11 +41,26 @@ export { OWNER_PATH };
  * are served its files from there (X224), and the executor takes from
  * there the two functions the library has for a passkey but does not name
  * among its exports: the check of a passkey's signature and the check of a
- * public key's form (X270).
+ * public key's form (X270). The library promises neither by name, so the
+ * package names one exact version of it, and what was found is held
+ * against what is used before anything else is done: a library without
+ * them stops the start, and says why.
  */
+export async function passkeyChecks(folder) {
+  const found = {};
+  try {
+    found.checkAssertion = (await import(pathToFileURL(join(folder, 'webauthn.js')).href)).checkAssertion;
+    Object.assign(found, (({ PASSKEY_METHODS, checkKey }) => ({ PASSKEY_METHODS, checkKey }))(await import(pathToFileURL(join(folder, 'keys.js')).href)));
+  } catch {
+    // Said below: one of the two files is not there, or cannot be loaded.
+  }
+  if (typeof found.checkAssertion !== 'function' || typeof found.checkKey !== 'function' || !Array.isArray(found.PASSKEY_METHODS)) {
+    throw new Error(`provared-mcp-executor: the "provared" library at ${folder} does not have the passkey checks this version was built with (checkAssertion in webauthn.js; checkKey and PASSKEY_METHODS in keys.js). Install the version of "provared" that this package's package.json names. Nothing was started.`);
+  }
+  return found;
+}
 const LIBRARY = dirname(fileURLToPath(import.meta.resolve('provared')));
-const { checkAssertion } = await import(pathToFileURL(join(LIBRARY, 'webauthn.js')).href);
-const { PASSKEY_METHODS, checkKey } = await import(pathToFileURL(join(LIBRARY, 'keys.js')).href);
+const { checkAssertion, PASSKEY_METHODS, checkKey } = await passkeyChecks(LIBRARY);
 
 /** How long a setup link and a challenge last, in milliseconds (X218, X273). */
 export const SETUP_LIFE = 15 * 60 * 1000;
@@ -227,7 +243,8 @@ export function openPasskeyCheck({ issuer, resource = `${issuer}/mcp`, clients =
   /** Whether a setup with this code is refused: no, while no owner exists and the link's code is given before it ends (X218, X223). Answers the refusal. */
   function linkRefused(res, v) {
     if (store.owner()) {
-      refuse(res, 409, 'owner-exists', 'An owner is already set up on this executor. A second setup is refused unless the owner is reset on the server.');
+      // Most often this is the owner's own setup, seen again: so it says what to do where its answer was lost, and does not read as if another had taken the executor (X280).
+      refuse(res, 409, 'owner-exists', 'An owner is already set up on this executor, so this setup link is of no more use. If you made the passkey here a moment ago and saw no recovery code, the setup finished but its answer did not arrive: your passkey is the owner\'s and approves connections. To get a recovery code, run "provared-mcp-executor owner --reset" on the server and set up again. A second setup is refused unless the owner is reset there.');
       return true;
     }
     const setup = store.setup();
@@ -276,7 +293,7 @@ export function openPasskeyCheck({ issuer, resource = `${issuer}/mcp`, clients =
   function challengeFor(res, v) {
     const owner = store.owner();
     if (!owner) return refuse(res, 409, 'no-owner', 'No owner is set up on this executor yet.');
-    // The challenge: sealed into the request it is for, which the page puts in its form in place of the one it had. A request so has one challenge, and a new one takes the old one's place; nothing is kept here.
+    // The challenge: sealed into the request it is for, which the page puts in its form in place of the one it had. So a form holds one challenge. Nothing is kept here, so an earlier challenge given for the same request still passes until its two minutes end: each needs the passkey's signature, and the request is answered once (X221).
     const challenge = randomBytes(32).toString('base64url');
     const request = only(v, ['request']) && typeof v.request === 'string' ? withNote(v.request, { challenge, expires: now() + CHALLENGE_LIFE }) : null;
     if (request === null) return refuse(res, 400, 'bad-request', 'Send {"request": "<the request of a page waiting for the owner, as its form holds it>"}.');
@@ -296,33 +313,64 @@ export function openPasskeyCheck({ issuer, resource = `${issuer}/mcp`, clients =
         ...(store.owner()
           ? [
               '<p>Approve asks for the owner\'s passkey. Without the passkey, type the recovery code here first:</p>',
-              `<p><label>Recovery code <input type="text" name="${FIELD_RECOVERY}" id="owner-recovery-code" autocomplete="off" spellcheck="false"></label></p>`,
+              `<p><label>Recovery code <input type="password" name="${FIELD_RECOVERY}" id="owner-recovery-code" autocomplete="off" spellcheck="false"></label></p>`,
             ]
           : [
               // The page's script says more here, where this browser holds the setup link (X272).
-              '<p id="owner-first">This executor has no owner yet, so nothing can be approved here. Its owner is made by the setup link, which the command "provared-mcp-executor owner" prints on the server. If you have that link, open it in this browser within 10 minutes: it shows this connection again, and one passkey prompt then makes the owner and approves it.</p>',
+              '<p id="owner-first">This executor has no owner yet, so nothing can be approved here. Its owner is made by the setup link, which the command "provared-mcp-executor owner" prints on the server. If you have that link and began this connection yourself, press "Keep this connection for the setup link", then open the link in this browser within 10 minutes: it shows this connection again, and one passkey prompt then makes the owner and approves it.</p>',
+              // Shown by the page's script where this browser holds no setup link. Only a press of it keeps the request for the setup page: a page that merely opens keeps nothing (X272).
+              '<p><button type="button" id="owner-keep" hidden>Keep this connection for the setup link</button></p>',
               '<pre id="owner-recovery" hidden></pre>',
             ]),
         '<p id="owner-status" role="status"></p>',
         `<script type="module" src="${OWNER_PATH}/page.js"></script>`,
       ].join('\n'),
     /**
-     * Whether the form's fields prove the owner, for this request (X274).
-     * "note" is what the request's seal holds of the check's. One of three
-     * things proves the owner: the request was approved by the setup that
-     * made this owner (X272); the recovery code (X276); or the passkey's
+     * Whether the form's fields prove the owner, for this request (X274):
+     * false, or which proof it was. "note" is what the request's seal
+     * holds of the check's. One of three things proves the owner: the
+     * request was approved by the setup that made this owner ("setup",
+     * X272); by the recovery code ("recovery", X276); or the passkey's
      * signature over this executor's own challenge for this request, with
      * the issuer as the origin and its host as the relying party, the user
-     * verified (X273). The signature is checked before anything is kept,
-     * and a challenge passes once.
+     * verified ("passkey", X273). The signature is checked before anything
+     * is kept, and a challenge passes once.
+     *
+     * A recovery code typed in the form does not approve at once. It is
+     * spent, a new one is made in its place, and the answer is {pause}: a
+     * page that shows the new code, whose Continue sends the same request
+     * with a note that the recovery code approved it.
      */
     async check(fields, { origin, note }) {
       tidy();
       const owner = store.owner();
       if (!owner) return false;
-      if (isObject(note) && typeof note.setup === 'string') return sameText(note.setup, owner.credentialId);
+      if (isObject(note) && typeof note.setup === 'string') return sameText(note.setup, owner.credentialId) ? 'setup' : false;
+      if (isObject(note) && typeof note.recovery === 'string') return sameText(note.recovery, owner.credentialId) ? 'recovery' : false;
       const typed = fields.get(FIELD_RECOVERY) ?? '';
-      if (typed.trim() !== '') return sameText(hashOf(recoveryText(typed)), owner.recoveryHash);
+      if (typed.trim() !== '') {
+        if (!sameText(hashOf(recoveryText(typed)), owner.recoveryHash)) return false;
+        // The code is spent by the same write that puts the new one's hash in its place: so it approves once, whoever typed it, and the owner always holds one that works (X276).
+        const fresh = base32(randomBytes(RECOVERY_BYTES));
+        try {
+          store.setRecovery(hashOf(fresh));
+        } catch {
+          return { problem: 'The executor could not write its state, so the recovery code was not spent and nothing was approved. Try again.' };
+        }
+        log({ event: 'owner-recovery-spent' });
+        const text = fields.get('request') ?? '';
+        return {
+          pause: {
+            title: 'Write down your new recovery code',
+            body: [
+              '<p>The recovery code you typed is spent: it approves nothing more. This is your new one, shown once:</p>',
+              `<pre id="owner-recovery">${escape(fresh.match(/.{4}/g).join('-'))}</pre>`,
+              `<p>Write it down now. Then press Continue: the connection is approved when you do, and the browser goes back to ${escape(hostOf(clientOf(text) ?? ''))}.</p>`,
+            ].join('\n'),
+            request: withNote(text, { recovery: owner.credentialId }),
+          },
+        };
+      }
       const text = fields.get(FIELD_CHALLENGE) ?? '';
       if (!isObject(note) || typeof note.challenge !== 'string' || !sameText(text, note.challenge) || !(note.expires > now()) || used.has(text)) return false;
       const signedBytes = bytesOf(text, 32);
@@ -338,7 +386,7 @@ export function openPasskeyCheck({ issuer, resource = `${issuer}/mcp`, clients =
       }
       if (checked !== 'valid' || used.has(text)) return false;
       used.set(text, note.expires);
-      return true;
+      return 'passkey';
     },
     owns: (path) => path === OWNER_PATH || path.startsWith(`${OWNER_PATH}/`),
     async take(req, res, path) {

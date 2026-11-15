@@ -124,10 +124,13 @@ Or from a copy of the repository: in `mcp-executor`, `npm pack`, then
 `npm install -g ./provared-mcp-executor-0.5.0.tgz`.
 
 It needs Node.js 24.7 or later. It depends only on the `provared` library,
-at version 0.7.0 or a later 0.7 version (`^0.7.0`): its receipts name
+at exactly version 0.7.0: its receipts name
 `provared.tool-name` and `provared.tool-result`, which the format reserved
 in 0.7.0 and which a checker of 0.5.0 or 0.6.0 refuses (0.4.0 and
-earlier read them as labels). `provared-mcp-executor --version` prints the
+earlier read them as labels); and its owner's check uses two functions
+of that version that the library does not yet name among its exports, so
+it does not take a later one unasked. A library without them stops the
+start, with a message that says so. `provared-mcp-executor --version` prints the
 version installed.
 
 The example files (`executor.example.json`, `executor-http.example.json`
@@ -652,9 +655,19 @@ with the `provared` library's own check, and needs no other package.
     your client afterwards.
 
   If the client's page is opened first, it says that the executor has no
-  owner yet. Open the setup link in the same browser within 10 minutes:
-  it offers to show that connection again, and Approve there is the same
-  one prompt. Opening the link approves nothing by itself.
+  owner yet. Press **Keep this connection for the setup link** on it, then
+  open the setup link in the same browser within 10 minutes: it offers to
+  show that connection again, and Approve there is the same one prompt.
+  Opening the link approves nothing by itself, and a page that is merely
+  opened keeps nothing: only the connection you pressed the button for is
+  offered.
+
+  If the page says that the executor's answer did not arrive, press
+  again. Where it then says that an owner is already set up, the setup
+  finished: the passkey you just made is the owner's, and approves
+  connections. Only the recovery code was not shown. To get one, run
+  `owner --reset` and set up again; at that moment no connection exists
+  to be ended.
 - **What the executor keeps.** The passkey's identifier, its public key,
   and a hash of the recovery code. Nothing that could stand in for the
   passkey or the code.
@@ -666,8 +679,15 @@ with the `provared` library's own check, and needs no other package.
   public key it keeps, for its own address, with the user verified.
 - **The recovery code.** 32 letters and digits, shown once at the setup.
   Typed into its box on the page in place of the passkey, it approves that
-  one connection, as often as it is typed. It does not make a new passkey:
-  for that, reset the owner.
+  one connection, once: it is then spent. The executor shows a new code
+  on a page of its own, before the browser goes back to the client: write
+  it down, then press **Continue**. So you always hold one code that
+  works, and a code that someone else has used no longer works for you:
+  if your code is refused and you did not use it, reset the owner. It
+  does not make a new passkey: for that, reset the owner too.
+- **The log says how each connection was approved.** The line
+  `"event":"oauth-approved"` carries `"by"`: `"passkey"`, `"recovery"` or
+  `"setup"` (the first approval, made with the owner).
 - **The passkey belongs to the issuer's address.** If the public address
   changes, the passkey no longer works there. The recovery code still
   approves a connection; `owner --reset` makes a new owner at the new
@@ -677,9 +697,11 @@ with the `provared` library's own check, and needs no other package.
   prints a new link.
 - The pages run only the executor's own scripts, from its own address:
   the page's script and the library's own files. Nothing is loaded from
-  anywhere else. The setup link's code, and a request that waits where
-  there is no owner, are kept in the browser's storage for the executor's
-  address until they are used or have ended. That is true of what the
+  anywhere else. The setup link's code, and a request the owner chose to
+  keep where there is no owner, are kept in the browser's storage for the
+  executor's address until they are used, or until one of the executor's
+  pages next finds them ended: a code may lie there after its 15 minutes,
+  of no use to anyone. That is true of what the
   executor sends: a program on the owner's own computer that changes the
   pages a browser shows, or reads the browser's storage, can still do
   what the owner can.
@@ -693,8 +715,9 @@ Chromium 153 with a virtual authenticator that verifies its user, against
 the executor's own commands at `http://localhost` (an issuer the settings
 take for tests, since a browser makes no passkey at an IP address): the
 setup and the first approval in one prompt, in both orders; a later
-approval in one prompt; an approval by the recovery code; each through to
-a token and a tool call. A virtual authenticator is not a device: the
+approval in one prompt; an approval by the recovery code, with the new
+code shown before the browser went on; each through to a token and a tool
+call. A virtual authenticator is not a device: the
 pages have not been tried here with a computer's own authenticator, a
 phone or a security key.
 There is no

@@ -1303,8 +1303,9 @@ the format: the executor writes ordinary stubs, countersignatures,
 denials and, from 0.5.0, seals.
 
 **X1. A package of its own, `mcp-executor/`, named `provared-mcp-executor`,
-depending on `provared` 0.7.0 (`^0.7.0`; it was `>0.6.0 <0.8.0` until
-0.7.0 was cut, and `^0.6.0` until the reserved names of X12 came).** It
+depending on `provared` 0.7.0 (exactly, from 0.5.0: X281; it was `^0.7.0`
+before that, `>0.6.0 <0.8.0` until 0.7.0 was cut, and `^0.6.0` until the
+reserved names of X12 came).** It
 has no other runtime dependency: the owner's check over OAuth (section
 14.1) uses the library's own check of a passkey's signature (X270). Two
 files are copies of the gateway's
@@ -3101,7 +3102,13 @@ connection you began yourself, just now." The check itself is one object
 given to the executor (`ownerCheck`): `form()` gives the HTML of its
 fields on the page, and `check(fields, {request, origin, note})` says
 whether they prove the owner; `note` is what the check itself had sealed
-into the request, or null. A check may also run a script from the
+into the request, or null. It answers `true`, or the name of the proof
+that passed, which the log's line for the approval then gives as `by`
+(X274); `{"pause": {"title", "body", "request"}}`, where a page of the
+check's is to be shown before anything is approved, whose one button,
+Continue, sends that request with the agent chosen (X276); `{"problem"}`,
+a fault of the executor's own, shown as it is (500); anything else is a
+refusal. A check may also run a script from the
 executor's own address (`scripts`) and answer at addresses of its own
 (`owns`, `take`). Left out, as the command `http` leaves it, the check is
 the one by the owner's passkey (section 14.1). Given as `null`, there is
@@ -3229,8 +3236,11 @@ the `request` field of a page waiting for the owner, gives `{"challenge",
 "request", "credentialId"}`: 32 random bytes in base64url, the same
 request with that challenge and its end sealed into it (X228), and the
 identifier of the passkey to ask (X273). The page puts the new request
-in its form in place of the one it had. So a request has one challenge,
-and a new one takes the old one's place. The challenge lasts 2 minutes and
+in its form in place of the one it had, so a form holds one challenge at
+a time. An earlier challenge given for the same request is not ended by a
+later one: nothing is kept that could say so, and it still passes until
+its 2 minutes are over. No harm follows, since each needs the passkey's
+signature and the request is answered once. The challenge lasts 2 minutes and
 belongs to that request alone, since it is under the request's seal. The
 executor keeps nothing of a challenge it gives out. It keeps, until they
 end, only the challenges whose signature passed, so that none passes
@@ -3296,7 +3306,8 @@ it has ended), `setup-refused` (403: not the link's code), `no-owner`
 (409), `not-found` (404: not one of the executor's files), `not-allowed`
 (405) and `not-written` (500: the state file could not be written, so no
 owner was set up, and the link still works). No failed attempt is counted
-(X211).
+(X211). Every JSON answer of the front door, these among them, is sent
+with `X-Content-Type-Options: nosniff`, as the pages and the scripts are.
 
 **X228. A request waiting at the page is kept in the page's form, under
 the executor's seal.** The hidden field `request` holds the request's
@@ -3374,12 +3385,20 @@ signature counter, which many passkeys leave at zero. And it does not
 look at the passkey's identifier in an answer: there is one owner and one
 key, and a signature that fits the key is the owner's.
 
+A known limit of the library's check, left as it is. Of the client data's
+`crossOrigin` it refuses only the value `true`: text such as `"true"`
+passes, and `topOrigin` is not read. A browser writes a boolean there, and
+the client data is under the passkey's signature, so no way to misuse this
+is known; a check that took only `false` or nothing would be tidier, and
+is the library's to make.
+
 Why: a passkey with PRF could not be made on a device whose own
 authenticator gives none, and then there was no owner at all. A plain
 passkey is what every authenticator gives, and the library already checks
 one for the permissions people sign. The other way: have the library name
-`checkAssertion` among its exports, which needs a release of the library
-before the executor's.
+`checkAssertion` and `checkKey` among its exports, which needs a release
+of the library before the executor's. Its next release should name them,
+and the executor then take them by name (X281 says what holds until then).
 
 **X271. The setup message.** `POST /oauth/owner/setup`, JSON: `{"code",
 "credentialId", "key"}` and, where the page holds one, `"request"` (X272).
@@ -3417,9 +3436,15 @@ Within that, the pages save the owner a second prompt.
   button, now "Continue", and the form goes as any approval does. The
   owner's check passes a request that carries that note, for that owner.
   The code is spent by the setup.
-- Where the browser holds no code, the authorisation page keeps its
-  `request` in the same storage; the fields of a request are not secret
-  (X228). The setup page, opened afterwards, sends it with the code to
+- Where the browser holds no code, the authorisation page offers a
+  button, "Keep this connection for the setup link". Only a press of it
+  puts the page's `request` in the same storage; the fields of a request
+  are not secret (X228). A page that merely opens keeps nothing, and
+  takes nothing out. Until this was changed, the page kept its request as
+  it opened, so any page that sent the browser to an authorisation
+  address, with nothing pressed, put its own request in the place of the
+  owner's, and the setup page then offered that one as "the connection
+  that is waiting". The setup page, opened afterwards, sends it with the code to
   `/oauth/owner/link`, which answers `"waiting": "<the client's host>"`
   only where that request still waits (X207's 10 minutes, by the
   executor's clock, under its seal). The page then offers "Review the
@@ -3430,8 +3455,8 @@ Within that, the pages save the owner a second prompt.
   nothing by it. Approve there is the one prompt, as above. A request
   that has ended is not offered, and is taken out of the storage.
 - The setup page alone still makes the passkey ("Make the passkey"),
-  approves nothing, and says what to do next: add the executor's address
-  in a client the settings list.
+  approves nothing, whatever waits, and says what to do next: add the
+  executor's address in a client the settings list.
 
 What this costs. Someone can begin a request and send its link to the
 owner before the owner is set up (X212). The owner who opens it and then
@@ -3440,8 +3465,9 @@ warning, and it is approved only if they press Approve: the same as at any
 later approval, and no more than 10 minutes after the page was made. A
 request that ends between Approve and the setup message is not approved,
 and the owner is set up all the same, since by then the passkey has been
-made. The code and a waiting request stay in the browser's storage until
-they are used or found to have ended; a program on the owner's computer
+made. The code and a kept request stay in the browser's storage until
+they are used, or until a page of the executor's next finds them ended:
+so a code that has ended may lie there, of no use to anyone. A program on the owner's computer
 that reads the browser's storage can read them, as it could already
 change the pages (X212). A browser with no storage loses only the one
 prompt. A start ends every waiting request (X228), and `owner` needs the
@@ -3474,13 +3500,18 @@ form, beside the request, the agent and the decision: `owner_challenge`
 `owner_client_data` (at most 4,096 bytes) and `owner_signature` (at most
 1,024 bytes), each in base64url. The recovery code's box is the field
 `owner_recovery` (X276). The check passes where one of three things
-holds: the request carries the setup's note for this owner (X272); the
-recovery code is the owner's; or the challenge is the one sealed into
-this request, has not expired and has not passed before, and
-`checkAssertion` says the signature is valid, with the issuer as the
-origin and the issuer's host name as the relying party. A signing method
-this computer cannot check counts as not proved. The signature is checked
-before anything is kept.
+holds, and says which: the request carries the setup's note for this
+owner (`setup`, X272); it carries the note that the recovery code
+approved it, for this owner (`recovery`, X276); or the challenge is the
+one sealed into this request, has not expired and has not passed before,
+and `checkAssertion` says the signature is valid, with the issuer as the
+origin and the issuer's host name as the relying party (`passkey`). A
+signing method this computer cannot check counts as not proved. The
+signature is checked before anything is kept. The log's line for an
+approval names the proof: `{"event": "oauth-approved", …, "by":
+"passkey"}`, or `"recovery"`, or `"setup"`. Why: an approval leaves no
+mark in the agent's book (X201), so the log's line is the one record of
+it, and it should say how it was made.
 
 **X275. One call makes the passkey, wherever the browser keeps it.** The
 page calls the library's `createPasskey`, as it is: the methods `ES256`,
@@ -3504,17 +3535,44 @@ keeps the SHA-256 of the 32 characters, in base64url, as it keeps its
 tokens (X208), and the code itself nowhere. Typed into its box on the
 authorisation page, it goes to the executor in the form, and approves
 that one request in the passkey's place; the page's script then asks for
-no passkey. As typed, spaces and hyphens are taken out and small letters
-made capitals; what is left is hashed, and the hashes are compared in
-constant time. It may be used as
-often as it is typed: it is not spent. It approves, and does nothing
-else: it does not make a new passkey and does not show the owner
-anything. To replace a lost passkey, the owner is reset on the server
-(X223), which ends every connection. Why: 160 random bits cannot be
-guessed, so a plain hash is enough, as for a token; and a code that could
-set up a new passkey would be a second setup link that never ends. The
-other way: a code that is spent by one use, which leaves an owner
-without a passkey one approval from a reset.
+no passkey. The box does not show what is typed (`type="password"`), and
+asks the browser not to keep it (`autocomplete="off"`). As typed, spaces
+and hyphens are taken out and small letters made capitals; what is left
+is hashed, and the hashes are compared in constant time.
+
+A code approves once, and is then spent. Where the code typed is the
+owner's, the executor makes a new one and writes its hash in the old
+one's place, in one write of the state; the old code approves nothing
+after that, whoever types it. Nothing is approved yet. The answer is a
+page, "Write down your new recovery code", that shows the new code once,
+with one button, Continue, and a form that holds the same request with a
+note under its seal (X228) that the recovery code approved it, for this
+owner, and the agent that was chosen. Continue sends that form, the check
+passes it, and the browser goes back to the client, as after the first
+approval (X272). A page whose Continue is not pressed within the
+request's 10 minutes approves nothing; the code is spent all the same,
+and the new one was shown. The log says `owner-recovery-spent`, and the
+approval's line says `"by": "recovery"` (X274). Where the state cannot be
+written, the page says so (500), nothing is approved, and the code is not
+spent.
+
+It approves, and does nothing else: it does not make a new passkey. To
+replace a lost passkey, the owner is reset on the server (X223), which
+ends every connection. A new code that never reached the owner (the
+answer was lost on its way) is lost: the passkey still approves, and a
+reset gives a new code.
+
+Why: 160 random bits cannot be guessed, so a plain hash is enough, as for
+a token; and a code that could set up a new passkey would be a second
+setup link that never ends. Until this choice was changed, the code could
+be used as often as it was typed: so a code that had once been seen, over
+a shoulder or in a note, was a second owner, tied to no device and to no
+address, that never ended, and nothing set its approvals apart in the
+log. Spent by its first use, a code that leaks is worth one approval at
+most, and its theft shows: the owner's own next use of it fails. Because
+a new one takes its place at once, the owner is not left one approval
+from a reset. The other way: a code that works for ever, with a warning
+to reset the owner when it may have been seen.
 
 **X277. The issuer may be `http://localhost` with a port, for tests.**
 Beside `http://127.0.0.1` (X202). A client's document at
@@ -3539,16 +3597,54 @@ document, which the settings list (X203). The name a document gives
 itself (`client_name`) is not shown. Why: the host is what the owner put
 in the settings; a name is whatever the client's server says.
 
+**X280. A setup whose answer is lost does not read as someone else's.**
+The executor writes the owner, and then sends the one answer that holds
+the recovery code. Where that answer does not arrive (the connection
+drops, or the executor stops), the owner exists, the link is spent, and
+the code was never seen. The page then says that the answer did not
+arrive, that a passkey was made and the setup may have finished, and to
+press again. The next press finds an owner (`owner-exists`, 409), and the
+executor's message for that says what it most often means: the setup
+finished but its answer did not arrive; the passkey is the owner's and
+approves connections; a recovery code is to be had by running `owner
+--reset` on the server and setting up again. On the authorisation page,
+Approve then asks that passkey, as at any later approval. Why: until this
+was written, the second press said only that an owner was already set up
+and a second setup refused, which reads as if another had taken the
+executor. A reset at that moment ends no connection, since none exists
+yet. Not done: the passkey made by a setup that was refused or not
+written stays on the device, and the next try makes another with the same
+name; the library's `createPasskey` has no way to leave one out.
+
+**X281. The library at one exact version, held at the start.** The
+package names `provared` at exactly `0.7.0`, in `package.json` and in
+`package-lock.json`, and no longer at any 0.7 version. When it is loaded,
+the executor looks in the library's folder for `checkAssertion`
+(`webauthn.js`), `checkKey` and `PASSKEY_METHODS` (`keys.js`); where one
+is not there, or a file cannot be loaded, nothing starts, and the message
+names what was looked for and says to install the version the package
+names. Why: the library does not name these among its exports (X270), so
+it promises nothing about them, and a range let npm install a version
+nobody had run the executor against; a missing name then gave refusals
+that did not say why. 0.7.0 is the version the owner's check was run
+against, in the tests' own steps and in a browser. The tests themselves
+use this repository's library, as every package's do. The other way,
+which is the better one once it can be had: the next release of the
+library names both functions among its exports, and the executor takes
+them by name and may name a range again.
+
 What the tests show, and what they do not. `test/owner.test.mjs` runs the
 page's own steps (`owner-steps.mjs`) in Node.js against the executor's
 addresses, with a software passkey: the library's own test stand-in,
 which builds the three values a real passkey returns. It covers the setup
 and the first approval in one prompt, in each order; a later approval
-with an `ES256`, an `RS256` and an `Ed25519` key; the recovery code; and
+with an `ES256`, an `RS256` and an `Ed25519` key; the recovery code,
+spent by its use and replaced; a setup whose answer is lost; a request
+kept only by the owner's press, and not replaced by another page; and
 each refusal: a code used twice, expired or wrong; a request approved
 twice or ended; a challenge from another request, expired or never given;
 another origin, another relying party, the user not verified, another
-key; a state file in the earlier form. The same file runs the page's
+key; a state file in the earlier form; a library without the checks. The same file runs the page's
 script itself (`owner-page.mjs`), fetched from the executor as a browser
 fetches it, with the library's `passkey-browser.js` as served, on a
 stand-in page with a stand-in for `navigator.credentials` and for the

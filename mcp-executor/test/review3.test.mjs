@@ -168,8 +168,30 @@ test('finding 2: a challenge passes the check once', async () => {
   const note = { challenge, expires: Date.now() + 60000 };
   assert.equal(await check.check(await signed({ signature: (s) => s.map((b, i) => (i === s.length - 1 ? b ^ 1 : b)) }), { origin, note }), false, 'a wrong signature');
   const fields = await signed();
-  assert.equal(await check.check(fields, { origin, note }), true, 'a wrong signature before it spends nothing');
+  assert.equal(await check.check(fields, { origin, note }), 'passkey', 'a wrong signature before it spends nothing');
   assert.equal(await check.check(fields, { origin, note }), false, 'the same challenge and signature again');
+  // Two answers with one challenge, checked at the same moment: one passes. The executor's addresses cannot bring this about, since an approved request is not read again; the check holds it by itself.
+  const again = randomBytes(32).toString('base64url');
+  const s = await soft.sign(await sha256(fromBase64url(again)));
+  const both = () => new URLSearchParams({ [FIELD_CHALLENGE]: again, [FIELD_AUTHENTICATOR_DATA]: toBase64url(s.authenticatorData), [FIELD_CLIENT_DATA]: toBase64url(s.clientDataJSON), [FIELD_SIGNATURE]: toBase64url(s.signature) });
+  const at = { origin, note: { challenge: again, expires: Date.now() + 60000 } };
+  assert.deepEqual((await Promise.all([check.check(both(), at), check.check(both(), at)])).sort(), ['passkey', false].sort());
+});
+
+test('a note that a setup or a recovery code approved the request passes only for the owner it names', async () => {
+  const origin = 'https://guard.example.com';
+  const soft = await makePasskey('ES256', { rpId: 'guard.example.com', origin });
+  // A run of the executor has one owner, so its addresses cannot show a note for another: the check holds it by itself.
+  let owner = { credentialId: 'AAAA', key: soft.key, recoveryHash: 'x' };
+  const check = openPasskeyCheck({ issuer: origin, store: { owner: () => owner, setup: () => null, setOwner() {} }, withNote: () => null, page() {}, json() {}, hashOf: (text) => text });
+  const none = new URLSearchParams();
+  assert.equal(await check.check(none, { origin, note: { setup: 'AAAA' } }), 'setup');
+  assert.equal(await check.check(none, { origin, note: { recovery: 'AAAA' } }), 'recovery');
+  assert.equal(await check.check(none, { origin, note: { setup: 'BBBB' } }), false, 'a setup\'s note for another owner');
+  assert.equal(await check.check(none, { origin, note: { recovery: 'BBBB' } }), false, 'a recovery code\'s note for another owner');
+  assert.equal(await check.check(none, { origin, note: { setup: true } }), false);
+  owner = null;
+  assert.equal(await check.check(none, { origin, note: { setup: 'AAAA' } }), false, 'no owner, no approval');
 });
 
 // --- finding 3: a stream does not outlive its token or its connection ---
