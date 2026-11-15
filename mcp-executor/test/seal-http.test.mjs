@@ -29,6 +29,19 @@ const { makeKeyFile } = await import('../files.mjs');
 const BIN = fileURLToPath(new URL('../bin.mjs', import.meta.url));
 const ENV = 'PROVARED_MCP_EXECUTOR_ADMIN_SECRET';
 
+// A second local address, beside 127.0.0.1, for the tests of the address the executor signs. Windows and Linux answer on the
+// whole of 127.0.0.0/8; a Mac has 127.0.0.1 alone until another is set up. Asked here, before any test is named: the tests
+// that need it are skipped, with the reason, where it is not there.
+const SECOND = '127.0.0.2';
+function canListenAt(host) {
+  return new Promise((done) => {
+    const probe = net.createServer();
+    probe.once('error', () => done(false));
+    probe.listen(0, host, () => probe.close(() => done(true)));
+  });
+}
+const NO_SECOND = (await canListenAt(SECOND)) ? false : `this computer cannot listen at a second local address, ${SECOND} (a Mac has 127.0.0.1 alone until another is set up)`;
+
 function run(args, { env = {} } = {}) {
   return new Promise((done) => {
     const child = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', BIN, ...args], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, env: { ...process.env, [ENV]: '', ...env } });
@@ -578,6 +591,95 @@ test('the commands send the administrator\'s secret to the executor of their set
     pretender.closeAllConnections();
     middle.closeAllConnections();
     await w.close();
+  }
+});
+
+test('an executor that listens on every address signs the address it was reached at: 127.0.0.2 where it is asked there, 127.0.0.1 where it is asked there', { skip: NO_SECOND }, async () => {
+  const w = await adminWorld({ agents: ['alpha'], config: { listen: { host: '0.0.0.0', port: 0 } } });
+  try {
+    const port = w.address.port;
+    const ed = await globalThis.crypto.subtle.importKey('jwk', w.executorKeys[0], { name: 'Ed25519' }, false, ['verify']);
+    for (const [at, other] of [[SECOND, '127.0.0.1'], ['127.0.0.1', SECOND]]) {
+      const challenge = randomBytes(32).toString('base64url');
+      const res = await rawRequest({ url: `http://${at}:${port}/provared/hello` }, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ challenge }) });
+      assert.equal(res.status, 200, res.body);
+      const answer = JSON.parse(res.body);
+      assert.deepEqual([answer.address, answer.port], [at, port], `asked at ${at}`);
+      assert.equal(await checkIdentity(w.executorKeys, challenge, at, port, answer.signatures), true, `asked at ${at}, it signs ${at}`);
+      assert.equal(await checkIdentity(w.executorKeys, challenge, other, port, answer.signatures), false, `asked at ${at}, it does not sign ${other}`);
+      // The text signed names the address the request came to, and no other.
+      const text = utf8(`provared-mcp-executor hello v1\n${challenge}\n${at}\n${port}\n`);
+      assert.equal(await globalThis.crypto.subtle.verify({ name: 'Ed25519' }, ed, fromBase64url(answer.signatures[0]), text), true);
+    }
+  } finally {
+    await w.close();
+  }
+});
+
+test('a relay at one local address that passes the challenge on to the executor at another, on the same port, is sent no secret: the executor signs the address it was reached at, not the one the command connected to', { skip: NO_SECOND }, async () => {
+  const w = await adminWorld({ agents: ['alpha'], open: false, config: { listen: { host: SECOND, port: 0 } } });
+  const secret = { env: { [ENV]: w.admin } };
+  const seen = [];
+  const passedOn = [];
+  // The relay: whatever it is sent it notes; a challenge it passes on to the executor, at the executor's own address, and hands back the answer.
+  const newRelay = () => http.createServer((req, res) => {
+    const chunks = [];
+    req.on('data', (c) => chunks.push(c));
+    req.on('end', async () => {
+      const sent = Buffer.concat(chunks).toString('utf8');
+      seen.push({ url: req.url, authorization: req.headers.authorization ?? null, body: sent });
+      if (req.url !== '/provared/hello') {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        return res.end('{"agents":{}}');
+      }
+      const answer = await fetch(`http://${SECOND}:${w.address.port}/provared/hello`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: sent });
+      const text = await answer.text();
+      passedOn.push({ status: answer.status, text });
+      res.writeHead(answer.status, { 'content-type': 'application/json' });
+      res.end(text);
+    });
+  });
+  let relay = null;
+  try {
+    // The executor at 127.0.0.2 and the relay at 127.0.0.1, on one port: the port the executor is given, where it is free at 127.0.0.1 too (another program may hold it there).
+    for (let tries = 0; relay === null && tries < 5; tries++) {
+      await openHttpWorld(w);
+      const server = newRelay();
+      relay = await new Promise((done) => {
+        server.once('error', () => done(null));
+        server.listen(w.address.port, '127.0.0.1', () => done(server));
+      });
+      if (relay === null) await w.closeExecutor();
+    }
+    assert.ok(relay, 'no port was free at both addresses in five tries');
+    const port = w.address.port;
+    assert.equal(w.address.address, SECOND);
+    // The command asks at 127.0.0.1, where the relay is.
+    const through = await run(['status', '--config', settingsAt(w, 'at-relay.json', port)], secret);
+    assert.equal(through.code, 2, through.stdout + through.stderr);
+    assert.match(through.stderr, /its signatures do not check .* over this command's challenge and the address it connected to\. The administrator's secret was not sent\./);
+    assert.equal(through.stdout, '');
+    // The relay was sent a challenge and no more: no secret, in a header or anywhere else.
+    assert.equal(seen.length, 1);
+    assert.deepEqual([seen[0].url, seen[0].authorization], ['/provared/hello', null]);
+    assert.ok(!seen[0].body.includes(w.admin));
+    // The executor did sign for the relay: the address it was reached at, 127.0.0.2, with the port both listen on. That address alone kept the secret back.
+    assert.equal(passedOn.length, 1);
+    const challenge = JSON.parse(seen[0].body).challenge;
+    const signed = JSON.parse(passedOn[0].text);
+    assert.deepEqual([passedOn[0].status, signed.address, signed.port], [200, SECOND, port]);
+    assert.equal(await checkIdentity(w.executorKeys, challenge, SECOND, port, signed.signatures), true);
+    assert.equal(await checkIdentity(w.executorKeys, challenge, '127.0.0.1', port, signed.signatures), false, 'it did not sign the address the command connected to');
+    // Asked at the address it listens on, with no relay between: the command works.
+    const direct = await run(['status', '--config', settingsAt(w, 'direct.json', port, (s) => ({ ...s, listen: { host: SECOND, port } }))], secret);
+    assert.equal(direct.code, 0, direct.stderr);
+    assert.deepEqual(Object.keys(JSON.parse(direct.stdout).agents), ['alpha']);
+    assert.equal(seen.length, 1, 'and the relay saw nothing of it');
+  } finally {
+    relay?.close();
+    relay?.closeAllConnections();
+    // w.close is there once the executor has been opened; before that, only the upstream is.
+    await (w.close ? w.close() : w.upstream.close());
   }
 });
 

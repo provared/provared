@@ -335,6 +335,16 @@
     aside: 0.4.1 does not know a `set-aside` line in the copy, and takes
     the call for unfinished again.
   - **Fixes from a second review** (X160 on):
+    - Two tests now hold that the executor signs the address it was
+      reached at (X138), which none did: the tests reached it at
+      127.0.0.1 only. An executor that listens on every address is asked
+      at 127.0.0.2 and at 127.0.0.1 and must sign each. And a relay at
+      127.0.0.1 passes the command's challenge on to an executor at
+      127.0.0.2 on the same port: the executor signs 127.0.0.2, the
+      command refuses, and the relay is sent no secret. With the
+      executor made to sign the fixed text 127.0.0.1, both tests fail.
+      They are skipped, with the reason, on a computer that cannot
+      listen at 127.0.0.2. The code is unchanged.
     - `status`, `seal` and `acknowledge` check a running executor with
       its public keys alone (X166). They had read `executor.keys` with
       the reader that loads the private keys, so the administrator had
