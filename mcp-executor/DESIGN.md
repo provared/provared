@@ -3659,13 +3659,15 @@ Chromium 153, driven by a script, with a virtual authenticator that
 verifies its user, against the commands `owner` and `http` at
 `http://localhost` (X277), with a stand-in client. The setup and the
 first approval took one prompt in each order; a later approval took one;
-the recovery code approved with none, and a wrong one was refused; each
-approval went through to a token and a tool call; the scripts loaded
-under the page's policy with nothing on the console. This was run with
-the library as published (0.7.0) and with this repository's. The first
-run of all stopped at its first page, which did not finish loading in 30
-seconds; the cause was not found, and it did not happen in the six runs
-after it. A virtual
+the recovery code approved with none, behind the page that showed the
+new code, and the spent one was then refused; a page that opened kept
+nothing, and a request the owner had kept was not replaced by another
+tab's; each approval went through to a token and a tool call; the scripts
+loaded under the page's policy with nothing on the console. This was run
+with the library as published (0.7.0) and with this repository's. The
+first run of all stopped at its first page, which did not finish loading
+in 30 seconds; the cause was not found, and it did not happen in the
+eight runs after it. A virtual
 authenticator is not a device: no passkey on a computer's own
 authenticator, a phone or a security key has been tried here, and no client but the stand-in; the
 recipe's README says how to try them by hand. In an earlier run, of the
