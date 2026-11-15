@@ -495,7 +495,7 @@ under a session is the plainest option. A request of the 2026-07-28
 revision, which has no sessions, is therefore refused in front of a local
 program: the executor serves the session era only there, and a request
 whose `MCP-Protocol-Version` header names 2026-07-28 is refused with 400
-(X247).
+(X247), unless it is the `initialize` that begins a session (X287).
 
 **X233. One answer to a request, and one stream for the program's own
 messages.** A request is answered with one JSON body, under the agent's
@@ -812,7 +812,9 @@ programs, and that program outlived the executor (the review ran it).
    method, whose header names a version other than 2025-11-25, 2025-06-18
    or 2025-03-26 (`LOCAL_VERSIONS`, the revisions with this transport and
    sessions) is refused with 400 and starts nothing, unless the version is
-   the one its session's program answered `initialize` with. A request
+   the one its session's program answered `initialize` with. Since X287
+   the `initialize` that begins a session, sent with no session id, is
+   not held to the header. A request
    with no such header is taken, as the specification allows. The last
    exception is the builder's: a program that answers with an earlier
    version, to a client that goes along with it, is still served. In
@@ -859,6 +861,54 @@ that speaks it and the earlier way falls back to `initialize` (read, not
 tried: the 400 it is given carries -32600); a client that speaks it alone
 cannot use a local program; and a program that speaks it alone, and so
 answers `initialize` with an error, cannot be served.
+
+**X287. The `initialize` that begins a session is not held to the
+`MCP-Protocol-Version` header, and the log names the version that was
+refused.** It changes the first point of X247 for one request. In front
+of a local program, a POST that carries no `Mcp-Session-Id` and whose one
+message is the request `initialize` is taken whatever its
+`MCP-Protocol-Version` header holds. The program is started, and the
+version it answers `initialize` with is the session's, as X247 has it: a
+later request of that session whose header names another version, not
+among `LOCAL_VERSIONS`, is refused as before. Every other request keeps
+X247's rule: any request under a session, an `initialize` that names one
+among them; a GET or a DELETE; and a POST with no session id whose
+message is anything else, a notification named `initialize` among them.
+
+Why: the specification asks a client for the header on the requests that
+follow initialization. The version is agreed inside `initialize`: the
+client names one in the body, and the server answers with its own. So a
+header on the opening `initialize` settles nothing, and a refusal for it
+turned away a client that would have agreed on a version the executor
+serves. The log of an executor in front of a local program, behind a
+client that connects through the front door (section 14), showed each
+new connection's first request refused with `protocol-version`, and a
+session begun straight after. That log did not say which version the
+header named, so the line now says more.
+
+The order of the checks. The message is known only once the body has
+been read. So for a POST with no session id, and for no other request,
+the header's check now comes after the checks of the body: its content
+type (415), its size and its time (413, 408), and that it is one message
+(400). It still comes before the check of the mirrored headers (X110). A
+POST with no session id that fails one of those is now answered for
+that, where it was answered for the header. The order of the other
+checks is unchanged, and under a session the header's check is still the
+first.
+
+The log line. `{"event":"refused","code":"protocol-version"}` now has
+`"version"`: the header's value where it is written as a revision is
+(`^\d{4}-\d{2}-\d{2}$`), and `"other"` for anything else, so that
+nothing a client chooses is copied into the log but ten characters of
+digits and hyphens. And `"session"`: `true` where an `Mcp-Session-Id`
+came with the request, `false` where none did. Nothing else of the
+request is in the line: not its method, and not the session's id.
+
+Not known: whether the request the log showed refused was an
+`initialize`. Where it was another message, sent the way of revision
+2026-07-28, it is still refused, and the client falls back to
+`initialize` as before; the line's new fields will say which version it
+named and whether it came under a session.
 
 **X248. One message, one line, for a reader of UTF-8.** This makes a
 message one line for a reader that takes the bytes as UTF-8; one that

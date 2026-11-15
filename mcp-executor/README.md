@@ -425,6 +425,13 @@ What is different from an upstream HTTP server:
   `MCP-Protocol-Version` header names a version other than those three is
   refused with 400, unless it is the version the session's program
   answered `initialize` with; a request with no such header is taken.
+  The `initialize` that begins a session, sent with no `Mcp-Session-Id`,
+  is taken whatever the header names: the version is agreed inside
+  `initialize`, and the one the program answers with is the session's.
+  The log line of such a refusal (`"code":"protocol-version"`) has
+  `"version"`, the version named where it is written as a date and
+  `"other"` where it is not, and `"session"`, whether a session id came
+  with the request.
 - **The same check and the same records.** A `tools/call` goes through the
   same rules, check, receipt, countersignature and copy, under the slip
   and into the book of the agent that sent it. The program is sent the

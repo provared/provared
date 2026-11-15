@@ -87,7 +87,10 @@ stand-in client. It has not been tried with claude.ai itself.
   which have the same transport). Revision 2026-07-28, which has no
   sessions, is not yet supported in this mode: a request whose
   `MCP-Protocol-Version` header names it is refused with 400, and a
-  program that speaks it alone cannot be served. In front of an upstream
+  program that speaks it alone cannot be served. The one exception is
+  the `initialize` that begins a session, which is taken whatever the
+  header names; the log line of a refusal
+  (`"code":"protocol-version"`) says which version was named. In front of an upstream
   HTTP server the header goes on to the upstream, which answers for it.
 - **A tool's question needs the stream.** What a local program sends of
   its own (the progress of a call, a question a tool asks during it) goes

@@ -174,6 +174,21 @@
     the other three methods the executor acts on, with -32600; and with
     `"unlisted": "forward"`, a call whose tool name is a ruled tool's in
     other capitals.
+  - **The `initialize` that begins a session is not held to the
+    `MCP-Protocol-Version` header (X287).** In front of a local program,
+    an `initialize` sent with no `Mcp-Session-Id` was refused with 400
+    where its header named a version the executor does not serve, though
+    the version is agreed inside `initialize`. It is now taken, and the
+    version the program answers with is the session's; every other
+    request keeps the rule of X247. For a POST with no session id the
+    header's check now comes after the checks of the body (415, 413,
+    408, and 400 for what is not one message), since the message must be
+    read first; nothing else changes its place. The log line of a
+    request refused for its version now has `"version"` (the version
+    named, where it is written as a date; `"other"` where it is not) and
+    `"session"` (whether a session id came with the request). Two more
+    tests in `test/http-local-faults.test.mjs`, and each part was undone
+    once to see its test fail.
   - **Tests.** `test/deep.test.mjs` (5), `test/list.test.mjs` (8, three
     of them in front of a local program), two more in
     `test/content-rules.test.mjs` and in `test/names.test.mjs`, and six

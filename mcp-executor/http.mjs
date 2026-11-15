@@ -74,6 +74,8 @@ const SESSION_ID = /^[\x21-\x7e]{1,512}$/;
 const PROTOCOL_VERSION_META = 'io.modelcontextprotocol/protocolVersion';
 /** The revisions of the specification the executor serves in front of a local program: those with Streamable HTTP and sessions. A request whose MCP-Protocol-Version names another is refused with 400, unless it is the version the session's program answered "initialize" with (X247). */
 export const LOCAL_VERSIONS = Object.freeze(['2025-11-25', '2025-06-18', '2025-03-26']);
+/** How a revision of the specification is written: a date. Only a header value of this form is named in the log (X287). */
+const REVISION = /^\d{4}-\d{2}-\d{2}$/;
 /** The member of params that Mcp-Name mirrors, for each method that has one, as the 2026-07-28 revision's table of standard request headers says (X110). */
 const MIRRORED_NAME = new Map([['tools/call', 'name'], ['prompts/get', 'name'], ['resources/read', 'uri']]);
 /** A number as JSON writes one (RFC 8259): no hexadecimal, no space, no "Infinity", none of what Number() would take besides. */
@@ -1235,14 +1237,17 @@ export async function openHttpExecutor(config, more = {}) {
 
   async function one(ctx, sessionId) {
     const { req, res, agent } = ctx;
-    if (local) {
-      // In front of a local program no one else reads the header, so the executor answers for it: "If the server receives a request with an invalid or unsupported MCP-Protocol-Version, it MUST respond with 400 Bad Request." A request that names no version is taken, as the specification allows (X247).
-      const versions = req.headersDistinct['mcp-protocol-version'] ?? [];
-      if (versions.length === 1 && !LOCAL_VERSIONS.includes(versions[0]) && versions[0] !== ctx.session?.version) {
-        agent.log({ event: 'refused', code: 'protocol-version' });
-        return refuse(res, 400, null, CODES.invalidRequest, `The MCP-Protocol-Version header names a version the executor does not serve in front of a local program. It serves ${LOCAL_VERSIONS.join(', ')}, and the version a session's program answered "initialize" with.`);
-      }
-    }
+    // In front of a local program no one else reads the header, so the executor answers for it: "If the server receives a request with an invalid or unsupported MCP-Protocol-Version, it MUST respond with 400 Bad Request." A request that names no version is taken, as the specification allows (X247).
+    const versions = local ? req.headersDistinct['mcp-protocol-version'] ?? [] : [];
+    const otherVersion = versions.length === 1 && !LOCAL_VERSIONS.includes(versions[0]) && versions[0] !== ctx.session?.version;
+    const refuseVersion = () => {
+      // The log names the version only where it is written as a revision is, and says whether a session id came with the request; nothing else of the request (X287).
+      agent.log({ event: 'refused', code: 'protocol-version', version: REVISION.test(versions[0]) ? versions[0] : 'other', session: sessionId !== undefined });
+      return refuse(res, 400, null, CODES.invalidRequest, `The MCP-Protocol-Version header names a version the executor does not serve in front of a local program. It serves ${LOCAL_VERSIONS.join(', ')}, and the version a session's program answered "initialize" with. An "initialize" sent without an Mcp-Session-Id is taken under any version: the program's answer settles it.`);
+    };
+    // A POST with no session id may be the "initialize" that begins a session, which is not held to this header: so for such a POST the check waits until its message has been read (below). Every other request is checked here, as before (X287).
+    const versionWaits = otherVersion && req.method === 'POST' && sessionId === undefined;
+    if (otherVersion && !versionWaits) return refuseVersion();
     if (req.method !== 'POST') {
       // The GET stream of server messages, or the DELETE that ends a session: no message, so no mirrored metadata to check; the same few headers go on.
       const h = headersFor(req, null, undefined);
@@ -1307,6 +1312,8 @@ export async function openHttpExecutor(config, more = {}) {
       return refuse(res, 400, read.id, read.refused.code, read.refused.message);
     }
     const m = read.message;
+    // The check of MCP-Protocol-Version that waited for the message: an "initialize" with no session id is taken whatever version the header names, since the version is agreed inside "initialize" and the program's answer becomes the session's; any other message is refused as it would have been above (X287).
+    if (versionWaits && !(read.kind === 'request' && m.method === 'initialize')) return refuseVersion();
     const h = headersFor(req, m, read.text);
     if (h.problem) {
       agent.log({ event: 'refused', code: 'header-mismatch' });

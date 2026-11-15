@@ -505,10 +505,12 @@ test('a program\'s standard error is read where it goes nowhere, and is written 
 test('MCP-Protocol-Version: a request that names a version the executor does not serve is answered 400; one that names none is taken', async () => {
   const w = await localWorld();
   try {
+    // With no session: any message but the "initialize" that begins one (X287, and the test after this one).
     for (const version of ['not-a-version', '2099-01-01', '2026-07-28', '2024-11-05', '']) {
-      const refused = await post(w, 'alpha', initialize(), { headers: { 'mcp-protocol-version': version } });
-      assert.equal(refused.status, 400, `initialize under ${JSON.stringify(version)}`);
+      const refused = await post(w, 'alpha', { jsonrpc: '2.0', id: 1, method: 'ping' }, { headers: { 'mcp-protocol-version': version } });
+      assert.equal(refused.status, 400, `a ping with no session under ${JSON.stringify(version)}`);
       assert.equal(refused.json.error.code, CODES.invalidRequest);
+      assert.match(refused.json.error.message, /^The MCP-Protocol-Version header names a version the executor does not serve/);
     }
     assert.equal(w.executor.programs(), 0, 'and no program is started for it');
     const { answer, session } = await begin(w, 'alpha');
@@ -529,6 +531,93 @@ test('MCP-Protocol-Version: a request that names a version the executor does not
     const oldSession = old.headers.get('mcp-session-id');
     assert.equal((await ask(w, 'beta', oldSession, { jsonrpc: '2.0', id: 2, method: 'ping' }, { headers: under(oldSession, '2024-11-05') })).status, 200);
     assert.equal((await ask(w, 'alpha', session, { jsonrpc: '2.0', id: 9, method: 'ping' }, { headers: under(session, '2024-11-05') })).status, 400);
+  } finally {
+    await w.close();
+  }
+});
+
+test('MCP-Protocol-Version on the "initialize" that begins a session: with no session id it is taken whatever version the header names, and the version the program answers with is the session\'s; every other request keeps the rule', async () => {
+  const w = await localWorld();
+  const versionRefusals = () => events(w, 'refused').filter((e) => e.code === 'protocol-version');
+  try {
+    // A client that names the newest revision on its opening "initialize": taken. The version is agreed inside "initialize", and the program answered 2025-11-25.
+    const begun = await post(w, 'alpha', initialize(1, '2025-11-25'), { headers: { 'mcp-protocol-version': '2026-07-28' } });
+    assert.equal(begun.status, 200, JSON.stringify(begun.json));
+    assert.equal(begun.json.result.protocolVersion, '2025-11-25');
+    const session = begun.headers.get('mcp-session-id');
+    assert.ok(session, 'a session was begun');
+    assert.equal(w.executor.programs(), 1);
+    assert.equal(versionRefusals().length, 0);
+    // In that session the header is held to the rule again: 2026-07-28 is not what the program answered, so it is refused; the version it answered is taken.
+    assert.equal((await ask(w, 'alpha', session, { jsonrpc: '2.0', id: 2, method: 'ping' }, { headers: under(session, '2026-07-28') })).status, 400);
+    assert.equal((await callIn(w, 'alpha', session, 'echo', {})).status, 200);
+    assert.equal((await post(w, 'alpha', { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'echo', arguments: {} } }, { headers: under(session, '2026-07-28') })).status, 400);
+    assert.equal(versionRefusals().length, 2);
+    // Any other value on the opening "initialize" is taken too: the header settles nothing there.
+    for (const version of ['2099-01-01', 'not-a-version', '']) {
+      const other = await post(w, 'beta', initialize(1, '2025-06-18'), { headers: { 'mcp-protocol-version': version } });
+      assert.equal(other.status, 200, JSON.stringify(version));
+      assert.equal(other.json.result.protocolVersion, '2025-06-18');
+      assert.equal((await endSession(w, 'beta', other.headers.get('mcp-session-id'))).status, 204);
+    }
+    // Where the program answers 2026-07-28, that is the session's version, and a later request may name it (X247).
+    const newest = await post(w, 'beta', initialize(1, '2026-07-28'), { headers: { 'mcp-protocol-version': '2026-07-28' } });
+    assert.equal(newest.json.result.protocolVersion, '2026-07-28');
+    const newestSession = newest.headers.get('mcp-session-id');
+    assert.equal((await ask(w, 'beta', newestSession, { jsonrpc: '2.0', id: 2, method: 'ping' }, { headers: under(newestSession, '2026-07-28') })).status, 200);
+    assert.equal(versionRefusals().length, 2, 'none of these was refused for its header');
+    // Every other request keeps the rule. With no session id: a request that is not "initialize", and a notification.
+    const before = versionRefusals().length;
+    assert.equal((await post(w, 'alpha', { jsonrpc: '2.0', id: 4, method: 'tools/list' }, { headers: { 'mcp-protocol-version': '2026-07-28' } })).status, 400);
+    assert.equal((await post(w, 'alpha', { jsonrpc: '2.0', method: 'notifications/initialized' }, { headers: { 'mcp-protocol-version': '2026-07-28' } })).status, 400);
+    assert.equal((await post(w, 'alpha', { jsonrpc: '2.0', method: 'initialize' }, { headers: { 'mcp-protocol-version': '2026-07-28' } })).status, 400, 'an "initialize" with no id is a notification, and begins nothing');
+    // An "initialize" that names a session is refused for its header, as before; under a version that is served, for naming a session.
+    const named = await post(w, 'alpha', initialize(5), { headers: under(session, '2026-07-28') });
+    assert.equal(named.status, 400);
+    assert.match(named.json.error.message, /^The MCP-Protocol-Version header names a version/);
+    assert.match((await post(w, 'alpha', initialize(6), { headers: under(session) })).json.error.message, /this one names a session/);
+    assert.equal(versionRefusals().length, before + 4);
+    // Two programs run: the first session's and the last one's. The three sessions that were ended have none, and no refusal started one.
+    await until(() => w.executor.programs() === 2, { timeout: 3000 });
+    // For a POST with no session id the check now comes once the message has been read, so the checks of the body come before it; under a session it is still the first.
+    const notJson = await rawRequest(w, { headers: { 'content-type': 'text/plain', ...auth(w, 'alpha'), 'mcp-protocol-version': '2026-07-28' }, body: 'x' });
+    assert.equal(notJson.status, 415);
+    const notAMessage = await rawRequest(w, { headers: { 'content-type': 'application/json', ...auth(w, 'alpha'), 'mcp-protocol-version': '2026-07-28' }, body: '[]' });
+    assert.equal(notAMessage.status, 400);
+    assert.equal(versionRefusals().length, before + 4, 'refused for the body, not for the header');
+    const inSession = await rawRequest(w, { headers: { 'content-type': 'text/plain', ...auth(w, 'alpha'), ...under(session, '2026-07-28') }, body: 'x' });
+    assert.equal(inSession.status, 400);
+    assert.equal(versionRefusals().length, before + 5);
+  } finally {
+    await w.close();
+  }
+});
+
+test('the log line of a request refused for its MCP-Protocol-Version names the version, where it is written as a revision is, and says whether a session id came with it; nothing else of the request', async () => {
+  const w = await localWorld();
+  try {
+    const { session } = await begin(w, 'alpha');
+    const last = () => events(w, 'refused').filter((e) => e.code === 'protocol-version').at(-1);
+    const ping = { jsonrpc: '2.0', id: 'an-id-not-for-the-log', method: 'ping', params: { secret: 'not-for-the-log' } };
+    // A revision's form: named. With no session id, and with one.
+    assert.equal((await post(w, 'alpha', ping, { headers: { 'mcp-protocol-version': '2026-07-28' } })).status, 400);
+    assert.deepEqual({ version: last().version, session: last().session }, { version: '2026-07-28', session: false });
+    assert.equal((await post(w, 'alpha', ping, { headers: under(session, '2099-01-01') })).status, 400);
+    assert.deepEqual({ version: last().version, session: last().session }, { version: '2099-01-01', session: true });
+    // The line holds the event, the code, the agent's name as every line of an agent's does, and these two; nothing of the body, and not the session's id.
+    assert.deepEqual(Object.keys(last()).sort(), ['agent', 'code', 'event', 'session', 'version']);
+    assert.equal(JSON.stringify(last()).includes(session), false);
+    assert.equal(JSON.stringify(events(w, 'refused')).includes('not-for-the-log'), false);
+    // Any other value is written as "other": what a client sends there is not put in the log.
+    const odd = ['not-a-version', '', '2026-7-28', '2026-07-28x', '20260728', '{"event":"oauth-approved"}', 'x'.repeat(300)];
+    for (const version of odd) {
+      assert.equal((await post(w, 'alpha', ping, { headers: { 'mcp-session-id': session, 'mcp-protocol-version': version } })).status, 400, JSON.stringify(version));
+      assert.deepEqual({ version: last().version, session: last().session }, { version: 'other', session: true }, JSON.stringify(version));
+    }
+    assert.equal(events(w, 'refused').filter((e) => e.code === 'protocol-version').length, 2 + odd.length);
+    // A GET and a DELETE are logged in the same way.
+    assert.equal((await rawRequest(w, { method: 'GET', headers: { ...auth(w, 'alpha'), ...under(session, '2026-07-28'), accept: 'text/event-stream' } })).status, 400);
+    assert.deepEqual({ version: last().version, session: last().session }, { version: '2026-07-28', session: true });
   } finally {
     await w.close();
   }
