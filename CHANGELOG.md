@@ -2,23 +2,23 @@
 
 ## Not yet released
 
-- **`provared-mcp-executor` 0.4.2 (not yet released): a security fix for
+- **`provared-mcp-executor` 0.4.2 (15 November 2026): a security fix for
   two weaknesses. In front of a tool server whose JSON reader ignores
   capitals, or of one that ends a line at a bare carriage return, an
-  agent could run a tool that no rule names, with no receipt; in front of
-  the first, also a tool other than the one its receipt names, or a
-  change that a rule on content forbids. 0.4.2 refuses the messages that
-  did the first, and writes every message to the server as one line,
-  which ends the second. Every version from 0.1.0
+  agent could have a tool call run that the executor never checked, with
+  no receipt; in front of the first, also a tool other than the one its
+  receipt names, or a change that a rule on content forbids. 0.4.2
+  refuses the messages that did the first, and writes every message to
+  the server as one line, which ends the second. Every version from 0.1.0
   to 0.4.1 has both weaknesses.**
   - **The second weakness: one message read as several lines.** The
     executor ends a line at a line feed alone. Some readers end one at a
     bare carriage return too: `node:readline` does (and at U+2028 and
-    U+2029), and so does a text reader with universal newlines, which
-    Python's `io.TextIOWrapper` gives unless told otherwise, as the
-    official Python SDK's stdio server uses, and how Python opens its
-    standard input on Windows. JSON allows a carriage return between its
-    values. So one line of the agent's,
+    U+2029), and so does a text reader with universal newlines. Python's
+    `io.TextIOWrapper` reads that way unless told otherwise; the official
+    Python SDK's stdio server reads through one; and Python opens its
+    standard input that way on Windows. JSON allows a carriage return
+    between its values. So one line of the agent's,
     `{"jsonrpc":"2.0","id":"outer","method":"ping","params":{"a":[<CR>{"jsonrpc":"2.0","id":"hidden","method":"tools/call","params":{"name":"order","arguments":{"total":999999}}}<CR>]}}`,
     was a `ping` to the executor, which passed it on with no check, and
     three lines to such a server, the second a call of `order` for
