@@ -204,7 +204,7 @@ export function centralSealer(s) {
    * order, each {index, fingerprint}; "disagree" is told where the book
    * and the sealer do not agree; "takeBack" is handed the entry of a seal
    * the sealer signed that the book does not hold yet, to be added before
-   * any other line.
+   * any other line, and the fingerprint the sealer named for it.
    */
   function open({ first, seals: given = [], now = Date.now, log = () => {}, disagree = () => {}, takeBack = async () => {} }) {
     /** The book as its file holds it, and how many lines that is. */
@@ -228,6 +228,8 @@ export function centralSealer(s) {
     let failedAt = null;
     /** Why no line may be written: a seal the sealer signed, or may have signed, is not in the book yet. */
     let doubt = null;
+    /** The fingerprint the sealer named for a seal that was handed to the agent's turn and is not dealt with yet. */
+    let handed = null;
     /** Why the book and the sealer do not agree. */
     let broken = null;
     let starting = false;
@@ -267,7 +269,7 @@ export function centralSealer(s) {
           doubt = 'the central sealer signed a seal that the book does not hold yet; it is added before any other line.';
           const latest = await ask((c) => c.latest(ref));
           if (!isObject(latest) || latest.fingerprint !== held.latest || !isObject(latest.entry)) throw notTaken('The sealer\'s answer with its latest seal is not in the form its protocol gives.');
-          return { takeBack: latest.entry };
+          return { takeBack: latest.entry, named: held.latest };
         }
         confirmed = held.size;
       }
@@ -321,11 +323,20 @@ export function centralSealer(s) {
               if (got.takeBack) {
                 if (forSeal) return got;
                 if (!starting) {
-                  // The agent adds it in its turn; the book is compared again once the seal is in its file.
-                  Promise.resolve(takeBack(got.takeBack)).catch(() => {});
+                  // The agent adds it in its turn; the book is compared again once the seal is in its file. One seal waits
+                  // for that turn at a time: a later question that finds the same seal hands it over no second time.
+                  if (handed !== got.named) {
+                    const mine = got.named;
+                    handed = mine;
+                    Promise.resolve(takeBack(got.takeBack, mine))
+                      .catch(() => {})
+                      .finally(() => {
+                        if (handed === mine) handed = null;
+                      });
+                  }
                   throw notTaken(doubt);
                 }
-                await takeBack(got.takeBack);
+                await takeBack(got.takeBack, got.named);
                 await absorb();
                 continue;
               }
@@ -439,8 +450,9 @@ export function centralSealer(s) {
        * line in the book file. The sealer is first asked what it holds,
        * and is sent what it lacks: a seal is asked for only where it
        * answers for every line and its latest seal is the book's. Gives
-       * {entry}: the new seal's entry, or one the sealer had signed
-       * over the book as it stands and the book had not taken.
+       * {entry}: the new seal's entry, or {entry, named}: one the sealer
+       * had signed over the book as it stands and the book had not taken,
+       * with the fingerprint the sealer named for it.
        * @param {string|undefined} previous the fingerprint of the book's last seal
        * @param {number} when the seal's time
        */
@@ -450,7 +462,7 @@ export function centralSealer(s) {
         agreed = false;
         const got = await attempt(true);
         if (broken) throw new Error(`The agent is stopped: ${broken}`);
-        if (got.takeBack) return { entry: got.takeBack };
+        if (got.takeBack) return { entry: got.takeBack, named: got.named };
         if (!agreed || confirmed !== lines) throw new Error(`No seal was asked for: the central sealer does not hold every line of the book (${lines - confirmed} not sent). ${problem ?? ''}`.trim());
         let answer;
         try {

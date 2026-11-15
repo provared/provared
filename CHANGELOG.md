@@ -204,7 +204,7 @@
       sealer listens on 127.0.0.1 only, so the two programs are on one
       computer. `DESIGN.md`, X147 to X159.
     - Tests (`test/central-sealer.test.mjs`,
-      `test/central-sealer-e2e.test.mjs`, `test/same-files.test.mjs`; 27
+      `test/central-sealer-e2e.test.mjs`, `test/same-files.test.mjs`; 32
       tests): the sealer's program set up by its own commands and run
       as a process of its own on 127.0.0.1, ended and started again
       while calls go on, with the timer's seals; a sealer stopped and
@@ -294,6 +294,27 @@
       questions at once; a ninth is answered 503 with nothing signed
       (X160). Before, it read up to 64 KiB for as long as `timeout`, for
       any number of callers.
+  - **Fixes from a third review** (X167 on), of the book sealed by a
+    central sealer and of the fixes above:
+    - One seal that comes two ways is added once, and the agent is not
+      stopped (X167). After a seal's answer was lost, the executor's
+      own question to the sealer and a seal asked for in that moment
+      (the timer's next round with `sealEvery` at 2,000, or `seal`)
+      were both handed the same seal. The book took it once and
+      refused it the second time, and the agent was then stopped with
+      "the book and what the sealer holds of it do not agree", which
+      was not true: the book was sound, and a restart started. Now
+      nothing is added where the book's last line is that entry byte
+      for byte, the book's check takes it as a sound seal, and its
+      fingerprint is the one the sealer named; any other entry goes to
+      the book as before, and a refusal still stops the agent. The link
+      to the sealer also hands one seal to the agent's turn at a time.
+      Five tests in `test/central-sealer.test.mjs`: the two ways; an
+      entry changed in one member; the book's last line handed back
+      where it is a receipt, and where it is the last seal under
+      another fingerprint; and one hand-over while the turn does not
+      come. Each of the five parts of the fix, undone, makes its test
+      fail.
   - **Tests** (`test/seal.test.mjs`, `test/seal-http.test.mjs`; 41
     tests): the seal checks under the recorder's keys with the library's
     checker, chains to the seal before, and a reader who names another

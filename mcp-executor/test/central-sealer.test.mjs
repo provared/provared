@@ -17,6 +17,7 @@ const { RECORDER, centralWorld, closeAll, refusal, sealerFolder, standIn } = awa
 // What a failed test left open is closed, so that the file still ends where no time limit ends it.
 afterEach(closeAll);
 const { checkConfig, readSettings, statusFromFiles } = await import('../executor.mjs');
+const { centralSealer } = await import('../sealing.mjs');
 const { startSealer } = await import('../../sealer/sealer.mjs');
 
 /** The status of the link to the sealer, once it says what is wrong. */
@@ -363,6 +364,176 @@ test('central sealer: a seal the sealer signed whose answer never came is added 
   } finally {
     await w.close();
     await fake.close();
+    await w.sealer.stop();
+  }
+});
+
+/**
+ * For the tests of one seal that comes two ways (review 3.2, F1): a world
+ * whose sealer signs a seal and loses the answer, and whose answer to the
+ * executor's own question for that seal ("latest") is held back until the
+ * test lets it go. "first(entry)" may change the entry that first answer
+ * hands over. Gives the world with "w.asked()", which is true once that
+ * question is out, and "w.letGo()".
+ */
+async function lostSealWorld({ first = (entry) => entry } = {}) {
+  const w = await centralWorld({ open: false });
+  let lose = true;
+  let asked = 0;
+  let letGo;
+  const held = new Promise((done) => (letGo = done));
+  w.fake = await standIn({
+    token: w.sealer.token,
+    real: w.settings.recorder.sealer.address,
+    answer: async (path, body, forward) => {
+      if (path === '/latest') {
+        asked += 1;
+        if (asked > 1) return forward();
+        const real = await forward();
+        await held;
+        return { latest: { ...real.latest, entry: first(real.latest.entry) } };
+      }
+      if (!lose || path !== '/seal') return forward();
+      await forward();
+      lose = false;
+      return null; // the sealer signed, and its answer never comes
+    },
+  });
+  w.settings.recorder.sealer.address = w.fake.address;
+  w.asked = () => asked >= 1;
+  w.letGo = () => letGo();
+  await openWorld(w);
+  await w.client.call('echo', {});
+  await w.level();
+  await assert.rejects(w.executor.seal(), /whether the central sealer signed one is not known/);
+  return w;
+}
+
+test('central sealer: one seal that comes two ways after a lost answer is added once, and the agent stays at work (review 3.2, F1)', async () => {
+  const w = await lostSealWorld();
+  try {
+    // Two seconds after the lost answer the executor asks the sealer itself, and is about to be handed the seal.
+    await until(w.asked, { timeout: 30000 });
+    // A seal is asked for at that moment: it takes the agent's turn, and is handed the same seal.
+    const second = w.executor.seal();
+    w.letGo();
+    const sealed = await second;
+    assert.equal(sealed.entry, 2, 'the permission, one receipt, then the seal');
+    // The seal the executor's own question found comes next in the agent's turn. It is in the book already: nothing is
+    // added and nothing is wrong. A further seal, which takes the turn after it, covers the first seal's own line.
+    const third = await w.executor.seal();
+    assert.equal(third.entry, 3);
+    assert.equal(w.executor.stopped(), null, 'the agent is not stopped');
+    assert.equal(w.logs.some((e) => e.event === 'sealer-disagrees'), false);
+    assert.deepEqual(w.logs.filter((e) => e.event === 'sealed').map((e) => e.entry), [2, 3], 'each seal is added once');
+    const c = await w.checked();
+    assert.equal(c.summary.problemFound, false);
+    assert.deepEqual(c.entries.map((e) => e.kind), ['slip', 'stub', 'seal', 'seal']);
+    assert.equal(c.entries[2].fingerprint, sealed.fingerprint);
+    assert.equal(refusal(await w.client.call('echo', {})), null, 'calls are taken');
+    await w.level();
+  } finally {
+    await w.close();
+    await w.fake.close();
+    await w.sealer.stop();
+  }
+});
+
+test('central sealer: a seal that differs from the book\'s last line in anything is not passed over as the same seal: the book refuses it and the agent stops (review 3.2, F1)', async () => {
+  // The same fingerprint named, another entry: the first answer hands the seal over with a member beside it.
+  const changed = await lostSealWorld({ first: (entry) => ({ ...entry, beside: 'not the seal the book holds' }) });
+  try {
+    await until(changed.asked, { timeout: 30000 });
+    const second = changed.executor.seal();
+    changed.letGo();
+    assert.equal((await second).entry, 2, 'the seal itself is added');
+    // The changed one comes next in the agent's turn, with the fingerprint of the seal the book now holds at its end.
+    await assert.rejects(changed.executor.seal(), /The agent is stopped: the central sealer signed a seal that the book does not take/);
+    assert.ok(changed.logs.some((e) => e.event === 'sealer-disagrees'));
+    assert.deepEqual((await changed.checked()).entries.map((e) => e.kind), ['slip', 'stub', 'seal'], 'nothing more was added');
+  } finally {
+    await changed.close();
+    await changed.fake.close();
+    await changed.sealer.stop();
+  }
+});
+
+// The book's own last line handed back as "the latest seal": a receipt, with its own fingerprint named; and the book's
+// last seal, with another fingerprint named. Neither is a seal the book lacks, and neither is said to be added.
+for (const which of ['a receipt', 'another fingerprint']) {
+  test(`central sealer: the book's last line handed back as the sealer's latest seal is not taken as a seal already added: ${which === 'a receipt' ? 'a receipt, named by its own fingerprint' : 'the last seal, named by another fingerprint'} (review 3.2, F1)`, async () => {
+    const w = await centralWorld({ open: false });
+    let lie = null;
+    const fake = await standIn({
+      token: w.sealer.token,
+      real: w.settings.recorder.sealer.address,
+      answer: async (path, body, forward) => {
+        if (!lie) return forward();
+        if (path === '/held') return { held: { ...(await forward()).held, size: lie.lines, sealed: lie.lines, latest: lie.named } };
+        if (path === '/latest') return { latest: { fingerprint: lie.named, entry: lie.entry } };
+        return forward();
+      },
+    });
+    try {
+      w.settings.recorder.sealer.address = fake.address;
+      await openWorld(w);
+      await w.client.call('echo', {});
+      if (which === 'another fingerprint') await w.executor.seal();
+      await w.level();
+      const before = w.bookText();
+      const last = (await w.checked()).entries.at(-1);
+      assert.equal(last.kind, which === 'a receipt' ? 'stub' : 'seal');
+      lie = { lines: w.lines().length, entry: JSON.parse(w.lines().at(-1)), named: which === 'a receipt' ? last.fingerprint : 'A'.repeat(43) };
+      await assert.rejects(w.executor.seal(), /The agent is stopped: the central sealer signed a seal that the book does not take/, which);
+      assert.match(w.executor.stopped(), /the book and what the sealer holds of it do not agree/, which);
+      assert.equal(w.bookText(), before, `${which}: the book is as it was`);
+      assert.equal(w.logs.filter((e) => e.event === 'sealed').length, which === 'a receipt' ? 0 : 1, `${which}: no seal is said to be added`);
+    } finally {
+      await w.close();
+      await fake.close();
+      await w.sealer.stop();
+    }
+  });
+}
+
+test('central sealer: a seal that waits for the agent\'s turn is handed over once, however often the sealer is asked meanwhile (review 3.2, F1)', async () => {
+  const w = await centralWorld();
+  let link = null;
+  let free = () => {};
+  try {
+    await w.client.call('echo', {});
+    await w.level();
+    await w.close();
+    // The book's own link to the sealer, opened as the executor opens it, with a turn that does not come.
+    const fake = await standIn({ token: w.sealer.token, real: w.settings.recorder.sealer.address, answer: (path, body, forward) => forward() });
+    const sealer = centralSealer({ address: fake.address, name: RECORDER, token: { file: join(w.folder, 'keys', 'sealer-token') }, keySet: w.sealer.keySet, timeout: 2000, maxUnsent: 100 });
+    const handed = [];
+    const turn = new Promise((done) => (free = done));
+    link = sealer.open({
+      first: w.lines()[0],
+      takeBack: (entry, named) => {
+        handed.push(named);
+        return turn;
+      },
+    });
+    await link.start(w.bookText());
+    // The sealer signs a seal the book does not take, as after an answer that was lost.
+    await w.ask().seal(await w.first(), { previous: null, when: Date.now() });
+    const signed = (await w.held()).latest;
+    const got = await link.seal(undefined, Date.now());
+    assert.equal(got.named, signed, 'a seal asked for is handed the one the sealer signed, with the fingerprint the sealer named');
+    // The link now asks the sealer by itself, at once and then every two seconds, and finds the same seal each time.
+    const asked = () => fake.seen.filter((q) => q.path === '/latest').length;
+    await until(() => asked() >= 4, { timeout: 60000 });
+    assert.deepEqual(handed, [signed], 'handed to the agent\'s turn once');
+    // Once the turn has come and gone without the seal in the book, it is handed over again.
+    free();
+    await until(() => handed.length >= 2, { timeout: 60000 });
+    assert.equal(handed[1], signed);
+  } finally {
+    free();
+    await link?.end();
+    await w.close();
     await w.sealer.stop();
   }
 });

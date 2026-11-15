@@ -2503,6 +2503,38 @@ them. `issuerKeys` is in the settings the command already trusts, so it
 would be as strong; but the command would read and check every agent's
 permission where a file of two keys is plainer.
 
+The choices from X167 on come from a third review, of the book sealed by
+a central sealer and of the fixes above.
+
+**X167. A seal that comes a second time, by another way, is not added
+again and stops nothing.** After an answer that was lost (X156) the
+executor asks the sealer every two seconds, and a seal it finds is
+handed to the agent's turn. A seal asked for in that moment (the timer's
+next round, or `seal`) is handed the same seal and adds it. The one
+handed over first then came to a book that held it already; the book
+refused it, and the agent was stopped as under X155, with a sound book
+and a message that was not true. Now `addCentralSeal` adds nothing where
+all three of these hold:
+- the book's last line is the entry byte for byte, the entry written
+  out with the library's `entryLine`, as `add` writes it;
+- the book's own check takes that line as a seal with nothing wrong;
+- its fingerprint by that check is the one the sealer named for its
+  latest seal.
+
+Anything else goes to `add` as before, and a refusal there stops the
+agent (X155): an entry that differs in one byte, the book's last line
+where it is no seal, or the book's last seal under another fingerprint.
+A seal newly signed, the answer to `seal`, comes with no fingerprint
+named and always goes to `add`. Why the line and the fingerprint both:
+the fingerprint is the sealer's word until the book's check has made it,
+and the line alone would let any last line pass as "the seal". The link
+also hands one seal to the agent's turn at a time (`sealing.mjs`): while
+one waits there, a later question that finds the same seal hands nothing
+over, so that a turn that is long in coming does not gather the same
+seal many times, each with a check of the whole book. The other way:
+tell the two cases apart by the book's refusal; `add` gives one refusal
+for every entry it does not take.
+
 **X241. A message is refused where a name in it differs only in capitals
 from one the executor reads (0.4.2).** The number is the one this choice
 has in the later design, so that one number names one choice. Three

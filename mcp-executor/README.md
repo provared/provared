@@ -1017,7 +1017,10 @@ seal, and the agent goes on. Where no answer comes, the sealer may have
 signed: a seal sits after exactly the entries it covers, so no line is
 written, and no call is taken, until the sealer has said. The executor
 asks again every two seconds, and adds the seal before any other line
-if there is one.
+if there is one. A seal asked for in that moment (the timer's next
+round, or `seal`) may be handed the same seal: it is added once, and the
+agent goes on. Only a seal that is not the book's last line, byte for
+byte, is put to the book, which refuses one signed over other lines.
 
 *What such a seal shows, and what it does not.* It shows that the
 sealer's keys signed the number of entries and the top fingerprint of

@@ -904,10 +904,32 @@ export async function openAgent(prepared, { settings, executorKeys, now, log, na
    * A seal the book refuses was signed over other lines than the book
    * holds: the two do not agree, and the agent is stopped. Gives {entry,
    * fingerprint} as the book's own check has them.
+   *
+   * "named" is the fingerprint the sealer gave for a seal it had signed
+   * before (its "latest"), where that is how the seal came. After an
+   * answer that was lost, the same seal can come two ways, one after the
+   * other. The second finds it in the book: nothing is added then, and
+   * the two do not disagree. That holds only where the book's last line
+   * is this entry byte for byte, the book's own check takes that line as
+   * a sound seal, and its fingerprint by that check is the one the sealer
+   * named. A seal that differs in anything goes to "add" as before.
    */
-  async function addCentralSeal(entry) {
+  async function addCentralSeal(entry, named) {
     // At a start, a permission new to the book is in the writer and not yet in the file: the seal covers the file, and would come after it.
     if (!started && !file.holds(writer.book())) throw Object.assign(new Error('The central sealer signed a seal over the book as its file stands, which the book never took, and the permission in force is new to the book: its line would come before the seal. Start the executor once with the permission the book last held, so that the seal is added; then with the new one.'), { notTaken: true });
+    if (typeof named === 'string') {
+      const book = writer.book();
+      let line = null;
+      try {
+        line = entryLine(entry);
+      } catch {
+        line = null; // not a line of a book: "add" refuses it below
+      }
+      if (line !== null && book.endsWith(`\n${line}\n`)) {
+        const last = (await writer.check()).entries.at(-1);
+        if (last.kind === 'seal' && last.problems.length === 0 && last.fingerprint === named) return { entry: last.index, fingerprint: last.fingerprint };
+      }
+    }
     try {
       await writer.add(entry);
     } catch (e) {
@@ -931,7 +953,7 @@ export async function openAgent(prepared, { settings, executorKeys, now, log, na
       log: agentLog,
       disagree: (why) => stop(why, 'sealer-disagrees'),
       // A seal the sealer signed and the book never took: at a start it is added at once; later, in the agent's turn.
-      takeBack: (entry) => (started ? inTurn(() => addCentralSeal(entry)) : addCentralSeal(entry)),
+      takeBack: (entry, named) => (started ? inTurn(() => addCentralSeal(entry, named)) : addCentralSeal(entry, named)),
     });
     // Before anything is written: the sealer must answer, and what it holds must agree with the book file.
     await link.start(prepared.onDisk);
@@ -1027,8 +1049,8 @@ export async function openAgent(prepared, { settings, executorKeys, now, log, na
       if (olderThan !== null && last && now() - Date.parse(last.content.when) < olderThan) return { sealed: false, reason: 'not-due' };
       if (link) {
         // The central sealer signs over the lines it was sent, and only once it holds every one; its seal's entry is added as it is.
-        const { entry } = await link.seal(last?.fingerprint, now());
-        return { sealed: true, ...(await addCentralSeal(entry)) };
+        const { entry, named } = await link.seal(last?.fingerprint, now());
+        return { sealed: true, ...(await addCentralSeal(entry, named)) };
       }
       const sealed = await sealer.seal(writer.book(), { previous: last?.fingerprint, when: now() });
       await writer.add({ seal: sealed.record });
