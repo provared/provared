@@ -589,21 +589,61 @@
       ends an earlier one, or that the browser's storage is emptied when
       a code ends; the design names a limit of the library's check of
       `crossOrigin` (X270).
+  - **Changed after a second look at those fixes, before any release**
+    (X282, the founder's decision of 15 November 2026; each fix has a
+    test that fails without it):
+    - A recovery code is used once and is no longer replaced. The fix
+      above made a new code at each use and showed it to whoever had
+      typed the old one: so one code that leaked gave approvals without
+      end, each with the code the page before had shown, and two presses
+      of Approve lost the owner the new code. A code now approves one
+      connection and is spent; none is made in its place. The page that
+      answers its use says so, and that a new code comes from stopping
+      the executor and running `provared-mcp-executor owner --config
+      <settings> --reset` on the server. Every authorisation page after
+      that says that the code is spent, and has no box for one. The
+      setup, `owner --reset` and the passkey are as they were.
+    - The code is spent in one step: of two presses, or of several
+      answers at once that hold the same code, one is taken and the
+      others are refused in words that say the code was already used
+      (the log: `owner-recovery-refused`). The state file marks a spent
+      code with `"recoverySpent": true` in its owner; a file without the
+      mark reads as before.
+    - The page's script sends an approval once: Approve and Continue are
+      disabled after the first press, and a second press sends nothing.
+    - The owner's check approves by answering `true`, or `passkey`,
+      `recovery` or `setup`, and by nothing else. Any text that was not
+      empty approved before; the check built in answered only those
+      three.
+    - "Keep this connection for the setup link" says so where it takes
+      the place of a connection that was kept before.
+    - Where the library lacks the passkey checks, the command prints the
+      message on one line and ends with 1; before, the message came
+      inside an uncaught error with its stack. No command runs, as
+      before.
+    - A test of `test/review3.test.mjs` failed now and then on a busy
+      computer: the real time that passed between the making of a token
+      and the opening of a stream came out of the half second the test
+      left the token. The test now sets its clock from the moment before
+      the token was made, and leaves two seconds.
   - **Not built:** no upstream OAuth, no one-command setup, no dynamic
     client registration, no revocation endpoint. No passkey on a device
     (a computer's own, a phone, a security key) has been tried, and no client
     but a stand-in: the tests use a stand-in page and a software passkey,
     and outside the tests the pages were run in headless Chromium 153
     with a virtual authenticator, at `http://localhost`, through to a
-    tool call. Where a client's callback sends the
+    tool call. The recovery code as it now is (X282) was run in a
+    headless Chromium browser, version 157, with no authenticator: two
+    presses of Approve and of Continue sent one form each. Where a
+    client's callback sends the
     browser on to another site, the page's own policy (`form-action`)
     stops the browser there, though the connection was made; the recipe
     says to watch for it.
   - **A recipe**, `mcp-executor/recipes/claude-ai/`: the settings for one
     client, with its limits, and the steps to try the passkey by hand,
     with what to watch the first time.
-  - **Tests**: `test/oauth.test.mjs`, 10 tests: the whole flow in plain
-    HTTP requests, and each refusal. `test/owner.test.mjs`, 22 tests: the
+  - **Tests**: `test/oauth.test.mjs`, 11 tests: the whole flow in plain
+    HTTP requests, and each refusal. `test/owner.test.mjs`, 28 tests: the
     page's own steps, and the page's script itself (`owner-page.mjs`)
     fetched from the executor and run on a stand-in page with the
     library's `passkey-browser.js` as served, with a software passkey;

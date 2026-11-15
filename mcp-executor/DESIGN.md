@@ -3103,12 +3103,14 @@ given to the executor (`ownerCheck`): `form()` gives the HTML of its
 fields on the page, and `check(fields, {request, origin, note})` says
 whether they prove the owner; `note` is what the check itself had sealed
 into the request, or null. It answers `true`, or the name of the proof
-that passed, which the log's line for the approval then gives as `by`
-(X274); `{"pause": {"title", "body", "request"}}`, where a page of the
-check's is to be shown before anything is approved, whose one button,
-Continue, sends that request with the agent chosen (X276); `{"problem"}`,
-a fault of the executor's own, shown as it is (500); anything else is a
-refusal. A check may also run a script from the
+that passed (`passkey`, `recovery` or `setup`), which the log's line for
+the approval then gives as `by` (X274); `{"pause": {"title", "body",
+"request"}}`, where a page of the check's is to be shown before anything
+is approved, whose one button, Continue, sends that request with the
+agent chosen (X276); `{"problem"}`, a fault of the executor's own, shown
+as it is (500); `{"refusal"}`, a refusal in the check's own words (403);
+anything else is a refusal, with the executor's words. Only `true` and
+those three names approve (X282). A check may also run a script from the
 executor's own address (`scripts`) and answer at addresses of its own
 (`owns`, `take`). Left out, as the command `http` leaves it, the check is
 the one by the owner's passkey (section 14.1). Given as `null`, there is
@@ -3295,8 +3297,10 @@ bytes in base64url (Web Authentication's bounds); its public key as a JWK,
 in exactly the form the library takes for a passkey's key (`ES256`,
 `RS256` or `Ed25519`; the method is the key's `alg`, so it is not kept a
 second time); the SHA-256 of the recovery code, in base64url; and when the
-owner was made. Nothing that could stand in for the passkey or the code is
-kept. A file written before them reads as having neither; one whose owner
+owner was made. Once the recovery code has been used it has a fifth
+member, `"recoverySpent": true` (X282); before that the member is not
+there, and no other value of it is read. Nothing that could stand in for
+the passkey or the code is kept. A file written before them reads as having neither; one whose owner
 or setup is not in this form stops the start (and X278).
 
 **X227. The answers of the owner's addresses.** JSON
@@ -3440,7 +3444,9 @@ Within that, the pages save the owner a second prompt.
   button, "Keep this connection for the setup link". Only a press of it
   puts the page's `request` in the same storage; the fields of a request
   are not secret (X228). A page that merely opens keeps nothing, and
-  takes nothing out. Until this was changed, the page kept its request as
+  takes nothing out. One request is kept: where the press takes the place
+  of another that was kept before, the page says so (X282). Until this was
+  changed, the page kept its request as
   it opened, so any page that sent the browser to an authorisation
   address, with nothing pressed, put its own request in the place of the
   owner's, and the setup page then offered that one as "the connection
@@ -3540,39 +3546,38 @@ asks the browser not to keep it (`autocomplete="off"`). As typed, spaces
 and hyphens are taken out and small letters made capitals; what is left
 is hashed, and the hashes are compared in constant time.
 
-A code approves once, and is then spent. Where the code typed is the
-owner's, the executor makes a new one and writes its hash in the old
-one's place, in one write of the state; the old code approves nothing
-after that, whoever types it. Nothing is approved yet. The answer is a
-page, "Write down your new recovery code", that shows the new code once,
-with one button, Continue, and a form that holds the same request with a
-note under its seal (X228) that the recovery code approved it, for this
-owner, and the agent that was chosen. Continue sends that form, the check
-passes it, and the browser goes back to the client, as after the first
-approval (X272). A page whose Continue is not pressed within the
-request's 10 minutes approves nothing; the code is spent all the same,
-and the new one was shown. The log says `owner-recovery-spent`, and the
-approval's line says `"by": "recovery"` (X274). Where the state cannot be
-written, the page says so (500), nothing is approved, and the code is not
-spent.
+A code approves once, and is then spent. No new one is made in its place
+(X282, which replaces what this choice said until then: that the executor
+made a new code and showed it). Where the code typed is the owner's, the
+executor marks it as spent, in one write of the state; it approves
+nothing after that, whoever types it. Nothing is approved yet. The answer
+is a page, "The recovery code is spent", with one button, Continue, and a
+form that holds the same request with a note under its seal (X228) that
+the recovery code approved it, for this owner, and the agent that was
+chosen. Continue sends that form, the check passes it, and the browser
+goes back to the client, as after the first approval (X272). A page whose
+Continue is not pressed within the request's 10 minutes approves nothing;
+the code is spent all the same. The log says `owner-recovery-spent`, and
+the approval's line says `"by": "recovery"` (X274). Where the state
+cannot be written, the page says so (500), nothing is approved, and the
+code is not spent.
 
 It approves, and does nothing else: it does not make a new passkey. To
-replace a lost passkey, the owner is reset on the server (X223), which
-ends every connection. A new code that never reached the owner (the
-answer was lost on its way) is lost: the passkey still approves, and a
-reset gives a new code.
+replace a lost passkey, or to have a recovery code again, the owner is
+reset on the server (X223), which ends every connection.
 
 Why: 160 random bits cannot be guessed, so a plain hash is enough, as for
 a token; and a code that could set up a new passkey would be a second
-setup link that never ends. Until this choice was changed, the code could
-be used as often as it was typed: so a code that had once been seen, over
-a shoulder or in a note, was a second owner, tied to no device and to no
-address, that never ended, and nothing set its approvals apart in the
-log. Spent by its first use, a code that leaks is worth one approval at
-most, and its theft shows: the owner's own next use of it fails. Because
-a new one takes its place at once, the owner is not left one approval
-from a reset. The other way: a code that works for ever, with a warning
-to reset the owner when it may have been seen.
+setup link that never ends. In the first form of this choice the code
+could be used as often as it was typed: so a code that had once been
+seen, over a shoulder or in a note, was a second owner, tied to no device
+and to no address, that never ended, and nothing set its approvals apart
+in the log. Spent by its first use, and not replaced, a code that leaks
+is worth one approval at most, and its use shows: in the log, and on
+every authorisation page after it (X282). The other ways: a code that
+works for ever, with a warning to reset the owner when it may have been
+seen; and a new code in the spent one's place, which X282 says why it was
+given up.
 
 **X277. The issuer may be `http://localhost` with a port, for tests.**
 Beside `http://127.0.0.1` (X202). A client's document at
@@ -3633,13 +3638,99 @@ which is the better one once it can be had: the next release of the
 library names both functions among its exports, and the executor takes
 them by name and may name a range again.
 
+**X282. A recovery code is used once and is not replaced; it is spent in
+one step.** The founder's decision of 15 November 2026. It replaces the
+part of X276 that made a new code each time one was used and showed it on
+a page, "Write down your new recovery code", and X276's reason for that
+(that the owner is not left one approval from a reset). The rest of X276
+stands. X280 is not changed: what it says of a recovery code, that one is
+to be had by `owner --reset` and a new setup, is now the one way to a new
+code in every case.
+
+- **One use, no new code.** A code that is the owner's is marked as spent
+  in the state file (`"recoverySpent": true`, X226) and approves the one
+  request it was typed for, once its page's Continue is pressed. Nothing
+  is made in its place. Its hash stays in the file, so that the same code
+  typed again can be told that it was used. The setup, which first shows
+  a code, is as it was; so is `owner --reset`, which removes the owner
+  and so the mark; so is the passkey.
+- **Spent in one step.** The front door's state has one operation for
+  it, which looks whether the code is spent and, where it is not, writes
+  that it is, with nothing waited for between the look and the write. It
+  answers whether this call spent the code. So of any number of answers
+  that hold the same code, sent one after another or at once, for one
+  request or several, one spends it and is shown the page; each of the
+  others is refused (403) in words that say the code was already used,
+  that nothing was approved, and what to do. The log has
+  `owner-recovery-refused` with `"code": "spent"` for each. The request
+  the page is to hold is made before the code is spent: where there is
+  none to make, nothing is spent. A wrong code is told only that the
+  check did not pass, as before.
+- **What the pages say.** The page that answers the use is headed "The
+  recovery code is spent". It says that the code is good for this one
+  connection and nothing after it, that no new code takes its place, and
+  that a new one comes from stopping the executor and running
+  `provared-mcp-executor owner --config <settings> --reset` on the
+  server, which is the command as its own help writes it; and what that
+  command does. Every authorisation page after that says the same in the
+  place of the code's box, which is no longer there. So an owner who did
+  not use the code sees that someone did, without trying it.
+- **One press.** The page's script sends an approval once: Approve with
+  a code typed, Approve once the passkey has signed, and Continue. A
+  second press sends nothing, and the button is disabled. It is disabled
+  a moment after the press and not in it, since a browser leaves a
+  disabled button's `decision` out of the form. A page that the browser
+  shows again as it was left (by Back) takes a press again. The page
+  that says the code is spent runs the executor's script for this, under
+  the same policy as the authorisation page (X224); it holds no secret
+  now. Refuse is not held to one press: it changes nothing.
+- **The owner's check approves by one of four values.** `true`, or one
+  of the names `passkey`, `recovery` and `setup` (X212). Until this
+  choice any text that was not empty approved, so a check given by
+  someone else that answered a word for "no" would have approved. The
+  check built in answers only those three names.
+- **Two smaller things.** "Keep this connection for the setup link"
+  says so where it takes the place of a connection kept before (X272).
+  Where the library lacks the passkey checks (X281), the command prints
+  the message X281 gives, on one line, and ends with 1; before, Node.js
+  printed it as an uncaught error with its stack. No command runs, as
+  before, `--version` and `stdio` among them. A program that loads the
+  executor as a library gets the same error as before, now with the code
+  `ERR_PROVARED_LIBRARY`.
+
+Why. A new code in the spent one's place went to whoever had typed the
+old one. The executor cannot tell the owner from someone who has seen the
+code, so one code that leaked gave approvals without end, each with the
+code the page before had shown; and "worth one approval at most" was not
+true. The new code was also written before it was seen, so two presses of
+Approve, or an answer lost on its way, left the owner with no code and
+nothing to say so.
+
+What it costs. An owner who has no passkey has one approval, and then
+needs a reset, which ends every connection; such an owner needs a reset
+in any case to have a passkey again, since the code makes none. A code is
+spent when it is typed and its page is sent, not when Continue is
+pressed: where that page does not arrive, or is closed, the code is gone
+and nothing was approved. The one press in the page's script guards
+against the common cause, a double press; a browser that runs no script
+has no such guard, and its second press is told that the code was used.
+
+The other ways. To spend the code only when Continue is pressed, so that
+a page that is lost costs nothing: not taken, because the decision is
+that a second press of Approve is refused as already used, and because
+the page would then promise a spending that had not happened. To keep
+replacing the code and say on every page when one was last used: given
+up by the decision, since the code that works would still be with
+whoever used the last one.
+
 What the tests show, and what they do not. `test/owner.test.mjs` runs the
 page's own steps (`owner-steps.mjs`) in Node.js against the executor's
 addresses, with a software passkey: the library's own test stand-in,
 which builds the three values a real passkey returns. It covers the setup
 and the first approval in one prompt, in each order; a later approval
 with an `ES256`, an `RS256` and an `Ed25519` key; the recovery code,
-spent by its use and replaced; a setup whose answer is lost; a request
+spent by its use and not replaced, typed again, and sent in four answers
+at once (X282); a setup whose answer is lost; a request
 kept only by the owner's press, and not replaced by another page; and
 each refusal: a code used twice, expired or wrong; a request approved
 twice or ended; a challenge from another request, expired or never given;
@@ -3667,7 +3758,26 @@ loaded under the page's policy with nothing on the console. This was run
 with the library as published (0.7.0) and with this repository's. The
 first run of all stopped at its first page, which did not finish loading
 in 30 seconds; the cause was not found, and it did not happen in the
-eight runs after it. A virtual
+eight runs after it. Those runs were of the recovery code as X276 first
+had it, with a new code shown. As X282 has it, the pages were run in a
+headless Chromium browser, version 157, driven by a script, with this
+repository's library
+and no authenticator, against an executor opened as the tests open it,
+at `http://127.0.0.1`. With the executor's answer held back for 700 and
+1,500 ms, Approve with the code typed was pressed twice, 60, 158 and 421
+ms apart: one form was sent each time, carrying `decision=approve`, the
+button was disabled, and the browser came to "The recovery code is
+spent", with no code on it and the command; Continue, pressed twice in
+the same way, sent one form, and the log read `owner-recovery-spent` and
+then `oauth-approved` by `recovery`. Refuse, pressed twice in the same
+way, sent two forms, which shows the run would have seen a second. After
+a wrong code and Back, Approve took a press again; the next
+authorisation page had no box and said the code was spent. Nothing but
+the failed load of the stand-in client's address was on the console. Not
+run in a browser as X282 has it: the one press after a passkey, which
+only the tests' stand-in page shows; any other browser; and whether, on
+Back, the browser brought the page back as it was left or loaded it
+again, which was not looked at. A virtual
 authenticator is not a device: no passkey on a computer's own
 authenticator, a phone or a security key has been tried here, and no client but the stand-in; the
 recipe's README says how to try them by hand. In an earlier run, of the

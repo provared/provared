@@ -200,10 +200,11 @@ address as a passkey's site. So try it at the proxy's https address. Below,
    passkey prompt, and the browser goes back to claude.ai (the log:
    `"by":"passkey"`). Then once more, in a browser without the passkey:
    type the recovery code in its box, then press Approve. No prompt
-   follows. The guard shows a new recovery code: the one you typed is
-   spent. Write the new one down and press Continue; the browser goes back
+   follows. The guard says that the code you typed is spent, and that no
+   new one takes its place. Press Continue, once; the browser goes back
    to claude.ai (the log: `"owner-recovery-spent"`, then `"by":"recovery"`).
-   The old code, typed again, is refused.
+   The next authorisation page has no box for a code, and says that the
+   code is spent. A new code comes from `owner --reset` and a new setup.
 8. Look at the headers: `curl -sI https://guard.example.com/oauth/owner`
    shows `content-security-policy: default-src 'none'; script-src 'self';
    connect-src 'self'; form-action 'self'; frame-ancestors 'none';

@@ -679,12 +679,18 @@ with the `provared` library's own check, and needs no other package.
   public key it keeps, for its own address, with the user verified.
 - **The recovery code.** 32 letters and digits, shown once at the setup.
   Typed into its box on the page in place of the passkey, it approves that
-  one connection, once: it is then spent. The executor shows a new code
-  on a page of its own, before the browser goes back to the client: write
-  it down, then press **Continue**. So you always hold one code that
-  works, and a code that someone else has used no longer works for you:
-  if your code is refused and you did not use it, reset the owner. It
-  does not make a new passkey: for that, reset the owner too.
+  one connection, once: it is then spent, and no new code takes its
+  place. The executor says so on a page of its own, before the browser
+  goes back to the client: press **Continue** there, once. Every
+  authorisation page after that says that the code is spent. If it says
+  so and you did not use the code, someone else did: reset the owner. To
+  have a recovery code again, stop the executor and run
+  `provared-mcp-executor owner --config <settings> --reset` on the
+  server: it removes the owner and ends every connection, and the new
+  setup shows a new code. Until then the passkey approves as before. A
+  code that is typed and whose page is then closed or lost is spent all
+  the same, and approved nothing. The code does not make a new passkey:
+  for that, reset the owner too.
 - **The log says how each connection was approved.** The line
   `"event":"oauth-approved"` carries `"by"`: `"passkey"`, `"recovery"` or
   `"setup"` (the first approval, made with the owner).
