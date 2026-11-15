@@ -39,10 +39,10 @@ const SCAN_RULES = {
 };
 
 /** A world with a rules file, the write tools, and (unless told otherwise) a slip whose agent.software states the rules. */
-async function ruledWorld({ rules = SCAN_RULES, software = 'stated', slip = {}, config = {} } = {}) {
+async function ruledWorld({ rules = SCAN_RULES, software = 'stated', slip = {}, config = {}, env = {} } = {}) {
   const fingerprint = await rulesFingerprint(rules);
   const stated = software === 'stated' ? [softwareEntry('The test executor', fingerprint)] : software === 'other' ? [{ name: 'Some other program', sha256: await identifierFingerprint('other') }] : undefined;
-  const w = await world({ open: false, slip: { actions: WRITE_ACTIONS, software: stated, ...slip }, config: { tools: WRITE_TOOLS, contentRules: 'rules.json', ...config } });
+  const w = await world({ open: false, env, slip: { actions: WRITE_ACTIONS, software: stated, ...slip }, config: { tools: WRITE_TOOLS, contentRules: 'rules.json', ...config } });
   writeFileSync(join(w.folder, 'rules.json'), JSON.stringify(rules, null, 2));
   w.rulesFingerprint = fingerprint;
   await openWorld(w);
@@ -149,15 +149,15 @@ test('content a rule cannot read exactly refuses the call: not JSON, a member na
     await expectUnreadable({ path: 'settings.json', content: '{"scan": false, "n": 9007199254740993}' }, 'the content at "/content" holds a whole number beyond');
     await expectUnreadable({ path: 'settings.json' }, 'nothing is found at "/content" in the arguments');
     await expectUnreadable({ path: 'settings.json', content: { scan: false } }, 'what is found at "/content" in the arguments is not text');
-    // The arguments themselves: two names that differ only in capitals, where a rule reads them.
+    // The arguments themselves: two names that differ only in capitals. The message is not read at all (X241), so it reaches no rule and no denial is written.
     const answer = await w.client.call('write_file', { path: 'notes.txt', PATH: 'settings.json', content: '{}' });
-    assert.equal(answer.result._meta['red.prova/refused'], 'content-unreadable');
-    assert.match(answer.result.content[0].text, /the arguments name one member twice in one object, or two that differ only in capitals/);
+    assert.equal(answer.error.code, -32600);
+    assert.match(answer.error.message, /two member names in one object that differ only in capitals/);
     // A byte-order mark at the start of the content is not JSON either.
     await expectUnreadable({ path: 'settings.json', content: '\uFEFF{"scan": false}' }, 'the content at "/content" is not JSON');
     assert.equal(w.fakeSeen().filter((s) => s.seen?.method === 'tools/call').length, 0, 'none reached the server');
     const checked = await bookOf(w);
-    assert.equal(checked.entries.filter((e) => e.kind === 'denial').length, 8);
+    assert.equal(checked.entries.filter((e) => e.kind === 'denial').length, 7);
     assert.ok(checked.entries.filter((e) => e.kind === 'denial').every((d) => d.content.source === 'rule' && docs(d)[RULE_DOCUMENT] !== undefined));
   } finally {
     await w.close();
@@ -596,4 +596,67 @@ test('L3: a JSON Pointer with a "~" not followed by "0" or "1" is not a pointer,
   const { rules, problems } = readRules(JSON.stringify({ version: 1, rules: [{ name: 'r', tool: 't', when: { pointer: '/a~2', equals: 1 } }] }));
   assert.equal(rules, null);
   assert.ok(problems.some((p) => p.startsWith('rules[0].when.pointer: must be a JSON Pointer')));
+});
+
+test('a rule is not skipped by writing the argument it reads in other capitals: in front of a server that ignores capitals, the call is refused as unreadable, with a denial (X249)', async () => {
+  const w = await ruledWorld({ env: { FAKE_FOLD: { value: '1' } } });
+  const refusedAsUnreadable = async (tool, args) => {
+    const r = await w.client.call(tool, args);
+    assert.equal(r.result?.isError, true, JSON.stringify(args));
+    assert.equal(r.result._meta['red.prova/refused'], 'content-unreadable', JSON.stringify(args));
+    assert.match(r.result.content[0].text, /is written in other capitals than the rule reads/);
+    assert.ok(r.result._meta['red.prova/denial'], 'a denial is written');
+  };
+  try {
+    // The server reads "Path" as "path": without the refusal it wrote the file with the scan on, and the rule never applied.
+    await refusedAsUnreadable('write_file', { Path: 'config/settings.json', content: '{"scan":true}' });
+    await refusedAsUnreadable('write_file', { PATH: 'settings.json', content: '{"scan":true}' });
+    await refusedAsUnreadable('edit_file', { Path: 'settings.json', old: 'a', new: 'b' });
+    // The name the rule tests, in other capitals inside the content.
+    await refusedAsUnreadable('write_file', { path: 'settings.json', content: '{"SCAN":true}' });
+    await refusedAsUnreadable('write_file', { path: 'settings.json', content: '{"Scan":true,"other":1}' });
+    // The names as the rule reads them, and other names, are judged as before.
+    assert.equal((await w.client.call('write_file', { path: 'settings.json', content: '{"scan":true}' })).result._meta['red.prova/refused'], 'content-rule');
+    assert.equal((await w.client.call('write_file', { path: 'settings.json', content: '{"scan":false,"Label":"x"}' })).result.content[0].text, 'Written.');
+    assert.equal((await w.client.call('write_file', { path: 'notes.txt', Mode: 'w', content: 'anything' })).result.content[0].text, 'Written.');
+    assert.deepEqual(w.fakeSeen().filter((e) => e.ran).map((e) => [e.ran, e.args.path]), [['write_file', 'settings.json'], ['write_file', 'notes.txt']], 'the server ran only the two calls the rules let through');
+    const checked = await bookOf(w);
+    assert.equal(checked.entries.filter((e) => e.kind === 'denial').length, 6);
+    assert.equal(checked.entries.filter((e) => e.kind === 'stub').length, 2);
+  } finally {
+    await w.close();
+  }
+});
+
+test('a rule does not take for absent what it cannot read: a value on the way to its pointer that is neither an object nor a list is unreadable (X249)', async () => {
+  const { rules } = readRules(JSON.stringify({
+    version: 1,
+    rules: [
+      { name: 'no debug', tool: 'run_job', content: { pointer: '/options', as: 'value' }, test: { pointer: '/debug', absent: true } },
+      { name: 'settings are not touched', tool: 'touch', when: { pointer: '/target/kind', equals: 'settings' } },
+      { name: 'the level is low', tool: 'set', test: { pointer: '/level/value', oneOf: [1, 2], orAbsent: true } },
+    ],
+  }));
+  const judge = (tool, args) => testCall(rules, tool, args, JSON.stringify(args))?.reason.code ?? 'taken';
+  // A test: the structure given as it is, and given as a text that holds JSON, which a server may read as the structure.
+  assert.equal(judge('run_job', { options: { debug: true } }), 'content-rule');
+  assert.equal(judge('run_job', { options: {} }), 'taken');
+  assert.equal(judge('run_job', { options: '{"debug":true}' }), 'content-unreadable');
+  for (const options of ['', 'text', 5, true, false, null]) assert.equal(judge('run_job', { options }), 'content-unreadable', JSON.stringify(options));
+  assert.match(testCall(rules, 'run_job', { options: '{"debug":true}' }, undefined).reason.message, /is neither an object nor a list/);
+  // A "when": the rule is not skipped.
+  assert.equal(judge('touch', { target: { kind: 'settings' } }), 'content-rule');
+  assert.equal(judge('touch', { target: { kind: 'notes' } }), 'taken');
+  assert.equal(judge('touch', { target: '{"kind":"settings"}' }), 'content-unreadable');
+  assert.equal(judge('touch', { target: 7 }), 'content-unreadable');
+  assert.equal(judge('touch', { target: { Kind: 'settings' } }), 'content-unreadable', 'a member on the way in other capitals');
+  assert.equal(judge('touch', { Target: { kind: 'settings' } }), 'content-unreadable');
+  // "orAbsent" is for a member that is not there, not for one that cannot be read.
+  assert.equal(judge('set', { level: { value: 2 } }), 'taken');
+  assert.equal(judge('set', {}), 'taken');
+  assert.equal(judge('set', { level: {} }), 'taken');
+  assert.equal(judge('set', { level: '{"value":9}' }), 'content-unreadable');
+  // What stays as it was: a member that is not there, and a list asked for a member by name, are absent (the README names the second as a limit).
+  assert.equal(judge('touch', {}), 'taken');
+  assert.equal(judge('touch', { target: [{ kind: 'settings' }] }), 'taken');
 });

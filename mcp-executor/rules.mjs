@@ -32,7 +32,7 @@
 // as "executor.rule".
 
 import { argumentsFingerprint } from 'provared';
-import { repeatedName, unsafeInteger } from './jsonrpc.mjs';
+import { foldName, repeatedName, unsafeInteger } from './jsonrpc.mjs';
 
 /** The document, in every receipt and denial, whose fingerprint is that of the rules file in force (a label). */
 export const RULES_DOCUMENT = 'executor.rules';
@@ -93,6 +93,35 @@ export function lookUp(value, tokens) {
     if (v === undefined) return { found: false };
   }
   return { found: true, value: v };
+}
+
+/**
+ * What stands in the way of reading a pointer's tokens exactly in plain
+ * data, or null where nothing does. "other-spelling": an object on the way
+ * holds a member that is the pointer's name once folded (foldName) and is
+ * not written so, which a reader that ignores capitals would take for the
+ * one the rule reads. "not-a-structure": the way stops, with names still
+ * to follow, at a value that is neither an object nor a list (a text, a
+ * number, true, false or null), which a server may read as a structure (a
+ * text that holds JSON, for one). A member that is simply not there, and a
+ * list asked for a member by name, stand in no one's way: lookUp finds
+ * nothing.
+ */
+export function unreadableAt(value, tokens) {
+  let v = value;
+  for (const t of tokens) {
+    if (Array.isArray(v)) {
+      if (!/^(0|[1-9][0-9]*)$/.test(t)) return null;
+      v = v[Number(t)];
+    } else if (isObject(v)) {
+      const folded = foldName(t);
+      if (Object.keys(v).some((k) => k !== t && foldName(k) === folded)) return 'other-spelling';
+      if (!Object.hasOwn(v, t)) return null;
+      v = v[t];
+    } else return 'not-a-structure';
+    if (v === undefined) return null;
+  }
+  return null;
 }
 
 /** Whether two plain JSON values are the same (the same text in the one form of RFC 8785). */
@@ -311,9 +340,14 @@ function wants(c) {
 /**
  * Whether a condition holds for a value. Gives {holds} or {problem}: a
  * problem is a value the condition cannot judge exactly (text too long to
- * match).
+ * match; a member on the way to the pointer written in other capitals; a
+ * value on the way that is neither an object nor a list).
  */
 function holds(c, subject) {
+  // What the rule cannot read exactly is not taken for absent: a server may find a value where the rule finds none (X249).
+  const way = unreadableAt(subject, c.tokens);
+  if (way === 'other-spelling') return { problem: `a member on the way to ${JSON.stringify(c.pointer)} is written in other capitals than the rule reads, or in letters that some readers take as the same, which two readers may read differently` };
+  if (way === 'not-a-structure') return { problem: `what is found on the way to ${JSON.stringify(c.pointer)} is neither an object nor a list, and a server may read it as one` };
   const found = lookUp(subject, c.tokens);
   if (c.kind === 'absent') return { holds: !found.found };
   if (!found.found) return { holds: c.orAbsent };

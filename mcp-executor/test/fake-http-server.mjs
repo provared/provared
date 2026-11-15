@@ -33,7 +33,11 @@ const TOOLS = [
 export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
   const seen = [];
   const sessions = new Set();
-  const state = { elsewhere: 0, aborted: 0 };
+  const state = { elsewhere: 0, aborted: 0, fold: false, ran: [], deepList: 0 };
+  /** The text of a value nested "depth" lists deep. */
+  const deep = (depth) => `${'['.repeat(depth)}1${']'.repeat(depth)}`;
+  // With "fold" set, the server reads member names without regard to capitals, the last one winning, as some JSON readers do for the fields they know.
+  const fold = (o) => (o && typeof o === 'object' && !Array.isArray(o) ? Object.fromEntries(Object.entries(o).map(([k, v]) => [k.toLowerCase().toUpperCase().toLowerCase(), v])) : o);
   let nextSession = 1;
 
   const json = (res, status, value, headers = {}) => {
@@ -112,6 +116,10 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
         return json(res, 400, { jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } });
       }
       seen.push({ method: 'POST', headers: req.headers, body: m });
+      if (state.fold && !Array.isArray(m)) {
+        m = fold(m);
+        if (m.params) m.params = { ...fold(m.params), arguments: fold(fold(m.params).arguments) };
+      }
       if (Array.isArray(m)) return json(res, 400, { jsonrpc: '2.0', id: null, error: { code: -32600, message: 'No batches' } });
       if (Object.hasOwn(m, 'result') || Object.hasOwn(m, 'error') || m.id === undefined) {
         res.writeHead(202);
@@ -128,6 +136,25 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
       if (method === 'hang') return; // never answers
       // Opens a session of the client's naming, with the status it asks for (a session id on a non-2xx answer is the review's case).
       if (method === 'with-session') return json(res, params.status ?? 200, { jsonrpc: '2.0', id, result: {} }, { 'mcp-session-id': params.session });
+      if (method === 'tools/list' && state.rawList) {
+        // An answer to tools/list exactly as the test gives it: the status, the headers and the body (text or bytes, or a function of the request's id that gives one).
+        res.writeHead(state.rawList.status, state.rawList.headers);
+        return res.end(typeof state.rawList.body === 'function' ? state.rawList.body(id) : state.rawList.body);
+      }
+      if (method === 'tools/list' && state.oddList === 'error') return failure(res, id, -32601, 'This server lists no tools.');
+      if (method === 'tools/list' && (state.deepList || state.oddList)) {
+        // A list the executor cannot read, as a JSON body or as an event: its first tool's schema nested very deeply; or ("twice") a member named twice beside it; or a result with no "tools", and the tools under "Tools"; or ("other-id") a list under another id.
+        const result = state.deepList ? `{"tools":[{"name":"echo","inputSchema":{"type":"object","x":${deep(state.deepList)}}},{"name":"hidden","inputSchema":{"type":"object"}}]}`
+          : state.oddList === 'twice' ? '{"tools":[{"name":"echo"},{"name":"hidden"}],"a":1,"a":2}'
+            : state.oddList === 'other-id' ? '{"tools":[{"name":"echo"},{"name":"hidden"}]}' : '{"Tools":[{"name":"echo"},{"name":"hidden"}]}';
+        const text = `{"jsonrpc":"2.0","id":${JSON.stringify(state.oddList === 'other-id' ? 'someone-else' : id)},"result":${result}}`;
+        if (params.sse) {
+          sse(res)(text);
+          return res.end();
+        }
+        res.writeHead(200, { 'content-type': 'application/json' });
+        return res.end(text);
+      }
       if (method === 'tools/list') {
         const page = params.cursor === 'page2' ? TOOLS.slice(4) : TOOLS.slice(0, 4);
         if (params.sse) {
@@ -140,6 +167,7 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
       if (method !== 'tools/call') return failure(res, id, -32601, `Method not found: ${method}`);
       const name = params.name;
       const args = params.arguments ?? {};
+      state.ran.push({ name, args });
       const text = (t) => result(res, id, { resultType: 'complete', content: [{ type: 'text', text: t }] });
       if (name === 'echo') return result(res, id, { resultType: 'complete', content: [{ type: 'text', text: JSON.stringify(args) }], structuredContent: { args, meta: params._meta ?? null, headers: req.headers } });
       if (name === 'order') return text(`Ordered for ${args.total}.`);
@@ -225,6 +253,24 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
           res.writeHead(200, { 'content-type': 'application/json' });
           return res.end('{"jsonrpc":"2.0","id":' + JSON.stringify(id) + ',"result":{"a":1,"a":2}}');
         }
+        // A second result, or a second id, under a name in other capitals: a client that ignores capitals would read the second.
+        if (how === 'capital-result' || how === 'capital-id') {
+          res.writeHead(200, { 'content-type': 'application/json' });
+          const second = how === 'capital-id' ? '"ID":"someone-else"' : '"Result":{"content":[{"type":"text","text":"the other result"}]}';
+          return res.end('{"jsonrpc":"2.0","id":' + JSON.stringify(id) + ',"result":{"content":[{"type":"text","text":"the result"}]},' + second + '}');
+        }
+        // Answers nested "depth" levels deep, written as text: a result or an error, as a JSON body or as an event.
+        if (how === 'deep-result' || how === 'deep-error' || how === 'deep-result-sse') {
+          const text = how === 'deep-error'
+            ? `{"jsonrpc":"2.0","id":${JSON.stringify(id)},"error":{"code":-32000,"message":"deep","data":${deep(args.depth)}}}`
+            : `{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"content":[{"type":"text","text":"deep"}],"structuredContent":{"a":${deep(args.depth)}}}}`;
+          if (how === 'deep-result-sse') {
+            sse(res)(text);
+            return res.end();
+          }
+          res.writeHead(200, { 'content-type': 'application/json' });
+          return res.end(text);
+        }
         if (how === 'bigint') {
           res.writeHead(200, { 'content-type': 'application/json' });
           return res.end(`{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"resultType":"complete","content":[{"type":"text","text":"ok"}],"structuredContent":{"snowflake":1234567890123456789}}}`);
@@ -242,6 +288,24 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
         port,
         seen,
         sessions,
+        /** Every tools/call the server ran: {name, args}, as it read them. */
+        ran: state.ran,
+        /** Read member names without regard to capitals from now on. */
+        foldNames: () => {
+          state.fold = true;
+        },
+        /** Answer tools/list, from now on, with a list nested this deeply. */
+        deepList: (depth) => {
+          state.deepList = depth;
+        },
+        /** Answer tools/list, from now on, with a list the executor cannot read in the way named, or ("error") with an error; null: as usual. */
+        oddList: (kind) => {
+          state.oddList = kind;
+        },
+        /** Answer tools/list, from now on, with exactly this: {status, headers, body (text or bytes, or a function of the request's id)}; null: as usual. */
+        rawList: (answer) => {
+          state.rawList = answer;
+        },
         get elsewhere() {
           return state.elsewhere;
         },

@@ -150,11 +150,11 @@ test('a tool with no rule is refused and written as a denial; an amount that can
     const folded = await w.client.raw(`${JSON.stringify({ jsonrpc: '2.0', id: 'f1', method: 'tools/call', params: { name: 'order', arguments: { total: 5, TOTAL: 7 } } })}\n`);
     assert.ok(folded);
     const answer = await until(() => w.client.others.find((m) => m.id === 'f1'));
-    assert.equal(answer.result._meta['red.prova/refused'], 'amount-not-found', 'two names that differ only in capitals');
+    assert.equal(answer.error.code, -32600, 'two names that differ only in capitals: the message is not read at all (X241), so no denial names a tool or an amount');
     assert.equal(w.fakeSeen().filter((s) => s.seen?.method === 'tools/call').length, 0);
     const checked = await bookOf(w);
     const denials = checked.entries.filter((e) => e.kind === 'denial');
-    assert.equal(denials.length, 3);
+    assert.equal(denials.length, 2);
     assert.equal(denials[0].content.action, UNLISTED_ACTION);
     assert.equal(denials[0].content.source, 'rule');
     assert.equal(denials[1].content.action, 'supplies.order');
@@ -291,7 +291,7 @@ test('lines the executor cannot read strictly are refused, not passed on', async
     w.client.raw('{"jsonrpc":"2.0","id":"d1","method":"ping","method":"tools/call","params":{"name":"hidden"}}\n');
     m = await w.client.nextOther();
     assert.equal(m.error.code, -32600, 'a member name given twice');
-    assert.equal(m.id, null);
+    assert.equal(m.id, 'd1', 'the refusal names the request, whose id is given once (X250)');
     w.client.raw('{"jsonrpc":"2.0","id":"d2","method":"tools/call","params":{"name":"echo","arguments":{"a":1,"a":2}}}\n');
     m = await w.client.nextOther();
     assert.equal(m.error.code, -32600, 'a member name given twice, deep in the arguments');
