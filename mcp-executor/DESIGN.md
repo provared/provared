@@ -3838,6 +3838,22 @@ before. The other way that was tried: to read the mark of a spent code
 from the file before spending. It was not enough: by then the second
 program had written its own memory over the file, mark and all.
 
+**X286. The log line of a spent code cannot change the answer.** The line
+`owner-recovery-spent` is written once the state holds the mark and
+before the page is made. Where the log function threw there, the check
+ended without an answer, and the owner was told "The owner's check did
+not pass" (403): the code was spent, and there was no page with Continue.
+The line is now written inside a `try`: whether or not the log took it,
+the page that says the code is spent follows. The command's own log
+writes to standard error and does not throw; this could happen only to a
+program that opens the executor as a library and gives it a log of its
+own. Where the line is lost, the state file still holds the mark, and the
+approval's line still says `"by": "recovery"`. Not changed: the other
+log lines of an approval. One that throws at `owner-recovery-refused`
+gives the plain refusal in place of the words that say the code was
+used, with nothing spent by that answer; the executor does not guard
+every line against a log that throws.
+
 What the tests show, and what they do not. `test/owner.test.mjs` runs the
 page's own steps (`owner-steps.mjs`) in Node.js against the executor's
 addresses, with a software passkey: the library's own test stand-in,
@@ -3845,7 +3861,9 @@ which builds the three values a real passkey returns. It covers the setup
 and the first approval in one prompt, in each order; a later approval
 with an `ES256`, an `RS256` and an `Ed25519` key; the recovery code,
 spent by its use and not replaced, typed again, and sent in four answers
-at once (X282); a setup whose answer is lost; a request
+at once (X282), typed late on its page (X283), with a log that throws
+(X286), and with a second executor on the same state file (X285); a
+setup whose answer is lost; a request
 kept only by the owner's press, and not replaced by another page; and
 each refusal: a code used twice, expired or wrong; a request approved
 twice or ended; a challenge from another request, expired or never given;

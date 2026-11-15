@@ -651,6 +651,11 @@
       executors need a state file each (X285). Where a second `http` on
       the same settings was refused before in words that named a book,
       it is now refused in words that name the state file.
+    - Where a program that opens the executor as a library gave it a
+      log that threw at the line `owner-recovery-spent`, the code was
+      spent and the owner was told only that the check did not pass,
+      with no page to continue from. That line can no longer change the
+      answer (X286).
   - **Not built:** no upstream OAuth, no one-command setup, no dynamic
     client registration, no revocation endpoint. No passkey on a device
     (a computer's own, a phone, a security key) has been tried, and no client
@@ -668,7 +673,7 @@
     client, with its limits, and the steps to try the passkey by hand,
     with what to watch the first time.
   - **Tests**: `test/oauth.test.mjs`, 11 tests: the whole flow in plain
-    HTTP requests, and each refusal. `test/owner.test.mjs`, 30 tests: the
+    HTTP requests, and each refusal. `test/owner.test.mjs`, 31 tests: the
     page's own steps, and the page's script itself (`owner-page.mjs`)
     fetched from the executor and run on a stand-in page with the
     library's `passkey-browser.js` as served, with a software passkey;

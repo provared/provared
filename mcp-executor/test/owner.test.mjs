@@ -919,6 +919,33 @@ test('a recovery code typed late on its page is not spent for nothing: the page 
   }
 });
 
+test('a log that throws at the line that says the code is spent does not turn the spent code into a plain refusal: the page with Continue follows, and Continue approves', async () => {
+  const w = await ownerWorld();
+  try {
+    const { recoveryCode } = await setUpOwner(w);
+    // A program that opens the executor as a library gives it a log of its own; this one fails at that one line.
+    let thrown = 0;
+    w.more.log = (e) => {
+      if (e.event === 'owner-recovery-spent') {
+        thrown += 1;
+        throw new Error('the log could not be written');
+      }
+      w.logs.push(e);
+    };
+    await reopen(w);
+    const one = await typeRecovery(w, recoveryCode);
+    assert.equal(thrown, 1, 'the log was asked, and threw');
+    assert.equal(state(w).owner.recoverySpent, true);
+    assert.equal(one.paused.status, 200, one.paused.body);
+    assert.ok(one.paused.body.includes('<h1>The recovery code is spent</h1>'));
+    assert.match(one.paused.body, /<button type="submit" name="decision" value="approve">Continue<\/button>/);
+    await callsATool(w, await answer(w, one.request, { agent: one.agent, fields: {} }), one.p);
+    assert.ok(w.logs.some((e) => e.event === 'oauth-approved' && e.by === 'recovery'));
+  } finally {
+    await w.close();
+  }
+});
+
 test('a recovery code is 20 random bytes in base32, as RFC 4648 writes it: the standard\'s own examples, and two codes are never the same', async () => {
   // RFC 4648, section 10, without the padding.
   for (const [text, written] of [['', ''], ['f', 'MY'], ['fo', 'MZXQ'], ['foo', 'MZXW6'], ['foob', 'MZXW6YQ'], ['fooba', 'MZXW6YTB'], ['foobar', 'MZXW6YTBOI']]) assert.equal(base32(Buffer.from(text)), written);

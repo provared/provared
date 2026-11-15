@@ -383,7 +383,12 @@ export function openPasskeyCheck({ issuer, resource = `${issuer}/mcp`, clients =
           log({ event: 'owner-recovery-refused', code: 'spent' });
           return { refusal: RECOVERY_USED };
         }
-        log({ event: 'owner-recovery-spent' });
+        // The code is spent, and the page that says so follows, whether or not the log took its line: a log that throws here must not leave a spent code with a plain refusal and no Continue (X286).
+        try {
+          log({ event: 'owner-recovery-spent' });
+        } catch {
+          // Not logged. The state file holds the mark, and the approval's own line says "by": "recovery".
+        }
         return {
           pause: {
             title: 'The recovery code is spent',
