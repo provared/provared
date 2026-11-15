@@ -2,6 +2,19 @@
 
 ## Not yet released
 
+- **The site and the READMEs after `provared-mcp-executor` 0.4.2.** The
+  home page, "Provared in plain words", "Over the limit", the top-level
+  README and the executor's README tell readers to use 0.4.2 or later
+  and link to the security advisory GHSA-q53c-6wvv-gfj8; the home page's
+  "What is new" names 0.4.0, 0.4.1 and 0.4.2, and its status line gives
+  the guard's version beside the library's. The pages, the READMEs and
+  the descriptions of the recorder beside Claude Code (`package.json`,
+  the plugin's `plugin.json` and the marketplace) no longer say it
+  records every tool call: eight tools, those in `NOT_RECORDED` in
+  `integrations/claude-code/actions.mjs`, are not recorded, and the
+  README names them. Its README says the plugin installs library 0.8.0
+  from its lockfile, where it said 0.6.0. The executor's README says the
+  MCP Registry lists 0.4.2. The record page and its generator, tools/make-record-page.mjs, name the eighth tool left out, the end of the conversation. No other code changes.
 - **`provared-mcp-executor` 0.4.2 (15 November 2026): a security fix for
   two weaknesses. In front of a tool server whose JSON reader ignores
   capitals, or of one that ends a line at a bare carriage return, an
