@@ -2,140 +2,16 @@
 
 ## Not yet released
 
-- **`provared` 0.8.1 (not yet released; `package.json` and
-  `python/pyproject.toml` still say 0.8.0): a time-stamp's time in the
-  years 0000 to 0099 is read, where it was refused; and two checks on
-  the signing page that rest on the clock of the device a person signs
-  on.** No signed byte, label or field's meaning changes. **The first
-  change alters what a checker answers:** a checker of an earlier
-  version, in JavaScript or Python, answers differently on the records
-  named below.
-  - **A time in a time-stamp or in its service's certificates, written
-    in the long form (GeneralizedTime) with a year from 0000 to 0099, is
-    now read as the year written** (`timeOf` in `src/der.js`, `time_of`
-    in `python/src/provared/der.py`). Before, both libraries refused it
-    (`stamp-bad-data`, "a time names a moment that does not exist"): in
-    JavaScript because `Date.UTC` reads a year from 0 to 99 as 1900 to
-    1999, so that the date did not come back as it went in, and in
-    Python to match. The format description never stated that refusal,
-    and a checker written from it alone reads such a year; the
-    description is unchanged, and the libraries and the shared test
-    files now agree with it. JavaScript sets the date with
-    `setUTCFullYear`, which takes every year as given; Python no longer
-    refuses a year below 100. A date that does not exist in those years
-    (29 February 0099, a thirteenth month, hour 24) is refused as in any
-    other year. The short form (UTCTime) names 1950 to 2049, as before.
-  - **What a checker now answers.** Such a time goes on to the rules
-    that follow the reading of it (format description, section 21.2). A
-    time-stamp that states a time in the year 0050, under a certificate
-    in force from 2026 to 2036, was refused as `stamp-bad-data`; it is
-    now refused as `stamp-invalid`, "A time-stamp is dated outside the
-    time its service's certificate was in force." No case in the shared
-    test files, and no test here, has such a time-stamp pass: for that,
-    a trusted service's certificates would have to be in force in those
-    years.
-  - **Shared test files whose stored answers changed** (five, against
-    the files before this change; each new answer is the one the library
-    gives): `test-vectors/stamps.json`, case 59, "statement: a time in
-    the year 50": refused `stamp-bad-data` before, refused
-    `stamp-invalid` now, with the words above.
-    `test-vectors/der-times.json`, four cases, each refused
-    `stamp-bad-data` before and read now, in milliseconds since 1970:
-    `00000101000000Z` -62167219200000; `00500101000000Z`
-    -60589296000000; `00990101000000Z` -59042995200000;
-    `00991231235959Z` -59011459201000.
-  - **Shared test files with more cases.** `der-times.json` gains six
-    (61 before, 67 now). Three are read: `00010101000000Z`
-    -62135596800000; `00960229000000Z` -59132592000000;
-    `00991231235959.5Z` -59011459200500. Three are refused in those
-    years as in any other: 29 February 0099, a thirteenth month in 0050,
-    and hour 24 in 0050.
-    `test-vectors/times.json` gains seven cases (18 before, 25 now) for a
-    record's own time (`parseTime`, `parse_time`; format description,
-    section 3.6), which was and is the year it says in both libraries:
-    the last second of 0000, the first of 0001, 0050, 29 February 0096
-    (a leap year), 29 February 0099 (not one), the last second of 0099
-    and the first of 0100.
-  - **Tests.** `test/timestamp.test.mjs` (one test) and
-    `python/tests/test_small_years.py` (one) hold the reading of those
-    years and the dates still refused; both fail on the earlier code.
-    `test/encoding.test.mjs` (one) and the second test of the Python
-    file hold a record's own time, and pass on the earlier code too.
-  - **The signing page sets its own limit on a start**
-    (`startRefusal` in `page/sign-page.js`). A review of the hand-over
-    (3 November 2026) found that the five-minute rule rests on the clock
-    of the device the person signs on, and that the signing page set no
-    limit of its own on a start: it signed whatever start the page that
-    asked gave it. Now a permission another page asks for (`#request=`,
-    kind `permission` or `renewal`) is not signed where it starts more
-    than 300 seconds (the allowance between clocks the format uses, and
-    the one by which the recorder beside Claude Code refuses a renewal
-    handed over, `starts-later`) after this device's clock at the press
-    of Sign. It is checked at every press, on what was read and is about
-    to be signed, before any warning is shown or a passkey asked, and
-    the page says why. The limit covers such requests only. A link with
-    `#permission=` carries its own start, which the page takes as the
-    link gives it (`readStartingPermission`), and that way of signing
-    has no limit on the start, as before: it is meant for a permission
-    kept as a file. A start that is not a time is left to the format's
-    own check, as before.
-  - **The signing page warns where this device's clock looks behind**
-    (`clockWarning`). Where a request carries an earlier permission
-    (a renewal or a cancellation), whose passkey signature the page has
-    checked, and by this device's clock that permission will not start
-    for more than 300 seconds yet, either it has not started or the
-    clock is behind: the page shows a warning with the others, and signs
-    only once the person presses again. Nothing signed changes: a
-    cancellation is dated by the same clock as before.
-  - **The recorder's README** (`integrations/claude-code/README.md`,
-    "Limits") said that the signing page sets no limit of its own on the
-    start. It now says what the page in this repository does, that the
-    limit covers requests (`#request=`) only, that a link with
-    `#permission=` carries its own start and has no such limit, that the
-    limit is measured by the signing device's clock, and that a copy of
-    the page from before this change (the one served at
-    https://sign.prova.red, until it is brought up to date) sets none.
-  - **The reader of another project's receipts**
-    (`integrations/agent-middleware/judge.mjs`, `parseAmwTime`; not
-    published) reads a time in the years 0000 to 0099 as the year
-    written, for the same reason and in the same way (`setUTCFullYear`
-    in place of `Date.UTC`). **This changes what it answers:** a receipt
-    dated in those years was "Not compared: the receipt's time cannot be
-    read"; it is now compared, and one outside the permission's period
-    is found `outside-valid-time`. A date that does not exist in those
-    years is still a time that cannot be read. One test
-    (`integrations/agent-middleware/test/judge.test.mjs`), which fails
-    on the earlier code.
-  - **What these two do not do.** Both read the same clock, the signing
-    device's. A clock that is ahead is not noticed, and with such a
-    clock a start that far ahead of the true time is still signed. A
-    request with no earlier permission gives the page nothing to compare
-    the clock with. The page asks no one the time, and sends nothing
-    anywhere, as before.
-  - **Tests** (`test/sign-start.test.mjs`, seven): the limit at 300
-    seconds and one second past it, for both kinds; no limit with no
-    request; a start that is not a time; the warning at the same two
-    points, and with a clock a year behind; the warning's words the same
-    from one press to the next; and, read from the page's own text, that
-    the limit comes before the warnings and the passkey, and that both
-    signing buttons work the warning out. In a browser with a virtual
-    passkey (`test/sign-window.test.mjs`, one test, skipped where there
-    is no browser): a renewal that starts ten minutes ahead is not
-    signed, no warning is shown, nothing goes back and the passkey is
-    not asked; and with a clock a day behind, a cancellation's first
-    press shows the warning and signs nothing, and the second signs.
-
-- **The threat model, corrected on time-stamps.** Two places in
-  `docs/threat-model.md` said an outside time-stamp settles a stub's
-  date. It shows only that the stub existed by the stamp's time: it catches
-  forward dating, not back dating. No code changes.
-
 - **`provared-mcp-executor` 0.5.0 (not yet released): `seal`,
   `acknowledge` and `status`.** The executor could not seal a book, and a
   call sent under a permission that had since been replaced stopped the
   start until the old permission was put back. No record of a new kind
   and no signature of the executor's own making: a seal is the library's
   (format description, section 21.1). What changes, in `mcp-executor/`:
+  - **The fixes of 0.4.2.** 0.5.0 holds every change of 0.4.2 (the entry
+    below), merged from the released line, with its tests; its choices
+    are X241, X248, X249, X250 and X260 in `DESIGN.md`, after this
+    work's own.
   - **The recorder's keys.** The settings may name a recorder:
     `"recorder": {"keys": <file>, "name": <text>, "sealEvery":
     <milliseconds>}`. `keys` makes its key file where there is none
@@ -450,6 +326,340 @@
     sealer they are X147 to X159; X152 (the sealer must answer at a
     start), X153 (the limit of unsent lines) and X156 (no line while a
     seal may have been signed) wait for the founder's review.
+
+- **`provared-mcp-executor` 0.4.2 (15 November 2026): a security fix for
+  two weaknesses. In front of a tool server whose JSON reader ignores
+  capitals, or of one that ends a line at a bare carriage return, an
+  agent could have a tool call run that the executor never checked, with
+  no receipt; in front of the first, also a tool other than the one its
+  receipt names, or a change that a rule on content forbids. 0.4.2
+  refuses the messages that did the first, and writes every message to
+  the server as one line, which ends the second. Every version from 0.1.0
+  to 0.4.1 has both weaknesses.**
+  - **The second weakness: one message read as several lines.** The
+    executor ends a line at a line feed alone. Some readers end one at a
+    bare carriage return too: `node:readline` does (and at U+2028 and
+    U+2029), and so does a text reader with universal newlines. Python's
+    `io.TextIOWrapper` reads that way unless told otherwise; the official
+    Python SDK's stdio server reads through one; and Python opens its
+    standard input that way on Windows. JSON allows a carriage return
+    between its values. So one line of the agent's,
+    `{"jsonrpc":"2.0","id":"outer","method":"ping","params":{"a":[<CR>{"jsonrpc":"2.0","id":"hidden","method":"tools/call","params":{"name":"order","arguments":{"total":999999}}}<CR>]}}`,
+    was a `ping` to the executor, which passed it on with no check, and
+    three lines to such a server, the second a call of `order` for
+    999,999: it ran, with no receipt and no denial, and its answer came
+    back to the agent. A text argument with U+2028 in it reached a server
+    that reads with `node:readline` as two lines, was not answered, and
+    was recorded as "outcome not known". **Who was exposed:** anyone who
+    runs the executor on stdio in front of a tool server that ends a line
+    at a bare carriage return. A server that ends a line at a line feed
+    alone is not affected. Servers built on the official Python SDK read
+    standard input through `io.TextIOWrapper`, so they end a line at a
+    bare carriage return; other servers have not been checked. Over HTTP
+    the executor sends the upstream a body, not lines,
+    and is not affected. **What 0.4.2 does** (`oneLine` in
+    `mcp-executor/jsonrpc.mjs`, used by `toServer` in
+    `mcp-executor/executor.mjs`; `mcp-executor/DESIGN.md`, X248): every
+    message written to the server's standard input is first made one
+    line, and is still the same JSON: a line feed or a carriage return
+    between its values becomes a space, and U+0085, U+2028 and U+2029 in
+    a text are written as their JSON escapes. This makes it one line for
+    a reader that takes the bytes as UTF-8. A reader that takes them as
+    another encoding may still cut a line inside a character beyond
+    ASCII; such a cut falls inside a text, where quotation marks are
+    escaped, so it can spoil a message and cannot hide a call. `oneLine`
+    is a new export of `provared-mcp-executor/jsonrpc`. **Tests:**
+    `mcp-executor/test/lines.test.mjs` sends such messages in front of
+    the made-up server reading each of the two ways (`FAKE_LINE_ENDS` in
+    `test/fake-server.mjs`); both of those tests fail without the fix.
+    The demonstration's made-up server (`demo/server.mjs`) still reads
+    with `node:readline`; behind the executor it is now sent one line
+    for each message.
+  - **The first weakness: what was weak.** The executor reads member names exactly. Some
+    JSON readers do not: the standard JSON reader of the Go language
+    takes `Method` for `method` and `Name` for `name` in the fields it
+    knows, the later one winning. A message with both was therefore one
+    message to the executor and another to such a server. A review ran
+    three, in front of a made-up server that reads names that way:
+    `{"method":"ping","Method":"tools/call", ...}` was a ping to the
+    executor, which passed it on with no check, no receipt and no
+    denial, and a tool call to the server, which ran it;
+    `{"method":"notifications/initialized","Method":"tools/call","ID":13, ...}`
+    likewise; and `{"name":"echo","Name":"order","arguments":{},"Arguments":{"total":999999}}`
+    was checked, receipted and countersigned as `echo` with no
+    arguments, and run as `order` for 999,999. **A rule on the content
+    of a change could be skipped the same way.** A rule reads the
+    arguments by the names it is given. With the README's own example
+    rules, `write_file` with `{"Path":"config/settings.json","content":"{\"scan\":true}"}`
+    was let through and receipted as an allowed change: the rule's
+    `when` found no `path`, so the rule did not apply, and such a server
+    read `Path` as `path` and wrote the file with the scan on. An
+    `edit_file` of `settings.json` under `Path`, and a lone `"SCAN": true`
+    inside the content, passed in the same way. Rules on content came
+    with 0.2.0, and every version from then to 0.4.1 does this.
+  - **Who was exposed.** Anyone who runs the executor, on stdio or over
+    HTTP, in front of a tool server whose JSON reader ignores capitals
+    in member names. A server that reads names exactly, as the JSON
+    readers of Node.js and Python do, is not affected. Servers built on
+    the official Go SDK before 1.3.1 ignore capitals
+    (GHSA-wvj2-96wp-fq3f); other servers have not been checked. Every
+    version from 0.1.0 to 0.4.1 has the weakness: `readMessage` in
+    `mcp-executor/jsonrpc.mjs` has looked only for a name given twice
+    exactly since the first version.
+  - **What 0.4.2 does** (`readMessage` in `mcp-executor/jsonrpc.mjs`,
+    `handleCall` and `filteredList` in `mcp-executor/executor.mjs`;
+    `mcp-executor/DESIGN.md`, X241). A message with a member at its top
+    level other than `jsonrpc`, `id`, `method`, `params`, `result` and
+    `error`, written exactly so, is refused, from the agent and from the
+    server. A message of the agent's is refused where its `params` hold,
+    in one object at any depth, two names that differ only in capitals
+    (or in the long s for `s`, or the Kelvin sign for `k`); where a
+    `tools/call` writes `name`, `arguments` or `_meta` in other
+    capitals, or a `notifications/cancelled` writes `requestId` so; and
+    where the `_meta` of a `tools/call` writes `red.prova/call-id` or
+    `traceparent` in other capitals. The agent is answered with the
+    error -32600, as for a member name given twice, and nothing is sent
+    to the server. A server's answer with such a member at its top level
+    is treated as any line the executor cannot read: the receipt says
+    the answer could not be read and names no result. In a `tools/list`
+    answer that the executor filters, a tool with a second name in other
+    capitals is not shown, and a second list (`Tools`) is left out.
+  - **What 0.4.2 does for the rules on content** (`unreadableAt` and
+    `holds` in `mcp-executor/rules.mjs`; DESIGN.md, X249). Where a rule
+    reads a pointer, in its `when` or its `test`, and an object on the
+    way holds a member that is the pointer's name in other capitals and
+    is not written as the rule reads it, the call is refused as
+    `content-unreadable`, with a denial: `Path` where the rule reads
+    `/path`, `SCAN` in the content where it reads `/scan`. So is a call
+    where the way to the pointer stops, with names still to follow, at a
+    value that is neither an object nor a list: a rule that tests
+    `/debug` in `options` refused `{"options":{"debug":true}}` and let
+    through `{"options":"{\"debug\":true}"}`, a text that a server may
+    read as the object. Such a value was taken for absent before.
+  - **The reading never ends the executor** (`foldedInParams` and
+    `readMessage` in `mcp-executor/jsonrpc.mjs`; DESIGN.md, X250). The
+    check for names in other capitals walks the message's text as it
+    came, and calls nothing that calls itself. And a message nested more
+    than 256 levels deep is not read at all (`MAX_DEPTH`): the agent's
+    is refused with -32600 under its id; the server's is treated as any
+    line the executor cannot read, so that a call's receipt says its
+    answer could not be read. A list of tools that the executor is to
+    filter (`hideUnlisted`) and cannot read, where it can match the
+    answer to the request, is no longer handed to the agent as it was,
+    which showed it the tools the executor is to hide: the request is
+    answered with the error -32603 under its id, and the log says
+    `tools-list-not-read`. That is, on stdio, a line whose one top-level
+    id is the request's; over HTTP, a JSON body, or an event under the
+    request's id. A list the executor cannot match to its request is
+    still handed on as it was, and the request is not answered
+    (DESIGN.md, X250): on stdio a line with an id given twice, no id or
+    a null one, a list of messages (a batch), or a byte order mark
+    before the message; over HTTP an event with no id, under another id,
+    or holding a list of messages. A tool shown so is still refused when
+    it is called, unless the settings forward such calls (`unlisted`).
+    Over HTTP the upstream's own error answer to `tools/list` goes on as
+    it is, with its status, under the request's id, another or a null
+    one, where the body is an error answer and nothing more
+    (`errorAnswer` in `mcp-executor/jsonrpc.mjs`; DESIGN.md, X260): a
+    server may refuse a request it could not read, or a session it does
+    not know, with a 400 or a 404 and an error under a null id. And
+    where the executor writes its own error in place of an upstream's
+    answer, it is sent as `application/json; charset=utf-8` with
+    `cache-control: no-store`, and not under the upstream's content type
+    or its word on caching (`test/list.test.mjs`, 14 tests, on stdio and
+    over HTTP as a JSON body and as an event stream). Before, one deep
+    answer of the server's ended the
+    executor: its error, or its list of tools, which the executor writes
+    out afresh, overflowed the stack (run). An agent's deep cancellation
+    of a call in flight, written afresh in the same way, ended it too
+    (run in the review's re-check: 0.4.1 ends at `executor.mjs:1214`).
+    (As first built for 0.4.2,
+    and never released, the check for names did the same on any line
+    5,000 levels deep.) What changes for a caller: a message deeper than
+    256 levels, which 0.4.1 passed on where it was not a call, is
+    refused. The two older refusals, for a member name given
+    twice and for a whole number beyond 2^53 - 1, are now answered under
+    the request's id where it can be found; before, under no id, so that
+    a client on stdio waited out its own timeout.
+  - **What changes for a caller.** Arguments with two names in one
+    object that differ only in capitals (`path` and `PATH`) are now
+    refused in every call, with -32600 and no denial; before, they were
+    refused, with a denial, only where a rule read the amount or the
+    content from the arguments. A call that a rule on content cannot read
+    exactly, in the two ways above, is now refused where it was let
+    through. That takes in a structure written as null where a rule
+    reads inside it: `{"options": null}` is refused as
+    `content-unreadable` where a rule tests `/debug` in `options`, while
+    `{"options": {}}` is taken as before, and a member that is not there
+    at all is still absent. `misspelt`, `foldedInParams`, `oneLine`,
+    `deeperThan`, `errorAnswer` and
+    `MAX_DEPTH` are new exports of `provared-mcp-executor/jsonrpc`, and `unreadableAt` of
+    `provared-mcp-executor/rules`.
+  - **What it does not cover.** The folding is that of capitals and a
+    little wider: it also makes one of the long s and `s`, the Kelvin
+    sign and `k`, the sharp s and `ss`, the dotless i, the dotted capital
+    I and `i`, and the ligatures and their letters, so that `Masse` and
+    `Maße` in one object are refused too. It errs on the side of
+    refusing. A reader that takes two names for one in some other way is
+    not covered. A rule on content sees a name in other capitals only on
+    the way to a pointer it reads: a rule that tests `/scan` does not see
+    `SCAN` in an object it does not walk through. A list that is asked
+    for a member by name is still taken as having none.
+  - **Tests.** `mcp-executor/test/names.test.mjs` sends eleven such
+    messages on stdio and over HTTP, in front of the made-up servers
+    reading names without regard to capitals (`FAKE_FOLD` in
+    `test/fake-server.mjs`, `foldNames()` in `test/fake-http-server.mjs`),
+    and reads each server's own record of what it ran; each of its five
+    tests fails without the fix. Two older tests that expected a denial
+    for such arguments now expect the error. Two new tests in
+    `test/content-rules.test.mjs` run the rules' cases, the first in
+    front of the made-up server that ignores capitals; and
+    `test/deep.test.mjs` (5 tests) sends 200,000 levels of nesting each
+    way on stdio and over HTTP (the agent's requests, a call and a
+    cancellation; the server's result, error, list of tools and
+    notification), and reads the ids of the older refusals; an
+    older test that expected such a refusal under no id now expects the
+    request's. `test/list.test.mjs` (14 tests) also holds what stays: a
+    list the executor cannot match to its request is handed on, in five
+    ways on stdio and three as an event. The review's re-check took 14
+    parts of these fixes out, one at a time, and a test failed for 12.
+    For two, no test fails in the code as it stands, since the limit on
+    nesting now comes first: the check for names in other capitals
+    walking the text (`foldedInParams` in `readMessage`), which was the
+    fix for a deep line before the limit was there and is a second layer
+    behind it now; and the catch-all in `readMessage`, which no line is
+    known to reach. The nine parts of the two changes over HTTP (X260)
+    were each undone once, and a test failed for each.
+  - **Versions.** 0.4.2 in `mcp-executor/package.json` and
+    `mcp-executor/server.json` (both fields).
+
+- **`provared` 0.8.1 (not yet released; `package.json` and
+  `python/pyproject.toml` still say 0.8.0): a time-stamp's time in the
+  years 0000 to 0099 is read, where it was refused; and two checks on
+  the signing page that rest on the clock of the device a person signs
+  on.** No signed byte, label or field's meaning changes. **The first
+  change alters what a checker answers:** a checker of an earlier
+  version, in JavaScript or Python, answers differently on the records
+  named below.
+  - **A time in a time-stamp or in its service's certificates, written
+    in the long form (GeneralizedTime) with a year from 0000 to 0099, is
+    now read as the year written** (`timeOf` in `src/der.js`, `time_of`
+    in `python/src/provared/der.py`). Before, both libraries refused it
+    (`stamp-bad-data`, "a time names a moment that does not exist"): in
+    JavaScript because `Date.UTC` reads a year from 0 to 99 as 1900 to
+    1999, so that the date did not come back as it went in, and in
+    Python to match. The format description never stated that refusal,
+    and a checker written from it alone reads such a year; the
+    description is unchanged, and the libraries and the shared test
+    files now agree with it. JavaScript sets the date with
+    `setUTCFullYear`, which takes every year as given; Python no longer
+    refuses a year below 100. A date that does not exist in those years
+    (29 February 0099, a thirteenth month, hour 24) is refused as in any
+    other year. The short form (UTCTime) names 1950 to 2049, as before.
+  - **What a checker now answers.** Such a time goes on to the rules
+    that follow the reading of it (format description, section 21.2). A
+    time-stamp that states a time in the year 0050, under a certificate
+    in force from 2026 to 2036, was refused as `stamp-bad-data`; it is
+    now refused as `stamp-invalid`, "A time-stamp is dated outside the
+    time its service's certificate was in force." No case in the shared
+    test files, and no test here, has such a time-stamp pass: for that,
+    a trusted service's certificates would have to be in force in those
+    years.
+  - **Shared test files whose stored answers changed** (five, against
+    the files before this change; each new answer is the one the library
+    gives): `test-vectors/stamps.json`, case 59, "statement: a time in
+    the year 50": refused `stamp-bad-data` before, refused
+    `stamp-invalid` now, with the words above.
+    `test-vectors/der-times.json`, four cases, each refused
+    `stamp-bad-data` before and read now, in milliseconds since 1970:
+    `00000101000000Z` -62167219200000; `00500101000000Z`
+    -60589296000000; `00990101000000Z` -59042995200000;
+    `00991231235959Z` -59011459201000.
+  - **Shared test files with more cases.** `der-times.json` gains six
+    (61 before, 67 now). Three are read: `00010101000000Z`
+    -62135596800000; `00960229000000Z` -59132592000000;
+    `00991231235959.5Z` -59011459200500. Three are refused in those
+    years as in any other: 29 February 0099, a thirteenth month in 0050,
+    and hour 24 in 0050.
+    `test-vectors/times.json` gains seven cases (18 before, 25 now) for a
+    record's own time (`parseTime`, `parse_time`; format description,
+    section 3.6), which was and is the year it says in both libraries:
+    the last second of 0000, the first of 0001, 0050, 29 February 0096
+    (a leap year), 29 February 0099 (not one), the last second of 0099
+    and the first of 0100.
+  - **Tests.** `test/timestamp.test.mjs` (one test) and
+    `python/tests/test_small_years.py` (one) hold the reading of those
+    years and the dates still refused; both fail on the earlier code.
+    `test/encoding.test.mjs` (one) and the second test of the Python
+    file hold a record's own time, and pass on the earlier code too.
+  - **The signing page sets its own limit on a start**
+    (`startRefusal` in `page/sign-page.js`). A review of the hand-over
+    (3 November 2026) found that the five-minute rule rests on the clock
+    of the device the person signs on, and that the signing page set no
+    limit of its own on a start: it signed whatever start the page that
+    asked gave it. Now a permission another page asks for (`#request=`,
+    kind `permission` or `renewal`) is not signed where it starts more
+    than 300 seconds (the allowance between clocks the format uses, and
+    the one by which the recorder beside Claude Code refuses a renewal
+    handed over, `starts-later`) after this device's clock at the press
+    of Sign. It is checked at every press, on what was read and is about
+    to be signed, before any warning is shown or a passkey asked, and
+    the page says why. The limit covers such requests only. A link with
+    `#permission=` carries its own start, which the page takes as the
+    link gives it (`readStartingPermission`), and that way of signing
+    has no limit on the start, as before: it is meant for a permission
+    kept as a file. A start that is not a time is left to the format's
+    own check, as before.
+  - **The signing page warns where this device's clock looks behind**
+    (`clockWarning`). Where a request carries an earlier permission
+    (a renewal or a cancellation), whose passkey signature the page has
+    checked, and by this device's clock that permission will not start
+    for more than 300 seconds yet, either it has not started or the
+    clock is behind: the page shows a warning with the others, and signs
+    only once the person presses again. Nothing signed changes: a
+    cancellation is dated by the same clock as before.
+  - **The recorder's README** (`integrations/claude-code/README.md`,
+    "Limits") said that the signing page sets no limit of its own on the
+    start. It now says what the page in this repository does, that the
+    limit covers requests (`#request=`) only, that a link with
+    `#permission=` carries its own start and has no such limit, that the
+    limit is measured by the signing device's clock, and that a copy of
+    the page from before this change (the one served at
+    https://sign.prova.red, until it is brought up to date) sets none.
+  - **The reader of another project's receipts**
+    (`integrations/agent-middleware/judge.mjs`, `parseAmwTime`; not
+    published) reads a time in the years 0000 to 0099 as the year
+    written, for the same reason and in the same way (`setUTCFullYear`
+    in place of `Date.UTC`). **This changes what it answers:** a receipt
+    dated in those years was "Not compared: the receipt's time cannot be
+    read"; it is now compared, and one outside the permission's period
+    is found `outside-valid-time`. A date that does not exist in those
+    years is still a time that cannot be read. One test
+    (`integrations/agent-middleware/test/judge.test.mjs`), which fails
+    on the earlier code.
+  - **What these two do not do.** Both read the same clock, the signing
+    device's. A clock that is ahead is not noticed, and with such a
+    clock a start that far ahead of the true time is still signed. A
+    request with no earlier permission gives the page nothing to compare
+    the clock with. The page asks no one the time, and sends nothing
+    anywhere, as before.
+  - **Tests** (`test/sign-start.test.mjs`, seven): the limit at 300
+    seconds and one second past it, for both kinds; no limit with no
+    request; a start that is not a time; the warning at the same two
+    points, and with a clock a year behind; the warning's words the same
+    from one press to the next; and, read from the page's own text, that
+    the limit comes before the warnings and the passkey, and that both
+    signing buttons work the warning out. In a browser with a virtual
+    passkey (`test/sign-window.test.mjs`, one test, skipped where there
+    is no browser): a renewal that starts ten minutes ahead is not
+    signed, no warning is shown, nothing goes back and the passkey is
+    not asked; and with a clock a day behind, a cancellation's first
+    press shows the warning and signs nothing, and the second signs.
+
+- **The threat model, corrected on time-stamps.** Two places in
+  `docs/threat-model.md` said an outside time-stamp settles a stub's
+  date. It shows only that the stub existed by the stamp's time: it catches
+  forward dating, not back dating. No code changes.
 
 - **`provared-mcp-executor` 0.4.1 (11 November 2026, on npm and the MCP Registry):
   `demo --stdio`, for an MCP client or a directory's inspector.** A

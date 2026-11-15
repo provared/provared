@@ -26,9 +26,9 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import http from 'node:http';
 import https from 'node:https';
 import { unfinished } from './copy.mjs';
-import { EXECUTOR_STOPPED, NOT_FOR_KEYS, NO_RECORDER_WARNING, SHARED_KEYS, SHORT_NAME, UNLISTED_FORWARD_WARNING, callCore, describeContentRules, describeRecorder, describeSlip, describeTools, filteredList, isObject, isPlaceholder, missingFiles, openAgent, pathFrom, placeholderProblems, prepareAgent, prepareShared, readAgentPaths, readCredentialFile, readIdentity, readFormerKeys, readKnobs, readRecorderSettings, readToolRules, reportFromFiles, sealTimer, serverIds } from './executor.mjs';
+import { EXECUTOR_STOPPED, LIST_NOT_READ, NOT_FOR_KEYS, NO_RECORDER_WARNING, SHARED_KEYS, SHORT_NAME, UNLISTED_FORWARD_WARNING, callCore, describeContentRules, describeRecorder, describeSlip, describeTools, filteredList, isObject, isPlaceholder, missingFiles, openAgent, pathFrom, placeholderProblems, prepareAgent, prepareShared, readAgentPaths, readCredentialFile, readIdentity, readFormerKeys, readKnobs, readRecorderSettings, readToolRules, reportFromFiles, sealTimer, serverIds } from './executor.mjs';
 import { CHALLENGE, identify, plainAddress } from './identity.mjs';
-import { CODES, MAX_LINE_BYTES, idKey, isId, readMessage, responseText, spliceId, topLevelId, unsafeInteger } from './jsonrpc.mjs';
+import { CODES, MAX_LINE_BYTES, errorAnswer, idKey, isId, readMessage, responseText, spliceId, topLevelId, unsafeInteger } from './jsonrpc.mjs';
 import { LOCK_WAIT_MS } from './lock.mjs';
 
 /** The most a POST body may be, unless the settings say otherwise: 10 MiB, as the gateway takes. */
@@ -393,6 +393,8 @@ export async function openHttpExecutor(config, more = {}) {
     if (path.length && typeof schema['x-mcp-header'] === 'string' && /^[A-Za-z0-9!#$%&'*+.^_`|~-]{1,128}$/.test(schema['x-mcp-header'])) found.set(schema['x-mcp-header'].toLowerCase(), path);
     if (isObject(schema.properties)) for (const [key, sub] of Object.entries(schema.properties)) walkSchema(sub, [...path, key], found, depth + 1);
   };
+  /** The answer, under the agent's id, where the upstream's list of tools is to be filtered and could not be read. */
+  const listNotRead = (clientId) => responseText(clientId, { error: { code: CODES.internal, message: LIST_NOT_READ } });
   const learnAnnotations = (m) => {
     const tools = m?.result?.tools;
     if (!Array.isArray(tools)) return;
@@ -690,6 +692,11 @@ export async function openHttpExecutor(config, more = {}) {
                   if (learn && m && read.kind === 'response') learnAnnotations(m);
                   const filtered = list && m ? filteredList(read.text, m, clientId, settings) : null;
                   if (filtered?.hidden) agent.log({ event: 'tools-hidden', hidden: filtered.hidden });
+                  // A list of tools that is to be filtered and cannot be read is not handed on: the agent is answered with an error under its id (X250). The upstream's own error goes on as it is.
+                  if (list && !filtered && !(m && Object.hasOwn(m, 'error'))) {
+                    agent.log({ event: 'tools-list-not-read' });
+                    return toAgent(sseEvent(event.others, listNotRead(clientId)));
+                  }
                   return toAgent(scrub(sseEvent(event.others, filtered ? filtered.text : (spliceId(event.data, clientId) ?? event.data))));
                 }
                 if (kind === 'call') agent.log({ event: 'upstream-other-id', id: typeof foundId === 'string' ? foundId.slice(0, 80) : foundId });
@@ -771,14 +778,23 @@ export async function openHttpExecutor(config, more = {}) {
           }
           // A request's answer: under the client's id, filtered where it lists tools.
           let out = text ?? bytes.toString('utf8');
+          let filtered = null;
           if (serverId !== undefined && foundId === serverId) {
             if (learn && m && read.kind === 'response') learnAnnotations(m);
-            const filtered = list && m && read.kind === 'response' ? filteredList(read.text, m, clientId, settings) : null;
+            filtered = list && m && read.kind === 'response' ? filteredList(read.text, m, clientId, settings) : null;
             if (filtered?.hidden) agent.log({ event: 'tools-hidden', hidden: filtered.hidden });
             out = filtered ? filtered.text : (spliceId(out, clientId) ?? out);
           }
+          // A list of tools that is to be filtered and cannot be read (or is under another id, or is no message) is not handed on: the agent is answered with an error under its id (X250). The upstream's own error goes on as it is, with its status: under the request's id; or, under any id or a null one, where it is an error answer and nothing more, which holds no result for any reader and so no list (X260).
+          let own = false;
+          if (list && !filtered && !(m && read.kind === 'response' && foundId === serverId && Object.hasOwn(m, 'error')) && !errorAnswer(text)) {
+            agent.log({ event: 'tools-list-not-read' });
+            out = listNotRead(clientId);
+            own = true;
+          }
           const body_ = Buffer.from(scrub(out));
-          res.writeHead(status, { ...returned, 'content-type': type || JSON_TYPE, 'content-length': body_.length });
+          // The executor's own error is JSON whatever the upstream sent, and is not to be stored: the upstream's content type and its word on caching were about the body that is not handed on (X260).
+          res.writeHead(status, own ? { ...returned, 'content-type': JSON_TYPE, 'cache-control': 'no-store', 'content-length': body_.length } : { ...returned, 'content-type': type || JSON_TYPE, 'content-length': body_.length });
           done(res.end(body_));
         });
       });

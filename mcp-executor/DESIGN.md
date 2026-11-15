@@ -569,11 +569,15 @@ into the record.
 - That a `when` reads a value of another kind: a `matches` is met only by
   text, so a path given as a list does not match and the rule does not
   apply (X77).
-- That a member is named as the program reads it: names in the content
-  are compared exactly, so a lone `SCAN` passes an `absent` or `orAbsent`
-  test on `/scan` (X77).
-- That content nested in content is read: `as: "json"` reads one layer,
-  so JSON text inside a JSON string is a string to the rule (X77).
+- That a member is named as the program reads it, beyond the way to the
+  pointers a rule reads: on that way a name in other capitals is refused
+  as unreadable (X249, from 0.4.2; before, a lone `SCAN` passed an
+  `absent` or `orAbsent` test on `/scan`, X77); elsewhere the rule does
+  not see it.
+- That content nested in content is read: `as: "json"` reads one layer.
+  JSON text where the rule's pointer walks on is refused as unreadable
+  (X249, from 0.4.2); JSON text in a member the rule does not walk
+  through is a string to the rule (X77).
 - Anything about a call to a tool the rule does not name, or a tool whose
   arguments are not plain data.
 - That the rules were right, or were applied. The record holds the
@@ -734,7 +738,9 @@ from the arguments, an object that names one member twice once folded
 (`total` and `TOTAL`; the long s and `s`; the Kelvin sign and `k`) gives
 no amount and the call is refused, as the gateway refuses such bodies.
 Why: a server written in a language whose JSON reader folds names could
-act on the other value. The other way: trust the exact names.
+act on the other value. The other way: trust the exact names. (From
+0.4.2 such arguments are refused in every call, before any rule is read:
+X241.)
 
 **X9. The executor refuses to start unless the permission fits it.** The
 slip's `agent.keys` must be the keys the executor holds for the agent; the
@@ -2496,3 +2502,286 @@ the agents' permissions, checked against `issuerKeys` as a start checks
 them. `issuerKeys` is in the settings the command already trusts, so it
 would be as strong; but the command would read and check every agent's
 permission where a file of two keys is plainer.
+
+**X241. A message is refused where a name in it differs only in capitals
+from one the executor reads (0.4.2).** The number is the one this choice
+has in the later design, so that one number names one choice. Three
+rules, in `readMessage` (`jsonrpc.mjs`), the same on stdio and over HTTP:
+
+- At its top level a message has the members `jsonrpc`, `id`, `method`,
+  `params`, `result` and `error`, written exactly so, and no other. A
+  message with any other member is refused. This holds for the agent's
+  messages and for the server's.
+- The agent's `params` hold, in one object at any depth (so in
+  `arguments` and in `_meta` too), no two names that are one once folded,
+  as X8 folds them: capitals, the long s and `s`, the Kelvin sign and `k`.
+- In the `params` of a `tools/call` the names `name`, `arguments` and
+  `_meta`, and in those of a `notifications/cancelled` the name
+  `requestId`, are written exactly: a name that is one of them once
+  folded, and is not written so, is refused (`Arguments` with no
+  `arguments`). In the `_meta` of a `tools/call` the same holds for
+  `red.prova/call-id` and `traceparent` (`handleCall` in `executor.mjs`).
+
+The agent is answered with the error -32600, as for a member name given
+twice, which the executor has refused from the start, and nothing is sent
+to the server. A message of the server's that the first rule refuses is
+treated as any line the executor cannot read: a call's receipt says the
+answer could not be read and names no result, and the line goes to the
+agent as it was. In a `tools/list` answer that the executor filters, a
+tool with a second name in other capitals is not shown, and a member that
+is `tools` once folded, and is not `tools`, is left out.
+
+Why: a review ran a tool that no rule names through a made-up server
+whose JSON reader takes member names without regard to capitals, the
+later one winning, as the standard JSON reader of the Go language does
+for the fields it knows. `{"method":"ping","Method":"tools/call", ...}`
+was a ping to the executor, passed on with no check and no receipt, and a
+tool call to that server. `{"name":"echo","Name":"order", ...}` was
+checked and receipted as `echo`, and run as `order`. Every version up to
+0.4.1 has this weakness where it stands in front of such a server. A
+server that reads names exactly, as the JSON readers of Node.js and
+Python do, is not affected. Servers built on the official Go SDK before
+1.3.1 ignore capitals (GHSA-wvj2-96wp-fq3f); other servers have not been
+checked.
+
+No denial is written for such a message: it has two readings, and a
+denial would name a tool and an amount that may not be the ones meant.
+X8's refusal of such arguments, and the content rules' own, stay in the
+code for a caller of `amountOf` and `testCall`; through the executor they
+are no longer reached, since the message is refused before any rule is
+read.
+
+What this does not cover. The folding is that of capitals and a little
+wider: besides the two letters above it makes one of the sharp s and
+`ss`, of the dotless i, the dotted capital I and `i`, and of the
+ligatures and their letters, so `Masse` and `Maße` in one object are
+refused too; it errs on the side of refusing, and the refusal says
+"differ only in capitals, or in letters that some readers take as the
+same". A reader that takes two names for one in another way (by leaving
+out `_` or `-`, or by a Unicode normal form) is not covered. Nothing is
+checked in the `result` or `error` of the agent's own answers to a
+server's requests, where the executor reads nothing. A lone name in the
+arguments in other capitals (`Total` where a rule reads `/total`) is not
+refused here: the amount is then not found and the call is refused (X8),
+and a rule on content refuses a call where such a name stands on the way
+to a pointer the rule reads (X249). The cost:
+arguments that rightly hold two names that differ only in capitals in one
+object (`path` and `PATH`) can no longer be sent.
+
+The other ways. Refuse only at the top level and one level deep in a
+tool call's `params`, the review's smallest fix: not taken, since a
+server that folds names folds them at every depth of the arguments it
+reads into its own types. Or fold names in the executor and read as such
+a server would: not taken, since the executor would then differ from the
+servers that read names exactly. `test/names.test.mjs` sends each such
+message on stdio and over HTTP, in front of a made-up server that reads
+names without regard to capitals, and reads that server's own record of
+what it ran.
+
+**X248. One message, one line, for a reader of UTF-8 (0.4.2).** The
+number is the one this choice has in the later design, as for X241. A
+message the executor writes to the tool server's standard input is first
+made one line (`oneLine` in `jsonrpc.mjs`, used by `toServer` in
+`executor.mjs`), and is still the same JSON: a line feed or a carriage
+return between its values, where alone JSON allows them outside a text,
+becomes a space; and U+0085, U+2028 and U+2029, which JSON allows only
+inside a text, are written as their JSON escapes. The agent's own text is
+changed in nothing else. This makes the message one line for a reader
+that takes the bytes as UTF-8 and ends a line at any of those. A reader
+that takes the bytes as another encoding may still cut a line inside a
+character beyond ASCII (one that reads Latin-1 and ends a line at the
+byte 0x85 does); such a cut falls inside a text, where quotation marks
+are escaped, so it can spoil a message and cannot hide a call. The other
+way, to write every character beyond ASCII as an escape, was not taken
+for 0.4.2: it would change the bytes of every message with such a
+character, for a reader that no server is known to be.
+
+Why: the executor ends a line at a line feed alone, as the specification
+frames stdio, and some readers end one at more. `node:readline` ends a
+line at a bare carriage return, U+2028 and U+2029; a text reader with
+universal newlines, which Python's `io.TextIOWrapper` gives unless told
+otherwise, as the official Python SDK's stdio server uses, and how Python
+opens its standard input on Windows, ends one at a bare carriage return.
+A message of the agent's with a whole
+`tools/call` between two carriage returns, inside a list in the `params`
+of a `ping`, was one `ping` to the executor, passed on with no check, and
+three lines to such a server, the second a call that the executor never
+saw: it ran with no receipt and no denial, and its answer came back to
+the agent (run, in front of a made-up server reading each way). A text
+argument with U+2028 in it reached a server that reads with
+`node:readline` as two lines: no call was hidden, since the quotation
+marks of a text within a text are escaped, but the call was not answered
+and was recorded as "outcome not known". Every version from 0.1.0 to
+0.4.1 wrote the agent's text to the server as it came. A server that ends
+a line at a line feed alone is not affected. Servers built on the
+official Python SDK read standard input through `io.TextIOWrapper`, so
+they end a line at a bare carriage return; other servers have not been
+checked. U+0085 is escaped as well because some line readers end a line
+there.
+
+Over HTTP the executor sends the upstream a body, not lines, and nothing
+changes. The demonstration's made-up server (`demo/server.mjs`) still
+reads with `node:readline`; behind the executor it is now sent one line
+for each message.
+
+The other way: refuse a message with a carriage return between its
+values. Not taken: it is valid JSON, and the same message on one line is
+plainer than a refusal. `test/lines.test.mjs` sends such messages in
+front of the made-up server reading each of the two ways, and reads its
+own record of what it read.
+
+**X249. A rule on content does not take for absent what it cannot read
+exactly (0.4.2).** The number follows X248, so that it names the same
+choice in the later design. Where a rule reads a pointer, in a `when` or
+a `test`, two things on the way to it are now `content-unreadable`, and
+the call is refused with a denial (`unreadableAt` and `holds` in
+`rules.mjs`):
+
+- An object on the way holds a member that is the pointer's name once
+  folded (as X241 folds) and is not written as the rule reads it: `Path`
+  where the rule reads `/path`, `SCAN` in the content where it reads
+  `/scan`.
+- The way stops, with names still to follow, at a value that is neither
+  an object nor a list: a text, a number, true, false or null.
+
+Why: an independent review of 0.4.2 ran the README's own example rules
+in front of the made-up server that ignores capitals. `write_file` with
+`Path` in place of `path` was let through and receipted as an allowed
+change, since the rule's `when` found no `path` and the rule did not
+apply, and the server wrote the file with the scan on; an `edit_file`
+under `Path`, and a lone `SCAN` inside the content, passed too. Every
+version with rules on content, from 0.2.0 to 0.4.1, does the same. X241
+could not catch it: the message has one reading of its tool and one
+spelling of each name, and only a rule knows which names matter. The
+second came from the same review: a rule that tests `/debug` in `options`
+refused `{"options":{"debug":true}}` and let through the same object
+given as a text that holds JSON, which a server may read as the object
+(as the reviewer recalls of one SDK; not run).
+
+A denial is written here, unlike X241: the tool and the rule are known,
+and only the content could not be read. What stays as it was: a member
+that is simply not there is absent, and `orAbsent` and `absent` hold for
+it; a list that is asked for a member by name has none; and a rule sees
+a name in other capitals only on the way to a pointer it reads. The cost:
+a call whose arguments rightly hold a name that differs only in capitals
+from one a rule reads, in the object the rule reads it from, is refused.
+
+The other way: fold names in the rule's own reading, so that `/path`
+finds `Path`. Not taken: a server that reads names exactly would then
+act on what the rule did not test. `test/content-rules.test.mjs` runs
+both, the first in front of the made-up server that ignores capitals.
+
+**X250. Reading a message never ends the executor, and a refusal names
+its request where it can (0.4.2).** The check of X241 for two names that
+are one once folded walks the message's text as it came
+(`foldedInParams` in `jsonrpc.mjs`), as `repeatedName` does, and calls
+nothing that calls itself. `readMessage` also catches whatever its
+reading throws and refuses the line; no line is known to reach that. The
+refusals for a member name given twice, and for a whole number beyond
+2^53 - 1, are answered under the request's id where the text has one
+top-level `id` that is text or a whole number every reader holds exactly
+(`topLevelId`); before, under no id.
+
+A message nested more than 256 levels deep, objects and lists together
+and the message itself the first, is not read at all (`MAX_DEPTH` and
+`deeperThan` in `jsonrpc.mjs`, which walks the text and calls nothing
+that calls itself). The agent's is refused with -32600 under its id, and
+nothing is sent to the server. The server's is a line the executor
+cannot read, as X241 treats a member it does not know: where it answers
+a call, the receipt says the answer could not be read and names no
+result, and the line goes to the agent as it was; where it answers
+another request, it is handed on as it was; a notification or a request
+of the server's is handed on as it was.
+
+One answer is not handed on: the server's answer to a `tools/list` that
+the executor is to filter (`hideUnlisted`) and cannot read, whether it
+is nested too deeply, names a member twice, holds no `tools` list in its
+result or, over HTTP, comes under another id or is no message. Handed on
+as it was, it would show the agent the tools the executor is to hide. The
+agent's request is answered with the error -32603 under its id, with the
+words of `LIST_NOT_READ`, and the log says `tools-list-not-read`
+(`executor.mjs` on stdio; `http.mjs` for a JSON body and for an event).
+The server's own error to `tools/list` goes on as it is (over HTTP, as
+X260 has it). Before, in
+every version, such a list was handed on unfiltered. What stays: a line
+of the server's that the executor cannot match to any request (an id
+given twice, no id or a null one, a list of messages, a byte order mark
+before the message), and an event with no id, under another id or
+holding a list of messages, are handed on as they were, and may hold
+anything the server chooses to write: a list of tools too, with the
+request not answered.
+`test/list.test.mjs` runs each on stdio and over HTTP.
+
+Why: the same review found that the first build of 0.4.2, never
+released, wrote the `params` out afresh to look for such names, which
+calls itself once for each level of nesting: one line of 10 KB, 5,000
+levels deep, overflowed the stack where the lines are read and ended the
+executor on stdio (over HTTP it answered 500 and went on). The walk
+closed that one place, and others were left, on both sides: an agent's
+cancellation of a call in flight is written afresh for the server; a
+server's error is written out for the receipt, and its list of tools is
+written afresh once filtered. Each calls itself in the same way: one
+deep answer of the server's ended the executor (run), and so did the
+agent's deep cancellation of a call in flight (run in the review's
+re-check: 0.4.1 ends at `executor.mjs:1214`). A limit where the message
+is read closes them together, and whatever is written later. 256 is the
+builder's number: it is far below the depth at which any of these
+overflows (some thousands), and above what the library fingerprints: the
+fingerprint of a call's arguments, and of its result, takes 64 levels.
+Between the two, as before, a call whose arguments nest too deeply is
+answered with error 1001 and not sent, and a result that nests too
+deeply is receipted as a result that could not be fingerprinted. The
+receipt's text for an answer that could not be read names three reasons
+(not JSON, a name given twice, not a response) and not this one; the
+text is left as it is, since its fingerprint is what receipts name. And
+a client on stdio that is answered under no id cannot match the answer
+to its request, and waits out its own timeout.
+
+The other way: catch the error at each place that writes a value out.
+Not taken: each new place would need its own, and the stack's depth
+where one is reached is not the same from one run to the next.
+`test/deep.test.mjs` sends 200,000 levels each way on stdio and over
+HTTP: the agent's requests, a call and a cancellation, and the server's
+result, error, list of tools and notification.
+
+**X260. Over HTTP, the upstream's own error answer to `tools/list` goes
+on as it is, and the executor's own error in its place is sent as JSON
+(0.4.2).** The number is out of order: X251 to X253 name other choices
+in the later design. X250 answers for a list the executor is to filter
+and cannot read, and let one answer through: the upstream's error under
+the request's id. Two things follow from the review's re-check.
+
+An upstream may refuse a request it could not read, or a session it does
+not know, with a 4xx and a JSON-RPC error under a null id. As X250 was
+first built, the agent was given -32603 in place of the upstream's
+words. Now a JSON body that is an error answer and nothing more is
+handed on as it was, with its status and content type, under whatever
+id it has (`errorAnswer` in `jsonrpc.mjs`): one object whose members are
+`jsonrpc` (`"2.0"`), `id` (text, a whole number or null) and `error` (an
+object with a whole number `code` and a text `message`), each once and
+written exactly so, nested no deeper than 256 levels, with no member
+name given twice at any depth. Such a body has no `result`, under any
+spelling, for any reader, so it holds no list of tools as a client
+reads one. What its `message` and `data` say is the upstream's to
+choose, as in its error under the request's id. Everything else is
+answered as X250 has it: a result beside the error, a member the
+executor does not know, a list of messages, a byte order mark, an error
+that is not such an object.
+
+Where the executor writes its own error in place of the upstream's
+answer, the body is the executor's, so it is sent as
+`application/json; charset=utf-8` with its own length and
+`cache-control: no-store`, as the executor's other refusals are, and
+not under the upstream's content type (`text/html` for a page) or its
+word on caching. The status stays the upstream's, so that a client that
+acts on the status is not misled. The upstream's `content-length` and
+`content-encoding` were never handed on: of the upstream's headers only
+the content type, the session, the protocol version and the word on
+caching come back.
+
+The other way for the first: hand on every error under a null id as the
+text came. Not taken: a body with a `result` beside the error, or with
+`Result`, is a list to some reader. The other way for the second: keep
+the upstream's word on caching. Not taken: it was said of a body the
+agent is not given. `test/list.test.mjs` runs both, and fourteen bodies
+that are not such an error answer.

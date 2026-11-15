@@ -30,7 +30,7 @@ import { basename, delimiter, dirname, isAbsolute, resolve } from 'node:path';
 import { argumentsFingerprint, checkBook, countersign, denialCodes, entryLine, fingerprint, fromBase64url, identifierFingerprint, openRecorder, randomId, thumbprint } from 'provared';
 import { loadCopyKey, openCopy, readCopy, unfinished } from './copy.mjs';
 import { aboutSlip, bookFile, loadKeyFile, readIfThere, slipFrom, untilFree } from './files.mjs';
-import { CODES, MAX_LINE_BYTES, idKey, isId, notificationLine, readLines, readMessage, repeatedName, responseLine, responseText, spliceId, topLevelId, unsafeInteger } from './jsonrpc.mjs';
+import { CODES, MAX_LINE_BYTES, foldName, idKey, isId, misspelt, notificationLine, oneLine, readLines, readMessage, repeatedName, responseLine, responseText, spliceId, topLevelId, unsafeInteger } from './jsonrpc.mjs';
 import { LOCK_WAIT_MS, lockFiles } from './lock.mjs';
 import { RULES_DOCUMENT, RULE_DOCUMENT, RULES_ENTRY_PREFIX, TOOL_NAME, lookUp, readPointer, readRules, rulesFingerprint, statesContentRules, testCall } from './rules.mjs';
 import { RECORDER_NAME } from './sealer-client.mjs';
@@ -54,6 +54,8 @@ export const OUTCOME_UNKNOWN = `${EXECUTOR_STOPPED} The receipt was written when
 export const RESULT_NOT_FINGERPRINTED = 'The tool server answered, and its result could not be written in the one form of RFC 8785 (text that is not well-formed Unicode, a number JSON cannot write, or a whole number beyond 9,007,199,254,740,991), so the receipt names no result.';
 /** The error text a receipt names where the server's answer could not be read as a message; the answer went to the client as it was. */
 export const UNREADABLE_ANSWER = 'The tool server answered with a line the executor could not read as a message (not JSON, a member name given twice, or not a response), so the receipt names no result. The line was handed to the agent as it was.';
+/** What the agent is told where the server's answer to tools/list is to be filtered and could not be read. */
+export const LIST_NOT_READ = 'The tool server\'s list of tools could not be read by the executor, which is to leave out of it the tools that have no rule. So the list was not handed on.';
 /** The document a receipt written at a restart names, and the text its fingerprint is of. */
 export const WRITTEN_LATE_DOCUMENT = 'executor.written-late';
 export const WRITTEN_LATE = 'This receipt was written when the executor next started, from its own copy of what it had sent: the executor stopped before the receipt could be written. Its date is the time the call was sent; the countersignature is dated at the restart.';
@@ -1455,8 +1457,10 @@ export function filteredList(text, m, clientId, settings) {
   } catch {
     exact = m;
   }
-  const shown = exact.result.tools.filter((t) => isObject(t) && typeof t.name === 'string' && settings.tools.has(t.name));
-  return { text: JSON.stringify({ ...exact, id: clientId, result: { ...exact.result, tools: shown } }), hidden: exact.result.tools.length - shown.length };
+  // A tool with a second name in other capitals ("Name") is not shown, and a second list ("Tools") is left out: a client that ignores capitals would read those, and not what was filtered here (X241).
+  const shown = exact.result.tools.filter((t) => isObject(t) && typeof t.name === 'string' && settings.tools.has(t.name) && misspelt(t, ['name']) === null);
+  const rest = Object.fromEntries(Object.entries(exact.result).filter(([name]) => name === 'tools' || foldName(name) !== 'tools'));
+  return { text: JSON.stringify({ ...exact, id: clientId, result: { ...rest, tools: shown } }), hidden: exact.result.tools.length - shown.length };
 }
 
 /**
@@ -1496,6 +1500,8 @@ export function callCore({ settings, content, executorKeys, now }) {
     if (typeof name !== 'string' || !TOOL_NAME.test(name)) return answerError(CODES.invalidParams, 'The tool name must be 1 to 128 letters, digits, underscores, hyphens or full stops.');
     if (Object.hasOwn(params, 'arguments') && !isObject(params.arguments)) return answerError(CODES.invalidParams, 'The arguments must be an object.');
     if (Object.hasOwn(params, '_meta') && !isObject(params._meta)) return answerError(CODES.invalidParams, 'The _meta member must be an object.');
+    // The two names the executor reads or writes in _meta, written exactly: a server that ignores capitals would take another spelling for the executor's own (X241).
+    if (isObject(params._meta) && misspelt(params._meta, [CALL_META, 'traceparent']) !== null) return answerError(CODES.invalidRequest, `The _meta member holds a name that differs only in capitals from one the executor reads or writes (${CALL_META}, traceparent), which two readers may read differently.`);
     const serverId = link.newServerId();
     const call = { id, serverId, state: 'queued', cancelled: false, settle: null, timer: null };
     const callId = randomId();
@@ -1788,10 +1794,11 @@ export async function openExecutor(config, more = {}) {
         outputOpen = false;
       }
     };
+    // Each message goes to the server as one line, for a reader of UTF-8 that ends a line at a line feed, a carriage return, U+0085, U+2028 or U+2029 (oneLine; X248): "buffer" is the message's text and its line feed.
     const toServer = (buffer) => {
       if (serverGone) return false;
       try {
-        child.stdin.write(buffer);
+        child.stdin.write(`${oneLine(buffer.toString('utf8').slice(0, -1))}\n`);
         return true;
       } catch {
         return false;
@@ -1936,6 +1943,12 @@ export async function openExecutor(config, more = {}) {
     // --- from the server ---
     /** The entry for a server id, or undefined. */
     const entryFor = (id) => (typeof id === 'string' ? mapped.get(id) : undefined);
+    /** The answer to a tools/list that is to be filtered could not be read: the agent is answered with an error under its id, and is not handed the list (X250). */
+    const listNotRead = (serverId, entry) => {
+      forget(serverId);
+      log({ event: 'tools-list-not-read' });
+      answerError(entry.id, CODES.internal, LIST_NOT_READ);
+    };
     readLines(child.stdout, {
       onLine: (line) => {
         const read = readMessage(line, { strictNumbers: false });
@@ -1954,6 +1967,8 @@ export async function openExecutor(config, more = {}) {
           const entry = found ? entryFor(found.value) : undefined;
           log({ event: 'server-line-not-read', code: read.refused.code, ...(entry ? { matched: entry.kind } : {}) });
           if (entry?.kind === 'call' && entry.call.state === 'sent' && entry.call.settle) return entry.call.settle({ kind: 'unreadable', text, errorText: UNREADABLE_ANSWER });
+          // A list of tools that is to be filtered and cannot be read is not handed on: it would show the agent the tools the executor is to hide.
+          if (entry?.kind === 'list') return listNotRead(found.value, entry);
           if (entry && entry.kind !== 'call') {
             forget(found.value);
             return toClient(forClient(text, entry.id));
@@ -1985,6 +2000,8 @@ export async function openExecutor(config, more = {}) {
               if (filtered.hidden) log({ event: 'tools-hidden', hidden: filtered.hidden });
               return toClient(Buffer.from(`${filtered.text}\n`));
             }
+            // A result that is not a list of tools as the executor reads one (no "tools", or not a list). The server's own error goes on as it is.
+            if (Object.hasOwn(m, 'result')) return listNotRead(m.id, entry);
           }
           if (entry) {
             forget(m.id);
