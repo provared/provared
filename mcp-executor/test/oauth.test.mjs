@@ -33,7 +33,9 @@ test('the whole flow: discovery, the owner\'s page, the code, the tokens, a tool
     const p = pkce();
     const page = await ask(w, authorizeUrl(w, d, { pkce: p, scope: 'tools' }));
     assert.equal(page.status, 200);
-    assert.match(page.body, /The test client/);
+    // The client is named by the host of its document's address, which the settings list, and not by the name the document gives itself.
+    assert.ok(page.body.includes(`<h1>Approve ${new URL(w.docs.client).host} connecting to your guard</h1>`), page.body);
+    assert.doesNotMatch(page.body, /The test client/);
     assert.match(page.headers['content-security-policy'], /default-src 'none'.*form-action 'self' https:\/\/client\.example.*frame-ancestors 'none'/);
     assert.equal(page.headers['x-frame-options'], 'DENY');
     assert.doesNotMatch(page.body, /<script/i, 'nothing on the page runs');

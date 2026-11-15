@@ -1,13 +1,14 @@
 // The owner's check by the owner's passkey (DESIGN.md, section 14.1,
-// X217 onward), through the executor's public interface: its addresses, the
+// X270 onward), through the executor's public interface: its addresses, the
 // command "owner", and openHttpExecutor with no check given, as the command
 // "http" opens it.
 //
 // The browser's half runs here too: the steps the page runs
-// (owner-steps.mjs), with the packages' own functions. Only the passkey is
-// made up: a stand-in gives a fixed PRF output, as the passkey ceremony
-// itself needs a real browser and authenticator (the recipe's README says
-// how to try that by hand). Nothing leaves this computer.
+// (owner-steps.mjs) and, as the executor serves it, the page's script
+// itself (owner-page.mjs), with the library's own browser functions, on a
+// stand-in page. Only the passkey is made up: a software passkey that
+// builds what a real one returns (owner-world.mjs). Nothing leaves this
+// computer.
 
 import './local-library.mjs'; // first: "provared" is this repository's own library
 import assert from 'node:assert/strict';
@@ -17,99 +18,41 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { createCryptoCore } from '@microtoll/crypto-core';
-import * as id from '@microtoll/identity';
 
 const { call } = await import('./http-world.mjs');
-const { readHttpSettings } = await import('../http.mjs');
-const { makeOwnerSetup } = await import('../oauth.mjs');
-const { CHALLENGE_LIFE, SETUP_LIFE, cryptoCore } = await import('../owner.mjs');
-const { NAMESPACE, FIELD_CHALLENGE, FIELD_SIGNATURE, SETUP_PATH, PASSKEY_PATH, CHALLENGE_PATH, setUp, signIn } = await import('../owner-steps.mjs');
-const { oauthWorld, reopen, send, json, pkce, authorizeUrl, discover, ask, answer, connect, bearer, CALLBACK } = await import('./oauth-world.mjs');
+const { REQUEST_LIFE, makeOwnerSetup, readIssuer } = await import('../oauth.mjs');
+const { CHALLENGE_LIFE, RECOVERY_BYTES, SETUP_LIFE } = await import('../owner.mjs');
+const { FIELD_CHALLENGE, FIELD_AUTHENTICATOR_DATA, FIELD_CLIENT_DATA, FIELD_SIGNATURE, FIELD_RECOVERY, SETUP_PATH, CHALLENGE_PATH, LINK_PATH, STORE_CODE, STORE_WAITING, setUp } = await import('../owner-steps.mjs');
+const { reopen, send, pkce, authorizeUrl, discover, ask, answer, connect, token, json, bearer, CALLBACK } = await import('./oauth-world.mjs');
+const { ownerWorld, softPasskey, setUpOwner, prove, sender, refusal, waiting, state, pageScript, runPage, softCredentials, softStorage } = await import('./owner-world.mjs');
 
 const BIN = fileURLToPath(new URL('../bin.mjs', import.meta.url));
-const cc = createCryptoCore({ namespace: NAMESPACE });
-
-/** A stand-in for the owner's passkey: it makes one credential and gives the same made-up PRF output for it each time. */
-function fakePasskey() {
-  const credentialId = new Uint8Array(randomBytes(16));
-  const prfOutput32 = new Uint8Array(randomBytes(32));
-  const p = {
-    prfOutput32,
-    /** How many passkeys were made. */
-    made: 0,
-    create: async () => {
-      p.made += 1;
-      return { credentialId, prfSalt: new Uint8Array(randomBytes(32)), prfOutput32, transports: ['internal'] };
-    },
-    evaluate: async (cid, salt, transports) => {
-      assert.deepEqual(cid, credentialId, 'the page asks the passkey the executor keeps');
-      assert.deepEqual(transports, ['internal'], 'and tells the browser where it is kept');
-      return { prfOutput32 };
-    },
-  };
-  return p;
+/** A recovery code as it is shown: 32 characters of base32, in eight groups of four. */
+const RECOVERY_SHOWN = /^([A-Z2-7]{4}-){7}[A-Z2-7]{4}$/;
+const FOUR = [FIELD_CHALLENGE, FIELD_AUTHENTICATOR_DATA, FIELD_CLIENT_DATA, FIELD_SIGNATURE];
+/** The check's four fields of an answer, without the request that came with them. */
+const fourOf = (fields) => Object.fromEntries(FOUR.map((name) => [name, fields[name]]));
+/** The fields a page's form would send: its hidden fields as the script left them. */
+const formFields = (page) => Object.fromEntries(Object.entries(page.form.elements).filter(([name]) => name !== 'request').map(([name, e]) => [name, e.value]));
+/** From an approval's 303 to a tool call: the code is traded for a token, and the token calls a tool. */
+async function callsATool(w, a, p) {
+  assert.equal(a.status, 303, a.body);
+  assert.ok(a.params.code, 'the browser goes back to the client with a code');
+  const got = await token(w, { grant_type: 'authorization_code', code: a.params.code, client_id: w.docs.client, code_verifier: p.verifier });
+  assert.equal(got.status, 200, got.body);
+  assert.equal((await call(w, bearer(json(got).access_token), 'echo', {})).status, 200);
 }
-/** A device with no PRF: every use of the passkey fails. */
-const noPasskey = { create: async () => { throw new Error('no PRF'); }, evaluate: async () => { throw new Error('no PRF'); } };
-
-/** The way the page reaches the executor: POST JSON, with the page's Origin. Throws {status, code} where the answer is not 200. */
-const sender = (w, origin = w.issuer) => async (path, value) => {
-  const r = await send('POST', `${w.issuer}${path}`, { headers: { 'content-type': 'application/json', ...(origin ? { origin } : {}) }, body: typeof value === 'string' ? value : JSON.stringify(value) });
-  const v = json(r);
-  if (r.status !== 200) throw Object.assign(new Error(v.message), { status: r.status, code: v.error });
-  return v;
-};
-/** The error a promise fails with: {status, code}. */
-const refusal = async (p) => {
-  try {
-    await p;
-  } catch (e) {
-    return { status: e.status, code: e.code };
-  }
-  assert.fail('it was not refused');
-};
-
-/** A world whose executor has the check by passkey, as the command "http" opens it, and a setup link made by "owner" before the start. */
-async function ownerWorld() {
-  const w = await oauthWorld({ open: false });
-  delete w.more.ownerCheck;
-  w.parsed = readHttpSettings(w.settings, w.folder).settings;
-  w.made = makeOwnerSetup(w.parsed, { now: w.more.now });
-  w.code = new URL(w.made.link).hash.slice(1);
-  await reopen(w);
-  return w;
+/** A test's page runs: the globals a page has are put back, and the world closed, when the test ends. */
+function pages(t, w) {
+  const undo = [];
+  t.after(async () => {
+    for (const f of undo.reverse()) f();
+    await w.close();
+  });
+  return (f) => undo.push(f);
 }
-/** Set up the owner through the steps the page runs: {passkey, recoveryCode}. */
-async function setUpOwner(w) {
-  const passkey = fakePasskey();
-  const { recoveryCode } = await setUp({ cc, id, passkey, code: w.code, send: sender(w) });
-  return { passkey, recoveryCode };
-}
-/** A page waiting for the owner's answer: its request id. */
-async function waiting(w) {
-  const d = await discover(w);
-  const page = await ask(w, authorizeUrl(w, d, { pkce: pkce() }));
-  assert.equal(page.status, 200, page.body);
-  return page.request;
-}
-const state = (w) => JSON.parse(readFileSync(w.statePath, 'utf8'));
 
-test('the namespace is "provared-mcp-executor", in the executor and in the page, and a signature under another namespace is refused', async () => {
-  assert.equal(NAMESPACE, 'provared-mcp-executor');
-  assert.equal(cryptoCore().profile.namespace, 'provared-mcp-executor');
-  const page = readFileSync(new URL('../owner-page.mjs', import.meta.url), 'utf8');
-  assert.match(page, /createCryptoCore\(\{ namespace: NAMESPACE \}\)/);
-  assert.match(page, /from '\.\/steps\.js'/);
-  const identity = await id.createIdentity(cc);
-  const nonce = new Uint8Array(randomBytes(32));
-  const origin = 'https://guard.example.com';
-  const sign = async (core) => cc.signBytes(identity.routing.privateKey, await id.authMessage(core, origin, nonce));
-  assert.equal(await id.verifyAuthSignature(cryptoCore(), identity.routing.publicKeyRaw, origin, nonce, await sign(cc)), true);
-  assert.equal(await id.verifyAuthSignature(cryptoCore(), identity.routing.publicKeyRaw, origin, nonce, await sign(createCryptoCore({ namespace: 'another-namespace' }))), false);
-});
-
-test('setup, then a full sign-in with the passkey: the pages run only the executor\'s own scripts; the executor keeps ciphertext only; the connection calls a tool', async () => {
+test('setup, then an approval with the passkey: the pages run only the executor\'s own scripts; the executor keeps the public key and a hash; the connection calls a tool', async () => {
   const w = await ownerWorld();
   try {
     assert.match(w.made.link, new RegExp(`^${w.issuer}/oauth/owner#[A-Za-z0-9_-]{43}$`));
@@ -121,107 +64,353 @@ test('setup, then a full sign-in with the passkey: the pages run only the execut
     assert.equal(setupPage.headers['content-security-policy'], "default-src 'none'; script-src 'self'; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'");
     assert.match(setupPage.body, /<script type="module" src="\/oauth\/owner\/page\.js"><\/script>/);
     assert.doesNotMatch(setupPage.body, /<script(?![^>]*\ssrc=)/, 'no inline script');
-    for (const path of ['page.js', 'steps.js', 'lib/identity/index.js', 'lib/identity/handshake.js', 'lib/crypto-core/index.js', 'lib/crypto-core/primitives.js']) {
+    for (const path of ['page.js', 'steps.js', 'lib/provared/passkey-browser.js', 'lib/provared/encoding.js']) {
       const f = await send('GET', `${w.issuer}/oauth/owner/${path}`);
       assert.equal(f.status, 200, path);
       assert.equal(f.headers['content-type'], 'text/javascript; charset=utf-8');
     }
-    assert.equal((await send('GET', `${w.issuer}/oauth/owner/lib/identity/..%2Fpackage.json`)).status, 404);
-    assert.equal((await send('GET', `${w.issuer}/oauth/owner/lib/identity/../../package.json`)).status, 404);
+    // The page's passkey functions are the library's own file, byte for byte.
+    assert.equal((await send('GET', `${w.issuer}/oauth/owner/lib/provared/passkey-browser.js`)).body, readFileSync(new URL('../../src/passkey-browser.js', import.meta.url), 'utf8'));
+    for (const path of ['lib/provared/..%2Fpackage.json', 'lib/provared/../../package.json', 'lib/provared/index.d.ts', 'lib/identity/index.js', 'lib/crypto-core/index.js']) assert.equal((await send('GET', `${w.issuer}/oauth/owner/${path}`)).status, 404, path);
 
     const { passkey, recoveryCode } = await setUpOwner(w);
-    assert.match(recoveryCode, /\S/);
+    assert.match(recoveryCode, RECOVERY_SHOWN);
+    assert.equal(RECOVERY_BYTES * 8 >= 128, true, 'at least 128 random bits');
+    assert.equal(passkey.made, 1);
     const kept = state(w);
     assert.equal(kept.setup, null, 'the link is spent');
-    assert.deepEqual(Object.keys(kept.owner).sort(), ['created', 'passkey', 'recovery', 'routingPublicKey']);
+    assert.deepEqual(Object.keys(kept.owner).sort(), ['created', 'credentialId', 'key', 'recoveryHash']);
+    assert.deepEqual(kept.owner.key, passkey.key, 'the passkey\'s public key, as a JWK');
+    assert.equal(kept.owner.credentialId, passkey.credentialId);
     const text = readFileSync(w.statePath, 'utf8');
-    assert.equal(text.includes(Buffer.from(passkey.prfOutput32).toString('base64url')), false, 'no PRF output in the file');
-    assert.equal(text.includes(recoveryCode), false, 'no recovery code in the file');
+    assert.equal(text.includes(recoveryCode) || text.includes(recoveryCode.replaceAll('-', '')), false, 'no recovery code in the file');
 
-    // The authorisation page: the check's fields and its script, under the policy.
+    // The authorisation page: who asks, by its host; the warning; the check's fields and its script, under the policy.
     const d = await discover(w);
     const page = await ask(w, authorizeUrl(w, d, { pkce: pkce() }));
     assert.match(page.headers['content-security-policy'], /^default-src 'none'; script-src 'self'; connect-src 'self'; form-action 'self' https:\/\/client\.example; frame-ancestors 'none'; base-uri 'none'$/);
+    const host = new URL(w.docs.client).host;
+    assert.ok(page.body.includes(`<h1>Approve ${host} connecting to your guard</h1>`), 'the client is named by its host');
+    assert.match(page.body, /Approve only a connection you began yourself, just now\./);
     assert.match(page.body, new RegExp(`name="${FIELD_CHALLENGE}"`));
+    assert.doesNotMatch(page.body, /id="owner-first"/);
     assert.doesNotMatch(page.body, /<script(?![^>]*\ssrc=)/, 'no inline script');
 
-    const prove = (request) => signIn({ cc, id, passkey, request, origin: w.issuer, send: sender(w) });
-    const { access } = await connect(w, { prove });
+    const { access } = await connect(w, { prove: prove(w, passkey) });
     assert.equal((await call(w, bearer(access), 'echo', { a: 1 })).status, 200);
-    assert.ok(w.logs.some((e) => e.event === 'owner-set'));
+    assert.equal(passkey.signed, 1, 'one prompt for the approval');
+    assert.ok(w.logs.some((e) => e.event === 'owner-set' && e.approves === false));
     assert.ok(w.logs.some((e) => e.event === 'oauth-approved' && e.agent === 'conn'));
   } finally {
     await w.close();
   }
 });
 
-test('a sign-in with the recovery code, on a device with no PRF; another recovery code is refused', async () => {
+for (const alg of ['RS256', 'Ed25519']) {
+  test(`a passkey that signs with ${alg} is the owner's as one with ES256 is, and another key of its kind is refused`, async () => {
+    const w = await ownerWorld();
+    try {
+      const { passkey } = await setUpOwner(w, alg);
+      assert.equal(state(w).owner.key.alg, alg);
+      const stranger = await softPasskey(w, alg);
+      stranger.credentialId = passkey.credentialId;
+      const request = await waiting(w);
+      assert.equal((await answer(w, request, { fields: await prove(w, stranger)(request) })).status, 403);
+      const { access } = await connect(w, { prove: prove(w, passkey) });
+      assert.equal((await call(w, bearer(access), 'echo', {})).status, 200);
+    } finally {
+      await w.close();
+    }
+  });
+}
+
+test('one prompt the first time, the setup link first: the setup message that makes the owner approves the one request sent with it, once, and only while that request waits', async () => {
   const w = await ownerWorld();
   try {
-    const { recoveryCode } = await setUpOwner(w);
-    const { access } = await connect(w, { prove: (request) => signIn({ cc, id, passkey: noPasskey, recoveryCode, request, origin: w.issuer, send: sender(w) }) });
-    assert.equal((await call(w, bearer(access), 'echo', {})).status, 200);
-    const other = await id.wrapRootKeyWithNewRecoveryCode(cc, (await id.createIdentity(cc)).rootKey);
-    const request = await waiting(w);
-    assert.deepEqual(await refusal(signIn({ cc, id, passkey: noPasskey, recoveryCode: other.displayString, request, origin: w.issuer, send: sender(w) })), { status: 404, code: 'not-found' });
+    const d = await discover(w);
+    const p = pkce();
+    const page = await ask(w, authorizeUrl(w, d, { pkce: p }));
+    // With no owner the page says so, shows the approval and its warning all the same, and has no box for a recovery code.
+    assert.match(page.body, /<p id="owner-first">This executor has no owner yet/);
+    assert.match(page.body, /Approve only a connection you began yourself, just now\./);
+    assert.doesNotMatch(page.body, /owner-recovery-code/);
+    // Nothing is approved for the asking: no owner, no code.
+    assert.equal((await answer(w, page.request, { fields: {} })).status, 403);
+    assert.deepEqual(await refusal(sender(w)(SETUP_PATH, { code: randomBytes(32).toString('base64url'), credentialId: 'AAAA', key: (await softPasskey(w)).key, request: page.request })), { status: 403, code: 'setup-refused' });
+    assert.equal(state(w).owner, null);
+
+    const passkey = await softPasskey(w);
+    const done = await setUp({ passkey, code: w.code, request: page.request, send: sender(w) });
+    assert.equal(done.owner, 'set');
+    assert.match(done.recoveryCode, RECOVERY_SHOWN);
+    assert.equal(typeof done.request, 'string');
+    assert.equal(state(w).setup, null, 'the code is spent');
+    assert.ok(w.logs.some((e) => e.event === 'owner-set' && e.approves === true));
+    // The request the page had is not approved: only the one the setup gave back, under the executor's seal.
+    assert.equal((await answer(w, page.request, { fields: {} })).status, 403);
+    // The approval is the owner's to send, or not: nothing has gone to the client yet.
+    assert.equal(w.logs.some((e) => e.event === 'oauth-approved'), false);
+    await callsATool(w, await answer(w, done.request, { fields: {} }), p);
+    assert.deepEqual([passkey.made, passkey.signed], [1, 0], 'one prompt: the passkey was made, and never asked to sign');
+    // Approved once: the same form again gets no second code.
+    const again = await answer(w, done.request, { fields: {} });
+    assert.equal(again.status, 400, again.body);
+    assert.equal(again.headers.location, undefined);
+    // The code is spent: it sets up no second owner, and approves no second request.
+    const other = await softPasskey(w);
+    assert.deepEqual(await refusal(setUp({ passkey: other, code: w.code, request: await waiting(w), send: sender(w) })), { status: 409, code: 'owner-exists' });
+    assert.equal(other.made, 0);
+    // Every later approval asks the passkey.
+    await connect(w, { prove: prove(w, passkey) });
+    assert.equal(passkey.signed, 1);
   } finally {
     await w.close();
   }
+  // A request that has ended (10 minutes; the link lasts 15) is not approved; the owner is set up all the same, since by then the passkey has been made.
+  const late = await ownerWorld();
+  try {
+    const request = await waiting(late);
+    late.clock.offset += REQUEST_LIFE;
+    const done = await setUp({ passkey: await softPasskey(late), code: late.code, request, send: sender(late) });
+    assert.equal(done.request, null);
+    assert.ok(state(late).owner);
+    assert.ok(late.logs.some((e) => e.event === 'owner-set' && e.approves === false));
+    assert.equal((await answer(late, request, { fields: {} })).status, 400, 'the request has ended');
+  } finally {
+    await late.close();
+  }
 });
 
-test('refused at the authorisation page: a signature over another origin, by another key, or with a challenge used twice, expired, for another request or never given', async () => {
+test('one prompt the first time, by the page\'s script as served, the setup link opened first: Approve makes the passkey, shows the recovery code, and the form goes only when the owner continues', async (t) => {
+  const w = await ownerWorld();
+  const after = pages(t, w);
+  const script = await pageScript(w);
+  const credentials = softCredentials(w);
+  const storage = softStorage();
+  const host = new URL(w.issuer).host;
+  // The setup link, opened and left: its code is kept for the authorisation page, and no passkey is made.
+  const setupHtml = (await send('GET', `${w.issuer}/oauth/owner`)).body;
+  const setup = await runPage(w, script, { html: setupHtml, hash: `#${w.code}`, path: '/oauth/owner', credentials, storage, after });
+  assert.deepEqual(setup.replaced?.[2], '/oauth/owner', 'the link\'s code is taken out of the address');
+  assert.equal(storage.getItem(STORE_CODE), w.code);
+  assert.equal(setup.el['owner-review'].hidden, true, 'no request waits');
+  assert.equal(setup.el['owner-setup'].disabled, false);
+  assert.equal(credentials.made.length, 0);
+
+  const d = await discover(w);
+  const p = pkce();
+  const html = (await ask(w, authorizeUrl(w, d, { pkce: p }))).body;
+  const page = await runPage(w, script, { html, path: '/oauth/authorize', credentials, storage, after });
+  assert.match(page.el['owner-first'].textContent, /Approve makes the owner's passkey for .* and approves this connection, in one prompt/);
+  assert.equal(storage.getItem(STORE_WAITING), null);
+  // Refuse is sent as it is: no passkey is made for it.
+  let stopped = false;
+  await page.form.fire('submit', { submitter: { value: 'refuse' }, preventDefault: () => (stopped = true) });
+  assert.equal(stopped, false);
+  assert.equal(credentials.made.length, 0);
+  // Approve: one prompt, which makes the passkey.
+  const submitter = { value: 'approve', textContent: 'Approve' };
+  let prevented = false;
+  await page.form.fire('submit', { submitter, preventDefault: () => (prevented = true) });
+  assert.equal(prevented, true);
+  assert.deepEqual(credentials.made, [{ rp: new URL(w.issuer).hostname, user: `Owner of ${host}`, userVerification: 'required', attachment: undefined, methods: [-7, -8, -257] }], 'the library\'s own call: this address, the user verified, ES256, Ed25519 or RS256, on whatever the browser offers');
+  assert.equal(state(w).owner.credentialId, Buffer.from(credentials.rawId).toString('base64url'));
+  assert.equal(page.el['owner-recovery'].hidden, false);
+  assert.match(page.el['owner-recovery'].textContent, RECOVERY_SHOWN, 'the recovery code is shown');
+  assert.match(page.el['owner-status'].textContent, /^The owner is set up, and this connection is approved once you continue\./);
+  assert.equal(page.form.submitted, null, 'the form is not sent for the owner: the code is to be written down first');
+  assert.equal(submitter.textContent, 'Continue');
+  assert.equal(storage.getItem(STORE_CODE), null, 'the spent code is not kept');
+  // Continue: the form goes as it is, with no second prompt.
+  prevented = false;
+  await page.form.fire('submit', { submitter, preventDefault: () => (prevented = true) });
+  assert.equal(prevented, false);
+  await callsATool(w, await answer(w, page.form.elements.request.value, { fields: formFields(page) }), p);
+  assert.deepEqual([credentials.made.length, credentials.asked.length], [1, 0], 'one prompt in all');
+});
+
+test('one prompt the first time, by the page\'s script as served, the authorisation page opened first: the setup link shows that request again while it waits, and approves nothing by itself', async (t) => {
+  const w = await ownerWorld();
+  const after = pages(t, w);
+  const script = await pageScript(w);
+  const credentials = softCredentials(w);
+  const storage = softStorage();
+  const d = await discover(w);
+  const p = pkce();
+  const first = await ask(w, authorizeUrl(w, d, { pkce: p }));
+  // The authorisation page, with no owner and no setup link in this browser: Approve does nothing, and the request is left for the setup page.
+  const early = await runPage(w, script, { html: first.body, path: '/oauth/authorize', credentials, storage, after });
+  assert.match(first.body, /<p id="owner-first">This executor has no owner yet, so nothing can be approved here\./);
+  assert.equal(early.el['owner-first'].textContent, '', 'the script leaves the executor\'s own words as they are');
+  assert.equal(storage.getItem(STORE_WAITING), first.request);
+  let prevented = false;
+  await early.form.fire('submit', { submitter: { value: 'approve' }, preventDefault: () => (prevented = true) });
+  assert.equal(prevented, true);
+  assert.match(early.el['owner-status'].textContent, /^Not done: this executor has no owner yet/);
+  assert.equal(credentials.made.length, 0);
+  assert.equal(state(w).owner, null);
+
+  // The setup link, opened second: it offers the waiting request for review, named by its client's host.
+  const setupHtml = (await send('GET', `${w.issuer}/oauth/owner`)).body;
+  const setup = await runPage(w, script, { html: setupHtml, hash: `#${w.code}`, path: '/oauth/owner', credentials, storage, after });
+  assert.equal(setup.el['owner-review'].hidden, false);
+  assert.equal(setup.el['owner-review-request'].value, first.request);
+  assert.ok(setup.el['owner-status'].textContent.startsWith(`${new URL(w.docs.client).host} is waiting to connect to this executor.`), setup.el['owner-status'].textContent);
+  assert.equal(state(w).owner, null, 'opening the link sets nothing up');
+  // Its form asks the executor for that request's page again: the same request, with the warning; nothing approved by it. Only from the executor's own page.
+  assert.equal((await answer(w, first.request, { decision: 'show', origin: 'null', fields: {} })).status, 403);
+  const shown = await answer(w, first.request, { decision: 'show', fields: {} });
+  assert.equal(shown.status, 200, shown.body);
+  assert.equal(/name="request" value="([^"]+)"/.exec(shown.body)?.[1], first.request, 'the same request, with the same end');
+  assert.match(shown.body, /Approve only a connection you began yourself, just now\./);
+  assert.match(shown.headers['content-security-policy'], /form-action 'self' https:\/\/client\.example;/);
+  assert.equal(w.logs.some((e) => e.event === 'oauth-approved'), false);
+
+  const page = await runPage(w, script, { html: shown.body, path: '/oauth/authorize', credentials, storage, after });
+  assert.match(page.el['owner-first'].textContent, /in one prompt/);
+  const submitter = { value: 'approve', textContent: 'Approve' };
+  await page.form.fire('submit', { submitter, preventDefault: () => {} });
+  assert.equal(credentials.made.length, 1);
+  assert.match(page.el['owner-recovery'].textContent, RECOVERY_SHOWN);
+  assert.equal(storage.getItem(STORE_WAITING), null);
+  prevented = false;
+  await page.form.fire('submit', { submitter, preventDefault: () => (prevented = true) });
+  assert.equal(prevented, false);
+  await callsATool(w, await answer(w, page.form.elements.request.value, { fields: formFields(page) }), p);
+  assert.deepEqual([credentials.made.length, credentials.asked.length], [1, 0], 'one prompt in all');
+});
+
+test('the setup link takes only a request that still waits: one that has ended is not offered, and is not shown again', async (t) => {
+  const w = await ownerWorld();
+  const after = pages(t, w);
+  const script = await pageScript(w);
+  const credentials = softCredentials(w);
+  const storage = softStorage();
+  const request = await waiting(w);
+  storage.setItem(STORE_WAITING, request);
+  assert.deepEqual(await sender(w)(LINK_PATH, { code: w.code, request }), { link: 'open', waiting: new URL(w.docs.client).host });
+  // Ten minutes on (the link lasts fifteen): the request has ended.
+  w.clock.offset += REQUEST_LIFE;
+  assert.deepEqual(await sender(w)(LINK_PATH, { code: w.code, request }), { link: 'open' });
+  assert.equal((await answer(w, request, { decision: 'show', fields: {} })).status, 400);
+  const setupHtml = (await send('GET', `${w.issuer}/oauth/owner`)).body;
+  const setup = await runPage(w, script, { html: setupHtml, hash: `#${w.code}`, path: '/oauth/owner', credentials, storage, after });
+  assert.equal(setup.el['owner-review'].hidden, true);
+  assert.equal(storage.getItem(STORE_WAITING), null, 'the ended request is not kept');
+  // The link alone still makes the passkey, and says what to do next.
+  assert.match(setupHtml, new RegExp(`<p id="owner-next" hidden>Next: add ${w.url} in ${new URL(w.docs.client).host}, and approve that connection with this passkey\\.</p>`));
+  await setup.el['owner-setup'].fire('click');
+  assert.equal(credentials.made.length, 1);
+  assert.match(setup.el['owner-status'].textContent, /^The owner is set up\./);
+  assert.match(setup.el['owner-recovery'].textContent, RECOVERY_SHOWN);
+  assert.equal(setup.el['owner-next'].hidden, false);
+  assert.equal(storage.getItem(STORE_CODE), null);
+  assert.equal(w.logs.some((e) => e.event === 'oauth-approved'), false);
+});
+
+test('a later approval by the page\'s script as served: one prompt, which asks the owner\'s passkey with the user verified; a prompt that is closed sends nothing', async (t) => {
+  const w = await ownerWorld();
+  const after = pages(t, w);
+  const script = await pageScript(w);
+  const credentials = softCredentials(w);
+  const storage = softStorage();
+  const setupHtml = (await send('GET', `${w.issuer}/oauth/owner`)).body;
+  const setup = await runPage(w, script, { html: setupHtml, hash: `#${w.code}`, path: '/oauth/owner', credentials, storage, after });
+  // A prompt the person closes sets nothing up, and the link still works.
+  credentials.refuse = true;
+  await setup.el['owner-setup'].fire('click');
+  assert.match(setup.el['owner-status'].textContent, /^Not done: /);
+  assert.equal(state(w).owner, null);
+  assert.equal(setup.el['owner-setup'].disabled, false);
+  credentials.refuse = false;
+  await setup.el['owner-setup'].fire('click');
+  assert.ok(state(w).owner);
+
+  const d = await discover(w);
+  const p = pkce();
+  const page = await runPage(w, script, { html: (await ask(w, authorizeUrl(w, d, { pkce: p }))).body, path: '/oauth/authorize', credentials, storage, after });
+  assert.equal(page.el['owner-first'], undefined);
+  const submitter = { value: 'approve' };
+  credentials.refuse = true;
+  await page.form.fire('submit', { submitter, preventDefault: () => {} });
+  assert.match(page.el['owner-status'].textContent, /^Not done: /);
+  assert.equal(page.form.submitted, null);
+  credentials.refuse = false;
+  let prevented = false;
+  await page.form.fire('submit', { submitter, preventDefault: () => (prevented = true) });
+  assert.equal(prevented, true, 'the form waits for the owner\'s proof');
+  assert.deepEqual(credentials.asked.at(-1), { rpId: new URL(w.issuer).hostname, userVerification: 'required', credential: state(w).owner.credentialId });
+  assert.equal(page.form.submitted, submitter, `the form is sent (${page.el['owner-status'].textContent})`);
+  await callsATool(w, await answer(w, page.form.elements.request.value, { fields: formFields(page) }), p);
+  // With a recovery code typed, the form goes as it is, and the passkey is not asked.
+  const typed = await runPage(w, script, { html: (await ask(w, authorizeUrl(w, d, { pkce: pkce() }))).body, path: '/oauth/authorize', credentials, storage, after });
+  typed.el['owner-recovery-code'].value = 'abcd';
+  const asked = credentials.asked.length;
+  let stopped = false;
+  await typed.form.fire('submit', { submitter: { value: 'approve' }, preventDefault: () => (stopped = true) });
+  assert.equal(stopped, false);
+  assert.equal(credentials.asked.length, asked);
+});
+
+test('refused at the authorisation page: a passkey used at another origin, for another relying party, without the user verified, to make and not to sign, by another key, or with a challenge used twice, expired, for another request or never given', async () => {
   const w = await ownerWorld();
   try {
     const { passkey } = await setUpOwner(w);
-    const prove = (request, origin = w.issuer) => signIn({ cc, id, passkey, request, origin, send: sender(w) });
-    const refused = async (request, fields) => {
+    const refused = async (request, fields, what) => {
       const a = await answer(w, request, { fields });
-      assert.equal(a.status, 403, a.body);
+      assert.equal(a.status, 403, `${what}: ${a.body}`);
       assert.match(a.body, /did not pass/);
     };
-
-    // Over another origin: the page was not the executor's.
+    // What the passkey signs, changed in one part each time.
+    const changes = {
+      'another origin: the page was not the executor\'s': { origin: 'https://elsewhere.example' },
+      'the page was inside another site\'s': { crossOrigin: true },
+      'another relying party': { rpId: 'elsewhere.example' },
+      'the user not verified': { flags: 0x01 },
+      'no person present': { flags: 0x04 },
+      'an answer to "make a passkey"': { type: 'webauthn.create' },
+      'bytes after the authenticator data': { extra: new Uint8Array(4) },
+      'a broken signature': { signature: (s) => s.map((b, i) => (i === s.length - 1 ? b ^ 1 : b)) },
+    };
+    for (const [what, change] of Object.entries(changes)) {
+      const request = await waiting(w);
+      passkey.change = change;
+      await refused(request, await prove(w, passkey)(request), what);
+    }
+    passkey.change = {};
+    // By another key: a passkey that is not the owner's, under the owner's identifier.
     let request = await waiting(w);
-    await refused(request, await prove(request, 'https://elsewhere.example'));
-    // By another key: an identity that is not the owner's.
-    request = await waiting(w);
-    const stranger = await id.createIdentity(cc);
-    const given = await sender(w)(CHALLENGE_PATH, { request });
-    const signature = await cc.signBytes(stranger.routing.privateKey, await id.authMessage(cc, w.issuer, cc.fromBase64Url(given.challenge)));
-    await refused(request, { request: given.request, [FIELD_CHALLENGE]: given.challenge, [FIELD_SIGNATURE]: cc.toBase64Url(signature) });
-
-    // A broken signature is refused.
-    request = await waiting(w);
-    const good = await prove(request);
-    await refused(request, { ...good, [FIELD_SIGNATURE]: cc.toBase64Url(new Uint8Array(64)) });
+    const stranger = await softPasskey(w);
+    stranger.credentialId = passkey.credentialId;
+    await refused(request, await prove(w, stranger)(request), 'another key');
     // Expired: two minutes later.
     request = await waiting(w);
-    const late = await prove(request);
+    const late = await prove(w, passkey)(request);
     w.clock.offset += CHALLENGE_LIFE;
-    await refused(request, late);
+    await refused(request, late, 'expired');
     // For another request: the first request's challenge and signature, sent with the second request.
     const first = await waiting(w);
     const second = await waiting(w);
-    const forFirst = await prove(first);
-    await refused(second, { [FIELD_CHALLENGE]: forFirst[FIELD_CHALLENGE], [FIELD_SIGNATURE]: forFirst[FIELD_SIGNATURE] });
+    const forFirst = await prove(w, passkey)(first);
+    await refused(second, fourOf(forFirst), 'another request\'s challenge');
     // And with the second request once it has a challenge of its own.
     const forSecond = await sender(w)(CHALLENGE_PATH, { request: second });
-    await refused(second, { request: forSecond.request, [FIELD_CHALLENGE]: forFirst[FIELD_CHALLENGE], [FIELD_SIGNATURE]: forFirst[FIELD_SIGNATURE] });
+    await refused(second, { request: forSecond.request, ...fourOf(forFirst) }, 'another request\'s challenge, beside its own');
     // Never given: a challenge the executor did not make, and none at all.
     request = await waiting(w);
-    const made = await prove(request);
-    await refused(request, { ...made, [FIELD_CHALLENGE]: Buffer.from(randomBytes(32)).toString('base64url') });
+    const made = await prove(w, passkey)(request);
+    await refused(request, { ...made, [FIELD_CHALLENGE]: randomBytes(32).toString('base64url') }, 'a challenge never given');
     request = await waiting(w);
-    await refused(request, {});
+    await refused(request, {}, 'nothing');
     // The request's seal: a request changed by one character, or one this executor never sealed, is not known, and gets no challenge.
     const changed = `${made.request.slice(0, -1)}${made.request.endsWith('A') ? 'B' : 'A'}`;
-    assert.equal((await answer(w, changed, { fields: { [FIELD_CHALLENGE]: made[FIELD_CHALLENGE], [FIELD_SIGNATURE]: made[FIELD_SIGNATURE] } })).status, 400);
+    assert.equal((await answer(w, changed, { fields: fourOf(made) })).status, 400);
     assert.deepEqual(await refusal(sender(w)(CHALLENGE_PATH, { request: changed })), { status: 400, code: 'bad-request' });
     assert.deepEqual(await refusal(sender(w)(CHALLENGE_PATH, { request: 'A'.repeat(43) })), { status: 400, code: 'bad-request' });
 
     // After all that, with no wait, the right answer passes: failed attempts are not counted (X211).
     request = await waiting(w);
-    const right = await prove(request);
+    const right = await prove(w, passkey)(request);
     const a = await answer(w, request, { fields: right });
     assert.equal(a.status, 303);
     assert.ok(a.params.code);
@@ -234,21 +423,54 @@ test('refused at the authorisation page: a signature over another origin, by ano
   }
 });
 
+test('the recovery code approves a connection in the passkey\'s place, as often as it is typed; another code is refused; it sets up no new passkey', async () => {
+  const w = await ownerWorld();
+  try {
+    const { passkey, recoveryCode } = await setUpOwner(w);
+    const { access } = await connect(w, { prove: () => ({ [FIELD_RECOVERY]: recoveryCode }) });
+    assert.equal((await call(w, bearer(access), 'echo', {})).status, 200);
+    // As a person types it: in small letters, with spaces for the hyphens.
+    await connect(w, { prove: () => ({ [FIELD_RECOVERY]: ` ${recoveryCode.toLowerCase().replaceAll('-', ' ')} ` }) });
+    assert.equal(passkey.signed, 0, 'the passkey was not asked');
+    // Another code, of the same form and of none; and a wrong code is not made right by the passkey's fields beside it.
+    const other = recoveryCode.replace(/.$/, (c) => (c === 'A' ? 'B' : 'A'));
+    for (const wrong of [other, other.replaceAll('-', ''), 'AAAA', '0', recoveryCode.slice(0, -1), `${recoveryCode}A`, state(w).owner.recoveryHash]) {
+      const request = await waiting(w);
+      assert.equal((await answer(w, request, { fields: { [FIELD_RECOVERY]: wrong } })).status, 403, wrong);
+      assert.equal((await answer(w, request, { fields: { ...(await prove(w, passkey)(request)), [FIELD_RECOVERY]: wrong } })).status, 403, wrong);
+    }
+    // Wrong codes shut nothing (X211): the right one passes straight after.
+    const request = await waiting(w);
+    assert.equal((await answer(w, request, { fields: { [FIELD_RECOVERY]: recoveryCode } })).status, 303);
+    // It approves; it does not set up: the owner and the passkey stay as they were.
+    const owner = state(w).owner;
+    assert.deepEqual(await refusal(sender(w)(SETUP_PATH, { code: recoveryCode, credentialId: 'AAAA', key: (await softPasskey(w)).key })), { status: 409, code: 'owner-exists' });
+    assert.deepEqual(state(w).owner, owner);
+  } finally {
+    await w.close();
+  }
+});
+
 test('the setup link: used twice, expired, the wrong code, or not from the executor\'s page, it is refused', async () => {
   const w = await ownerWorld();
   try {
     // Not from the executor's own page: no Origin, or another.
-    assert.deepEqual(await refusal(setUp({ cc, id, passkey: fakePasskey(), code: w.code, send: sender(w, null) })), { status: 403, code: 'origin-refused' });
-    assert.deepEqual(await refusal(setUp({ cc, id, passkey: fakePasskey(), code: w.code, send: sender(w, 'https://elsewhere.example') })), { status: 403, code: 'origin-refused' });
-    // The wrong code.
-    assert.deepEqual(await refusal(setUp({ cc, id, passkey: fakePasskey(), code: Buffer.from(randomBytes(32)).toString('base64url'), send: sender(w) })), { status: 403, code: 'setup-refused' });
+    assert.deepEqual(await refusal(setUp({ passkey: await softPasskey(w), code: w.code, send: sender(w, null) })), { status: 403, code: 'origin-refused' });
+    assert.deepEqual(await refusal(setUp({ passkey: await softPasskey(w), code: w.code, send: sender(w, 'https://elsewhere.example') })), { status: 403, code: 'origin-refused' });
+    // The wrong code: at the page's first question, and at the message itself.
+    const wrong = randomBytes(32).toString('base64url');
+    const unmade = await softPasskey(w);
+    assert.deepEqual(await refusal(setUp({ passkey: unmade, code: wrong, send: sender(w) })), { status: 403, code: 'setup-refused' });
+    assert.equal(unmade.made, 0, 'no passkey was made');
+    assert.deepEqual(await refusal(sender(w)(SETUP_PATH, { code: wrong, credentialId: unmade.credentialId, key: unmade.key })), { status: 403, code: 'setup-refused' });
+    assert.equal(state(w).owner, null);
     // Used twice: the second is refused before a passkey is made, and the owner is the first.
     await setUpOwner(w);
     const owner = state(w).owner;
-    const second = fakePasskey();
-    assert.deepEqual(await refusal(setUp({ cc, id, passkey: second, code: w.code, send: sender(w) })), { status: 409, code: 'owner-exists' });
+    const second = await softPasskey(w);
+    assert.deepEqual(await refusal(setUp({ passkey: second, code: w.code, send: sender(w) })), { status: 409, code: 'owner-exists' });
     assert.equal(second.made, 0, 'no passkey was made');
-    assert.deepEqual(await refusal(sender(w)(SETUP_PATH, { code: w.code })), { status: 409, code: 'owner-exists' });
+    assert.deepEqual(await refusal(sender(w)(SETUP_PATH, { code: w.code, credentialId: second.credentialId, key: second.key })), { status: 409, code: 'owner-exists' });
     assert.deepEqual(state(w).owner, owner);
   } finally {
     await w.close();
@@ -257,11 +479,11 @@ test('the setup link: used twice, expired, the wrong code, or not from the execu
   const late = await ownerWorld();
   try {
     late.clock.offset += SETUP_LIFE;
-    const passkey = fakePasskey();
-    assert.deepEqual(await refusal(setUp({ cc, id, passkey, code: late.code, send: sender(late) })), { status: 403, code: 'setup-ended' });
+    const passkey = await softPasskey(late);
+    assert.deepEqual(await refusal(setUp({ passkey, code: late.code, send: sender(late) })), { status: 403, code: 'setup-ended' });
     assert.equal(passkey.made, 0, 'no passkey was made');
     // The message itself is refused too, without the page's first question.
-    assert.deepEqual(await refusal(sender(late)(SETUP_PATH, { code: late.code })), { status: 403, code: 'setup-ended' });
+    assert.deepEqual(await refusal(sender(late)(SETUP_PATH, { code: late.code, credentialId: passkey.credentialId, key: passkey.key })), { status: 403, code: 'setup-ended' });
     assert.equal(state(late).owner, null);
   } finally {
     await late.close();
@@ -272,7 +494,7 @@ test('a second setup while an owner exists is refused, unless the owner is reset
   const w = await ownerWorld();
   try {
     const { passkey } = await setUpOwner(w);
-    const { access } = await connect(w, { prove: (request) => signIn({ cc, id, passkey, request, origin: w.issuer, send: sender(w) }) });
+    const { access } = await connect(w, { prove: prove(w, passkey) });
     assert.equal((await call(w, bearer(access), 'echo', {})).status, 200);
     // As the command works: on the files of a stopped executor.
     await w.executor.close();
@@ -287,43 +509,37 @@ test('a second setup while an owner exists is refused, unless the owner is reset
     await reopen(w);
     assert.equal((await call(w, bearer(access), 'echo', {})).status, 401, 'the token was revoked');
     // The old passkey is no longer the owner's; a new setup, with the new link, is.
-    assert.deepEqual(await refusal(sender(w)(PASSKEY_PATH, {})), { status: 409, code: 'no-owner' });
+    const request = await waiting(w);
+    assert.deepEqual(await refusal(sender(w)(CHALLENGE_PATH, { request })), { status: 409, code: 'no-owner' });
     w.code = new URL(reset.link).hash.slice(1);
     const again = await setUpOwner(w);
-    const { access: fresh } = await connect(w, { prove: (request) => signIn({ cc, id, passkey: again.passkey, request, origin: w.issuer, send: sender(w) }) });
+    const { access: fresh } = await connect(w, { prove: prove(w, again.passkey) });
     assert.equal((await call(w, bearer(fresh), 'echo', {})).status, 200);
   } finally {
     await w.close();
   }
 });
 
-test('a setup with an unlock method missing or malformed is refused, and the link still works after', async () => {
+test('a setup whose passkey is missing or malformed is refused, and the link still works after', async () => {
   const w = await ownerWorld();
   try {
-    const identity = await id.createIdentity(cc);
-    const byPasskey = await id.wrapRootKeyWithPrf(cc, identity.rootKey, new Uint8Array(randomBytes(32)), new Uint8Array(randomBytes(16)), new Uint8Array(randomBytes(32)));
-    const { method: byCode } = await id.wrapRootKeyWithNewRecoveryCode(cc, identity.rootKey);
-    const b = cc.toBase64Url;
-    const right = () => ({
-      code: w.code,
-      routingPublicKey: b(identity.routing.publicKeyRaw),
-      passkey: { credentialId: b(byPasskey.credentialId), prfSalt: b(byPasskey.prfSalt), wrappedRootKey: b(byPasskey.wrappedRootKey) },
-      recovery: { salt: b(byCode.salt), lookupHash: byCode.lookupHash, wrappedRootKey: b(byCode.wrappedRootKey) },
-    });
+    const passkey = await softPasskey(w);
+    const rsa = await softPasskey(w, 'RS256');
+    const right = () => ({ code: w.code, credentialId: passkey.credentialId, key: { ...passkey.key } });
     const wrong = {
-      'no recovery code': (v) => delete v.recovery,
-      'no passkey': (v) => delete v.passkey,
-      'a passkey with no wrapped root key': (v) => delete v.passkey.wrappedRootKey,
-      'a PRF salt of 31 bytes': (v) => (v.passkey.prfSalt = b(new Uint8Array(31))),
-      'an empty credential id': (v) => (v.passkey.credentialId = ''),
-      'a lookup hash in capitals': (v) => (v.recovery.lookupHash = v.recovery.lookupHash.toUpperCase()),
-      'a recovery salt of 32 bytes': (v) => (v.recovery.salt = b(new Uint8Array(32))),
-      'a routing key of 31 bytes': (v) => (v.routingPublicKey = b(new Uint8Array(31))),
-      'base64 with padding': (v) => (v.passkey.wrappedRootKey += '='),
-      'a member the page does not send': (v) => (v.passkey.label = 'laptop'),
-      // A transport that is not a name, or a ninth, is left out and not refused (review4.test.mjs).
-      'transports as a string': (v) => (v.passkey.transports = 'usb'),
-      'a method as a string': (v) => (v.recovery = 'x'),
+      'no public key': (v) => delete v.key,
+      'no identifier': (v) => delete v.credentialId,
+      'an empty identifier': (v) => (v.credentialId = ''),
+      'an identifier of 1,024 bytes': (v) => (v.credentialId = randomBytes(1024).toString('base64url')),
+      'base64 with padding': (v) => (v.credentialId += '='),
+      'a key as text': (v) => (v.key = JSON.stringify(v.key)),
+      'a key with a private part': (v) => (v.key.d = v.key.x),
+      'a key with no method': (v) => delete v.key.alg,
+      'a method a passkey does not sign with': (v) => (v.key = { alg: 'ML-DSA-87', kty: 'AKP', pub: randomBytes(2592).toString('base64url') }),
+      'a point that is not on the curve': (v) => (v.key.y = v.key.x),
+      'an RSA key of 1,024 bits': (v) => (v.key = { ...rsa.key, n: randomBytes(128).toString('base64url') }),
+      'a member the page does not send': (v) => (v.transports = ['internal']),
+      'a request that is not text': (v) => (v.request = 1),
     };
     for (const [what, change] of Object.entries(wrong)) {
       const v = right();
@@ -331,17 +547,44 @@ test('a setup with an unlock method missing or malformed is refused, and the lin
       assert.deepEqual(await refusal(sender(w)(SETUP_PATH, v)), { status: 400, code: 'bad-request' }, what);
     }
     assert.deepEqual(await refusal(sender(w)(SETUP_PATH, '{not json')), { status: 400, code: 'bad-request' });
+    assert.deepEqual(await refusal(sender(w)(LINK_PATH, { code: w.code, request: 1 })), { status: 400, code: 'bad-request' });
     assert.equal(state(w).owner, null);
-    assert.deepEqual(await sender(w)(SETUP_PATH, right()), { owner: 'set' });
-    assert.equal(state(w).owner.routingPublicKey, b(identity.routing.publicKeyRaw));
-    assert.deepEqual(state(w).owner.passkey.transports, [], 'a passkey sent with no transports is kept as having none');
+    const done = await sender(w)(SETUP_PATH, right());
+    assert.deepEqual(Object.keys(done).sort(), ['owner', 'recoveryCode']);
+    assert.deepEqual(state(w).owner.key, passkey.key);
     // A state file whose owner is not in the executor's form stops the start.
     await w.executor.close();
     w.executor = null;
     const s = state(w);
-    s.owner.passkey.prfSalt = 'x';
+    s.owner.key.x = 'x';
     writeFileSync(w.statePath, JSON.stringify(s));
     await assert.rejects(reopen(w), /not in the form the executor writes/);
+  } finally {
+    await w.close();
+  }
+});
+
+test('a state file whose owner is in the form of the builds before the plain passkey stops the start, and says to reset the owner; the reset then works', async () => {
+  const w = await ownerWorld();
+  try {
+    const { passkey } = await setUpOwner(w);
+    await connect(w, { prove: prove(w, passkey) });
+    await w.executor.close();
+    w.executor = null;
+    // The earlier form: a public key for signatures made in the browser, and two locked copies of the key behind it.
+    const b = (n) => randomBytes(n).toString('base64url');
+    const s = state(w);
+    s.owner = { routingPublicKey: b(32), passkey: { credentialId: b(16), prfSalt: b(32), wrappedRootKey: b(60), transports: ['internal'] }, recovery: { salt: b(16), lookupHash: randomBytes(32).toString('hex'), wrappedRootKey: b(60) }, created: 1 };
+    writeFileSync(w.statePath, JSON.stringify(s));
+    await assert.rejects(reopen(w), /holds an owner in an earlier form.*owner --config <settings> --reset/);
+    assert.throws(() => makeOwnerSetup(w.parsed, { now: w.more.now }), /holds an owner in an earlier form.*--reset/);
+    assert.deepEqual(state(w), s, 'nothing changed');
+    const reset = makeOwnerSetup(w.parsed, { reset: true, now: w.more.now });
+    assert.equal(reset.revoked, 1);
+    assert.equal(state(w).owner, null);
+    await reopen(w);
+    w.code = new URL(reset.link).hash.slice(1);
+    await connect(w, { prove: prove(w, (await setUpOwner(w)).passkey) });
   } finally {
     await w.close();
   }
@@ -379,15 +622,24 @@ test('the command "owner": a link on a stopped executor; refused while it runs; 
   }
 });
 
-test('the form the page sends: the owner\'s fields and nothing of the recovery code', async () => {
+test('the form the page sends: the request, the check\'s four fields and, once there is an owner, the recovery code\'s box', async () => {
   const w = await ownerWorld();
   try {
     const d = await discover(w);
+    const names = (body) => [...body.matchAll(/<input [^>]*name="([^"]+)"/g)].map((m) => m[1]);
+    const before = await ask(w, authorizeUrl(w, d, { pkce: pkce(), redirect_uri: CALLBACK }));
+    assert.deepEqual(names(before.body), ['request', ...FOUR]);
+    await setUpOwner(w);
     const page = await ask(w, authorizeUrl(w, d, { pkce: pkce(), redirect_uri: CALLBACK }));
-    // The recovery code's box has no name, so the form never sends it.
-    assert.match(page.body, /<input type="text" id="owner-recovery-code" autocomplete="off" spellcheck="false">/);
-    assert.equal([...page.body.matchAll(/<input [^>]*name="/g)].length, 3, 'request and the two fields of the check');
+    assert.deepEqual(names(page.body), ['request', ...FOUR, FIELD_RECOVERY]);
+    assert.ok(page.body.includes(`<input type="text" name="${FIELD_RECOVERY}" id="owner-recovery-code" autocomplete="off" spellcheck="false">`));
   } finally {
     await w.close();
   }
+});
+
+test('the issuer may be http://localhost with a port, for tests: a browser makes no passkey at an IP address', () => {
+  assert.equal(readIssuer('http://localhost:8787'), 'http://localhost:8787');
+  assert.equal(readIssuer('http://127.0.0.1:8787'), 'http://127.0.0.1:8787');
+  for (const not of ['http://localhost', 'http://localhost.example:8787', 'http://guard.example:8787', 'http://[::1]:8787', 'http://localhost:8787/x']) assert.equal(readIssuer(not), null, not);
 });

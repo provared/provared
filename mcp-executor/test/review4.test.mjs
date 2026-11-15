@@ -8,23 +8,19 @@ import './local-library.mjs'; // first: "provared" is this repository's own libr
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import fs, { mkdirSync, readFileSync, rmdirSync, writeFileSync } from 'node:fs';
+import fs, { mkdirSync, rmdirSync, writeFileSync } from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { createCryptoCore } from '@microtoll/crypto-core';
-import * as id from '@microtoll/identity';
 
 const { call, rawRequest } = await import('./http-world.mjs');
 const { until } = await import('./world.mjs');
-const { readHttpSettings } = await import('../http.mjs');
-const { MAX_ACCESS, REQUEST_LIFE, STATE_RETRY, makeOwnerSetup } = await import('../oauth.mjs');
-const { NAMESPACE, CHALLENGE_PATH, LINK_PATH, SETUP_PATH, setUp, signIn } = await import('../owner-steps.mjs');
-const { oauthWorld, reopen, send, json, pkce, authorizeUrl, discover, ask, answer, token, connect, bearer } = await import('./oauth-world.mjs');
+const { MAX_ACCESS, REQUEST_LIFE, STATE_RETRY } = await import('../oauth.mjs');
+const { CHALLENGE_PATH, LINK_PATH, SETUP_PATH } = await import('../owner-steps.mjs');
+const { oauthWorld, reopen, send, json, answer, token, connect, bearer } = await import('./oauth-world.mjs');
+const { ownerWorld, softPasskey, setUpOwner, prove, sender, refusal, waiting, state } = await import('./owner-world.mjs');
 
 const WRAPPER = fileURLToPath(new URL('./signal-wrapper.mjs', import.meta.url));
-const cc = createCryptoCore({ namespace: NAMESPACE });
-const state = (w) => JSON.parse(readFileSync(w.statePath, 'utf8'));
 const pause = (ms) => new Promise((done) => setTimeout(done, ms));
 /** Whether a promise settles within so many milliseconds. */
 const within = (p, ms) => Promise.race([p.then(() => true), pause(ms).then(() => false)]);
@@ -209,94 +205,11 @@ test('N2: a stream is ended when later refreshes push its access token out; a st
 
 // --- N3, and the two tests the re-check found missing (N4) ---
 
-/** The way the page reaches the executor: POST JSON, with the page's Origin. Throws {status, code} where the answer is not 200. */
-const sender = (w) => async (path, value) => {
-  const r = await send('POST', `${w.issuer}${path}`, { headers: { 'content-type': 'application/json', origin: w.issuer }, body: JSON.stringify(value) });
-  const v = json(r);
-  if (r.status !== 200) throw Object.assign(new Error(v.message), { status: r.status, code: v.error });
-  return v;
-};
-const refusal = async (p) => {
-  try {
-    await p;
-  } catch (e) {
-    return { status: e.status, code: e.code };
-  }
-  assert.fail('it was not refused');
-};
-/** A stand-in for the owner's passkey, which reports the transports given; "asked" holds the transports each unlock was told. */
-function fakePasskey(transports) {
-  const credentialId = new Uint8Array(randomBytes(16));
-  const prfOutput32 = new Uint8Array(randomBytes(32));
-  const p = {
-    asked: [],
-    create: async () => ({ credentialId, prfSalt: new Uint8Array(randomBytes(32)), prfOutput32, transports }),
-    evaluate: async (cid, salt, told) => {
-      p.asked.push(told);
-      return { prfOutput32 };
-    },
-  };
-  return p;
-}
-/** A world whose executor has the check by passkey, and a setup link made before the start. */
-async function ownerWorld() {
-  const w = await oauthWorld({ open: false });
-  delete w.more.ownerCheck;
-  w.parsed = readHttpSettings(w.settings, w.folder).settings;
-  w.code = new URL(makeOwnerSetup(w.parsed, { now: w.more.now }).link).hash.slice(1);
-  await reopen(w);
-  return w;
-}
-/** A page waiting for the owner's answer: the form's request field. */
-async function waiting(w) {
-  const page = await ask(w, authorizeUrl(w, await discover(w), { pkce: pkce() }));
-  assert.equal(page.status, 200, page.body);
-  return page.request;
-}
-/** What the page sends at the setup, for a new identity, with these transports. */
-async function ownerToSend(w, transports) {
-  const identity = await id.createIdentity(cc);
-  const byPasskey = await id.wrapRootKeyWithPrf(cc, identity.rootKey, new Uint8Array(randomBytes(32)), new Uint8Array(randomBytes(16)), new Uint8Array(randomBytes(32)));
-  const { method: byCode } = await id.wrapRootKeyWithNewRecoveryCode(cc, identity.rootKey);
-  const b = cc.toBase64Url;
-  return {
-    code: w.code,
-    routingPublicKey: b(identity.routing.publicKeyRaw),
-    passkey: { credentialId: b(byPasskey.credentialId), prfSalt: b(byPasskey.prfSalt), wrappedRootKey: b(byPasskey.wrappedRootKey), ...(transports === undefined ? {} : { transports }) },
-    recovery: { salt: b(byCode.salt), lookupHash: byCode.lookupHash, wrappedRootKey: b(byCode.wrappedRootKey) },
-  };
-}
-
-test('N3: a transport name that is not in the executor\'s form is left out, and the owner is set up: [\'Internal\'] through the page\'s own steps, then a sign-in', async () => {
-  const w = await ownerWorld();
-  try {
-    const passkey = fakePasskey(['Internal']);
-    const { recoveryCode } = await setUp({ cc, id, passkey, code: w.code, send: sender(w) });
-    assert.equal(typeof recoveryCode, 'string');
-    assert.deepEqual(state(w).owner.passkey.transports, [], 'the name is dropped, the owner kept');
-    const c = await connect(w, { prove: (request) => signIn({ cc, id, passkey, request, origin: w.issuer, send: sender(w) }) });
-    assert.deepEqual(passkey.asked, [[]], 'the unlock is told no transport');
-    assert.equal((await call(w, bearer(c.access), 'echo', {})).status, 200);
-  } finally {
-    await w.close();
-  }
-});
-
-test('N3: of a passkey\'s transports, the names in the form are kept, in their order, eight at most; a list that is no list is still refused', async () => {
-  const w = await ownerWorld();
-  try {
-    assert.deepEqual(await refusal(sender(w)(SETUP_PATH, await ownerToSend(w, 'usb'))), { status: 400, code: 'bad-request' });
-    assert.equal(state(w).owner, null);
-    const sent = ['Internal', 'usb', 'USB key', 7, 'nfc', '', 'ble', 'hybrid', 'internal', 'smart-card', 'x'.repeat(33), 'a', 'b', 'c', 'd'];
-    assert.deepEqual(await sender(w)(SETUP_PATH, await ownerToSend(w, sent)), { owner: 'set' });
-    assert.deepEqual(state(w).owner.passkey.transports, ['usb', 'nfc', 'ble', 'hybrid', 'internal', 'smart-card', 'a', 'b']);
-    // What was kept is in the form a start reads.
-    await reopen(w);
-    assert.deepEqual((await sender(w)('/oauth/owner/passkey', {})).transports, ['usb', 'nfc', 'ble', 'hybrid', 'internal', 'smart-card', 'a', 'b']);
-  } finally {
-    await w.close();
-  }
-});
+// N3 was of a passkey's transports: a name not in the executor's form was
+// left out, and the setup not refused for it. The plain passkey's setup
+// sends no transports (DESIGN.md, X275), so there is nothing left to test
+// of it: a setup message with any member beside the code, the identifier,
+// the key and a request is refused (owner.test.mjs).
 
 /** Put stand-ins in place of functions of node:fs, for the modules that imported them by name too. Gives the function that puts the real ones back. */
 function withFs(standIns) {
@@ -313,7 +226,8 @@ test('N4: where the state cannot be written at the owner\'s setup, the answer is
   const w = await ownerWorld();
   let restore = () => {};
   try {
-    const owner = await ownerToSend(w, ['internal']);
+    const passkey = await softPasskey(w);
+    const owner = { code: w.code, credentialId: passkey.credentialId, key: passkey.key };
     // The file is held by another program: putting the new file in place fails, as Windows reports it.
     restore = withFs({ renameSync: (real) => (from, to) => {
       if (String(to) === w.statePath) throw Object.assign(new Error('the file is held'), { code: 'EBUSY' });
@@ -324,10 +238,10 @@ test('N4: where the state cannot be written at the owner\'s setup, the answer is
     restore = () => {};
     assert.equal(w.logs.some((e) => e.event === 'owner-set'), false);
     assert.equal(state(w).owner, null, 'no owner in the file');
-    assert.deepEqual(await refusal(sender(w)('/oauth/owner/passkey', {})), { status: 409, code: 'no-owner' }, 'and none in memory');
+    assert.deepEqual(await refusal(sender(w)(CHALLENGE_PATH, { request: await waiting(w) })), { status: 409, code: 'no-owner' }, 'and none in memory');
     assert.deepEqual(await sender(w)(LINK_PATH, { code: w.code }), { link: 'open' }, 'the link still works');
-    assert.deepEqual(await sender(w)(SETUP_PATH, owner), { owner: 'set' });
-    assert.equal(state(w).owner.routingPublicKey, owner.routingPublicKey);
+    assert.equal((await sender(w)(SETUP_PATH, owner)).owner, 'set');
+    assert.deepEqual(state(w).owner.key, passkey.key);
   } finally {
     restore();
     await w.close();
@@ -337,8 +251,7 @@ test('N4: where the state cannot be written at the owner\'s setup, the answer is
 test('N4: a challenge is given only for a request that waits: not for one that has ended, nor for one already approved', async () => {
   const w = await ownerWorld();
   try {
-    const passkey = fakePasskey(['internal']);
-    await setUp({ cc, id, passkey, code: w.code, send: sender(w) });
+    const { passkey } = await setUpOwner(w);
     const challenge = (request) => sender(w)(CHALLENGE_PATH, { request });
     // Ended: ten minutes after the page was made.
     const ended = await waiting(w);
@@ -347,7 +260,7 @@ test('N4: a challenge is given only for a request that waits: not for one that h
     assert.deepEqual(await refusal(challenge(ended)), { status: 400, code: 'bad-request' }, 'ended');
     // Approved: the request as the page had it, and as it was approved, with its challenge sealed in.
     const first = await waiting(w);
-    const fields = await signIn({ cc, id, passkey, request: first, origin: w.issuer, send: sender(w) });
+    const fields = await prove(w, passkey)(first);
     assert.equal((await answer(w, fields.request, { fields })).status, 303);
     assert.deepEqual(await refusal(challenge(first)), { status: 400, code: 'bad-request' }, 'approved, as the page had it');
     assert.deepEqual(await refusal(challenge(fields.request)), { status: 400, code: 'bad-request' }, 'approved, as it was sent');

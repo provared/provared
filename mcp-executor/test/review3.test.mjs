@@ -1,30 +1,27 @@
 // The findings of the third review, of the OAuth sign-in and the owner's
 // check (DESIGN.md, section 14): each fault as a test that fails without
 // its fix. Through the executor's public interface, as the other tests of
-// OAuth are; the page's script (owner-page.mjs) is run here as the executor
-// serves it, with a stand-in for the page and for navigator.credentials.
-// Nothing leaves this computer.
+// OAuth are. The page's script (owner-page.mjs) is run as the executor
+// serves it in owner.test.mjs, since the owner's check became a plain
+// passkey. Nothing leaves this computer.
 
 import './local-library.mjs'; // first: "provared" is this repository's own library
 import assert from 'node:assert/strict';
-import { createHash, createHmac, randomBytes } from 'node:crypto';
-import fs, { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { createHmac, randomBytes } from 'node:crypto';
+import fs, { readFileSync, writeFileSync } from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
-import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
 import { test } from 'node:test';
-import { pathToFileURL } from 'node:url';
-import { createCryptoCore } from '@microtoll/crypto-core';
-import * as id from '@microtoll/identity';
 
 const { call, rawRequest } = await import('./http-world.mjs');
-const { openHttpExecutor, readHttpSettings, secretHash } = await import('../http.mjs');
-const { ACCESS_LIFE, DOCUMENT_KEPT, DOCUMENT_RETRY, REQUEST_LIFE, makeOwnerSetup } = await import('../oauth.mjs');
+const { openHttpExecutor, secretHash } = await import('../http.mjs');
+const { ACCESS_LIFE, DOCUMENT_KEPT, DOCUMENT_RETRY, REQUEST_LIFE } = await import('../oauth.mjs');
 const { openPasskeyCheck } = await import('../owner.mjs');
-const { NAMESPACE, FIELD_CHALLENGE, FIELD_SIGNATURE, CHALLENGE_PATH, LINK_PATH, RECOVERY_PATH, ELSEWHERE_AFTER, setUp, signIn } = await import('../owner-steps.mjs');
+const { FIELD_CHALLENGE, FIELD_AUTHENTICATOR_DATA, FIELD_CLIENT_DATA, FIELD_SIGNATURE, FIELD_RECOVERY, CHALLENGE_PATH, LINK_PATH } = await import('../owner-steps.mjs');
 const { CALLBACK, oauthWorld, reopen, send, json, pkce, authorizeUrl, discover, ask, answer, token, connect, bearer } = await import('./oauth-world.mjs');
+const { ownerWorld, setUpOwner, prove, sender, refusal, waiting } = await import('./owner-world.mjs');
+const { fromBase64url, sha256, toBase64url } = await import('provared');
+const { makePasskey } = await import('../../test/helpers/passkey.mjs');
 
-const cc = createCryptoCore({ namespace: NAMESPACE });
 const state = (w) => JSON.parse(readFileSync(w.statePath, 'utf8'));
 const pause = (ms) => new Promise((done) => setTimeout(done, ms));
 /** Whether a promise settles within so many milliseconds. */
@@ -32,43 +29,6 @@ const within = (p, ms) => Promise.race([p.then(() => true), pause(ms).then(() =>
 /** Many requests, a hundred at a time. */
 async function many(count, one) {
   for (let done = 0; done < count; done += 100) await Promise.all(Array.from({ length: Math.min(100, count - done) }, () => one()));
-}
-
-/** A stand-in for the owner's passkey, as in owner.test.mjs. */
-function fakePasskey() {
-  const credentialId = new Uint8Array(randomBytes(16));
-  const prfOutput32 = new Uint8Array(randomBytes(32));
-  return { create: async () => ({ credentialId, prfSalt: new Uint8Array(randomBytes(32)), prfOutput32, transports: ['internal'] }), evaluate: async () => ({ prfOutput32 }) };
-}
-/** The way the page reaches the executor: POST JSON, with the page's Origin. Throws {status, code} where the answer is not 200. */
-const sender = (w, origin = w.issuer) => async (path, value) => {
-  const r = await send('POST', `${w.issuer}${path}`, { headers: { 'content-type': 'application/json', ...(origin ? { origin } : {}) }, body: JSON.stringify(value) });
-  const v = json(r);
-  if (r.status !== 200) throw Object.assign(new Error(v.message), { status: r.status, code: v.error });
-  return v;
-};
-const refusal = async (p) => {
-  try {
-    await p;
-  } catch (e) {
-    return { status: e.status, code: e.code };
-  }
-  assert.fail('it was not refused');
-};
-/** A world whose executor has the check by passkey, and a setup link made before the start. */
-async function ownerWorld() {
-  const w = await oauthWorld({ open: false });
-  delete w.more.ownerCheck;
-  w.parsed = readHttpSettings(w.settings, w.folder).settings;
-  w.code = new URL(makeOwnerSetup(w.parsed, { now: w.more.now }).link).hash.slice(1);
-  await reopen(w);
-  return w;
-}
-/** A page waiting for the owner's answer: the form's request field. */
-async function waiting(w) {
-  const page = await ask(w, authorizeUrl(w, await discover(w), { pkce: pkce() }));
-  assert.equal(page.status, 200, page.body);
-  return page.request;
 }
 
 // --- finding 1: the page's own form must carry the executor's Origin ---
@@ -126,13 +86,12 @@ test('finding 2: wrong setup codes and wrong recovery codes shut nothing: the li
   const w = await ownerWorld();
   try {
     for (let i = 0; i < 12; i += 1) assert.deepEqual(await refusal(sender(w)(LINK_PATH, { code: randomBytes(32).toString('base64url') })), { status: 403, code: 'setup-refused' });
-    const passkey = fakePasskey();
-    await setUp({ cc, id, passkey, code: w.code, send: sender(w) });
+    const { passkey, recoveryCode } = await setUpOwner(w);
     assert.ok(state(w).owner, 'the right code, straight after twelve wrong ones');
-    for (let i = 0; i < 12; i += 1) assert.deepEqual(await refusal(sender(w)(RECOVERY_PATH, { lookupHash: randomBytes(32).toString('hex') })), { status: 404, code: 'not-found' });
     const request = await waiting(w);
-    for (let i = 0; i < 12; i += 1) assert.equal((await answer(w, request, { fields: { [FIELD_CHALLENGE]: randomBytes(32).toString('base64url'), [FIELD_SIGNATURE]: randomBytes(64).toString('base64url') } })).status, 403);
-    const a = await answer(w, request, { fields: await signIn({ cc, id, passkey, request, origin: w.issuer, send: sender(w) }) });
+    for (let i = 0; i < 12; i += 1) assert.equal((await answer(w, request, { fields: { [FIELD_RECOVERY]: recoveryCode.replace(/.$/, (c) => (c === 'A' ? 'B' : 'A')) } })).status, 403);
+    for (let i = 0; i < 12; i += 1) assert.equal((await answer(w, request, { fields: { [FIELD_CHALLENGE]: randomBytes(32).toString('base64url'), [FIELD_AUTHENTICATOR_DATA]: randomBytes(37).toString('base64url'), [FIELD_CLIENT_DATA]: randomBytes(64).toString('base64url'), [FIELD_SIGNATURE]: randomBytes(64).toString('base64url') } })).status, 403);
+    const a = await answer(w, request, { fields: await prove(w, passkey)(request) });
     assert.equal(a.status, 303, a.body);
   } finally {
     await w.close();
@@ -142,12 +101,11 @@ test('finding 2: wrong setup codes and wrong recovery codes shut nothing: the li
 test('finding 2: nothing anyone sends pushes the owner\'s page out: after 1,200 other requests at the page and 1,200 other challenges, the owner\'s answer passes', async () => {
   const w = await ownerWorld();
   try {
-    const passkey = fakePasskey();
-    await setUp({ cc, id, passkey, code: w.code, send: sender(w) });
+    const { passkey } = await setUpOwner(w);
     const d = await discover(w);
-    // The owner's page, and the owner's answer made ready: the root key open, the challenge signed.
+    // The owner's page, and the owner's answer made ready: the challenge signed.
     const request = await waiting(w);
-    const fields = await signIn({ cc, id, passkey, request, origin: w.issuer, send: sender(w) });
+    const fields = await prove(w, passkey)(request);
     // Meanwhile anyone asks for pages, and for challenges for a page of their own.
     const url = authorizeUrl(w, d, { pkce: pkce() });
     await many(1200, async () => assert.equal((await send('GET', url)).status, 200));
@@ -198,16 +156,18 @@ test('finding 2: the request in the form is under the executor\'s seal: one chan
 });
 
 test('finding 2: a challenge passes the check once', async () => {
-  const identity = await id.createIdentity(cc);
   const origin = 'https://guard.example.com';
-  const owner = { routingPublicKey: cc.toBase64Url(identity.routing.publicKeyRaw) };
+  const soft = await makePasskey('ES256', { rpId: 'guard.example.com', origin });
+  const owner = { credentialId: 'AAAA', key: soft.key, recoveryHash: 'x' };
   const check = openPasskeyCheck({ issuer: origin, store: { owner: () => owner, setup: () => null, setOwner() {} }, withNote: () => null, page() {}, json() {}, hashOf: (text) => text });
-  const nonce = new Uint8Array(randomBytes(32));
-  const challenge = cc.toBase64Url(nonce);
-  const signature = cc.toBase64Url(await cc.signBytes(identity.routing.privateKey, await id.authMessage(cc, origin, nonce)));
-  const fields = new URLSearchParams({ [FIELD_CHALLENGE]: challenge, [FIELD_SIGNATURE]: signature });
+  const challenge = randomBytes(32).toString('base64url');
+  const signed = async (change) => {
+    const s = await soft.sign(await sha256(fromBase64url(challenge)), change);
+    return new URLSearchParams({ [FIELD_CHALLENGE]: challenge, [FIELD_AUTHENTICATOR_DATA]: toBase64url(s.authenticatorData), [FIELD_CLIENT_DATA]: toBase64url(s.clientDataJSON), [FIELD_SIGNATURE]: toBase64url(s.signature) });
+  };
   const note = { challenge, expires: Date.now() + 60000 };
-  assert.equal(await check.check(new URLSearchParams({ [FIELD_CHALLENGE]: challenge, [FIELD_SIGNATURE]: cc.toBase64Url(new Uint8Array(64)) }), { origin, note }), false, 'a wrong signature');
+  assert.equal(await check.check(await signed({ signature: (s) => s.map((b, i) => (i === s.length - 1 ? b ^ 1 : b)) }), { origin, note }), false, 'a wrong signature');
+  const fields = await signed();
   assert.equal(await check.check(fields, { origin, note }), true, 'a wrong signature before it spends nothing');
   assert.equal(await check.check(fields, { origin, note }), false, 'the same challenge and signature again');
 });
@@ -277,191 +237,13 @@ test('finding 4: the page tells the owner to approve only a connection they bega
 });
 
 // --- findings 5 and 14: the page's script, run as the executor serves it ---
-
-/** The files the page loads, fetched from the executor as a browser would and written to a folder of the same shape: the address of page.js there. */
-async function pageScript(w) {
-  const root = mkdtempSync(join(tmpdir(), 'provared-page-'));
-  writeFileSync(join(root, 'package.json'), '{"type":"module"}');
-  const seen = new Set();
-  const fetchFile = async (path) => {
-    if (seen.has(path)) return;
-    seen.add(path);
-    const r = await send('GET', `${w.issuer}${path}`);
-    assert.equal(r.status, 200, path);
-    const file = join(root, path);
-    mkdirSync(dirname(file), { recursive: true });
-    writeFileSync(file, r.body);
-    // Every file it imports by a relative address, as a browser would ask for them.
-    for (const m of r.body.matchAll(/\bfrom\s+['"](\.{1,2}\/[^'"]+)['"]|\bimport\s*\(?\s*['"](\.{1,2}\/[^'"]+)['"]/g)) await fetchFile(new URL(m[1] ?? m[2], `http://x${path}`).pathname);
-  };
-  await fetchFile('/oauth/owner/page.js');
-  assert.ok(seen.size > 4, 'the page\'s script, its steps and the two packages\' files');
-  return pathToFileURL(join(root, 'oauth', 'owner', 'page.js')).href;
-}
-
-/** A stand-in for an element of the page: what the script reads and sets, and its listeners. */
-function element(more = {}) {
-  const listeners = {};
-  return { textContent: '', hidden: false, disabled: false, value: '', ...more, addEventListener: (type, f) => (listeners[type] = f), fire: (type, event) => listeners[type](event) };
-}
-
-/**
- * A stand-in for navigator.credentials, for the package's own WebAuthn
- * functions. "onDevice" is what the device's own authenticator does: 'no-prf'
- * (it makes a passkey that gives no PRF), 'refused' (its prompt is closed),
- * 'unavailable', or 'ok'. A phone or a security key always works here.
- */
-function fakeCredentials(onDevice) {
-  const secret = randomBytes(32);
-  const prf = (salt) => new Uint8Array(createHash('sha256').update(secret).update(Buffer.from(salt)).digest());
-  const c = {
-    /** The attachment of each passkey asked for, and the transports and hints of each unlock. */
-    made: [],
-    asked: [],
-    async create({ publicKey: k }) {
-      const attachment = k.authenticatorSelection.authenticatorAttachment;
-      c.made.push(attachment);
-      assert.equal(k.authenticatorSelection.userVerification, 'required');
-      if (attachment === 'platform' && onDevice === 'refused') throw Object.assign(new Error('closed'), { name: 'NotAllowedError' });
-      if (attachment === 'platform' && onDevice === 'unavailable') throw Object.assign(new Error('not here'), { name: 'SecurityError' });
-      const noPrf = attachment === 'platform' && onDevice === 'no-prf';
-      const transports = attachment === 'platform' ? ['internal'] : ['hybrid', 'usb'];
-      return {
-        rawId: new Uint8Array(randomBytes(16)),
-        response: { getTransports: () => transports, getAuthenticatorData: () => new Uint8Array(37) },
-        getClientExtensionResults: () => ({ prf: noPrf ? { enabled: false } : { enabled: true, results: { first: prf(k.extensions.prf.eval.first) } } }),
-      };
-    },
-    async get({ publicKey: k }) {
-      c.asked.push({ transports: k.allowCredentials[0].transports, hints: k.hints });
-      return { rawId: k.allowCredentials[0].id, response: {}, getClientExtensionResults: () => ({ prf: { results: { first: prf(k.extensions.prf.eval.first) } } }) };
-    },
-  };
-  return c;
-}
-
-/**
- * Run the page's script on a stand-in page made from the HTML the executor
- * sent: every element with an id, and the form with its named fields.
- * Gives {el (the elements by id), form, replaced (what history.replaceState
- * was given)}. The globals a page has are set for the run, and put back by
- * "after".
- */
-let runs = 0;
-async function runPage(w, script, { html, hash = '', path, credentials, after }) {
-  const el = {};
-  for (const m of html.matchAll(/<(\w+)[^>]*\sid="([^"]+)"([^>]*)>/g)) el[m[2]] = element({ hidden: /\shidden(\s|$)/.test(` ${m[3]}`) });
-  let form = null;
-  if (/<form method="post" action="\/oauth\/authorize">/.test(html)) {
-    form = element({ elements: {}, submitted: null, requestSubmit: (submitter) => (form.submitted = submitter) });
-    for (const m of html.matchAll(/<input type="hidden" name="([^"]+)" value="([^"]*)">/g)) form.elements[m[1]] = { value: m[2] };
-  }
-  const page = { el, form, replaced: null };
-  const globals = {
-    document: { getElementById: (name) => el[name] ?? null, querySelector: (q) => (q === 'form[action="/oauth/authorize"]' ? form : null) },
-    location: { hash, host: new URL(w.issuer).host, origin: w.issuer, pathname: path },
-    history: { replaceState: (...a) => (page.replaced = a) },
-    navigator: { credentials },
-    // The page's fetch: to the executor's own address, with the Origin a browser gives a page's own request.
-    fetch: async (to, o) => {
-      const r = await send(o.method, `${w.issuer}${to}`, { headers: { ...o.headers, origin: w.issuer }, body: o.body });
-      return { ok: r.status >= 200 && r.status < 300, status: r.status, json: async () => JSON.parse(r.body) };
-    },
-  };
-  const before = Object.fromEntries(Object.keys(globals).map((k) => [k, Object.getOwnPropertyDescriptor(globalThis, k)]));
-  for (const [k, value] of Object.entries(globals)) Object.defineProperty(globalThis, k, { value, configurable: true, writable: true });
-  after(() => {
-    for (const [k, d] of Object.entries(before)) {
-      if (d) Object.defineProperty(globalThis, k, d);
-      else delete globalThis[k];
-    }
-  });
-  runs += 1;
-  await import(`${script}?run=${runs}`);
-  return page;
-}
-
-test('findings 5 and 14: the page\'s script, as served: where the device\'s passkey gives no PRF, a passkey on a phone or a security key is offered and sets up the owner; its transports are kept and given back at the unlock', async (t) => {
-  const w = await ownerWorld();
-  const undo = [];
-  t.after(async () => {
-    for (const f of undo.reverse()) f();
-    await w.close();
-  });
-  const after = (f) => undo.push(f);
-  const script = await pageScript(w);
-  const credentials = fakeCredentials('no-prf');
-  const setupHtml = (await send('GET', `${w.issuer}/oauth/owner`)).body;
-  const setup = await runPage(w, script, { html: setupHtml, hash: `#${w.code}`, path: '/oauth/owner', credentials, after });
-  assert.deepEqual(setup.replaced?.[2], '/oauth/owner', 'the link\'s code is taken out of the address');
-  assert.equal(setup.el['owner-setup-elsewhere'].hidden, true, 'the second way is not offered before the first has failed');
-  // The passkey on the device: made, but with no PRF. Nothing is set up, and the second way is offered.
-  await setup.el['owner-setup'].fire('click');
-  assert.deepEqual(credentials.made, ['platform']);
-  assert.equal(state(w).owner, null);
-  assert.equal(setup.el['owner-setup-elsewhere'].hidden, false, 'a phone or a security key is offered');
-  assert.equal(setup.el['owner-setup'].disabled, false);
-  assert.match(setup.el['owner-status'].textContent, /^Not done: .*phone or a security key/);
-  assert.equal(setup.el['owner-recovery'].hidden, true);
-  // On a phone or a security key: the package's own "cross-platform".
-  await setup.el['owner-setup-elsewhere'].fire('click');
-  assert.deepEqual(credentials.made, ['platform', 'cross-platform']);
-  assert.match(setup.el['owner-status'].textContent, /^The owner is set up\./);
-  assert.equal(setup.el['owner-recovery'].hidden, false);
-  assert.match(setup.el['owner-recovery'].textContent, /\S/, 'the recovery code is shown');
-  assert.deepEqual(state(w).owner.passkey.transports, ['hybrid', 'usb'], 'the executor keeps where the passkey is');
-  assert.equal(readFileSync(w.statePath, 'utf8').includes(setup.el['owner-recovery'].textContent), false);
-
-  // The authorisation page: Approve asks the passkey where it is kept, then sends the form with the request and the check's two fields.
-  const d = await discover(w);
-  const p = pkce();
-  const html = (await ask(w, authorizeUrl(w, d, { pkce: p }))).body;
-  const page = await runPage(w, script, { html, path: '/oauth/authorize', credentials, after });
-  const submitter = { value: 'approve' };
-  let prevented = false;
-  await page.form.fire('submit', { submitter, preventDefault: () => (prevented = true) });
-  assert.equal(prevented, true, 'the form waits for the owner\'s proof');
-  assert.deepEqual(credentials.asked, [{ transports: ['hybrid', 'usb'], hints: ['hybrid', 'security-key'] }], 'the browser is told where the passkey is kept');
-  assert.equal(page.form.submitted, submitter, `the form is sent (${page.el['owner-status'].textContent})`);
-  const a = await answer(w, page.form.elements.request.value, { fields: { [FIELD_CHALLENGE]: page.form.elements[FIELD_CHALLENGE].value, [FIELD_SIGNATURE]: page.form.elements[FIELD_SIGNATURE].value } });
-  assert.equal(a.status, 303, a.body);
-  const got = await token(w, { grant_type: 'authorization_code', code: a.params.code, client_id: w.docs.client, code_verifier: p.verifier });
-  assert.equal(got.status, 200, got.body);
-  assert.equal((await call(w, bearer(json(got).access_token), 'echo', {})).status, 200);
-  // Refuse is sent as it is, with no proof asked for.
-  const refuse = await runPage(w, script, { html: (await ask(w, authorizeUrl(w, d, { pkce: pkce() }))).body, path: '/oauth/authorize', credentials, after });
-  let stopped = false;
-  await refuse.form.fire('submit', { submitter: { value: 'refuse' }, preventDefault: () => (stopped = true) });
-  assert.equal(stopped, false);
-  assert.equal(credentials.asked.length, 1);
-});
-
-test('finding 5: the second way is offered after the device\'s prompt is closed or refused too, and after no other failure', async (t) => {
-  assert.deepEqual(ELSEWHERE_AFTER, ['prf-unsupported', 'not-allowed']);
-  const w = await ownerWorld();
-  const undo = [];
-  t.after(async () => {
-    for (const f of undo.reverse()) f();
-    await w.close();
-  });
-  const after = (f) => undo.push(f);
-  const script = await pageScript(w);
-  const html = (await send('GET', `${w.issuer}/oauth/owner`)).body;
-  const refused = await runPage(w, script, { html, hash: `#${w.code}`, path: '/oauth/owner', credentials: fakeCredentials('refused'), after });
-  await refused.el['owner-setup'].fire('click');
-  assert.equal(refused.el['owner-setup-elsewhere'].hidden, false, 'after "not-allowed"');
-  const unavailable = await runPage(w, script, { html, hash: `#${w.code}`, path: '/oauth/owner', credentials: fakeCredentials('unavailable'), after });
-  await unavailable.el['owner-setup'].fire('click');
-  assert.match(unavailable.el['owner-status'].textContent, /^Not done: /);
-  assert.equal(unavailable.el['owner-setup-elsewhere'].hidden, true, 'not after "webauthn-unavailable"');
-  assert.equal(state(w).owner, null);
-  // Where the device's own passkey works, it is the owner's, and its transports are kept.
-  const works = fakeCredentials('ok');
-  const ok = await runPage(w, script, { html, hash: `#${w.code}`, path: '/oauth/owner', credentials: works, after });
-  await ok.el['owner-setup'].fire('click');
-  assert.deepEqual(works.made, ['platform']);
-  assert.deepEqual(state(w).owner.passkey.transports, ['internal']);
-});
+//
+// These were of a passkey that had to give PRF: where the device's own gave
+// none, a second button asked for one on a phone or a security key, and the
+// passkey's transports were kept. The owner's check is now a plain passkey
+// (DESIGN.md, X270 and X275): one call, the library's own, with no
+// attachment named, so the browser itself offers this device, a phone or a
+// security key. The page's script is run as served in owner.test.mjs.
 
 // --- finding 6: memory never runs ahead of the state file ---
 

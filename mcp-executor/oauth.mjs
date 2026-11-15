@@ -33,7 +33,7 @@ import { closeSync, fsyncSync, openSync, readFileSync, renameSync, rmSync, write
 import http from 'node:http';
 import https from 'node:https';
 import { untilFree } from './files.mjs';
-import { OWNER_PATH, SETUP_LIFE, openPasskeyCheck, readOwner } from './owner.mjs';
+import { OWNER_PATH, SETUP_LIFE, isOldOwner, openPasskeyCheck, readOwner } from './owner.mjs';
 
 /** Where the executor's own OAuth addresses are. */
 export const OAUTH_PATH = '/oauth';
@@ -78,7 +78,10 @@ const sameText = (a, b) => {
   return x.length === y.length && timingSafeEqual(x, y);
 };
 
-/** The issuer as the settings give it, or null: an https origin, or http://127.0.0.1 with a port for tests (X202). */
+/** A local address, for tests: 127.0.0.1, or the name "localhost", which a browser takes for this computer and at which, unlike an IP address, it lets a passkey be made (X277). */
+const LOCAL_HOSTS = ['127.0.0.1', 'localhost'];
+
+/** The issuer as the settings give it, or null: an https origin, or http://127.0.0.1 or http://localhost with a port for tests (X202, X277). */
 export function readIssuer(text) {
   if (typeof text !== 'string') return null;
   let u;
@@ -90,11 +93,11 @@ export function readIssuer(text) {
   if (u.username || u.password || u.search || u.hash || u.pathname !== '/') return null;
   if (text !== u.origin && text !== `${u.origin}/`) return null;
   if (u.protocol === 'https:') return u.origin;
-  if (u.protocol === 'http:' && u.hostname === '127.0.0.1' && u.port !== '') return u.origin;
+  if (u.protocol === 'http:' && LOCAL_HOSTS.includes(u.hostname) && u.port !== '') return u.origin;
   return null;
 }
 
-/** Whether a client's id is a URL the executor may fetch: https with a path, or http://127.0.0.1 where the issuer is too (X203). */
+/** Whether a client's id is a URL the executor may fetch: https with a path, or http://127.0.0.1 where the issuer is a local address too (X203, X277). */
 function clientIdProblem(id, issuer) {
   if (typeof id !== 'string' || id.length > 2048) return 'is not a URL';
   let u;
@@ -107,7 +110,7 @@ function clientIdProblem(id, issuer) {
   if (u.username || u.password || u.hash) return 'has a user, a password or a fragment';
   if (u.pathname === '/' || u.pathname === '') return 'has no path';
   if (u.protocol === 'https:') return null;
-  if (u.protocol === 'http:' && u.hostname === '127.0.0.1' && issuer?.startsWith('http://127.0.0.1:')) return null;
+  if (u.protocol === 'http:' && u.hostname === '127.0.0.1' && LOCAL_HOSTS.some((h) => issuer?.startsWith(`http://${h}:`))) return null;
   return 'is not https';
 }
 
@@ -125,7 +128,7 @@ export function readOAuthSettings(config, root, s, at, warnings, pathFrom) {
     return;
   }
   const out = { issuer: readIssuer(o.issuer), clients: [], state: null };
-  if (!out.issuer) at('oauth.issuer', 'must be the executor\'s public address, as clients reach it: an https origin with no path, such as "https://guard.example.com" (the executor itself speaks plain HTTP behind a reverse proxy), or http://127.0.0.1 with a port, for tests.');
+  if (!out.issuer) at('oauth.issuer', 'must be the executor\'s public address, as clients reach it: an https origin with no path, such as "https://guard.example.com" (the executor itself speaks plain HTTP behind a reverse proxy), or http://127.0.0.1 or http://localhost with a port, for tests.');
   const clients = o.clients ?? [];
   if (!Array.isArray(clients)) at('oauth.clients', 'must be a list of the URLs of the clients\' metadata documents; with none, no client can connect.');
   else {
@@ -190,7 +193,11 @@ function newSeal() {
   };
 }
 
-function readState(path) {
+/** What a start says of a state file whose owner is in the form of the builds before the plain passkey, which were never released (X278). */
+const OLD_OWNER = 'oauth.state: the file holds an owner in an earlier form (a key kept in the browser, which this version does not use), so it cannot be read. Run "provared-mcp-executor owner --config <settings> --reset": it removes that owner, ends every connection, and prints a new setup link.';
+
+/** The state file, read whole. "forReset": an owner in the earlier form is let through as it is, since the caller is about to remove it. */
+function readState(path, { forReset = false } = {}) {
   let text;
   try {
     text = untilFree(() => readFileSync(path, 'utf8'));
@@ -206,7 +213,12 @@ function readState(path) {
   }
   const grantOk = (g) => isObject(g) && typeof g.id === 'string' && typeof g.agent === 'string' && typeof g.client === 'string' && typeof g.resource === 'string' && (g.scope === null || typeof g.scope === 'string') && (g.refresh === null || HASH.test(g.refresh)) && Number.isInteger(g.refreshExpires) && Array.isArray(g.spent) && g.spent.every((h) => HASH.test(h)) && Array.isArray(g.access) && g.access.every((a) => isObject(a) && HASH.test(a.hash) && Number.isInteger(a.expires));
   // The owner and a setup waiting for its link (X226): absent in a file written before them, which is read as having neither.
-  const ownerOk = (v) => v === undefined || v === null || (isObject(v) && Number.isInteger(v.created) && !readOwner({ routingPublicKey: v.routingPublicKey, passkey: v.passkey, recovery: v.recovery }).problem && Object.keys(v).length === 4);
+  if (isObject(state) && isOldOwner(state.owner)) {
+    if (!forReset) throw new Error(OLD_OWNER);
+    // Only that it is there matters to a reset, which removes it.
+    state.owner = { earlier: true };
+  }
+  const ownerOk = (v) => v === undefined || v === null || (forReset && v.earlier === true) || (isObject(v) && Number.isInteger(v.created) && !readOwner({ credentialId: v.credentialId, key: v.key, recoveryHash: v.recoveryHash }).problem && Object.keys(v).length === 4);
   const setupOk = (v) => v === undefined || v === null || (isObject(v) && typeof v.hash === 'string' && HASH.test(v.hash) && Number.isInteger(v.expires));
   if (!isObject(state) || state.version !== STATE_VERSION || !Array.isArray(state.grants) || !state.grants.every(grantOk) || !isObject(state.documents) || !ownerOk(state.owner) || !setupOk(state.setup)) {
     throw new Error('oauth.state: the file is not in the form the executor writes.');
@@ -224,7 +236,7 @@ function readState(path) {
  */
 export function makeOwnerSetup(settings, { reset = false, now = Date.now } = {}) {
   const o = settings.oauth;
-  const state = readState(o.state);
+  const state = readState(o.state, { forReset: reset });
   if (state.owner && !reset) throw new Error('An owner is already set up on this executor, so a second setup is refused. To replace the owner, run the command again with --reset: every connection then ends, with its tokens.');
   const revoked = reset ? state.grants.length : 0;
   if (reset) {
@@ -573,6 +585,8 @@ export function openFrontDoor({ settings, now = Date.now, log = () => {}, ownerC
   // The owner's check: the one given, or by the owner's passkey (owner.mjs), which keeps the owner in the state file.
   const ownerCheck = given !== undefined ? given : openPasskeyCheck({
     issuer,
+    resource,
+    clients: o.clients,
     now,
     log,
     store: {
@@ -588,6 +602,7 @@ export function openFrontDoor({ settings, now = Date.now, log = () => {}, ownerC
       const r = waiting(text);
       return r ? seals.seal({ ...r, note }) : null;
     },
+    clientOf: (text) => waiting(text)?.client ?? null,
     page: (res, status, title, body) => sendPage(res, status, title, body, { scripts: true }),
     json: sendJson,
     hashOf,
@@ -703,12 +718,17 @@ export function openFrontDoor({ settings, now = Date.now, log = () => {}, ownerC
     if (scope !== null && (scope.length > 1024 || !PRINTABLE.test(scope))) return fail('invalid_scope', 'scope is longer than 1024 characters or not printable');
     if (oauthAgents.length === 0) return fail('access_denied', 'the executor has no agent for connections');
     // The request waits in the page's form, under the executor's seal (X228): nothing of it is kept here.
-    const sealed = seals.seal({ id: newToken(), client: client.id, redirectUri: to, state: st, challenge, scope, expires: now() + REQUEST_LIFE });
+    showRequest(res, seals.seal({ id: newToken(), client: client.id, redirectUri: to, state: st, challenge, scope, expires: now() + REQUEST_LIFE }), client.id, to);
+  }
+
+  /** The page for a request that waits, as its form holds it: who asks, named by its host, the warning, the agent, the owner's check and the two answers (X212). */
+  function showRequest(res, sealed, clientId, to) {
     const where = new URL(to);
+    const host = new URL(clientId).host;
     const options = oauthAgents.map((n) => `<option value="${escape(n)}">${escape(n)}</option>`).join('');
     const check = ownerCheck ? ownerCheck.form() : '<p>No owner\'s check is set up on this executor, so no connection can be approved here.</p>';
     const body = [
-      `<p><strong>${escape(client.name ?? new URL(client.id).host)}</strong> (client ${escape(client.id)}) asks to connect to ${escape(settings.name ?? 'this executor')} at ${escape(resource)}.</p>`,
+      `<p><strong>${escape(host)}</strong> (client ${escape(clientId)}) asks to connect to ${escape(settings.name ?? 'this executor')} at ${escape(resource)}.</p>`,
       `<p>Once approved, it is one agent: it may call the tools that agent's permission allows, and each call gets a receipt in that agent's book. The answer goes to ${escape(where.origin)}.</p>`,
       // The page cannot tell whose request this is: any user of the client can begin one and send its link to the owner.
       '<p><strong>Approve only a connection you began yourself, just now.</strong> If this page came to you as a link from someone else, refuse.</p>',
@@ -719,7 +739,7 @@ export function openFrontDoor({ settings, now = Date.now, log = () => {}, ownerC
       '<p><button type="submit" name="decision" value="approve">Approve</button> <button type="submit" name="decision" value="refuse">Refuse</button></p>',
       '</form>',
     ].join('\n');
-    sendPage(res, 200, 'Approve a connection', body, { formTo: [where.origin], scripts: ownerCheck?.scripts === true });
+    sendPage(res, 200, `Approve ${host} connecting to your guard`, body, { formTo: [where.origin], scripts: ownerCheck?.scripts === true });
   }
 
   /** POST /oauth/authorize: the owner's answer (X212). */
@@ -739,6 +759,8 @@ export function openFrontDoor({ settings, now = Date.now, log = () => {}, ownerC
       log({ event: 'oauth-refused', code: 'access-denied', client: r.client });
       return back(res, r.redirectUri, { error: 'access_denied', error_description: 'the owner refused', state: r.state });
     }
+    // The setup page sends the request of a page that waited where no owner existed, to have it shown again (X272). It is the same request, with the same end: nothing is approved by showing it.
+    if (form.get('decision') === 'show') return showRequest(res, form.get('request'), r.client, r.redirectUri);
     if (form.get('decision') !== 'approve') return problemPage(res, 400, 'The answer is neither approve nor refuse.');
     if (!ownerCheck) return problemPage(res, 503, 'No owner\'s check is set up on this executor, so no connection can be approved.');
     const agent = form.get('agent');
