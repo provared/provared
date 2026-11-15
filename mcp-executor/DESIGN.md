@@ -894,7 +894,12 @@ type (415), its size and its time (413, 408), and that it is one message
 POST with no session id that fails one of those is now answered for
 that, where it was answered for the header. The order of the other
 checks is unchanged, and under a session the header's check is still the
-first.
+first. A GET or a DELETE with no session id is not an `initialize`: its
+header is checked first, before it is refused for naming no session.
+`test/http-local-faults.test.mjs` holds both places: a POST with no
+session id whose mirrored header also disagrees is refused for its
+version, and a GET and a DELETE with no session id are refused for
+theirs, with `"session": false` in the log.
 
 The log line. `{"event":"refused","code":"protocol-version"}` now has
 `"version"`: the header's value where it is written as a revision is
@@ -902,7 +907,10 @@ The log line. `{"event":"refused","code":"protocol-version"}` now has
 nothing a client chooses is copied into the log but ten characters of
 digits and hyphens. And `"session"`: `true` where an `Mcp-Session-Id`
 came with the request, `false` where none did. Nothing else of the
-request is in the line: not its method, and not the session's id.
+request is in the line: not its method, and not the session's id. The
+test's list of other values has one that ends in a date
+(`x2026-07-28`), so that the form is held at its start as well as at its
+end.
 
 Not known: whether the request the log showed refused was an
 `initialize`. Where it was another message, sent the way of revision
@@ -3812,7 +3820,11 @@ no longer only until its end: a request approved by the passkey on its
 first page is then not approved a second time by a Continue on a page
 that outlives the first. One code is spent once while the executor runs,
 and a restart ends every request (X228), so a request is given this time
-once at most, and no request lasts more than 15 minutes.
+once at most, and no request lasts more than 15 minutes. Only that page
+gives it: the note a passkey's challenge seals into a request keeps the
+request's own end. `test/owner.test.mjs` holds this: a challenge asked
+with a minute of the 10 left, its form sent a minute and a second later,
+is refused, and nothing is approved.
 
 Why five minutes: the page has a command to note down and one button;
 five minutes is enough to read it, and short beside the 10 a request

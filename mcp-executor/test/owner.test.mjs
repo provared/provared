@@ -644,6 +644,25 @@ test('refused at the authorisation page: a passkey used at another origin, for a
   }
 });
 
+test('a passkey\'s challenge gives its request no time of its own: asked with a minute left, its form sent just after the request\'s 10 minutes is refused, and nothing is approved (X283)', async () => {
+  const w = await ownerWorld();
+  try {
+    const { passkey } = await setUpOwner(w);
+    const request = await waiting(w);
+    w.clock.offset += REQUEST_LIFE - 60 * 1000;
+    const signed = await prove(w, passkey)(request);
+    // The challenge has two minutes; the request, one minute and a second fewer.
+    w.clock.offset += 61 * 1000;
+    const approved = count(w, 'oauth-approved');
+    const a = await answer(w, request, { fields: signed });
+    assert.equal(a.status, 400, a.body);
+    assert.equal(a.headers.location, undefined);
+    assert.equal(count(w, 'oauth-approved'), approved);
+  } finally {
+    await w.close();
+  }
+});
+
 /** What a page's form would send: the value of one of its hidden fields. */
 const hidden = (body, name) => new RegExp(`<input type="hidden" name="${name}" value="([^"]+)">`).exec(body)?.[1];
 /** The owner's answer by a recovery code: the page that says the code is spent, with what its Continue would send. {paused (the answer), request, agent, p (the client's PKCE), first (the request as the first page had it)}. */

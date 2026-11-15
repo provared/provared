@@ -188,7 +188,13 @@
     named, where it is written as a date; `"other"` where it is not) and
     `"session"` (whether a session id came with the request). Two more
     tests in `test/http-local-faults.test.mjs`, and each part was undone
-    once to see its test fail.
+    once to see its test fail. A re-check found three changes to this
+    work that no test caught, and those tests now catch each: the log's
+    form for a version not held at its start (a value such as
+    `x2026-07-28` is now in the test's list), the check that waited
+    moved after the mirrored headers, and a GET or a DELETE with no
+    session id not refused for its version. Each change was made once,
+    its test failed, and the code was put back.
   - **Tests.** `test/deep.test.mjs` (5), `test/list.test.mjs` (8, three
     of them in front of a local program), two more in
     `test/content-rules.test.mjs` and in `test/names.test.mjs`, and six
@@ -649,7 +655,9 @@
       named a limit. That page now has 5 minutes of its own, or what was
       left of the 10 where that is more, and says so (X283). A request
       is still answered once: the executor keeps an approved request's
-      id for five minutes past its end.
+      id for five minutes past its end. A test now also holds that a
+      passkey's challenge gives a request no time of its own: a re-check
+      found that a change making every challenge do so failed no test.
     - Approve with a code typed, then Refuse before the answer came,
       sent both forms: the code was spent, the browser went back to the
       client as refused, and the page with Continue was never seen. Once
@@ -692,7 +700,7 @@
     client, with its limits, and the steps to try the passkey by hand,
     with what to watch the first time.
   - **Tests**: `test/oauth.test.mjs`, 11 tests: the whole flow in plain
-    HTTP requests, and each refusal. `test/owner.test.mjs`, 32 tests: the
+    HTTP requests, and each refusal. `test/owner.test.mjs`, 33 tests: the
     page's own steps, and the page's script itself (`owner-page.mjs`)
     fetched from the executor and run on a stand-in page with the
     library's `passkey-browser.js` as served, with a software passkey;

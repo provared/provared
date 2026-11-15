@@ -588,6 +588,19 @@ test('MCP-Protocol-Version on the "initialize" that begins a session: with no se
     const inSession = await rawRequest(w, { headers: { 'content-type': 'text/plain', ...auth(w, 'alpha'), ...under(session, '2026-07-28') }, body: 'x' });
     assert.equal(inSession.status, 400);
     assert.equal(versionRefusals().length, before + 5);
+    // The check that waited comes before the mirrored headers: a message that also has a header that disagrees with it is refused for its version.
+    const mirrored = await post(w, 'alpha', { jsonrpc: '2.0', id: 7, method: 'tools/call', params: { name: 'echo', arguments: {} } }, { headers: { 'mcp-protocol-version': '2026-07-28', 'mcp-method': 'tools/list' } });
+    assert.equal(mirrored.status, 400);
+    assert.match(mirrored.json.error.message, /^The MCP-Protocol-Version header names a version/);
+    assert.equal(versionRefusals().length, before + 6);
+    // A GET or a DELETE with no session id is no "initialize": it is refused for its version at once, not for naming no session.
+    for (const method of ['GET', 'DELETE']) {
+      const none = await rawRequest(w, { method, headers: { ...auth(w, 'alpha'), 'mcp-protocol-version': '2026-07-28', ...(method === 'GET' ? { accept: 'text/event-stream' } : {}) } });
+      assert.equal(none.status, 400, method);
+      assert.match(none.body, /The MCP-Protocol-Version header names a version/, method);
+      assert.deepEqual({ version: versionRefusals().at(-1).version, session: versionRefusals().at(-1).session }, { version: '2026-07-28', session: false }, method);
+    }
+    assert.equal(versionRefusals().length, before + 8);
   } finally {
     await w.close();
   }
@@ -609,7 +622,7 @@ test('the log line of a request refused for its MCP-Protocol-Version names the v
     assert.equal(JSON.stringify(last()).includes(session), false);
     assert.equal(JSON.stringify(events(w, 'refused')).includes('not-for-the-log'), false);
     // Any other value is written as "other": what a client sends there is not put in the log.
-    const odd = ['not-a-version', '', '2026-7-28', '2026-07-28x', '20260728', '{"event":"oauth-approved"}', 'x'.repeat(300)];
+    const odd = ['not-a-version', '', '2026-7-28', '2026-07-28x', 'x2026-07-28', '20260728', '{"event":"oauth-approved"}', 'x'.repeat(300)];
     for (const version of odd) {
       assert.equal((await post(w, 'alpha', ping, { headers: { 'mcp-session-id': session, 'mcp-protocol-version': version } })).status, 400, JSON.stringify(version));
       assert.deepEqual({ version: last().version, session: last().session }, { version: 'other', session: true }, JSON.stringify(version));
