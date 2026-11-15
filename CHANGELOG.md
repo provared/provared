@@ -201,7 +201,8 @@
     to a fourth address, `POST /provared/hello`, with no secret; the
     executor answers with the signatures of its own two keys over the
     challenge and the address and port it was asked at; the command
-    checks them against the public keys in `executor.keys` and against
+    checks them against the executor's public keys (those in
+    `executor.keys`, or in a file of the public keys alone) and against
     the address it connected to, and sends the secret on that same
     connection (`identity.mjs`; `DESIGN.md`, X138). Another listener at
     that address, or one that passes the challenge on, is sent no
@@ -334,6 +335,23 @@
     aside: 0.4.1 does not know a `set-aside` line in the copy, and takes
     the call for unfinished again.
   - **Fixes from a second review** (X160 on):
+    - `status`, `seal` and `acknowledge` check a running executor with
+      its public keys alone (X166). They had read `executor.keys` with
+      the reader that loads the private keys, so the administrator had
+      to be able to read the keys that countersign every receipt, and a
+      file of public keys was refused with "Unsupported key usage for
+      Ed25519 key". They now take the public parts of the two keys and
+      load no private key. `keys --public-keys <file>` writes the two
+      public keys alone to a new file (the form of a key file, with
+      nothing private in it), and `--public-keys <file>` names it to the
+      three commands in place of `executor.keys`. The check is as it
+      was: both signatures, the address and port connected to, the same
+      connection. A file that holds no usable keys is said to hold none,
+      and nothing is sent; an executor given a file of public keys says
+      that it holds public keys only. The README now says that through
+      an SSH tunnel, a published container port or a reverse proxy the
+      command refuses, which is the defence working, and advises naming
+      one address in `listen.host` rather than every address.
     - `acknowledge` no longer prints "Still waiting: <call>: can be
       acknowledged" for a call it has just tried and been refused: it
       gives the reason, says that acknowledging it again gives the same

@@ -484,6 +484,32 @@ export async function loadRules(path) {
   return { rules, fingerprint: await rulesFingerprint(parsed), names: rules.map((r) => r.name) };
 }
 
+/** Whether a file reads as a key file with no private part in any of its keys ("d" for Ed25519, "priv" for the two others): a file of public keys. */
+function holdsPublicKeysOnly(path) {
+  try {
+    const keys = JSON.parse(readFileSync(path, 'utf8')).keys;
+    return Array.isArray(keys) && keys.length > 0 && keys.every((k) => k !== null && typeof k === 'object' && k.d === undefined && k.priv === undefined);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Read a key file the executor signs with: its own, or an agent's. A file
+ * of public keys alone, such as "keys --public-keys" writes for the
+ * commands that ask a running executor, cannot be signed with; it is
+ * refused in plain words, where the reader (files.mjs, the gateway's) says
+ * "Unsupported key usage".
+ */
+export async function loadSigningKeys(path) {
+  try {
+    return await loadKeyFile(path, 'agent');
+  } catch (e) {
+    if (holdsPublicKeysOnly(path)) throw new Error(`The key file ${path} holds public keys only. The executor signs with private keys: name the key file that "provared-mcp-executor keys" made. A file of public keys is for the commands that ask a running executor (--public-keys).`);
+    throw e;
+  }
+}
+
 /**
  * Open what every agent shares: the executor's own keys, and the rules on
  * content where the settings name a rules file. Gives
@@ -492,7 +518,7 @@ export async function loadRules(path) {
  */
 export async function prepareShared(settings) {
   const warnings = [];
-  const executorKeys = await loadKeyFile(settings.executor.keys, 'agent');
+  const executorKeys = await loadSigningKeys(settings.executor.keys);
   let content = null;
   if (settings.contentRules) {
     content = await loadRules(settings.contentRules);
@@ -769,7 +795,7 @@ export async function missingFiles(s, agents) {
     else {
       try {
         if (kind === 'recorder') await readRecorderKeyFile(path);
-        else await loadKeyFile(path, kind);
+        else await loadSigningKeys(path);
       } catch (e) {
         problems.push(`${what}: ${e.message}`);
       }

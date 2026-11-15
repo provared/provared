@@ -348,8 +348,10 @@ The settings (`executor-http.example.json` is a start): `name`, `service`,
 `tools`, `contentRules`, `unlisted`, `hideUnlisted`, `timeout`,
 `denialsPerHour`, `callIdInMeta`, `maxWaiting` and `recorder` as below; and
 
-- `listen`: `host` (default `127.0.0.1`; another address is warned about)
-  and `port` (default 8796). `path`: the endpoint (default `/mcp`).
+- `listen`: `host` (default `127.0.0.1`; another address is warned about;
+  name one address rather than every address, see "Through a forwarder
+  the command refuses") and `port` (default 8796). `path`: the endpoint
+  (default `/mcp`).
 - `upstream`: `url` (http or https; plain http off this computer is warned
   about) and `credential`: `{"file": <path>}`, the file that holds the
   bearer token, readable by the executor alone. Without `credential` the
@@ -1087,8 +1089,8 @@ challenge, 32 random bytes it has just made, with no secret, to a fourth
 address, `POST /provared/hello`. The executor answers with two signatures,
 by the two keys of its own key file (the keys it countersigns with), over
 the challenge and the address and port at which it received the request.
-The command checks them against the public keys in `executor.keys`, which
-it must be able to read, and against the address and port it connected
+The command checks them against the executor's public keys, and against
+the address and port it connected
 to; only then does it send the secret, on that same connection. Where the
 check fails it says "… did not show that it is the executor of these
 settings … The administrator's secret was not sent." and ends with code
@@ -1100,6 +1102,38 @@ takes 8 such questions at once; a ninth is answered 503 and nothing is
 signed for it. This shows the command that
 it reached the executor; it does not hide the secret from whoever can read
 the connection, which is plain HTTP.
+
+**The keys a command checks with.** A command needs the executor's two
+public keys and no private key. It takes them from `executor.keys`, of
+which it reads the public parts alone. Where the administrator may not
+read that file, write the public keys alone to a new file, as the
+executor's user:
+
+```
+provared-mcp-executor keys --config executor-http.json --public-keys executor-public.json
+```
+
+and name that file to `status`, `seal` or `acknowledge` with
+`--public-keys executor-public.json`; the command then reads it in place
+of `executor.keys`. The file has the form of a key file with nothing
+private in it and is no secret, but whoever can change it can make the
+command trust another listener: keep it where only the administrator can
+change it. A file that holds no usable keys (not the two keys, Ed25519 and
+then ML-DSA-87) is said to hold none, and nothing is sent. The executor
+itself signs, and does not start on a file of public keys.
+
+**Through a forwarder the command refuses.** Through an SSH tunnel, a
+published container port or a reverse proxy, the address the executor
+signs is not the one the command connected to, so the command refuses and
+sends no secret: that is the defence working, since the command cannot
+tell such a forwarder from a listener in the middle. Run the command where
+it reaches the executor directly: on the executor's computer, or inside
+its container. Name one address in `listen.host` rather than every address
+(`0.0.0.0` or `::`): on Windows, another program of the same user can
+listen on `127.0.0.1` at the executor's port while the executor listens
+on every address. The check keeps the administrator's secret from such a
+program; an agent that connects to `127.0.0.1` would still hand it the
+agent's own secret.
 
 **`status`**, asked of a running HTTP executor, gives the recorder's name,
 the fingerprint of its key set and the timer, and for each agent: the
@@ -1318,8 +1352,10 @@ again once no call waits.
   and wrote to them stops the executor at its next call.
 - **The administrator's secret travels in the clear**, like the agents'.
   The commands check that they have reached the executor before they send
-  it; they do not hide it from whoever can read the connection, and they
-  need to read `executor.keys` to make the check.
+  it; they do not hide it from whoever can read the connection. To make
+  the check they need the executor's public keys, from `executor.keys` or
+  from a file of the public keys alone (`--public-keys`), and they refuse
+  through a tunnel, a published container port or a reverse proxy.
 - **A call set aside has no receipt**, and the book does not show it;
   only the executor's copy and its log do, and `compare` from then on.
 - **An acknowledged receipt says what the copy says.** Its date is the

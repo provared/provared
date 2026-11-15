@@ -581,6 +581,119 @@ test('the commands send the administrator\'s secret to the executor of their set
   }
 });
 
+test('the commands check a running executor with its public keys alone: the file "keys --public-keys" writes, named by --public-keys or as "executor.keys"; a file with no usable keys is said in plain words and nothing is sent', async () => {
+  const w = await adminWorld({ agents: ['alpha'] });
+  const secret = { env: { [ENV]: w.admin } };
+  // A listener that notes what it is sent: a command that has no keys to check with sends it nothing, not even a challenge.
+  const seen = [];
+  const listener = http.createServer((req, res) => {
+    seen.push(req.url);
+    res.writeHead(404);
+    res.end();
+  });
+  try {
+    const keyFile = readFileSync(join(w.folder, 'keys', 'executor.jwk'), 'utf8');
+    // "keys --public-keys" writes the executor's two public keys to a new file, in a folder it makes, and nothing private.
+    const publicAt = join(w.folder, 'for-the-administrator', 'executor-public.json');
+    const made = await run(['keys', '--config', w.configPath, '--public-keys', publicAt]);
+    assert.equal(made.code, 0, made.stderr);
+    assert.match(made.stderr, /wrote the executor's two public keys to .*executor-public\.json\. It holds no private key and is no secret\./);
+    const written = JSON.parse(readFileSync(publicAt, 'utf8'));
+    assert.deepEqual(Object.keys(written), ['about', 'keys']);
+    assert.deepEqual(written.keys, w.executorKeys);
+    assert.deepEqual(written.keys.map((k) => Object.keys(k).sort()), [['alg', 'crv', 'kty', 'x'], ['alg', 'kty', 'pub']], 'no private part: no "d", no "priv"');
+    // It overwrites nothing, and does not write over a key file of the settings.
+    const twice = await run(['keys', '--config', w.configPath, '--public-keys', publicAt]);
+    assert.equal(twice.code, 2);
+    assert.match(twice.stderr, /Nothing was written: .*executor-public\.json \(--public-keys\) already exists/);
+    const onKeyFile = await run(['keys', '--config', w.configPath, '--public-keys', join(w.folder, 'keys', 'executor.jwk')]);
+    assert.equal(onKeyFile.code, 2);
+    assert.match(onKeyFile.stderr, /Nothing was written: .* is a key file of the settings/);
+    assert.equal(readFileSync(join(w.folder, 'keys', 'executor.jwk'), 'utf8'), keyFile);
+
+    // The commands need no private key. Settings whose "executor.keys" cannot be read, and --public-keys: each command works.
+    const unreadable = settingsAt(w, 'unreadable-keys.json', w.address.port, (s) => ({ ...s, executor: { keys: 'keys/none.jwk' } }));
+    for (const args of [['status'], ['seal', '--agent', 'alpha']]) {
+      const r = await run([...args, '--config', unreadable, '--public-keys', publicAt], secret);
+      assert.equal(r.code, 0, `${args.join(' ')}: ${r.stderr}`);
+    }
+    // No call waits to be acknowledged: it is the executor that says so, to the administrator.
+    const nothing = await run(['acknowledge', '--agent', 'alpha', '--config', unreadable, '--public-keys', publicAt], secret);
+    assert.equal(nothing.code, 1);
+    assert.match(nothing.stderr, /nothing was acknowledged or set aside: This agent has no call without a receipt to acknowledge\./);
+    assert.equal(sealsOf(await checked(w, 'alpha')).length, 1, 'the book was sealed by the running executor');
+    // The same file as "executor.keys", in settings of the administrator's own: it had been refused with "Unsupported key usage for Ed25519 key".
+    const publicOnly = settingsAt(w, 'public-only.json', w.address.port, (s) => ({ ...s, executor: { keys: publicAt } }));
+    const ok = await run(['status', '--config', publicOnly], secret);
+    assert.equal(ok.code, 0, ok.stderr);
+    assert.deepEqual(Object.keys(JSON.parse(ok.stdout).agents), ['alpha']);
+
+    // The check is as strong as it was: both signatures must check under the keys in the file. Another executor's public keys, or one of them, and the secret is not sent.
+    const direct = settingsAt(w, 'direct.json', w.address.port);
+    const other = await makeKeyFile(join(w.folder, 'keys', 'other.jwk'), 'agent');
+    const wrongAt = join(w.folder, 'wrong-public.json');
+    for (const keys of [other, [w.executorKeys[0], other[1]], [other[0], w.executorKeys[1]]]) {
+      writeFileSync(wrongAt, JSON.stringify({ keys }));
+      const r = await run(['status', '--config', direct, '--public-keys', wrongAt], secret);
+      assert.equal(r.code, 2);
+      assert.match(r.stderr, /its signatures do not check under the public keys in the file --public-keys names, .* The administrator's secret was not sent\./);
+      assert.equal(r.stdout, '');
+    }
+
+    // A file with no usable keys: said in plain words, and nothing at all is sent.
+    const atListener = settingsAt(w, 'at-listener.json', await listenOn(listener));
+    const unusableAt = join(w.folder, 'unusable.json');
+    const unusable = {
+      'no keys': { keys: [] },
+      'one key': { keys: [w.executorKeys[0]] },
+      'three keys': { keys: [...w.executorKeys, w.executorKeys[0]] },
+      'the two keys the other way round': { keys: [w.executorKeys[1], w.executorKeys[0]] },
+      'a key cut short': { keys: [{ ...w.executorKeys[0], x: 'AAAA' }, w.executorKeys[1]] },
+      'a key with no public part': { keys: [{ alg: 'Ed25519', crv: 'Ed25519', kty: 'OKP' }, w.executorKeys[1]] },
+      'what "keys" prints, which is not a key file': { alpha: { with: { keys: w.executorKeys } } },
+      'not an object': null,
+    };
+    for (const [what, value] of Object.entries(unusable)) {
+      writeFileSync(unusableAt, JSON.stringify(value));
+      const r = await run(['status', '--config', atListener, '--public-keys', unusableAt], secret);
+      assert.equal(r.code, 2, what);
+      assert.match(r.stderr, /unusable\.json holds no usable keys of the executor\. It must hold the executor's two public keys, Ed25519 and then ML-DSA-87: .* The administrator's secret was not sent\./, what);
+    }
+    writeFileSync(unusableAt, 'not JSON');
+    assert.match((await run(['status', '--config', atListener, '--public-keys', unusableAt], secret)).stderr, /unusable\.json could not be read \(it is not JSON\)\. .* The administrator's secret was not sent\./);
+    const missing = await run(['status', '--config', atListener, '--public-keys', join(w.folder, 'none.json')], secret);
+    assert.equal(missing.code, 2);
+    assert.match(missing.stderr, /none\.json could not be read \(ENOENT\)\. .* The administrator's secret was not sent\./);
+    // Where "executor.keys" is the file that cannot be read, the command says how to do without it.
+    const hint = await run(['status', '--config', settingsAt(w, 'unreadable-at-listener.json', listener.address().port, (s) => ({ ...s, executor: { keys: 'keys/none.jwk' } }))], secret);
+    assert.equal(hint.code, 2);
+    assert.match(hint.stderr, /none\.jwk could not be read \(ENOENT\)\. .*"keys --public-keys <file>" writes the public keys alone to a file, and --public-keys <file> names it here\. The administrator's secret was not sent\./);
+    assert.deepEqual(seen, [], 'the listener was sent nothing');
+
+    // --public-keys is for asking a running executor: a command that works on the files refuses it, and does nothing.
+    for (const args of [['status', '--offline'], ['seal', '--agent', 'alpha', '--offline'], ['acknowledge', '--agent', 'alpha', '--offline']]) {
+      const r = await run([...args, '--config', w.configPath, '--public-keys', publicAt]);
+      assert.equal(r.code, 2, args.join(' '));
+      assert.match(r.stderr, /--public-keys names the file of public keys that a running HTTP executor is checked against\. This command asks no running executor/, args.join(' '));
+    }
+    // The executor itself signs, and cannot run on a file of public keys: "check" and a command on the files say so in plain words.
+    const checkedSettings = await run(['check', '--config', publicOnly]);
+    assert.equal(checkedSettings.code, 1);
+    assert.ok(JSON.parse(checkedSettings.stdout).problems.some((p) => /^executor\.keys: The key file .*executor-public\.json holds public keys only\. The executor signs with private keys/.test(p)), checkedSettings.stdout);
+    const onFiles = await run(['seal', '--agent', 'alpha', '--offline', '--config', publicOnly]);
+    assert.equal(onFiles.code, 2);
+    assert.match(onFiles.stderr, /executor-public\.json holds public keys only\. The executor signs with private keys/);
+    const keysAgain = await run(['keys', '--config', publicOnly]);
+    assert.equal(keysAgain.code, 2);
+    assert.match(keysAgain.stderr, /executor-public\.json holds public keys only/);
+    assert.ok(!/Unsupported key usage/.test(checkedSettings.stdout + onFiles.stderr + keysAgain.stderr));
+  } finally {
+    listener.close();
+    listener.closeAllConnections();
+    await w.close();
+  }
+});
+
 test('a body sent to the executor\'s own addresses is read up to 64 KiB and no further, whatever bodyLimit is', async () => {
   // bodyLimit as it comes (10 MiB): a body that never ends is cut off once it passes 64 KiB, not read on.
   const w = await adminWorld({ agents: ['alpha'] });

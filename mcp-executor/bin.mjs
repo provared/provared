@@ -19,14 +19,16 @@
 //   provared-mcp-executor secret                           make a new secret for an agent, and print it with
 //                                                          its hash (the hash goes into the settings)
 //   provared-mcp-executor check   --config executor.json   say what each rule maps to, and what is wrong
-//   provared-mcp-executor keys    --config executor.json [--out <file>]
+//   provared-mcp-executor keys    --config executor.json [--out <file>] [--public-keys <file>]
 //                                                          make the key files, if there are none, and print
 //                                                          what goes into the permission: agent.keys, the
 //                                                          executor's entry for "with", and the agent.software
 //                                                          entry for the rules on content, where there are any
 //                                                          (or write it to a new file, with --out). It needs no
 //                                                          passkey's thumbprint and no secret hash yet, and
-//                                                          writes nothing until all it needs has been read
+//                                                          writes nothing until all it needs has been read.
+//                                                          Over HTTP, --public-keys writes the executor's two
+//                                                          public keys to a new file, for the commands below
 //   provared-mcp-executor compare --config executor.json [--book <file>] [--agent <name>]
 //                                                          hold the executor's copy against a book (over HTTP,
 //                                                          the named agent's copy and book)
@@ -45,12 +47,15 @@
 // Over HTTP, "seal", "acknowledge" and "status" ask the running executor,
 // with the administrator's secret from the environment
 // (PROVARED_MCP_EXECUTOR_ADMIN_SECRET); with --offline they work on the
-// files of an executor that is not running, and need no secret. Over stdio
+// files of an executor that is not running, and need no secret; without it
+// they take --public-keys <file>. Over stdio
 // there is no address to ask: "seal" and "acknowledge" take --offline
 // only, and "status" reads the files. A command with --offline takes the
 // lock on the files (lock.mjs), so it is refused while an executor runs on
 // them. Before the secret is sent, the executor must show that it is the
-// executor (identity.mjs, askRunning).
+// executor (identity.mjs, askRunning). The command checks that against the
+// executor's public keys: those in "executor.keys", or those in the file
+// --public-keys names, which holds no private key.
 //
 // "check", "keys" and "compare" read either kind of settings: the stdio
 // executor's (with "server" and "agent") or the HTTP executor's (with
@@ -72,10 +77,10 @@ import { fileURLToPath } from 'node:url';
 import { keySetFingerprint } from 'provared';
 import { loadCopyKey } from './copy.mjs';
 import { compareCopyWithBook } from './compare.mjs';
-import { checkConfig, loadRules, openExecutor, readSettings, softwareEntry, statusFromFiles } from './executor.mjs';
-import { loadKeyFile, makeKeyFile, readIfThere } from './files.mjs';
+import { checkConfig, loadRules, loadSigningKeys, openExecutor, readSettings, softwareEntry, statusFromFiles } from './executor.mjs';
+import { makeKeyFile, readIfThere } from './files.mjs';
 import { ADMIN_PATH, checkHttpConfig, httpStatusFromFiles, newSecret, openHttpExecutor, readHttpSettings, secretHash } from './http.mjs';
-import { checkIdentity, plainAddress } from './identity.mjs';
+import { PUBLIC_KEYS_ABOUT, checkIdentity, plainAddress, readPublicKeys } from './identity.mjs';
 import { makeRecorderKeyFile, readRecorderKeyFile } from './sealing.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -91,19 +96,20 @@ const USAGE = `provared-mcp-executor ${VERSION}: an executor for MCP tool server
   provared-mcp-executor http    --config executor-http.json
   provared-mcp-executor secret
   provared-mcp-executor check   --config <settings>
-  provared-mcp-executor keys    --config <settings> [--out <file>]
+  provared-mcp-executor keys    --config <settings> [--out <file>] [--public-keys <file>]
   provared-mcp-executor compare --config <settings> [--book <file>] [--agent <name>] [--sealer <fingerprint>]
-  provared-mcp-executor seal    --config <settings> [--agent <name>] [--offline]
-  provared-mcp-executor acknowledge --config <settings> [--agent <name>] [--set-aside <call,…>] [--offline]
-  provared-mcp-executor status  --config <settings> [--offline]
+  provared-mcp-executor seal    --config <settings> [--agent <name>] [--offline | --public-keys <file>]
+  provared-mcp-executor acknowledge --config <settings> [--agent <name>] [--set-aside <call,…>] [--offline | --public-keys <file>]
+  provared-mcp-executor status  --config <settings> [--offline | --public-keys <file>]
   provared-mcp-executor --version
 
 Over HTTP, "seal", "acknowledge" and "status" ask the running executor, with the administrator's secret in
 ${ADMIN_SECRET_ENV}; with --offline they work on the files of an executor that is not running, and need
 no secret. Over stdio there is no address to ask: "seal" and "acknowledge" take --offline only, and "status"
 reads the files. A command with --offline is refused while an executor runs on the same files. The secret is
-sent only once the executor has shown, with its own keys, that it is the executor; the command reads
-"executor.keys" to check.
+sent only once the executor has shown, with its own keys, that it is the executor. The command checks that
+against the executor's public keys: those in "executor.keys", or, where it may not read that file, those in
+the file --public-keys names, which "keys --public-keys <file>" writes and which holds no private key.
 
 Where the settings name a central sealer ("recorder.sealer"), a seal is asked of it; "status" asks it how
 many lines of each book it holds; and a command that opens the files to write (--offline) needs its answer
@@ -198,6 +204,19 @@ function statusCode(value) {
   return agents.every((a) => a && !a.problem && a.sound !== false && !a.stopped && (a.receiptsMissing ?? []).length === 0) ? 0 : 1;
 }
 
+/**
+ * The file of the executor's public keys that --public-keys names, for a
+ * command that asks a running executor; null where it names none. Refused
+ * where the command asks no running executor ("asks" false), so that the
+ * option is not taken for something it does not do.
+ */
+function publicKeysOption(args, asks) {
+  const path = option(args, '--public-keys');
+  if (path === undefined) return null;
+  if (!asks) throw new Error('--public-keys names the file of public keys that a running HTTP executor is checked against. This command asks no running executor: it works on the files. Nothing was done.');
+  return isAbsolute(path) ? path : resolve(path);
+}
+
 /** Open the executor on its files, for a command run with --offline: no server is started, nothing listens, no credential is read. */
 function openOffline(config, root) {
   return isHttp(config) ? openHttpExecutor(config, { root, offline: true }) : openExecutor(config, { root, offline: true });
@@ -211,18 +230,30 @@ function openOffline(config, root) {
  * listens at the settings' address is first sent a fresh challenge, with no
  * secret (POST /provared/hello), and must answer with the executor's two
  * signatures over it and over the address and port this command connected
- * to, which are checked against the public keys in the executor's key file
+ * to, which are checked against the executor's public keys
  * (identity.mjs). The secret then goes on that same connection and no
- * other. The command must be able to read "executor.keys".
+ * other.
+ *
+ * The public keys are those in "publicKeys", the file --public-keys
+ * names, or else those in the executor's key file ("executor.keys"), of
+ * which the public parts alone are read: the command loads no private key
+ * (X166).
  *
  * The answer is waited for as long as a call may take ("timeout") and half
  * a minute more: a seal waits its turn behind a call in progress.
  */
-async function askRunning(config, root, method, path, body, hint) {
+async function askRunning(config, root, method, path, body, hint, publicKeys = null) {
   const secret = process.env[ADMIN_SECRET_ENV];
   if (!secret) throw new Error(`Put the administrator's secret in the environment: ${ADMIN_SECRET_ENV}.`);
-  if (typeof config.executor?.keys !== 'string' || config.executor.keys === '') throw new Error('The settings name no key file of the executor ("executor.keys"), so the command cannot tell whether it is the executor that answers. The administrator\'s secret was not sent.');
-  const { keys } = await loadKeyFile(isAbsolute(config.executor.keys) ? config.executor.keys : resolve(root, config.executor.keys), 'agent');
+  if (publicKeys === null && (typeof config.executor?.keys !== 'string' || config.executor.keys === '')) throw new Error('The settings name no key file of the executor ("executor.keys"), and no file of its public keys is named (--public-keys), so the command cannot tell whether it is the executor that answers. The administrator\'s secret was not sent.');
+  const keysAt = publicKeys ?? (isAbsolute(config.executor.keys) ? config.executor.keys : resolve(root, config.executor.keys));
+  const keysNamed = publicKeys === null ? 'the executor\'s key file ("executor.keys")' : 'the file --public-keys names';
+  let keys;
+  try {
+    keys = await readPublicKeys(keysAt);
+  } catch (e) {
+    throw new Error(`${e.message} The command checks the executor against the public keys in ${keysNamed}${publicKeys === null ? '; where it may not read that file, "keys --public-keys <file>" writes the public keys alone to a file, and --public-keys <file> names it here' : ''}. The administrator's secret was not sent.`);
+  }
   const listen = config.listen ?? {};
   // An executor that listens on every address is asked at the local one.
   const host = listen.host === undefined || listen.host === '0.0.0.0' ? '127.0.0.1' : listen.host === '::' ? '::1' : listen.host;
@@ -265,7 +296,7 @@ async function askRunning(config, root, method, path, body, hint) {
     const notProved = (why) => new Error(`What answers at ${host}:${port} did not show that it is the executor of these settings: ${why} The administrator's secret was not sent.`);
     if (hello.status === 404 && hello.value?.code === 'not-found' && /no administrator's secret/.test(hello.value.message ?? '')) throw notProved('it says that its settings name no administrator\'s secret ("admin"), so its own addresses answer nothing.');
     if (hello.status !== 200 || hello.value === undefined) throw notProved(`it answered ${hello.status} where the executor signs the challenge it is sent.`);
-    if (!(await checkIdentity(keys, challenge, plainAddress(hello.address), hello.port, hello.value.signatures))) throw notProved('its signatures do not check under the public keys in the executor\'s key file ("executor.keys"), over this command\'s challenge and the address it connected to.');
+    if (!(await checkIdentity(keys, challenge, plainAddress(hello.address), hello.port, hello.value.signatures))) throw notProved(`its signatures do not check under the public keys in ${keysNamed}, over this command's challenge and the address it connected to.`);
     const answer = await send(method, path, { authorization: `Bearer ${secret}` }, body, hello.socket);
     if (answer.value === undefined) throw new Error('The executor gave an answer that is not JSON.');
     return { status: answer.status, value: answer.value };
@@ -362,6 +393,10 @@ async function main(args) {
     if (problems.length) throw new Error(`The settings have problems:\n- ${problems.join('\n- ')}`);
     const out = option(args, '--out');
     const outAt = out ? (isAbsolute(out) ? out : resolve(out)) : null;
+    // The executor's public keys alone, in a file of their own, for the commands that ask a running executor (X166).
+    const publicOut = option(args, '--public-keys');
+    const publicAt = publicOut ? (isAbsolute(publicOut) ? publicOut : resolve(publicOut)) : null;
+    if (publicAt && !http) throw new Error('Nothing was written: --public-keys writes the public keys that the commands check a running HTTP executor against, and these settings are the stdio executor\'s, which no command asks.');
     // Everything "keys" needs is read and checked before anything is
     // written: the rules file, each key file already there, and that the
     // folder of each file it would write can be made (its nearest folder
@@ -371,7 +406,7 @@ async function main(args) {
     const agents = http ? [...settings.agents].map(([name, paths]) => [name, paths.keys]) : [[null, settings.agent.keys]];
     const keyPaths = [settings.executor.keys, ...agents.map(([, path]) => path)];
     for (const path of keyPaths) {
-      if (existsSync(path)) await loadKeyFile(path, 'agent');
+      if (existsSync(path)) await loadSigningKeys(path);
       else if (!canMakeFolder(dirname(path))) throw new Error(`Nothing was written: the key file ${path} cannot be made, since a file stands where its folder would be.`);
     }
     // The recorder's three keys for sealing, where the settings name a recorder: a file of its own.
@@ -385,6 +420,12 @@ async function main(args) {
       if ([...keyPaths, ...(recorderAt ? [recorderAt] : [])].some((path) => samePath(path, outAt))) throw new Error(`Nothing was written: ${outAt} (--out) is a key file of the settings. Name another file.`);
       if (existsSync(outAt)) throw new Error(`Nothing was written: ${outAt} (--out) already exists. Name a new file.`);
       if (!canMakeFolder(dirname(outAt))) throw new Error(`Nothing was written: ${outAt} (--out) cannot be made, since a file stands where its folder would be.`);
+    }
+    if (publicAt) {
+      if ([...keyPaths, ...(recorderAt ? [recorderAt] : [])].some((path) => samePath(path, publicAt))) throw new Error(`Nothing was written: ${publicAt} (--public-keys) is a key file of the settings. Name another file.`);
+      if (outAt && samePath(outAt, publicAt)) throw new Error(`Nothing was written: --out and --public-keys name the same file, ${publicAt}. Name two files.`);
+      if (existsSync(publicAt)) throw new Error(`Nothing was written: ${publicAt} (--public-keys) already exists. Name a new file.`);
+      if (!canMakeFolder(dirname(publicAt))) throw new Error(`Nothing was written: ${publicAt} (--public-keys) cannot be made, since a file stands where its folder would be.`);
     }
     const executor = await makeKeyFile(settings.executor.keys, 'agent');
     // The agent.software entry for the rules on content, where the settings name a rules file.
@@ -402,6 +443,12 @@ async function main(args) {
     } else {
       process.stdout.write(text);
       process.stderr.write(`provared-mcp-executor: ${KEYS_NEXT}\n`);
+    }
+    if (publicAt) {
+      // The form of a key file, with the public keys and nothing private in it.
+      mkdirSync(dirname(publicAt), { recursive: true });
+      writeFileSync(publicAt, `${JSON.stringify({ about: PUBLIC_KEYS_ABOUT, keys: executor }, null, 2)}\n`, { flag: 'wx' });
+      process.stderr.write(`provared-mcp-executor: wrote the executor's two public keys to ${publicAt}. It holds no private key and is no secret. "status", "seal" and "acknowledge" check a running executor against it where --public-keys names it; keep it where only the administrator can change it.\n`);
     }
     if (config.recorder?.sealer !== undefined) {
       // A central sealer starts a recorder's books only from permissions for the agents it was named with, each by the fingerprint of its key set.
@@ -448,13 +495,14 @@ async function main(args) {
     return result.summary.agree ? 0 : result.summary.onlySetAside ? 3 : 1;
   }
   if (command === 'status') {
-    onlyOptions(command, args, ['--offline'], ['--config']);
+    onlyOptions(command, args, ['--offline'], ['--config', '--public-keys']);
     const { config, root } = readConfig(args);
+    const publicKeys = publicKeysOption(args, isHttp(config) && !args.includes('--offline'));
     let value;
     if (!isHttp(config)) value = await statusFromFiles(config, root);
     else if (args.includes('--offline')) value = await httpStatusFromFiles(config, root);
     else {
-      const answer = await askRunning(config, root, 'GET', `${ADMIN_PATH}/status`, undefined, 'To read the files of an executor that is not running, add --offline.');
+      const answer = await askRunning(config, root, 'GET', `${ADMIN_PATH}/status`, undefined, 'To read the files of an executor that is not running, add --offline.', publicKeys);
       process.stdout.write(`${JSON.stringify(answer.value, null, 2)}\n`);
       if (answer.status !== 200) return 1;
       value = answer.value;
@@ -464,9 +512,10 @@ async function main(args) {
     return statusCode(value);
   }
   if (command === 'seal') {
-    onlyOptions(command, args, ['--offline'], ['--config', '--agent']);
+    onlyOptions(command, args, ['--offline'], ['--config', '--agent', '--public-keys']);
     const { config, root } = readConfig(args);
     const offline = args.includes('--offline');
+    const publicKeys = publicKeysOption(args, isHttp(config) && !offline);
     const name = agentOf(config, args, 'whose book to seal');
     const whose = name === null ? 'the book' : `${name}'s book`;
     if (offline) {
@@ -481,7 +530,7 @@ async function main(args) {
       return 0;
     }
     if (name === null) throw new Error(`Over stdio there is no running executor to ask. Seal the book while the executor is not running, with --offline; or set "recorder.sealEvery" in the settings, and the executor seals it on a timer while it runs.`);
-    const answer = await askRunning(config, root, 'POST', `${ADMIN_PATH}/seal`, { agent: name }, 'To seal a book while it is stopped, add --offline.');
+    const answer = await askRunning(config, root, 'POST', `${ADMIN_PATH}/seal`, { agent: name }, 'To seal a book while it is stopped, add --offline.', publicKeys);
     if (answer.status !== 200) {
       process.stderr.write(`provared-mcp-executor: the book was not sealed: ${answer.value?.message ?? answer.status}\n`);
       return 1;
@@ -490,9 +539,10 @@ async function main(args) {
     return 0;
   }
   if (command === 'acknowledge') {
-    onlyOptions(command, args, ['--offline'], ['--config', '--agent', '--set-aside']);
+    onlyOptions(command, args, ['--offline'], ['--config', '--agent', '--set-aside', '--public-keys']);
     const { config, root } = readConfig(args);
     const offline = args.includes('--offline');
+    const publicKeys = publicKeysOption(args, isHttp(config) && !offline);
     const name = agentOf(config, args, 'whose calls to acknowledge');
     const aside = option(args, '--set-aside');
     const setAside = aside === undefined ? [] : aside.split(',').map((s) => s.trim()).filter(Boolean);
@@ -507,7 +557,7 @@ async function main(args) {
       }
     } else {
       if (name === null) throw new Error('Over stdio there is no running executor to ask, and the executor does not start while a call waits to be acknowledged. Run the command with --offline.');
-      const answer = await askRunning(config, root, 'POST', `${ADMIN_PATH}/acknowledge`, { agent: name, setAside }, 'To acknowledge while it is stopped, add --offline.');
+      const answer = await askRunning(config, root, 'POST', `${ADMIN_PATH}/acknowledge`, { agent: name, setAside }, 'To acknowledge while it is stopped, add --offline.', publicKeys);
       if (answer.status !== 200) {
         // The executor refused before it did anything.
         process.stderr.write(`provared-mcp-executor: nothing was acknowledged or set aside: ${answer.value?.message ?? answer.status}\n`);

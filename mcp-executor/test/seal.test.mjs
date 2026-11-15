@@ -642,6 +642,17 @@ test('the command over stdio: keys makes the recorder\'s key file; seal and ackn
   const named = await run(['seal', ...config, '--offline', '--agent', 'alpha']);
   assert.equal(named.code, 2);
   assert.match(named.stderr, /--agent is not taken/);
+  // --public-keys is for the commands that ask a running HTTP executor: over stdio none does, and nothing is written or done.
+  const publicAt = join(w.folder, 'executor-public.json');
+  const noFile = await run(['keys', ...config, '--public-keys', publicAt]);
+  assert.equal(noFile.code, 2);
+  assert.match(noFile.stderr, /Nothing was written: --public-keys writes the public keys that the commands check a running HTTP executor against/);
+  assert.ok(!existsSync(publicAt));
+  for (const command of ['status', 'seal', 'acknowledge']) {
+    const r = await run([command, ...config, '--public-keys', publicAt]);
+    assert.equal(r.code, 2, command);
+    assert.match(r.stderr, /This command asks no running executor/, command);
+  }
   const sealed = await run(['seal', ...config, '--offline']);
   assert.equal(sealed.code, 0, sealed.stderr);
   assert.match(sealed.stdout, /^Sealed: entry 1 of the book is the seal [A-Za-z0-9_-]{43}\.\n$/);

@@ -650,7 +650,8 @@ start, and writes no receipt by itself (X143).
 
 **Who is asked.** Before a command sends the administrator's secret to a
 running executor, the executor signs the command's challenge and the
-address it was asked at with its own keys (`identity.mjs`, X138).
+address it was asked at with its own keys (`identity.mjs`, X138). The
+command checks that with the executor's public keys alone (X166).
 
 Still to build:
 
@@ -2094,9 +2095,10 @@ What is fixed, and why:
 - *No secret at `hello`, and none without `admin`.* It answers 404 where
   the settings name no administrator, as the other addresses do.
 What it does not do: it does not encrypt. Whoever can read the connection
-reads the secret; the README says so. The command must be able to read
-`executor.keys`, which holds the private keys too: run it as the
-executor's user. The other ways: never send the secret and answer the
+reads the secret; the README says so. As first built, the command had to
+be able to read `executor.keys`, which holds the private keys too, and so
+to run as the executor's user; since X166 it needs the public keys alone.
+The other ways: never send the secret and answer the
 executor's challenge with an HMAC of it, which needs the executor to keep
 the secret and not its hash; or take the executor's public keys from the
 agents' permissions, which a command could read as another user, but
@@ -2450,3 +2452,47 @@ book could not be written) had still named the kind, `"outcome":
 all. Such a line now names no kind, so the text is true wherever it is
 written. Nothing reads the kind back: it was for whoever reads the copy.
 A line with documents names its kind as before.
+
+**X166. A command checks a running executor with its public keys alone
+(for the founder's review).** Under X138 the command read `executor.keys`
+with the reader that loads the private keys. So the administrator, who
+until then needed only a secret, had to be able to read the keys that
+countersign every receipt, and a file of the public keys alone was
+refused ("Unsupported key usage for Ed25519 key"). The command now takes
+the public parts of the two keys and loads no private key
+(`readPublicKeys` in `identity.mjs`). What is fixed, and why:
+- *Where the keys are read.* From `executor.keys`, as before; or from the
+  file that `--public-keys <file>` names to `status`, `seal` and
+  `acknowledge`, in place of it. The option is refused where the command
+  asks no running executor (`--offline`, and the stdio executor's
+  settings), so that it is not taken for something it does not do.
+- *The file of public keys.* The form of a key file with nothing private
+  in it: `{"about": <a sentence>, "keys": [<Ed25519>, <ML-DSA-87>]}`,
+  each key the public JSON Web Key that `keys` prints in the `with`
+  entry. `keys --public-keys <file>` writes it, for the HTTP executor's
+  settings, to a new file: it overwrites nothing and refuses a key file
+  of the settings. The plainest form there is: no new format, no new
+  label, no signed byte.
+- *The check is the same.* Both signatures, over the same text, the
+  address and port the command connected to, and the same connection
+  (X138). The file must hold exactly the two keys, Ed25519 and then
+  ML-DSA-87, each one that Web Crypto takes as a key to check a signature
+  with. Anything else is said to hold no usable keys, and nothing is
+  sent, not even a challenge.
+- *What the file is trusted for.* Whoever can change the file the command
+  reads can make it trust another listener, as with `executor.keys` and
+  with the settings themselves. The file is no secret; it is kept where
+  only the administrator can change it.
+- *The executor still needs its private keys.* A start, `check`, `keys`
+  or a command with `--offline` that is given a file of public keys says
+  that it holds public keys only (`loadSigningKeys` in `executor.mjs`;
+  `files.mjs` is the gateway's file byte for byte, and is left as it is).
+
+Through a forwarder (an SSH tunnel, a published container port, a
+reverse proxy) the address the executor signs is not the one the command
+connected to, and the command refuses. That is X138 as designed, and the
+README now says it. The other way to the public keys, not built: from
+the agents' permissions, checked against `issuerKeys` as a start checks
+them. `issuerKeys` is in the settings the command already trusts, so it
+would be as strong; but the command would read and check every agent's
+permission where a file of two keys is plainer.
