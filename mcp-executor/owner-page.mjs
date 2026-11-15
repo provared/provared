@@ -144,26 +144,30 @@ const form = document.querySelector('form[action="/oauth/authorize"]');
 /**
  * An approval goes to the executor once (X282). A second press sends
  * nothing: the executor would take the first and refuse the second, and the
- * browser would show the refusal. The button that was pressed is disabled,
- * a moment later: one disabled before the browser has read the form's
- * fields would not send its "decision".
+ * browser would show the refusal. Once an approval has been sent, no button
+ * of the form sends anything more, Refuse included (X284): a Refuse sent
+ * behind an approval would not undo it, and the browser would drop the
+ * approval's answer for the refusal's. Every submit button of the form is
+ * disabled, a moment later: one disabled before the browser has read the
+ * form's fields would not send its "decision".
  */
 let sent = false;
-let pressed = null;
+const buttons = () => [...(form?.querySelectorAll?.('button[type="submit"]') ?? [])];
 const once = (event) => {
   if (sent) return event.preventDefault();
   sent = true;
-  pressed = event.submitter ?? null;
-  if (pressed) setTimeout(() => (pressed.disabled = sent), 0);
+  setTimeout(() => {
+    for (const button of buttons()) button.disabled = sent;
+  }, 0);
   say('Sending…');
 };
 // A page the browser shows again as it was left (by Back, after a refusal that says to go back) takes one more press. So does one a browser loads again with its buttons as they were left.
 globalThis.addEventListener?.('pageshow', (event) => {
   if (!event.persisted) return;
   sent = false;
-  if (pressed) pressed.disabled = false;
+  for (const button of buttons()) button.disabled = false;
 });
-for (const button of form?.querySelectorAll?.('button[type="submit"]') ?? []) button.disabled = false;
+for (const button of buttons()) button.disabled = false;
 if (form && form.elements[FIELD_CHALLENGE]) {
   // Present where the executor has no owner yet: then Approve can only be the setup and the approval in one (X272).
   const first = document.getElementById('owner-first');
@@ -202,6 +206,8 @@ if (form && form.elements[FIELD_CHALLENGE]) {
   let owner = !first;
   form.addEventListener('submit', async (event) => {
     const submitter = event.submitter;
+    // Once an approval has been sent, nothing more is: not Refuse either (X284).
+    if (sent) return event.preventDefault();
     if (submitter?.value !== 'approve') return;
     // Proved: the form goes, once.
     if (proved) return once(event);

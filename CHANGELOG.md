@@ -635,6 +635,12 @@
       left of the 10 where that is more, and says so (X283). A request
       is still answered once: the executor keeps an approved request's
       id for five minutes past its end.
+    - Approve with a code typed, then Refuse before the answer came,
+      sent both forms: the code was spent, the browser went back to the
+      client as refused, and the page with Continue was never seen. Once
+      an approval has been sent, the page's script now sends nothing
+      more, and disables every submit button of the form, Refuse
+      included (X284).
   - **Not built:** no upstream OAuth, no one-command setup, no dynamic
     client registration, no revocation endpoint. No passkey on a device
     (a computer's own, a phone, a security key) has been tried, and no client

@@ -173,7 +173,7 @@ export function softStorage() {
 /**
  * Run the page's script on a stand-in page made from the HTML the executor
  * sent: every element with an id, and the authorisation form with its
- * hidden fields. Gives {el (the elements by id), form, replaced (what
+ * hidden fields and its submit buttons (form.buttons). Gives {el (the elements by id), form, replaced (what
  * history.replaceState was given), window (the listeners the script set on
  * the window, by event)}. The globals a page has are set for the
  * run, and put back by "after". "lose" says, for an address, whether the
@@ -185,7 +185,10 @@ export async function runPage(w, script, { html, hash = '', path, credentials, s
   for (const m of html.matchAll(/<(\w+)[^>]*\sid="([^"]+)"([^>]*)>/g)) el[m[2]] = element({ hidden: /\shidden(\s|$)/.test(` ${m[3]}`) });
   let form = null;
   if (/<form method="post" action="\/oauth\/authorize">/.test(html)) {
-    form = element({ elements: {}, submitted: null, requestSubmit: (submitter) => (form.submitted = submitter) });
+    // The form's submit buttons, by the "decision" each sends: form.buttons.approve, form.buttons.refuse.
+    const buttons = {};
+    for (const m of html.matchAll(/<button type="submit" name="decision" value="([^"]+)">/g)) buttons[m[1]] = element({ value: m[1] });
+    form = element({ elements: {}, buttons, submitted: null, requestSubmit: (submitter) => (form.submitted = submitter), querySelectorAll: (q) => (q === 'button[type="submit"]' ? Object.values(buttons) : []) });
     for (const m of html.matchAll(/<input type="hidden" name="([^"]+)" value="([^"]*)">/g)) form.elements[m[1]] = { value: m[2] };
   }
   const page = { el, form, replaced: null, window: {} };

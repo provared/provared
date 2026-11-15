@@ -463,7 +463,7 @@ test('a later approval by the page\'s script as served: one prompt, which asks t
   assert.equal(credentials.asked.length, asked);
 });
 
-test('by the page\'s script as served, an approval is sent once: with a recovery code typed, Approve sends the form and is then disabled, and a second press sends nothing; the same for Continue on the page that follows, and for Approve after the passkey', async (t) => {
+test('by the page\'s script as served, an approval is sent once: with a recovery code typed, Approve sends the form and is then disabled, and a second press sends nothing; the same for Continue on the page that follows, and for Approve after the passkey; once an approval is sent, Refuse sends nothing either', async (t) => {
   const w = await ownerWorld();
   const after = pages(t, w);
   const script = await pageScript(w);
@@ -482,24 +482,35 @@ test('by the page\'s script as served, an approval is sent once: with a recovery
   };
   const moment = () => new Promise((done) => setTimeout(done, 20));
 
+  // Where no approval was sent, Refuse is a button like any other: it goes, and is not held to one press by itself.
+  const other = await runPage(w, script, { html: (await ask(w, authorizeUrl(w, d, { pkce: pkce() }))).body, path: '/oauth/authorize', credentials, storage, after });
+  assert.equal(await press(other, other.form.buttons.refuse), true, 'Refuse goes where nothing was sent');
+  assert.equal(await press(other, other.form.buttons.refuse), true);
+
   // The recovery code typed: the form goes as it is, once.
   const p = pkce();
   const typed = await runPage(w, script, { html: (await ask(w, authorizeUrl(w, d, { pkce: p }))).body, path: '/oauth/authorize', credentials, storage, after });
   typed.el['owner-recovery-code'].value = recoveryCode;
-  const approve = { value: 'approve', disabled: false };
+  const { approve, refuse } = typed.form.buttons;
   assert.equal(await press(typed, approve), true, 'the first press sends the form');
   assert.equal(approve.disabled, false, 'not disabled yet: the browser has still to read the button\'s "decision" for the form');
+  assert.equal(refuse.disabled, false);
+  // Refuse pressed in that moment, before the buttons are disabled: nothing goes (X284).
+  assert.equal(await press(typed, refuse), false, 'Refuse behind an approval sends nothing');
   await moment();
   assert.equal(approve.disabled, true, 'disabled after the first press');
+  assert.equal(refuse.disabled, true, 'and Refuse with it: every submit button of the form');
   assert.equal(await press(typed, approve), false, 'a second press sends nothing');
   assert.equal(await press(typed, approve), false, 'nor a third');
+  assert.equal(await press(typed, refuse), false, 'nor Refuse');
   assert.equal(credentials.asked.length, 0, 'the passkey was not asked');
   // What the one form sent: the executor spends the code and answers with the page that says so.
   const paused = await answer(w, typed.form.elements.request.value, { fields: { ...formFields(typed), [FIELD_RECOVERY]: recoveryCode } });
   assert.equal(paused.status, 200, paused.body);
   // That page's Continue: once, too.
   const spent = await runPage(w, script, { html: paused.body, path: '/oauth/authorize', credentials, storage, after });
-  const go = { value: 'approve', disabled: false };
+  const go = spent.form.buttons.approve;
+  assert.deepEqual(Object.keys(spent.form.buttons), ['approve'], 'one button, Continue');
   assert.equal(await press(spent, go), true);
   await moment();
   assert.equal(go.disabled, true);
@@ -516,16 +527,23 @@ test('by the page\'s script as served, an approval is sent once: with a recovery
   const p2 = pkce();
   const page = await runPage(w, script, { html: (await ask(w, authorizeUrl(w, d, { pkce: p2 }))).body, path: '/oauth/authorize', credentials, storage, after });
   assert.equal(page.el['owner-recovery-code'], undefined, 'no box for a code that is spent');
-  const again = { value: 'approve', disabled: false };
+  const again = page.form.buttons.approve;
   assert.equal(await press(page, again), false, 'the form waits for the passkey');
   assert.equal(page.form.submitted, again, 'and is then sent by the script');
   assert.equal(await press(page, again), true, 'the sending itself');
+  // Refuse behind an approval the passkey signed sends nothing either, in the moment before it is disabled and after (X284).
+  assert.equal(await press(page, page.form.buttons.refuse), false);
   await moment();
   assert.equal(again.disabled, true);
+  assert.equal(page.form.buttons.refuse.disabled, true);
   assert.equal(await press(page, again), false, 'a press after it sends nothing');
+  assert.equal(await press(page, page.form.buttons.refuse), false);
+  // A page the browser shows again as it was left takes a press of either button again.
+  page.window.pageshow({ persisted: true });
+  assert.equal(page.form.buttons.refuse.disabled, false);
+  assert.equal(again.disabled, false);
+  assert.equal(await press(page, page.form.buttons.refuse), true);
   await callsATool(w, await answer(w, page.form.elements.request.value, { fields: formFields(page) }), p2);
-  // Refuse is not held back by any of this.
-  assert.equal(await press(page, { value: 'refuse' }), true);
 });
 
 test('"Keep this connection" says so where it takes the place of a connection kept before', async (t) => {

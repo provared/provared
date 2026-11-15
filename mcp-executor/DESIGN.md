@@ -3687,7 +3687,11 @@ code in every case.
   shows again as it was left (by Back) takes a press again. The page
   that says the code is spent runs the executor's script for this, under
   the same policy as the authorisation page (X224); it holds no secret
-  now. Refuse is not held to one press: it changes nothing.
+  now. Refuse is not held to one press where no approval was sent: it
+  changes nothing then. Once an approval has been sent, Refuse sends
+  nothing either, and is disabled with the other button (X284, which
+  replaces what this choice said until then: that Refuse is never held
+  back).
 - **The owner's check approves by one of four values.** `true`, or one
   of the names `passkey`, `recovery` and `setup` (X212). Until this
   choice any text that was not empty approved, so a check given by
@@ -3757,6 +3761,35 @@ has. The other way: to refuse a code, unspent, where under a minute of
 its page was left. Not taken: the owner would have to begin again from
 the client to use the code, and a code typed with just over a minute left
 would still leave too little time to read the page.
+
+**X284. Once an approval has been sent, no button of the form sends
+anything more, Refuse included.** Until this choice the page's script
+held back only the button that was pressed, and X282 said that Refuse
+"changes nothing". In one case it did. An owner pressed Approve with the
+recovery code typed, thought again, and pressed Refuse before the answer
+came. The executor took the first form and spent the code; the browser
+dropped that answer for the second form's, and went back to the client
+with `access_denied`. Nothing was approved, the code was gone, and the
+page with Continue was never seen. After a passkey had signed, the same
+two presses would have left an approval in the log and no connection
+made. Now, from the moment an approval is sent (Approve with a code
+typed, Approve once the passkey has signed, or Continue), a press of any
+submit button of the form sends nothing, and every one of them is
+disabled a moment later, as X282 has it for the button pressed. A page
+the browser shows again as it was left (by Back) takes a press of either
+button again. Why: a Refuse sent behind an approval cannot undo it. The
+executor answers each form by itself, and the first has already been
+taken. What it costs: an owner who thinks again after pressing Approve
+cannot refuse on that page. With a code typed, the page that follows
+still asks for Continue, and closing it approves nothing. After a
+passkey, the approval stands, and the browser goes back to the client
+with its code; what ends a connection is as it was. A browser that runs
+no script has no such guard, as X282 says of the double press. Run in a
+headless Chromium browser, version 157, with the executor's answer held
+back 800 ms and Refuse pressed 200 ms after Approve with the code typed:
+one form was sent, and the browser came to "The recovery code is spent".
+Not run in a browser: the same two presses after a passkey, which the
+tests' stand-in page shows.
 
 What the tests show, and what they do not. `test/owner.test.mjs` runs the
 page's own steps (`owner-steps.mjs`) in Node.js against the executor's

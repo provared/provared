@@ -683,7 +683,9 @@ with the `provared` library's own check, and needs no other package.
   place. The executor says so on a page of its own, before the browser
   goes back to the client: press **Continue** there, once. That page
   gives you 5 minutes for it, however late on the first page the code
-  was typed, and says so. Every
+  was typed, and says so. Once Approve or Continue has been sent, the
+  page's buttons send nothing more, Refuse included: a Refuse behind an
+  approval would not undo it. Every
   authorisation page after that says that the code is spent. If it says
   so and you did not use the code, someone else did: reset the owner. To
   have a recovery code again, stop the executor and run
@@ -731,7 +733,8 @@ with a new code shown; each through to a token and a tool call. The
 recovery code as it now is, spent and not replaced, was run in a headless
 Chromium browser, version 157, with no authenticator: two presses of
 Approve, and of Continue, sent one form each, and the connection was
-approved once. A virtual authenticator is not a device: the
+approved once; Approve and then Refuse, before the answer came, sent one
+form. A virtual authenticator is not a device: the
 pages have not been tried here with a computer's own authenticator, a
 phone or a security key.
 There is no
