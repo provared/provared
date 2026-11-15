@@ -12,6 +12,21 @@
     below), merged from the released line, with its tests; its choices
     are X241, X248, X249, X250 and X260 in `DESIGN.md`, after this
     work's own.
+  - **The central sealer's tests on a slow disk** (no change to the
+    program). In `test/central-sealer.test.mjs` the sealer and the
+    executor run in one process, and each holds its one thread while a
+    line goes to the disk. On Linux in a container here that took 100
+    to 370 ms a time, so the tests that gave the sealer 400 or 500 ms
+    to answer a question failed now and then, with a time-out at a
+    start. They now give it the tests' usual 2 seconds. The one test in
+    which a question is meant to time out gives it 1.5 seconds, and
+    allows a call or a seal 4.5 seconds (it was 0.4 and 3), still short
+    of the 5 seconds a question takes where the settings do not say.
+    And a test that failed before it closed its executor left it open,
+    so the file never ended under the workflow's command, which has no
+    time limit. Now whatever a test leaves open is closed after it
+    (`closeAll` in `test/sealer-world.mjs`), and a test whose start
+    fails reports that failure, not "w.close is not a function".
   - **The recorder's keys.** The settings may name a recorder:
     `"recorder": {"keys": <file>, "name": <text>, "sealEvery":
     <milliseconds>}`. `keys` makes its key file where there is none

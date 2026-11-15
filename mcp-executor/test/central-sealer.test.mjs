@@ -8,11 +8,14 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import { join } from 'node:path';
-import { test } from 'node:test';
+import { afterEach, test } from 'node:test';
 
 const { leafFingerprint } = await import('provared');
 const { openWorld, signSlip, until } = await import('./world.mjs');
-const { RECORDER, centralWorld, refusal, sealerFolder, standIn } = await import('./sealer-world.mjs');
+const { RECORDER, centralWorld, closeAll, refusal, sealerFolder, standIn } = await import('./sealer-world.mjs');
+
+// What a failed test left open is closed, so that the file still ends where no time limit ends it.
+afterEach(closeAll);
 const { checkConfig, readSettings, statusFromFiles } = await import('../executor.mjs');
 const { startSealer } = await import('../../sealer/sealer.mjs');
 
@@ -84,7 +87,7 @@ test('central sealer: a restart of the executor goes on from the line the sealer
 });
 
 test('central sealer: while the sealer is stopped the lines wait in order, the status says how many and since when, no seal is asked for, and they are sent when it answers again', async () => {
-  const w = await centralWorld({ sealer: { timeout: 500 } });
+  const w = await centralWorld();
   try {
     await w.client.call('echo', {});
     await w.level();
@@ -141,7 +144,7 @@ test('central sealer: a seal asked for just after the sealer started again cover
 });
 
 test('central sealer: past the limit of unsent lines a call is refused with a denial and not sent, until the sealer has caught up', async () => {
-  const w = await centralWorld({ sealer: { maxUnsent: 1, timeout: 500 } });
+  const w = await centralWorld({ sealer: { maxUnsent: 1 } });
   try {
     await w.sealer.stop();
     assert.equal(refusal(await w.client.call('echo', {})), null);
@@ -167,7 +170,9 @@ test('central sealer: past the limit of unsent lines a call is refused with a de
 });
 
 test('central sealer: with a sealer that takes a question and never answers, no call and no seal waits longer than a question may take', async () => {
-  const w = await centralWorld({ open: false, sealer: { maxUnsent: 0, timeout: 400 } });
+  // A limit of 1.5 seconds on a question: past what the disk may hold this process's thread for (sealer-world.mjs). A seal
+  // may wait for two questions; the 4.5 seconds allowed below are short of the 5 seconds one question may take unless set.
+  const w = await centralWorld({ open: false, sealer: { maxUnsent: 0, timeout: 1500 } });
   let hang = false;
   const fake = await standIn({ token: w.sealer.token, real: w.settings.recorder.sealer.address, answer: (path, body, forward) => (hang ? new Promise(() => {}) : forward()) });
   try {
@@ -179,10 +184,10 @@ test('central sealer: with a sealer that takes a question and never answers, no 
     assert.equal(refusal(await w.client.call('echo', {})), null, 'nothing was unsent when this call came');
     let from = Date.now();
     assert.equal(refusal(await w.client.call('echo', {})).code, 'sealer-behind');
-    assert.ok(Date.now() - from < 3000, `the call waited ${Date.now() - from} ms`);
+    assert.ok(Date.now() - from < 4500, `the call waited ${Date.now() - from} ms`);
     from = Date.now();
     await assert.rejects(w.executor.seal(), /No seal was asked for/);
-    assert.ok(Date.now() - from < 3000, `the seal waited ${Date.now() - from} ms`);
+    assert.ok(Date.now() - from < 4500, `the seal waited ${Date.now() - from} ms`);
     assert.match((await w.executor.report()).agent.sealer.problem, /TimeoutError/);
   } finally {
     await w.close();
@@ -232,7 +237,7 @@ test('central sealer: a sealer that signs with another key set than the settings
 });
 
 test('central sealer: an answer with another number of lines than was sent is not taken as the sealer holding them', async () => {
-  const w = await centralWorld({ open: false, sealer: { timeout: 500 } });
+  const w = await centralWorld({ open: false });
   let wrong = false;
   const fake = await standIn({
     token: w.sealer.token,
@@ -260,7 +265,7 @@ test('central sealer: an answer with another number of lines than was sent is no
 });
 
 test('central sealer: a place the sealer does not hold ("at") makes the executor ask what it holds and send from there; a sealer that never agrees is given up on, and the lines stay unsent', async () => {
-  const w = await centralWorld({ open: false, sealer: { timeout: 500 } });
+  const w = await centralWorld({ open: false });
   let wrong = false;
   let asked = 0;
   const fake = await standIn({
@@ -322,7 +327,7 @@ test('central sealer: a sealer that refuses to sign leaves the book without a se
 });
 
 test('central sealer: a seal the sealer signed whose answer never came is added before any other line; meanwhile no call is taken and no line is written', async () => {
-  const w = await centralWorld({ open: false, sealer: { timeout: 500 } });
+  const w = await centralWorld({ open: false });
   let lose = true;
   const fake = await standIn({
     token: w.sealer.token,
@@ -363,7 +368,7 @@ test('central sealer: a seal the sealer signed whose answer never came is added 
 });
 
 test('central sealer: a seal the sealer signed that the book never took is added at the next start, before any other line', async () => {
-  const w = await centralWorld({ open: false, sealer: { timeout: 500 } });
+  const w = await centralWorld({ open: false });
   const fake = await standIn({
     token: w.sealer.token,
     real: w.settings.recorder.sealer.address,
@@ -594,7 +599,7 @@ test('central sealer: a sealer that was not told this agent refuses the book\'s 
 });
 
 test('central sealer: a seal the book never took, with a permission new to the book: the executor does not start until the seal is in the book', async () => {
-  const w = await centralWorld({ open: false, sealer: { timeout: 500 } });
+  const w = await centralWorld({ open: false });
   const fake = await standIn({
     token: w.sealer.token,
     real: w.settings.recorder.sealer.address,
@@ -676,7 +681,7 @@ test('central sealer: a book with no seal, begun before the settings named a sea
 });
 
 test('central sealer: the status read from the files asks the sealer how many lines it holds, and says where it cannot be asked', async () => {
-  const w = await centralWorld({ sealer: { timeout: 500 } });
+  const w = await centralWorld();
   try {
     await w.client.call('echo', {});
     const sealed = await w.executor.seal();

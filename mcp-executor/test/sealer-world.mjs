@@ -23,6 +23,28 @@ export const RECORDER = 'guard-one';
 /** The label of the proof on a sealer's answer (sealer/README.md, "What a recorder asks"). */
 const ANSWER_LABEL = 'provared sealer v1: the sealer\'s answer';
 
+/** The worlds and stand-ins made in this process, for closeAll. */
+const opened = { worlds: [], standIns: [] };
+
+/**
+ * After each test: whatever a test left open, because it failed before it
+ * closed it, is closed (the executor, the stand-ins, the sealer), so that a
+ * failure is reported and the test file still ends.
+ */
+export async function closeAll() {
+  const worlds = opened.worlds.splice(0);
+  const standIns = opened.standIns.splice(0);
+  for (const w of worlds) {
+    if (w.client && !w.client.toExecutor.writableEnded) {
+      w.client.end();
+      let timer;
+      await Promise.race([w.ended, new Promise((done) => (timer = setTimeout(done, 10000)))]).finally(() => clearTimeout(timer));
+    }
+  }
+  for (const s of standIns) await s.close();
+  for (const w of worlds) await w.sealer?.stop();
+}
+
 /** A port on 127.0.0.1 that was free a moment ago. */
 export function freePort() {
   return new Promise((done, failed) => {
@@ -53,6 +75,9 @@ export async function sealerFolder(agents, { name = RECORDER } = {}) {
  */
 export async function centralWorld({ sealer = {}, recorder = {}, open = true, more = {}, ...o } = {}) {
   const w = await world({ ...o, open: false });
+  // Until an executor is open there is nothing to close: so a test whose start fails reports that, and not "w.close is not a function".
+  w.close = async () => {};
+  opened.worlds.push(w);
   const s = await sealerFolder([w.agentKeys]);
   w.sealer = {
     ...s,
@@ -71,6 +96,9 @@ export async function centralWorld({ sealer = {}, recorder = {}, open = true, mo
   w.sealKeys = [w.sealer.keySet];
   mkdirSync(join(w.folder, 'keys'), { recursive: true });
   writeFileSync(join(w.folder, 'keys', 'sealer-token'), `${s.token}\n`);
+  // The sealer and the executor share this process's one thread, and each holds it while a line goes to the disk (fsync):
+  // on a slow disk 100 to 400 ms a time, and a question can wait for several. So a question may take 2 seconds here; a test
+  // that sets less fails on such a disk for no fault of the program.
   w.settings.recorder = { sealer: { address: `http://127.0.0.1:${s.port}`, name: RECORDER, token: { file: 'keys/sealer-token' }, keySet: w.sealer.keySet, timeout: 2000, ...sealer }, ...recorder };
   writeFileSync(w.configPath, JSON.stringify(w.settings));
   /** The sealer asked directly, as the recorder: what it holds of this world's book. */
@@ -135,7 +163,7 @@ export async function standIn({ token, real = null, answer }) {
     });
   });
   await new Promise((done) => server.listen(0, '127.0.0.1', done));
-  return {
+  const made = {
     address: `http://127.0.0.1:${server.address().port}`,
     seen,
     async close() {
@@ -143,6 +171,8 @@ export async function standIn({ token, real = null, answer }) {
       await new Promise((done) => server.close(() => done()));
     },
   };
+  opened.standIns.push(made);
+  return made;
 }
 
 /** Run the sealer's command to its end: {code, stdout, stderr}. */
