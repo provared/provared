@@ -14,15 +14,15 @@ import './local-library.mjs'; // first: "provared" is this repository's own libr
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const { call } = await import('./http-world.mjs');
 const { REQUEST_LIFE, makeOwnerSetup, readIssuer } = await import('../oauth.mjs');
-const { CHALLENGE_LIFE, RECOVERY_BYTES, SETUP_LIFE, base32, passkeyChecks } = await import('../owner.mjs');
+const { CHALLENGE_LIFE, LIBRARY_PROBLEM, RECOVERY_BYTES, RECOVERY_USED, RESET_COMMAND, SETUP_LIFE, base32, passkeyChecks } = await import('../owner.mjs');
 const { FIELD_CHALLENGE, FIELD_AUTHENTICATOR_DATA, FIELD_CLIENT_DATA, FIELD_SIGNATURE, FIELD_RECOVERY, SETUP_PATH, CHALLENGE_PATH, LINK_PATH, STORE_CODE, STORE_WAITING, setUp } = await import('../owner-steps.mjs');
 const { reopen, send, pkce, authorizeUrl, discover, ask, answer, connect, token, json, bearer, CALLBACK } = await import('./oauth-world.mjs');
 const { ownerWorld, softPasskey, setUpOwner, prove, sender, refusal, waiting, state, pageScript, runPage, softCredentials, softStorage } = await import('./owner-world.mjs');
@@ -463,6 +463,97 @@ test('a later approval by the page\'s script as served: one prompt, which asks t
   assert.equal(credentials.asked.length, asked);
 });
 
+test('by the page\'s script as served, an approval is sent once: with a recovery code typed, Approve sends the form and is then disabled, and a second press sends nothing; the same for Continue on the page that follows, and for Approve after the passkey', async (t) => {
+  const w = await ownerWorld();
+  const after = pages(t, w);
+  const script = await pageScript(w);
+  const credentials = softCredentials(w);
+  const storage = softStorage();
+  const setup = await runPage(w, script, { html: (await send('GET', `${w.issuer}/oauth/owner`)).body, hash: `#${w.code}`, path: '/oauth/owner', credentials, storage, after });
+  await setup.el['owner-setup'].fire('click');
+  const recoveryCode = setup.el['owner-recovery'].textContent;
+  assert.match(recoveryCode, RECOVERY_SHOWN);
+  const d = await discover(w);
+  /** A press of a button of the page's form: whether the form went to the executor. */
+  const press = async (page, submitter) => {
+    let stopped = false;
+    await page.form.fire('submit', { submitter, preventDefault: () => (stopped = true) });
+    return !stopped;
+  };
+  const moment = () => new Promise((done) => setTimeout(done, 20));
+
+  // The recovery code typed: the form goes as it is, once.
+  const p = pkce();
+  const typed = await runPage(w, script, { html: (await ask(w, authorizeUrl(w, d, { pkce: p }))).body, path: '/oauth/authorize', credentials, storage, after });
+  typed.el['owner-recovery-code'].value = recoveryCode;
+  const approve = { value: 'approve', disabled: false };
+  assert.equal(await press(typed, approve), true, 'the first press sends the form');
+  assert.equal(approve.disabled, false, 'not disabled yet: the browser has still to read the button\'s "decision" for the form');
+  await moment();
+  assert.equal(approve.disabled, true, 'disabled after the first press');
+  assert.equal(await press(typed, approve), false, 'a second press sends nothing');
+  assert.equal(await press(typed, approve), false, 'nor a third');
+  assert.equal(credentials.asked.length, 0, 'the passkey was not asked');
+  // What the one form sent: the executor spends the code and answers with the page that says so.
+  const paused = await answer(w, typed.form.elements.request.value, { fields: { ...formFields(typed), [FIELD_RECOVERY]: recoveryCode } });
+  assert.equal(paused.status, 200, paused.body);
+  // That page's Continue: once, too.
+  const spent = await runPage(w, script, { html: paused.body, path: '/oauth/authorize', credentials, storage, after });
+  const go = { value: 'approve', disabled: false };
+  assert.equal(await press(spent, go), true);
+  await moment();
+  assert.equal(go.disabled, true);
+  assert.equal(await press(spent, go), false, 'a second press of Continue sends nothing');
+  // A page the browser shows again as it was left takes one more press; one it merely shows does not.
+  spent.window.pageshow({ persisted: false });
+  assert.equal(await press(spent, go), false);
+  spent.window.pageshow({ persisted: true });
+  assert.equal(go.disabled, false);
+  assert.equal(await press(spent, go), true);
+  await callsATool(w, await answer(w, spent.form.elements.request.value, { agent: spent.form.elements.agent.value, fields: {} }), p);
+
+  // After the passkey: the script sends the form itself, which the browser tells the page of as it does a press; a press after that sends nothing.
+  const p2 = pkce();
+  const page = await runPage(w, script, { html: (await ask(w, authorizeUrl(w, d, { pkce: p2 }))).body, path: '/oauth/authorize', credentials, storage, after });
+  assert.equal(page.el['owner-recovery-code'], undefined, 'no box for a code that is spent');
+  const again = { value: 'approve', disabled: false };
+  assert.equal(await press(page, again), false, 'the form waits for the passkey');
+  assert.equal(page.form.submitted, again, 'and is then sent by the script');
+  assert.equal(await press(page, again), true, 'the sending itself');
+  await moment();
+  assert.equal(again.disabled, true);
+  assert.equal(await press(page, again), false, 'a press after it sends nothing');
+  await callsATool(w, await answer(w, page.form.elements.request.value, { fields: formFields(page) }), p2);
+  // Refuse is not held back by any of this.
+  assert.equal(await press(page, { value: 'refuse' }), true);
+});
+
+test('"Keep this connection" says so where it takes the place of a connection kept before', async (t) => {
+  const w = await ownerWorld();
+  const after = pages(t, w);
+  const script = await pageScript(w);
+  const credentials = softCredentials(w);
+  const storage = softStorage();
+  const d = await discover(w);
+  const open = async () => {
+    const asked = await ask(w, authorizeUrl(w, d, { pkce: pkce() }));
+    return { request: asked.request, page: await runPage(w, script, { html: asked.body, path: '/oauth/authorize', credentials, storage, after }) };
+  };
+  const then = ' Now open the setup link here, within 10 minutes of this page opening: it shows this connection again.';
+  // The first that is kept, and the same one kept again: nothing was replaced.
+  const one = await open();
+  await one.page.el['owner-keep'].fire('click');
+  assert.equal(one.page.el['owner-status'].textContent, `Kept in this browser.${then}`);
+  await one.page.el['owner-keep'].fire('click');
+  assert.equal(one.page.el['owner-status'].textContent, `Kept in this browser.${then}`);
+  // Another, kept after it: it takes the first one's place, and its page says so.
+  const two = await open();
+  assert.equal(storage.getItem(STORE_WAITING), one.request, 'opening a page keeps nothing');
+  await two.page.el['owner-keep'].fire('click');
+  assert.equal(two.page.el['owner-status'].textContent, `Kept in this browser, in place of another connection that was kept here before: only one is kept, and the setup link will show this one, not that one.${then}`);
+  assert.equal(storage.getItem(STORE_WAITING), two.request);
+});
+
 test('refused at the authorisation page: a passkey used at another origin, for another relying party, without the user verified, to make and not to sign, by another key, or with a challenge used twice, expired, for another request or never given', async () => {
   const w = await ownerWorld();
   try {
@@ -534,75 +625,203 @@ test('refused at the authorisation page: a passkey used at another origin, for a
   }
 });
 
-/** The owner's answer by a recovery code: the page that shows the new code, with what its Continue would send. {paused (the answer), fresh (the new code), request, agent, p (the client's PKCE)}. */
+/** What a page's form would send: the value of one of its hidden fields. */
+const hidden = (body, name) => new RegExp(`<input type="hidden" name="${name}" value="([^"]+)">`).exec(body)?.[1];
+/** The owner's answer by a recovery code: the page that says the code is spent, with what its Continue would send. {paused (the answer), request, agent, p (the client's PKCE), first (the request as the first page had it)}. */
 async function typeRecovery(w, typed) {
   const p = pkce();
   const page = await ask(w, authorizeUrl(w, await discover(w), { pkce: p }));
   const paused = await answer(w, page.request, { fields: { [FIELD_RECOVERY]: typed } });
-  const field = (name) => new RegExp(`<input type="hidden" name="${name}" value="([^"]+)">`).exec(paused.body)?.[1];
-  return { paused, fresh: /<pre id="owner-recovery">([^<]+)<\/pre>/.exec(paused.body)?.[1], request: field('request'), agent: field('agent'), p, first: page.request };
+  return { paused, request: hidden(paused.body, 'request'), agent: hidden(paused.body, 'agent'), p, first: page.request };
 }
+/** Text as a page shows it: the executor writes these five characters as numbers. */
+const shown = (text) => text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+/** Anything written as a recovery code is: eight groups of four, or 32 characters in a row. */
+const ANY_CODE = /\b([A-Z2-7]{4}-){7}[A-Z2-7]{4}\b|\b[A-Z2-7]{32}\b/;
+/** How many of the log's lines are of one event. */
+const count = (w, event) => w.logs.filter((e) => e.event === event).length;
 
-test('the recovery code approves one connection in the passkey\'s place and is then spent: a new one is shown before the browser goes on; another code is refused; it sets up no new passkey', async () => {
+test('the recovery code approves one connection in the passkey\'s place and is then spent: no new code is made or shown; the page says it is spent and how a new one is to be had; another code is refused; it sets up no new passkey', async () => {
   const w = await ownerWorld();
   try {
     const { passkey, recoveryCode } = await setUpOwner(w);
     const before = state(w).owner;
-    // Typed in its box: nothing is approved yet. The code is spent, and a page shows the new one, with Continue.
-    const one = await typeRecovery(w, recoveryCode);
+    assert.equal(Object.hasOwn(before, 'recoverySpent'), false);
+    // Another code, of the same form and of none; and a wrong code is not made right by the passkey's fields beside it. None of them spends anything, and none is told more than that the check did not pass.
+    const other = recoveryCode.replace(/.$/, (c) => (c === 'A' ? 'B' : 'A'));
+    for (const wrong of [other, other.replaceAll('-', ''), 'AAAA', '0', recoveryCode.slice(0, -1), `${recoveryCode}A`, before.recoveryHash]) {
+      const request = await waiting(w);
+      const refused = await answer(w, request, { fields: { [FIELD_RECOVERY]: wrong } });
+      assert.equal(refused.status, 403, wrong);
+      assert.ok(refused.body.includes('<p>The owner&#39;s check did not pass. Go back and try again.</p>'), wrong);
+      assert.equal((await answer(w, request, { fields: { ...(await prove(w, passkey)(request)), [FIELD_RECOVERY]: wrong } })).status, 403, wrong);
+    }
+    assert.deepEqual(state(w).owner, before);
+    assert.equal(count(w, 'owner-recovery-spent') + count(w, 'owner-recovery-refused'), 0);
+    const asked = passkey.signed;
+    // Wrong codes shut nothing (X211): the right one passes straight after, as a person types it, in small letters with spaces for the hyphens. Nothing is approved yet: the code is spent, and a page says so, with Continue.
+    const one = await typeRecovery(w, ` ${recoveryCode.toLowerCase().replaceAll('-', ' ')} `);
     assert.equal(one.paused.status, 200, one.paused.body);
-    assert.ok(one.paused.body.includes('<h1>Write down your new recovery code</h1>'));
-    assert.match(one.fresh, RECOVERY_SHOWN);
-    assert.notEqual(one.fresh, recoveryCode);
     assert.equal(one.agent, 'conn');
+    assert.equal(count(w, 'oauth-approved'), 0, 'not approved until the owner continues');
+    assert.equal(count(w, 'owner-recovery-spent'), 1);
+    // The page's text after the use: the code is spent, none takes its place, and the command that makes a new owner, as the command's own help writes it.
+    assert.ok(one.paused.body.includes('<h1>The recovery code is spent</h1>'));
+    assert.ok(one.paused.body.includes('<p id="owner-spent">The recovery code you typed is spent. It is good for this one connection, which Continue approves, and for nothing after it. No new code takes its place.</p>'));
+    assert.ok(one.paused.body.includes('<p>To have a recovery code again, stop the executor and run this on the server:</p>\n<pre id="owner-reset">provared-mcp-executor owner --config &#60;settings&#62; --reset</pre>'));
+    assert.ok(one.paused.body.includes('It removes the owner and ends every connection, and prints a setup link.'));
+    assert.ok(one.paused.body.includes(`<p>Press Continue, once: the connection is approved when you do, and the browser goes back to ${new URL(w.docs.client).host}.</p>`), one.paused.body);
     assert.match(one.paused.body, /<button type="submit" name="decision" value="approve">Continue<\/button>/);
-    assert.match(one.paused.headers['content-security-policy'], /^default-src 'none'; form-action 'self' https:\/\/client\.example; frame-ancestors 'none'; base-uri 'none'$/);
-    assert.doesNotMatch(one.paused.body, /<script/);
-    assert.equal(w.logs.some((e) => e.event === 'oauth-approved'), false, 'not approved until the owner continues');
-    assert.ok(w.logs.some((e) => e.event === 'owner-recovery-spent'));
-    const after = state(w).owner;
-    assert.notEqual(after.recoveryHash, before.recoveryHash, 'the new code\'s hash is in the old one\'s place');
-    assert.deepEqual({ ...after, recoveryHash: before.recoveryHash }, before, 'and nothing else of the owner changed');
-    const text = readFileSync(w.statePath, 'utf8');
-    assert.equal(text.includes(one.fresh) || text.includes(one.fresh.replaceAll('-', '')), false, 'no recovery code in the file');
-    // The request as the first page had it is not approved by this: only the one on the page that shows the new code.
+    const help = spawnSync(process.execPath, [BIN, '--help'], { encoding: 'utf8' }).stdout;
+    assert.ok(help.split('\n').some((line) => line.trim().replace(/\s+/g, ' ').replace('[--reset]', '--reset') === RESET_COMMAND), 'the command is the one the help gives');
+    // No new code: none on the page, none in the file, and the hash on file is the one it was.
+    assert.doesNotMatch(one.paused.body, ANY_CODE);
+    assert.equal(one.paused.body.includes('id="owner-recovery"'), false);
+    assert.deepEqual(state(w).owner, { ...before, recoverySpent: true }, 'the owner is as it was, with the code marked as spent');
+    assert.doesNotMatch(readFileSync(w.statePath, 'utf8'), ANY_CODE);
+    // The page runs the executor's own script and no other, so that Continue is pressed once; it holds no secret.
+    assert.match(one.paused.headers['content-security-policy'], /^default-src 'none'; script-src 'self'; connect-src 'self'; form-action 'self' https:\/\/client\.example; frame-ancestors 'none'; base-uri 'none'$/);
+    assert.deepEqual([...one.paused.body.matchAll(/<script[^>]*>/g)].map((m) => m[0]), ['<script type="module" src="/oauth/owner/page.js">']);
+    // The request as the first page had it is not approved by this: only the one on the page that says the code is spent.
     assert.equal((await answer(w, one.first, { fields: {} })).status, 403);
     // Continue: the connection is made, and the log says by which proof.
     await callsATool(w, await answer(w, one.request, { agent: one.agent, fields: {} }), one.p);
     assert.ok(w.logs.some((e) => e.event === 'oauth-approved' && e.by === 'recovery'));
     assert.equal((await answer(w, one.request, { agent: one.agent, fields: {} })).status, 400, 'approved once');
-    // Spent: the code that was typed approves nothing more, whoever types it.
-    assert.equal((await typeRecovery(w, recoveryCode)).paused.status, 403);
-    // The new code works, once, as a person types it: in small letters, with spaces for the hyphens.
-    const two = await typeRecovery(w, ` ${one.fresh.toLowerCase().replaceAll('-', ' ')} `);
-    assert.equal(two.paused.status, 200, two.paused.body);
-    await callsATool(w, await answer(w, two.request, { agent: two.agent, fields: {} }), two.p);
-    assert.equal((await typeRecovery(w, one.fresh)).paused.status, 403);
-    assert.equal(passkey.signed, 0, 'the passkey was not asked');
-    // The same code sent twice at once is spent once: one page with a new code, one refusal.
-    const p = pkce();
-    const page = await ask(w, authorizeUrl(w, await discover(w), { pkce: p }));
-    const twice = await Promise.all([1, 2].map(() => answer(w, page.request, { fields: { [FIELD_RECOVERY]: two.fresh } })));
-    assert.deepEqual(twice.map((r) => r.status).sort(), [200, 403]);
-    const current = /<pre id="owner-recovery">([^<]+)<\/pre>/.exec(twice.find((r) => r.status === 200).body)[1];
-    // Another code, of the same form and of none; and a wrong code is not made right by the passkey's fields beside it. None of them spends anything.
-    const kept = state(w).owner.recoveryHash;
-    const other = current.replace(/.$/, (c) => (c === 'A' ? 'B' : 'A'));
-    for (const wrong of [other, other.replaceAll('-', ''), 'AAAA', '0', current.slice(0, -1), `${current}A`, kept]) {
-      const request = await waiting(w);
-      assert.equal((await answer(w, request, { fields: { [FIELD_RECOVERY]: wrong } })).status, 403, wrong);
-      assert.equal((await answer(w, request, { fields: { ...(await prove(w, passkey)(request)), [FIELD_RECOVERY]: wrong } })).status, 403, wrong);
-    }
-    assert.equal(state(w).owner.recoveryHash, kept);
-    // Wrong codes shut nothing (X211): the right one passes straight after. A page whose Continue is not pressed within the request's 10 minutes approves nothing.
-    const last = await typeRecovery(w, current);
+    assert.equal(passkey.signed, asked, 'the passkey was not asked');
+    // It approves; it does not set up: the owner's passkey stays as it was.
+    assert.deepEqual(await refusal(sender(w)(SETUP_PATH, { code: recoveryCode, credentialId: 'AAAA', key: (await softPasskey(w)).key })), { status: 409, code: 'owner-exists' });
+    assert.equal(state(w).owner.credentialId, before.credentialId);
+    assert.deepEqual(state(w).owner.key, before.key);
+  } finally {
+    await w.close();
+  }
+});
+
+test('a recovery code that was used approves nothing more: typed again it is told that it was already used, by whoever types it, in any request and after a restart; the page then has no box for it; the passkey still approves', async () => {
+  const w = await ownerWorld();
+  try {
+    const { passkey, recoveryCode } = await setUpOwner(w);
+    const one = await typeRecovery(w, recoveryCode);
+    await callsATool(w, await answer(w, one.request, { agent: one.agent, fields: {} }), one.p);
+    const spent = state(w).owner;
+    // The second use, in a new request: refused, in words that say why and what to do.
+    const used = (r) => {
+      assert.equal(r.status, 403, r.body);
+      assert.ok(r.body.includes('<h1>The connection cannot be made</h1>'));
+      assert.ok(r.body.includes(`<p>${shown(RECOVERY_USED)}</p>`), r.body);
+      assert.equal(r.headers.location, undefined);
+      assert.doesNotMatch(r.body, ANY_CODE);
+    };
+    assert.match(RECOVERY_USED, /^This recovery code was already used, and is spent: a code approves one connection\. Nothing was approved by this\./);
+    assert.ok(RECOVERY_USED.includes(`running "${RESET_COMMAND}" on the server, which removes the owner and ends every connection.`));
+    const two = await typeRecovery(w, recoveryCode);
+    used(two.paused);
+    assert.equal(two.request, undefined, 'no page with a Continue');
+    // The same in the form a person types, and beside a passkey's fields that would pass by themselves: a spent code typed is refused, not passed over.
+    used((await typeRecovery(w, recoveryCode.toLowerCase().replaceAll('-', ' '))).paused);
+    const request = await waiting(w);
+    used(await answer(w, request, { fields: { ...(await prove(w, passkey)(request)), [FIELD_RECOVERY]: recoveryCode } }));
+    assert.equal(count(w, 'owner-recovery-spent'), 1, 'spent once');
+    assert.equal(count(w, 'owner-recovery-refused'), 3, 'and each later use is in the log');
+    assert.ok(w.logs.some((e) => e.event === 'owner-recovery-refused' && e.code === 'spent'));
+    assert.equal(count(w, 'oauth-approved'), 1, 'one approval from the code, and no more');
+    assert.deepEqual(state(w).owner, spent, 'a later use changes nothing');
+    // A wrong code is still told only that the check did not pass.
+    assert.ok((await typeRecovery(w, 'AAAA')).paused.body.includes('The owner&#39;s check did not pass.'));
+    // After a restart the code is still spent: the file says so.
+    await reopen(w);
+    used((await typeRecovery(w, recoveryCode)).paused);
+    assert.equal(count(w, 'oauth-approved'), 0);
+    // Every authorisation page now says that the code is spent, with the same command, and has no box for one.
+    const page = await ask(w, authorizeUrl(w, await discover(w), { pkce: pkce() }));
+    assert.ok(page.body.includes(`<p id="owner-recovery-spent">Approve asks for the owner's passkey. This executor's recovery code has been used and is spent, so there is none to type. If you did not use it, someone else did: reset the owner. A new code comes from stopping the executor and running "${shown(RESET_COMMAND)}" on the server, which removes the owner and ends every connection.</p>`), page.body);
+    assert.equal(page.body.includes(`name="${FIELD_RECOVERY}"`), false);
+    // The passkey approves as before.
+    const { access } = await connect(w, { prove: prove(w, passkey) });
+    assert.equal((await call(w, bearer(access), 'echo', {})).status, 200);
+    assert.ok(w.logs.some((e) => e.event === 'oauth-approved' && e.by === 'passkey'));
+  } finally {
+    await w.close();
+  }
+});
+
+test('the same recovery code in several answers at once approves one connection at most: one answer spends it, and each of the others is told it was already used', async () => {
+  const w = await ownerWorld();
+  try {
+    const { recoveryCode } = await setUpOwner(w);
+    const d = await discover(w);
+    // Two presses on one page, and two more pages open beside it: four answers with the one code, sent together.
+    const pages = [];
+    for (let i = 0; i < 3; i += 1) pages.push({ p: pkce() });
+    for (const page of pages) page.request = (await ask(w, authorizeUrl(w, d, { pkce: page.p }))).request;
+    const sent = [pages[0], pages[0], pages[1], pages[2]];
+    const answers = await Promise.all(sent.map((page) => answer(w, page.request, { fields: { [FIELD_RECOVERY]: recoveryCode } })));
+    assert.deepEqual(answers.map((r) => r.status).sort(), [200, 403, 403, 403]);
+    for (const r of answers.filter((a) => a.status === 403)) assert.ok(r.body.includes(`<p>${shown(RECOVERY_USED)}</p>`), r.body);
+    assert.equal(count(w, 'owner-recovery-spent'), 1);
+    assert.equal(count(w, 'owner-recovery-refused'), 3);
+    assert.equal(count(w, 'oauth-approved'), 0);
+    // The one page with a Continue approves its own connection, once; none of the requests as the first pages had them is approved.
+    const i = answers.findIndex((r) => r.status === 200);
+    const body = answers[i].body;
+    for (const page of pages) assert.equal((await answer(w, page.request, { fields: {} })).status, 403);
+    const both = await Promise.all([1, 2].map(() => answer(w, hidden(body, 'request'), { agent: hidden(body, 'agent'), fields: {} })));
+    assert.deepEqual(both.map((r) => r.status).sort(), [303, 400], 'Continue sent twice at once approves once');
+    await callsATool(w, both.find((r) => r.status === 303), sent[i].p);
+    assert.equal(count(w, 'oauth-approved'), 1, 'one connection, from four answers');
+    assert.equal(state(w).grants.length, 1);
+  } finally {
+    await w.close();
+  }
+});
+
+test('a recovery code whose request has ended is not spent; a page whose Continue is not pressed in time approves nothing, and the code is spent all the same; a reset of the owner gives a new code', async () => {
+  const w = await ownerWorld();
+  try {
+    const { recoveryCode } = await setUpOwner(w);
+    const before = state(w).owner;
+    // The request ended before the code was sent: the front door answers, the check is not asked, nothing is spent.
+    const late = await waiting(w);
+    w.clock.offset += REQUEST_LIFE;
+    assert.equal((await answer(w, late, { fields: { [FIELD_RECOVERY]: recoveryCode } })).status, 400);
+    // Refuse, show, an agent that is not for connections and another origin spend nothing either.
+    const request = await waiting(w);
+    assert.equal((await answer(w, request, { decision: 'refuse', fields: { [FIELD_RECOVERY]: recoveryCode } })).status, 303);
+    assert.equal((await answer(w, request, { decision: 'show', fields: { [FIELD_RECOVERY]: recoveryCode } })).status, 200);
+    assert.equal((await answer(w, request, { agent: 'alpha', fields: { [FIELD_RECOVERY]: recoveryCode } })).status, 400);
+    assert.equal((await answer(w, request, { origin: 'https://other.example', fields: { [FIELD_RECOVERY]: recoveryCode } })).status, 403);
+    assert.deepEqual(state(w).owner, before);
+    assert.equal(count(w, 'owner-recovery-spent'), 0);
+    // Spent, and Continue not pressed within the request's 10 minutes: nothing is approved.
+    const last = await typeRecovery(w, recoveryCode);
     assert.equal(last.paused.status, 200);
     w.clock.offset += REQUEST_LIFE;
     assert.equal((await answer(w, last.request, { agent: last.agent, fields: {} })).status, 400);
-    // It approves; it does not set up: the owner's passkey stays as it was.
-    assert.deepEqual(await refusal(sender(w)(SETUP_PATH, { code: last.fresh, credentialId: 'AAAA', key: (await softPasskey(w)).key })), { status: 409, code: 'owner-exists' });
-    assert.equal(state(w).owner.credentialId, before.credentialId);
-    assert.deepEqual(state(w).owner.key, before.key);
+    assert.equal(count(w, 'oauth-approved'), 0);
+    assert.equal(state(w).owner.recoverySpent, true);
+    await w.executor.close();
+    w.executor = null;
+    // The state file says that a code is spent by "recoverySpent": true, and in no other way: a file that says anything else there is not read.
+    const text = readFileSync(w.statePath, 'utf8');
+    for (const other of [false, 1, 'true', null]) {
+      writeFileSync(w.statePath, JSON.stringify({ ...JSON.parse(text), owner: { ...JSON.parse(text).owner, recoverySpent: other } }));
+      await assert.rejects(reopen(w), /oauth\.state: the file is not in the form the executor writes\./, String(other));
+    }
+    writeFileSync(w.statePath, text);
+    // "owner --reset", as the command works, on the files of a stopped executor: a new owner, with a new code that works once.
+    const reset = makeOwnerSetup(w.parsed, { reset: true, now: w.more.now });
+    assert.equal(state(w).owner, null);
+    await reopen(w);
+    w.code = new URL(reset.link).hash.slice(1);
+    const again = await setUpOwner(w);
+    assert.match(again.recoveryCode, RECOVERY_SHOWN);
+    assert.notEqual(again.recoveryCode, recoveryCode);
+    assert.equal(Object.hasOwn(state(w).owner, 'recoverySpent'), false);
+    assert.equal((await typeRecovery(w, recoveryCode)).paused.status, 403, 'the old code is nothing to the new owner');
+    const fresh = await typeRecovery(w, again.recoveryCode);
+    assert.equal(fresh.paused.status, 200, fresh.paused.body);
+    await callsATool(w, await answer(w, fresh.request, { agent: fresh.agent, fields: {} }), fresh.p);
   } finally {
     await w.close();
   }
@@ -640,12 +859,51 @@ test('the library\'s passkey checks are found where the executor looks for them,
   writeFileSync(join(other, 'webauthn.js'), 'export const checkPasskey = () => "valid";\n');
   writeFileSync(join(other, 'keys.js'), 'export const PASSKEY_METHODS = ["ES256"];\nexport function checkKey() {}\n');
   await assert.rejects(passkeyChecks(other), reason);
+  // The error is marked, so that the command knows it from any other and prints its message alone.
+  await assert.rejects(passkeyChecks(other), { code: LIBRARY_PROBLEM });
+  assert.equal(LIBRARY_PROBLEM, 'ERR_PROVARED_LIBRARY');
   // The package names one exact version of the library: the one these checks were read in.
   const named = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).dependencies;
   assert.deepEqual(named, { provared: '0.7.0' });
   const locked = JSON.parse(readFileSync(new URL('../package-lock.json', import.meta.url), 'utf8')).packages;
   assert.equal(locked[''].dependencies.provared, '0.7.0');
   assert.equal(locked['node_modules/provared'].version, '0.7.0');
+});
+
+test('installed beside a library without the passkey checks, every command prints the executor\'s own message, and nothing round it, and ends with 1', () => {
+  const here = fileURLToPath(new URL('../', import.meta.url));
+  const manifest = JSON.parse(readFileSync(join(here, 'package.json'), 'utf8'));
+  // The package as npm lays it out: its own files, and the library in its node_modules. The library is this repository's.
+  const root = mkdtempSync(join(tmpdir(), 'provared-installed-'));
+  const executor = join(root, 'provared-mcp-executor');
+  for (const f of ['package.json', ...manifest.files.filter((x) => x.endsWith('.mjs') || x.endsWith('.json'))]) {
+    mkdirSync(dirname(join(executor, f)), { recursive: true });
+    copyFileSync(join(here, f), join(executor, f));
+  }
+  const library = join(executor, 'node_modules', 'provared');
+  mkdirSync(library, { recursive: true });
+  copyFileSync(join(here, '..', 'package.json'), join(library, 'package.json'));
+  cpSync(join(here, '..', 'src'), join(library, 'src'), { recursive: true });
+  // The command finds the library as Node.js finds it, not by the tests' own way to it (local-library.mjs).
+  const run = (...args) => spawnSync(process.execPath, [join(executor, 'bin.mjs'), ...args], { encoding: 'utf8', cwd: root, env: { ...process.env, NODE_OPTIONS: '' } });
+  // With the library whole, the command runs.
+  const whole = run('--version');
+  assert.equal(whole.status, 0, whole.stderr);
+  assert.equal(whole.stdout, `provared-mcp-executor ${manifest.version}\n`);
+  // The check of a passkey's signature under another name, throughout the library: it loads, and has no checkAssertion.
+  for (const f of readdirSync(join(library, 'src')).filter((x) => x.endsWith('.js'))) {
+    const text = readFileSync(join(library, 'src', f), 'utf8');
+    if (text.includes('checkAssertion')) writeFileSync(join(library, 'src', f), text.replaceAll('checkAssertion', 'checkSignedByPasskey'));
+  }
+  const message = /^provared-mcp-executor: the "provared" library at [^\n]+ does not have the passkey checks this version was built with \(checkAssertion in webauthn\.js; checkKey and PASSKEY_METHODS in keys\.js\)\. Install the version of "provared" that this package's package\.json names\. Nothing was started\.\n$/;
+  for (const args of [['--version'], ['--help'], [], ['secret'], ['stdio', '--config', 'none.json'], ['http', '--config', 'none.json'], ['owner', '--config', 'none.json']]) {
+    const r = run(...args);
+    const said = `"${args.join(' ')}": ${r.stderr}`;
+    assert.equal(r.status, 1, said);
+    assert.equal(r.stdout, '', said);
+    // One line: no stack, no source line, no "Node.js v…" under it.
+    assert.match(r.stderr, message, said);
+  }
 });
 
 test('the setup link: used twice, expired, the wrong code, or not from the executor\'s page, it is refused', async () => {

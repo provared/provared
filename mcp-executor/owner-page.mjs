@@ -141,6 +141,29 @@ if (setupButton) {
 
 // The authorisation page: "Approve" first proves the owner, then sends the form.
 const form = document.querySelector('form[action="/oauth/authorize"]');
+/**
+ * An approval goes to the executor once (X282). A second press sends
+ * nothing: the executor would take the first and refuse the second, and the
+ * browser would show the refusal. The button that was pressed is disabled,
+ * a moment later: one disabled before the browser has read the form's
+ * fields would not send its "decision".
+ */
+let sent = false;
+let pressed = null;
+const once = (event) => {
+  if (sent) return event.preventDefault();
+  sent = true;
+  pressed = event.submitter ?? null;
+  if (pressed) setTimeout(() => (pressed.disabled = sent), 0);
+  say('Sending…');
+};
+// A page the browser shows again as it was left (by Back, after a refusal that says to go back) takes one more press. So does one a browser loads again with its buttons as they were left.
+globalThis.addEventListener?.('pageshow', (event) => {
+  if (!event.persisted) return;
+  sent = false;
+  if (pressed) pressed.disabled = false;
+});
+for (const button of form?.querySelectorAll?.('button[type="submit"]') ?? []) button.disabled = false;
 if (form && form.elements[FIELD_CHALLENGE]) {
   // Present where the executor has no owner yet: then Approve can only be the setup and the approval in one (X272).
   const first = document.getElementById('owner-first');
@@ -167,8 +190,11 @@ if (form && form.elements[FIELD_CHALLENGE]) {
   // The request is kept for the setup page only when the owner presses this, on the page that shows it. A page that merely opens keeps nothing: so no other page, opened in this browser by anyone, can put its request in this one's place (X272).
   if (keep) {
     keep.addEventListener('click', () => {
-      store.set(STORE_WAITING, form.elements.request.value);
-      say('Kept in this browser. Now open the setup link here, within 10 minutes of this page opening: it shows this connection again.');
+      // One request is kept. Where another was kept before, this one takes its place, and the page says so.
+      const before = store.get(STORE_WAITING);
+      const mine = form.elements.request.value;
+      store.set(STORE_WAITING, mine);
+      say(`${before !== '' && before !== mine ? 'Kept in this browser, in place of another connection that was kept here before: only one is kept, and the setup link will show this one, not that one.' : 'Kept in this browser.'} Now open the setup link here, within 10 minutes of this page opening: it shows this connection again.`);
     });
   }
   let proved = false;
@@ -176,7 +202,9 @@ if (form && form.elements[FIELD_CHALLENGE]) {
   let owner = !first;
   form.addEventListener('submit', async (event) => {
     const submitter = event.submitter;
-    if (proved || submitter?.value !== 'approve') return;
+    if (submitter?.value !== 'approve') return;
+    // Proved: the form goes, once.
+    if (proved) return once(event);
     if (busy) return event.preventDefault();
     if (!owner) {
       event.preventDefault();
@@ -208,8 +236,8 @@ if (form && form.elements[FIELD_CHALLENGE]) {
       busy = false;
       return;
     }
-    // A recovery code typed in its box is the proof, and goes with the form as it is (X276).
-    if ((document.getElementById('owner-recovery-code')?.value ?? '').trim() !== '') return;
+    // A recovery code typed in its box is the proof, and goes with the form as it is (X276), once: the first press spends the code, and a second would only be told so (X282).
+    if ((document.getElementById('owner-recovery-code')?.value ?? '').trim() !== '') return once(event);
     event.preventDefault();
     busy = true;
     say('Asking for the owner\'s passkey…');
@@ -227,4 +255,7 @@ if (form && form.elements[FIELD_CHALLENGE]) {
     busy = false;
   });
   await ready;
+} else if (form && document.getElementById('owner-spent')) {
+  // The page that answers a recovery code's use (X282): its one button, Continue, approves the connection, and is pressed once.
+  form.addEventListener('submit', once);
 }

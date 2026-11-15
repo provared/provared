@@ -174,7 +174,8 @@ export function softStorage() {
  * Run the page's script on a stand-in page made from the HTML the executor
  * sent: every element with an id, and the authorisation form with its
  * hidden fields. Gives {el (the elements by id), form, replaced (what
- * history.replaceState was given)}. The globals a page has are set for the
+ * history.replaceState was given), window (the listeners the script set on
+ * the window, by event)}. The globals a page has are set for the
  * run, and put back by "after". "lose" says, for an address, whether the
  * executor's answer to the page is lost on its way.
  */
@@ -187,9 +188,11 @@ export async function runPage(w, script, { html, hash = '', path, credentials, s
     form = element({ elements: {}, submitted: null, requestSubmit: (submitter) => (form.submitted = submitter) });
     for (const m of html.matchAll(/<input type="hidden" name="([^"]+)" value="([^"]*)">/g)) form.elements[m[1]] = { value: m[2] };
   }
-  const page = { el, form, replaced: null };
+  const page = { el, form, replaced: null, window: {} };
   const u = new URL(w.issuer);
   const globals = {
+    // The window's own events (pageshow): page.window[type] is the listener.
+    addEventListener: (type, f) => (page.window[type] = f),
     document: { getElementById: (name) => el[name] ?? null, querySelector: (q) => (q === 'form[action="/oauth/authorize"]' ? form : null) },
     location: { hash, host: u.host, hostname: u.hostname, origin: w.issuer, pathname: path },
     history: { replaceState: (...a) => (page.replaced = a) },

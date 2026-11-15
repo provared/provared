@@ -15,7 +15,7 @@ import { test } from 'node:test';
 const { checkBook } = await import('provared');
 const { httpWorld, call, request } = await import('./http-world.mjs');
 const { readHttpSettings } = await import('../http.mjs');
-const { ACCESS_LIFE, CODE_LIFE, DOCUMENT_KEPT, DOCUMENT_RETRY, OAUTH_TIMEOUT } = await import('../oauth.mjs');
+const { ACCESS_LIFE, CODE_LIFE, DOCUMENT_KEPT, DOCUMENT_RETRY, OAUTH_TIMEOUT, PROOFS } = await import('../oauth.mjs');
 const { CALLBACK, oauthWorld, reopen, send, json, pkce, authorizeUrl, discover, ask, answer, token, connect, bearer } = await import('./oauth-world.mjs');
 
 test('the whole flow: discovery, the owner\'s page, the code, the tokens, a tool call receipted in the connection\'s own book, a refresh; an agent with a secret works as before', async () => {
@@ -266,6 +266,56 @@ test('without an owner\'s check, the page approves nothing', async () => {
     assert.equal(page.status, 200);
     assert.match(page.body, /No owner's check is set up/);
     assert.equal((await answer(w, page.request)).status, 503);
+  } finally {
+    await w.close();
+  }
+});
+
+test('an owner\'s check approves by saying true, or the name of the proof that passed, and by nothing else: an empty text, another word, a number, an object or a check that throws refuses', async () => {
+  // A check that answers whatever the test names: the value at the place the form's field gives.
+  const says = [];
+  const check = {
+    form: () => '<p>A check for the test.</p>',
+    check: async (fields) => {
+      const v = says[Number(fields.get('says'))];
+      if (v instanceof Error) throw v;
+      return v;
+    },
+  };
+  const w = await oauthWorld({ ownerCheck: check });
+  try {
+    const d = await discover(w);
+    const answerOf = async (value) => {
+      says.push(value);
+      w.logs.length = 0;
+      return answer(w, (await ask(w, authorizeUrl(w, d, { pkce: pkce() }))).request, { fields: { says: String(says.length - 1) } });
+    };
+    // What approves, and what the log then says of the proof.
+    assert.deepEqual(PROOFS, ['passkey', 'recovery', 'setup']);
+    for (const [value, by] of [[true, undefined], ['passkey', 'passkey'], ['recovery', 'recovery'], ['setup', 'setup']]) {
+      const a = await answerOf(value);
+      assert.equal(a.status, 303, String(value));
+      assert.ok(a.params.code);
+      const line = w.logs.find((e) => e.event === 'oauth-approved');
+      assert.equal(line.by, by);
+      assert.equal(Object.hasOwn(line, 'by'), by !== undefined);
+    }
+    // What does not: every other value, among them the ones that are true to an "if".
+    const not = ['', ' ', 'no', 'yes', 'true', 'ok', 'Passkey', 'passkey ', 'refused', 1, -1, 0, Number.NaN, 1n, null, undefined, {}, [], ['passkey'], [true], { ok: true }, { by: 'passkey' }, { pause: true }, { pause: {} }, { problem: 1 }, () => true, Symbol('passkey'), new String('passkey'), new Boolean(true), new Error('the check failed')];
+    for (const [i, value] of not.entries()) {
+      const a = await answerOf(value);
+      const said = `value ${i} of the list (${typeof value})`;
+      assert.equal(a.status, 403, said);
+      assert.equal(a.headers.location, undefined, said);
+      assert.ok(a.body.includes('The owner&#39;s check did not pass. Go back and try again.'), said);
+      assert.equal(w.logs.some((e) => e.event === 'oauth-approved'), false, said);
+      assert.deepEqual(w.logs.filter((e) => e.event === 'oauth-refused').map((e) => e.code), ['owner-not-proved'], said);
+    }
+    // A refusal in the check's own words is a refusal, and the page shows the words as text.
+    const worded = await answerOf({ refusal: 'Not <this> time.' });
+    assert.equal(worded.status, 403);
+    assert.ok(worded.body.includes('<p>Not &#60;this&#62; time.</p>'), worded.body);
+    assert.equal(w.logs.some((e) => e.event === 'oauth-approved'), false);
   } finally {
     await w.close();
   }

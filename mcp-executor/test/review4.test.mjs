@@ -266,10 +266,12 @@ test('where the state cannot be written when a recovery code is typed, the page 
     assert.match(failed.body, /could not write its state, so the recovery code was not spent and nothing was approved/);
     assert.equal(w.logs.some((e) => e.event === 'owner-recovery-spent' || e.event === 'oauth-approved'), false);
     assert.equal(state(w).owner.recoveryHash, kept, 'the file holds the code\'s hash still');
-    // And memory with it: the same code, typed again, is taken.
+    assert.equal(Object.hasOwn(state(w).owner, 'recoverySpent'), false, 'and does not say that it is spent');
+    // And memory with it: the same code, typed again, is taken, and spent then.
     const again = await answer(w, request, { fields: { owner_recovery: recoveryCode } });
     assert.equal(again.status, 200, again.body);
-    assert.notEqual(state(w).owner.recoveryHash, kept);
+    assert.equal(state(w).owner.recoverySpent, true);
+    assert.equal(state(w).owner.recoveryHash, kept, 'its hash stays, so that the code typed again can be told it was used');
   } finally {
     restore();
     await w.close();

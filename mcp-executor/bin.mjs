@@ -82,10 +82,20 @@ import { loadCopyKey } from './copy.mjs';
 import { compareCopyWithBook } from './compare.mjs';
 import { checkConfig, loadRules, openExecutor, readSettings, softwareEntry, statusFromFiles } from './executor.mjs';
 import { loadKeyFile, makeKeyFile, readIfThere } from './files.mjs';
-import { ADMIN_PATH, checkHttpConfig, httpStatusFromFiles, newSecret, openHttpExecutor, readHttpSettings, secretHash } from './http.mjs';
 import { checkIdentity, plainAddress } from './identity.mjs';
-import { makeOwnerSetup } from './oauth.mjs';
 import { makeRecorderKeyFile, readRecorderKeyFile } from './sealing.mjs';
+
+// http.mjs and oauth.mjs are loaded here, and not in the lines above: loading them holds the library's passkey checks against what the executor uses (owner.mjs, X281). Where the library lacks them, no command runs, as before; what is new is that the command then prints the executor's own message, and nothing round it, and ends with 1 (see the last lines). Any other error in loading them is thrown on as it is.
+let libraryProblem = null;
+let loaded = [{}, {}];
+try {
+  loaded = [await import('./http.mjs'), await import('./oauth.mjs')];
+} catch (e) {
+  if (e?.code !== 'ERR_PROVARED_LIBRARY') throw e;
+  libraryProblem = e.message;
+}
+const { ADMIN_PATH, checkHttpConfig, httpStatusFromFiles, newSecret, openHttpExecutor, readHttpSettings, secretHash } = loaded[0];
+const { makeOwnerSetup } = loaded[1];
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const VERSION = JSON.parse(readFileSync(join(HERE, 'package.json'), 'utf8')).version;
@@ -622,13 +632,19 @@ async function main(args) {
   throw new Error(`Unknown command "${command}".\n\n${USAGE}`);
 }
 
-main(process.argv.slice(2)).then(
-  (code) => {
-    // null: "http" keeps running until it is stopped.
-    if (code !== null) process.exitCode = code;
-  },
-  (e) => {
-    process.stderr.write(`provared-mcp-executor: ${e.message}\n`);
-    process.exitCode = 2;
-  },
-);
+if (libraryProblem !== null) {
+  // The library lacks the passkey checks (X281): the message says what was looked for and what to install. No command is run.
+  process.stderr.write(`${libraryProblem}\n`);
+  process.exitCode = 1;
+} else {
+  main(process.argv.slice(2)).then(
+    (code) => {
+      // null: "http" keeps running until it is stopped.
+      if (code !== null) process.exitCode = code;
+    },
+    (e) => {
+      process.stderr.write(`provared-mcp-executor: ${e.message}\n`);
+      process.exitCode = 2;
+    },
+  );
+}

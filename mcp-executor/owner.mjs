@@ -10,8 +10,9 @@
 // 3, section 7.2), against the public key it keeps, with its public address
 // as the origin and that address's host as the relying party. A recovery
 // code, made here and shown once, approves one connection in the passkey's
-// place and is then spent, a new one being made in its place; only its
-// SHA-256 is kept.
+// place and is then spent: no new one is made in its place, and the next
+// comes with a new owner, from "owner --reset" (X282). Only its SHA-256 is
+// kept.
 //
 // What it serves, beside the front door's addresses:
 //
@@ -44,8 +45,11 @@ export { OWNER_PATH };
  * public key's form (X270). The library promises neither by name, so the
  * package names one exact version of it, and what was found is held
  * against what is used before anything else is done: a library without
- * them stops the start, and says why.
+ * them stops the start, and says why. The error carries LIBRARY_PROBLEM as
+ * its code, by which the command knows it and prints its message alone
+ * (bin.mjs).
  */
+export const LIBRARY_PROBLEM = 'ERR_PROVARED_LIBRARY';
 export async function passkeyChecks(folder) {
   const found = {};
   try {
@@ -55,7 +59,7 @@ export async function passkeyChecks(folder) {
     // Said below: one of the two files is not there, or cannot be loaded.
   }
   if (typeof found.checkAssertion !== 'function' || typeof found.checkKey !== 'function' || !Array.isArray(found.PASSKEY_METHODS)) {
-    throw new Error(`provared-mcp-executor: the "provared" library at ${folder} does not have the passkey checks this version was built with (checkAssertion in webauthn.js; checkKey and PASSKEY_METHODS in keys.js). Install the version of "provared" that this package's package.json names. Nothing was started.`);
+    throw Object.assign(new Error(`provared-mcp-executor: the "provared" library at ${folder} does not have the passkey checks this version was built with (checkAssertion in webauthn.js; checkKey and PASSKEY_METHODS in keys.js). Install the version of "provared" that this package's package.json names. Nothing was started.`), { code: LIBRARY_PROBLEM });
   }
   return found;
 }
@@ -67,6 +71,10 @@ export const SETUP_LIFE = 15 * 60 * 1000;
 export const CHALLENGE_LIFE = 2 * 60 * 1000;
 /** A recovery code is this many random bytes, written in base32 (X276). */
 export const RECOVERY_BYTES = 20;
+/** The command that makes a new owner, and with it a new recovery code, as the command's own help writes it (bin.mjs, X282). */
+export const RESET_COMMAND = 'provared-mcp-executor owner --config <settings> --reset';
+/** What is said to a recovery code that was the owner's and is spent (X282). */
+export const RECOVERY_USED = `This recovery code was already used, and is spent: a code approves one connection. Nothing was approved by this. If you pressed Approve twice, the first press spent the code, and the page it was answered with, whose Continue approves, was lost to the second. If you did not use the code, someone else did: reset the owner. The owner's passkey still approves: go back and press Approve with the box empty. A new code comes from stopping the executor and running "${RESET_COMMAND}" on the server, which removes the owner and ends every connection.`;
 const BODY_LIMIT = 16 * 1024;
 const BODY_TIME = 10 * 1000;
 
@@ -191,7 +199,7 @@ function pageFiles() {
  *
  * issuer     the executor's public address: the origin every signature must name, and its host the relying party
  * resource   the address a client is given for the executor, and "clients" the clients the settings list: what the setup page says to do next
- * store      {owner() -> the owner or null, setup() -> {hash, expires} or null, setOwner(owner)}: the front door's state file
+ * store      {owner() -> the owner or null, setup() -> {hash, expires} or null, setOwner(owner), spendRecovery() -> whether this call spent the recovery code}: the front door's state file
  * withNote   (request, note) -> the same waiting request with the note sealed into it, as the text for the page's form; null where the text is not a request waiting at the page (X228)
  * clientOf   (request) -> the client of a request waiting at the page, or null where the text is not one
  * page, json the front door's ways to answer with a page and with JSON
@@ -311,10 +319,15 @@ export function openPasskeyCheck({ issuer, resource = `${issuer}/mcp`, clients =
         `<input type="hidden" name="${FIELD_CLIENT_DATA}" value="">`,
         `<input type="hidden" name="${FIELD_SIGNATURE}" value="">`,
         ...(store.owner()
-          ? [
-              '<p>Approve asks for the owner\'s passkey. Without the passkey, type the recovery code here first:</p>',
-              `<p><label>Recovery code <input type="password" name="${FIELD_RECOVERY}" id="owner-recovery-code" autocomplete="off" spellcheck="false"></label></p>`,
-            ]
+          ? store.owner().recoverySpent === true
+            ? [
+                // No box: there is no code to type. Every authorisation page says so, so an owner who did not use the code learns of it without trying it (X282).
+                `<p id="owner-recovery-spent">Approve asks for the owner's passkey. This executor's recovery code has been used and is spent, so there is none to type. If you did not use it, someone else did: reset the owner. A new code comes from stopping the executor and running "${escape(RESET_COMMAND)}" on the server, which removes the owner and ends every connection.</p>`,
+              ]
+            : [
+                '<p>Approve asks for the owner\'s passkey. Without the passkey, type the recovery code here first. It approves one connection and is then spent:</p>',
+                `<p><label>Recovery code <input type="password" name="${FIELD_RECOVERY}" id="owner-recovery-code" autocomplete="off" spellcheck="false"></label></p>`,
+              ]
           : [
               // The page's script says more here, where this browser holds the setup link (X272).
               '<p id="owner-first">This executor has no owner yet, so nothing can be approved here. Its owner is made by the setup link, which the command "provared-mcp-executor owner" prints on the server. If you have that link and began this connection yourself, press "Keep this connection for the setup link", then open the link in this browser within 10 minutes: it shows this connection again, and one passkey prompt then makes the owner and approves it.</p>',
@@ -337,9 +350,11 @@ export function openPasskeyCheck({ issuer, resource = `${issuer}/mcp`, clients =
      * is kept, and a challenge passes once.
      *
      * A recovery code typed in the form does not approve at once. It is
-     * spent, a new one is made in its place, and the answer is {pause}: a
-     * page that shows the new code, whose Continue sends the same request
-     * with a note that the recovery code approved it.
+     * spent, by one write of the state, and no new one is made (X282). The
+     * answer is {pause}: a page that says so, and how a new code is to be
+     * had, whose Continue sends the same request with a note that the
+     * recovery code approved it. The code typed again, by anyone, in any
+     * request, gets {refusal}: the words that say it was already used.
      */
     async check(fields, { origin, note }) {
       tidy();
@@ -350,24 +365,36 @@ export function openPasskeyCheck({ issuer, resource = `${issuer}/mcp`, clients =
       const typed = fields.get(FIELD_RECOVERY) ?? '';
       if (typed.trim() !== '') {
         if (!sameText(hashOf(recoveryText(typed)), owner.recoveryHash)) return false;
-        // The code is spent by the same write that puts the new one's hash in its place: so it approves once, whoever typed it, and the owner always holds one that works (X276).
-        const fresh = base32(randomBytes(RECOVERY_BYTES));
+        // The request the page will hold is made first: where there is none to make, nothing is spent.
+        const text = fields.get('request') ?? '';
+        const request = withNote(text, { recovery: owner.credentialId });
+        if (typeof request !== 'string') return false;
+        // The code is spent here, once: the store says whether this call spent it, and writes the state in the same step. Of two answers that hold the same code, at once or one after the other, one is told true; the other is told that the code was already used (X282).
+        let spent = false;
         try {
-          store.setRecovery(hashOf(fresh));
+          spent = store.spendRecovery() === true;
         } catch {
           return { problem: 'The executor could not write its state, so the recovery code was not spent and nothing was approved. Try again.' };
         }
+        if (!spent) {
+          log({ event: 'owner-recovery-refused', code: 'spent' });
+          return { refusal: RECOVERY_USED };
+        }
         log({ event: 'owner-recovery-spent' });
-        const text = fields.get('request') ?? '';
         return {
           pause: {
-            title: 'Write down your new recovery code',
+            title: 'The recovery code is spent',
             body: [
-              '<p>The recovery code you typed is spent: it approves nothing more. This is your new one, shown once:</p>',
-              `<pre id="owner-recovery">${escape(fresh.match(/.{4}/g).join('-'))}</pre>`,
-              `<p>Write it down now. Then press Continue: the connection is approved when you do, and the browser goes back to ${escape(hostOf(clientOf(text) ?? ''))}.</p>`,
+              '<p id="owner-spent">The recovery code you typed is spent. It is good for this one connection, which Continue approves, and for nothing after it. No new code takes its place.</p>',
+              '<p>To have a recovery code again, stop the executor and run this on the server:</p>',
+              `<pre id="owner-reset">${escape(RESET_COMMAND)}</pre>`,
+              '<p>It removes the owner and ends every connection, and prints a setup link. The setup makes a new passkey and shows a new code. Until then the owner\'s passkey, where you still have it, approves connections as before.</p>',
+              `<p>Press Continue, once: the connection is approved when you do, and the browser goes back to ${escape(hostOf(clientOf(text) ?? ''))}.</p>`,
+              '<p id="owner-status" role="status"></p>',
+              // The page's script lets Continue be pressed once (X282). The page holds no secret.
+              `<script type="module" src="${OWNER_PATH}/page.js"></script>`,
             ].join('\n'),
-            request: withNote(text, { recovery: owner.credentialId }),
+            request,
           },
         };
       }

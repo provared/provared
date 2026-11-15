@@ -227,13 +227,18 @@ test('finding 3: a stream opened with a token is ended when its connection ends 
     // A new approval of the agent ends the connection before, and its stream.
     const c2 = await connect(w);
     const s2 = await openStream(w, bearer(c2.access));
+    // The executor's clock before the next connection's token is made, and after: the token ends ACCESS_LIFE after a moment between the two.
+    const before = w.more.now();
     const c3 = await connect(w);
+    const made = w.more.now();
     assert.equal(await within(s2.closed, 3000), true, 'ended by the new approval');
 
-    // The token expires: here it has half a second left when the stream is opened.
-    w.clock.offset += ACCESS_LIFE - 500;
+    // The token expires: the clock is put LEFT before the soonest moment it can end, so it has LEFT or a little more when the stream is opened, however long the lines above took. (The clock was once moved on by a fixed ACCESS_LIFE less half a second: the real time that had passed since the token was made came out of that half second, and on a busy computer the token had ended before the stream was opened, which was then refused with 401.)
+    const LEFT = 2000;
+    w.clock.offset += before + ACCESS_LIFE - LEFT - w.more.now();
     const s3 = await openStream(w, bearer(c3.access));
-    assert.equal(await within(s3.closed, 3000), true, 'ended when the token expires');
+    // It ends LEFT from now at the soonest, and later by no more than the making of the connection took.
+    assert.equal(await within(s3.closed, LEFT + (made - before) + 3000), true, 'ended when the token expires');
     assert.ok(w.logs.some((e) => e.event === 'stream-ended' && e.why === 'token-expired'));
     assert.equal(await noneOpen(w, 'conn'), 0);
 

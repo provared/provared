@@ -38,6 +38,8 @@ import { OWNER_PATH, SETUP_LIFE, isOldOwner, openPasskeyCheck, readOwner } from 
 /** Where the executor's own OAuth addresses are. */
 export const OAUTH_PATH = '/oauth';
 export const WELL_KNOWN = '/.well-known';
+/** The names an owner's check may give for the proof that passed (X274). They approve, as true does; no other value does (X282). */
+export const PROOFS = Object.freeze(['passkey', 'recovery', 'setup']);
 /** How long each thing lasts, in milliseconds (X207, X208, X209). */
 export const REQUEST_LIFE = 10 * 60 * 1000;
 export const CODE_LIFE = 60 * 1000;
@@ -218,7 +220,8 @@ function readState(path, { forReset = false } = {}) {
     // Only that it is there matters to a reset, which removes it.
     state.owner = { earlier: true };
   }
-  const ownerOk = (v) => v === undefined || v === null || (forReset && v.earlier === true) || (isObject(v) && Number.isInteger(v.created) && !readOwner({ credentialId: v.credentialId, key: v.key, recoveryHash: v.recoveryHash }).problem && Object.keys(v).length === 4);
+  // "recoverySpent" is there, and true, only once the recovery code has been used (X282): an owner whose code still works has the four members it always had.
+  const ownerOk = (v) => v === undefined || v === null || (forReset && v.earlier === true) || (isObject(v) && Number.isInteger(v.created) && !readOwner({ credentialId: v.credentialId, key: v.key, recoveryHash: v.recoveryHash }).problem && Object.keys(v).length === (Object.hasOwn(v, 'recoverySpent') ? 5 : 4) && (!Object.hasOwn(v, 'recoverySpent') || v.recoverySpent === true));
   const setupOk = (v) => v === undefined || v === null || (isObject(v) && typeof v.hash === 'string' && HASH.test(v.hash) && Number.isInteger(v.expires));
   if (!isObject(state) || state.version !== STATE_VERSION || !Array.isArray(state.grants) || !state.grants.every(grantOk) || !isObject(state.documents) || !ownerOk(state.owner) || !setupOk(state.setup)) {
     throw new Error('oauth.state: the file is not in the form the executor writes.');
@@ -435,6 +438,7 @@ const repeated = (params) => [...new Set(params.keys())].find((k) => params.getA
  *
  * settings  the executor's settings (settings.oauth, settings.path, settings.name, settings.agents)
  * ownerCheck  the owner's check at the page: {form() -> HTML of its fields, check(fields, {request, origin, note}) -> Promise<boolean>},
+ *           where true approves, as does the name of the proof that passed, one of PROOFS, and nothing else does (X282),
  *           with, where it has them, "scripts" (the page runs a script of the executor's own) and its own addresses
  *           (owns(path), take(req, res, path)); null for none; left out, the check by the owner's passkey (owner.mjs).
  *           The executor counts no failed attempts (X211), so what a check asks for must not be guessable.
@@ -596,10 +600,21 @@ export function openFrontDoor({ settings, now = Date.now, log = () => {}, ownerC
         state.owner = owner;
         state.setup = null;
       }),
-      /** A new recovery code's hash in place of the one just used: the old code is spent by the same write (X276). */
-      setRecovery: (recoveryHash) => change(() => {
-        state.owner = { ...state.owner, recoveryHash };
-      }),
+      /**
+       * The recovery code is spent (X282): true where this call spent it,
+       * false where it was spent before. The look and the write are one
+       * step, with nothing waited for between them, so of any number of
+       * calls one is told true. Its hash stays, so that the code typed
+       * again can be told it was used. Where the state cannot be written
+       * it throws, and the code is not spent.
+       */
+      spendRecovery: () => {
+        if (!state.owner || state.owner.recoverySpent === true) return false;
+        change(() => {
+          state.owner = { ...state.owner, recoverySpent: true };
+        });
+        return true;
+      },
     },
     /** The same waiting request with a note of the check's own sealed into it, as the text for the form; null where the text is not a waiting request. */
     withNote: (text, note) => {
@@ -769,7 +784,7 @@ export function openFrontDoor({ settings, now = Date.now, log = () => {}, ownerC
     if (!ownerCheck) return problemPage(res, 503, 'No owner\'s check is set up on this executor, so no connection can be approved.');
     const agent = form.get('agent');
     if (!oauthAgents.includes(agent)) return problemPage(res, 400, 'That is not an agent for connections.');
-    // What the check says (X212): true, or the name of the proof that passed; a page to show before the approval, whose Continue sends the request again; a problem of the executor's own; anything else is a refusal.
+    // What the check says (X212): true, or the name of the proof that passed, one of PROOFS; a page to show before the approval, whose Continue sends the request again; a problem of the executor's own; a refusal with its own words. Anything else is a refusal too: no other value approves, whatever it is (X282).
     let proved = false;
     try {
       proved = await ownerCheck.check(form, { request: r.id, origin: issuer, note: r.note ?? null });
@@ -790,11 +805,12 @@ export function openFrontDoor({ settings, now = Date.now, log = () => {}, ownerC
         `<input type="hidden" name="agent" value="${escape(agent)}">`,
         '<p><button type="submit" name="decision" value="approve">Continue</button></p>',
         '</form>',
-      ].join('\n'), { formTo: [new URL(r.redirectUri).origin] });
+      ].join('\n'), { formTo: [new URL(r.redirectUri).origin], scripts: ownerCheck.scripts === true });
     }
-    if (proved !== true && (typeof proved !== 'string' || proved === '')) {
+    if (proved !== true && !PROOFS.includes(proved)) {
       log({ event: 'oauth-refused', code: 'owner-not-proved' });
-      return problemPage(res, 403, 'The owner\'s check did not pass. Go back and try again.');
+      // The check's own words, where it gives them: a recovery code that was already used (X282).
+      return problemPage(res, 403, isObject(proved) && typeof proved.refusal === 'string' && proved.refusal !== '' ? proved.refusal : 'The owner\'s check did not pass. Go back and try again.');
     }
     // An approved request is answered once: the same form sent again gets no second code.
     if (answered.has(r.id)) return problemPage(res, 400, 'This request has ended or is not known. Begin again from the client.');
@@ -802,7 +818,7 @@ export function openFrontDoor({ settings, now = Date.now, log = () => {}, ownerC
     const code = newToken();
     codes.set(hashOf(code), { client: r.client, redirectUri: r.redirectUri, challenge: r.challenge, scope: r.scope, agent, expires: now() + CODE_LIFE, used: false, grant: null });
     // With which proof it was approved, where the check names it: the passkey, the recovery code, or the setup that made the owner (X274).
-    log({ event: 'oauth-approved', agent, client: r.client, ...(typeof proved === 'string' ? { by: proved } : {}) });
+    log({ event: 'oauth-approved', agent, client: r.client, ...(proved === true ? {} : { by: proved }) });
     back(res, r.redirectUri, { code, state: r.state });
   }
 
