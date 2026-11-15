@@ -452,7 +452,13 @@ The settings (`executor-http.example.json` is a start): `name`, `service`,
   `forward`, a content rule that names a tool no rule in `tools` names
   stops the start.
 - `hideUnlisted`: whether `tools/list` comes back without such tools.
-  Default true.
+  Default true. Where the executor cannot read the server's answer to
+  `tools/list` so as to leave them out, it does not hand the answer on:
+  the request is answered with the error -32603 under its id. The
+  server's own error goes on as it is, over HTTP with its status. An
+  answer the executor cannot match to the request (on stdio a line with
+  an id given twice, no id, a list of messages or a byte order mark; over
+  HTTP an event with no id or another's) is handed on as it was.
 - `timeout`: how long the server is given to answer a call, in
   milliseconds (default 300,000; from 1,000 to 86,400,000). After it the
   executor cancels the call and writes the receipt with an error.
@@ -637,8 +643,12 @@ sent on with no content rule tested.
   `/scan` (versions up to 0.4.1 took both for absent, so that in front of
   a program that reads names without regard to capitals the rule was
   skipped). A rule still does not see such a name in an object it does
-  not walk through, and it folds capitals only: a program that takes two
-  names for one in some other way acts on what the rule did not see.
+  not walk through. And it takes two names for one only where they
+  differ in capitals, or in a few letters that some programs take as the
+  same (the long s and `s`, the Kelvin sign and `k`, the sharp s and
+  `ss`, the dotless i, the dotted capital I and `i`, the ligatures and
+  their letters): a program that takes two names for one in some other
+  way acts on what the rule did not see.
 - That a value of another kind is read as the program reads it. From
   0.4.2, where the way to a pointer stops, with names still to follow, at
   a value that is neither an object nor a list (a text, a number, true,

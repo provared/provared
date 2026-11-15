@@ -36,6 +36,14 @@ const TOOLS = [
 
 /** The text of a value nested "depth" lists deep. */
 const deep = (depth) => `${'['.repeat(depth)}1${']'.repeat(depth)}`;
+/** With FAKE_ODD_LIST one of these names: the line that answers tools/list, from the request's id as JSON and the result's text. */
+const UNMATCHED_LIST = {
+  'id-twice': (id, r) => `{"jsonrpc":"2.0","id":${id},"id":${id},"result":${r}}`,
+  'no-id': (id, r) => `{"jsonrpc":"2.0","result":${r}}`,
+  'null-id': (id, r) => `{"jsonrpc":"2.0","id":null,"result":${r}}`,
+  batch: (id, r) => `[{"jsonrpc":"2.0","id":${id},"result":${r}}]`,
+  bom: (id, r) => `﻿{"jsonrpc":"2.0","id":${id},"result":${r}}`,
+};
 
 const cancelled = new Set();
 const pendingAsks = new Map();
@@ -80,6 +88,10 @@ function onMessage(given) {
     return process.stdout.write(`{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"resultType":"complete","tools":[{"name":"error","description":"A protocol error.","inputSchema":{"type":"object"}},{"name":"hidden","description":"No rule.","inputSchema":{"type":"object"},"ordinal":1234567890123456789},{"name":"big","description":"A large answer.","inputSchema":{"type":"object"},"ordinal":1234567890123456789}]}}\n`);
   }
   if (method === 'tools/list' && process.env.FAKE_ODD_LIST === 'error') return failure(id, -32601, 'This server lists no tools.');
+  if (method === 'tools/list' && Object.hasOwn(UNMATCHED_LIST, process.env.FAKE_ODD_LIST ?? '')) {
+    // A list on a line that no reader can match to the request.
+    return process.stdout.write(`${UNMATCHED_LIST[process.env.FAKE_ODD_LIST](JSON.stringify(id), '{"tools":[{"name":"echo"},{"name":"hidden"}]}')}\n`);
+  }
   if (method === 'tools/list' && process.env.FAKE_ODD_LIST) {
     // A list the executor cannot read: "twice", a member named twice beside it; anything else, a result with no "tools", and the tools under "Tools".
     const odd = process.env.FAKE_ODD_LIST === 'twice' ? '{"tools":[{"name":"echo"},{"name":"hidden"}],"a":1,"a":2}' : '{"Tools":[{"name":"echo"},{"name":"hidden"}]}';

@@ -119,16 +119,36 @@
     is refused with -32600 under its id; the server's is treated as any
     line the executor cannot read, so that a call's receipt says its
     answer could not be read. A list of tools that the executor is to
-    filter (`hideUnlisted`) and cannot read, for this or any other
-    reason, is no longer handed to the agent as it was, which showed it
-    the tools the executor is to hide: the request is answered with the
-    error -32603 under its id, and the log says `tools-list-not-read`
-    (`test/list.test.mjs`, 5 tests, on stdio and over HTTP as a JSON
-    body and as an event stream). Before, one deep answer of the server's ended the
+    filter (`hideUnlisted`) and cannot read, where it can match the
+    answer to the request, is no longer handed to the agent as it was,
+    which showed it the tools the executor is to hide: the request is
+    answered with the error -32603 under its id, and the log says
+    `tools-list-not-read`. That is, on stdio, a line whose one top-level
+    id is the request's; over HTTP, a JSON body, or an event under the
+    request's id. A list the executor cannot match to its request is
+    still handed on as it was, and the request is not answered
+    (DESIGN.md, X250): on stdio a line with an id given twice, no id or
+    a null one, a list of messages (a batch), or a byte order mark
+    before the message; over HTTP an event with no id, under another id,
+    or holding a list of messages. A tool shown so is still refused when
+    it is called, unless the settings forward such calls (`unlisted`).
+    Over HTTP the upstream's own error answer to `tools/list` goes on as
+    it is, with its status, under the request's id, another or a null
+    one, where the body is an error answer and nothing more
+    (`errorAnswer` in `mcp-executor/jsonrpc.mjs`; DESIGN.md, X260): a
+    server may refuse a request it could not read, or a session it does
+    not know, with a 400 or a 404 and an error under a null id. And
+    where the executor writes its own error in place of an upstream's
+    answer, it is sent as `application/json; charset=utf-8` with
+    `cache-control: no-store`, and not under the upstream's content type
+    or its word on caching (`test/list.test.mjs`, 14 tests, on stdio and
+    over HTTP as a JSON body and as an event stream). Before, one deep
+    answer of the server's ended the
     executor: its error, or its list of tools, which the executor writes
-    out afresh, overflowed the stack (run). An agent's cancellation of a
-    call in flight is written afresh in the same way (read in the code,
-    not run on its own). (As first built for 0.4.2,
+    out afresh, overflowed the stack (run). An agent's deep cancellation
+    of a call in flight, written afresh in the same way, ended it too
+    (run in the review's re-check: 0.4.1 ends at `executor.mjs:1214`).
+    (As first built for 0.4.2,
     and never released, the check for names did the same on any line
     5,000 levels deep.) What changes for a caller: a message deeper than
     256 levels, which 0.4.1 passed on where it was not a call, is
@@ -142,7 +162,12 @@
     refused, with a denial, only where a rule read the amount or the
     content from the arguments. A call that a rule on content cannot read
     exactly, in the two ways above, is now refused where it was let
-    through. `misspelt`, `foldedInParams`, `oneLine`, `deeperThan` and
+    through. That takes in a structure written as null where a rule
+    reads inside it: `{"options": null}` is refused as
+    `content-unreadable` where a rule tests `/debug` in `options`, while
+    `{"options": {}}` is taken as before, and a member that is not there
+    at all is still absent. `misspelt`, `foldedInParams`, `oneLine`,
+    `deeperThan`, `errorAnswer` and
     `MAX_DEPTH` are new exports of `provared-mcp-executor/jsonrpc`, and `unreadableAt` of
     `provared-mcp-executor/rules`.
   - **What it does not cover.** The folding is that of capitals and a
@@ -169,7 +194,17 @@
     cancellation; the server's result, error, list of tools and
     notification), and reads the ids of the older refusals; an
     older test that expected such a refusal under no id now expects the
-    request's. Each of these fixes was undone once to see a test fail.
+    request's. `test/list.test.mjs` (14 tests) also holds what stays: a
+    list the executor cannot match to its request is handed on, in five
+    ways on stdio and three as an event. The review's re-check took 14
+    parts of these fixes out, one at a time, and a test failed for 12.
+    For two, no test fails in the code as it stands, since the limit on
+    nesting now comes first: the check for names in other capitals
+    walking the text (`foldedInParams` in `readMessage`), which was the
+    fix for a deep line before the limit was there and is a second layer
+    behind it now; and the catch-all in `readMessage`, which no line is
+    known to reach. The nine parts of the two changes over HTTP (X260)
+    were each undone once, and a test failed for each.
   - **Versions.** 0.4.2 in `mcp-executor/package.json` and
     `mcp-executor/server.json` (both fields).
 

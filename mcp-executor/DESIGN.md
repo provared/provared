@@ -1962,11 +1962,15 @@ as it was, it would show the agent the tools the executor is to hide. The
 agent's request is answered with the error -32603 under its id, with the
 words of `LIST_NOT_READ`, and the log says `tools-list-not-read`
 (`executor.mjs` on stdio; `http.mjs` for a JSON body and for an event).
-The server's own error to `tools/list` goes on as it is. Before, in
+The server's own error to `tools/list` goes on as it is (over HTTP, as
+X260 has it). Before, in
 every version, such a list was handed on unfiltered. What stays: a line
 of the server's that the executor cannot match to any request (an id
-given twice, or no id), and an event under another id, are handed on as
-they were, and may hold anything the server chooses to write.
+given twice, no id or a null one, a list of messages, a byte order mark
+before the message), and an event with no id, under another id or
+holding a list of messages, are handed on as they were, and may hold
+anything the server chooses to write: a list of tools too, with the
+request not answered.
 `test/list.test.mjs` runs each on stdio and over HTTP.
 
 Why: the same review found that the first build of 0.4.2, never
@@ -1978,8 +1982,9 @@ closed that one place, and others were left, on both sides: an agent's
 cancellation of a call in flight is written afresh for the server; a
 server's error is written out for the receipt, and its list of tools is
 written afresh once filtered. Each calls itself in the same way: one
-deep answer of the server's ended the executor (run), and the agent's
-cancellation is the same code path (read, not run on its own). A limit where the message
+deep answer of the server's ended the executor (run), and so did the
+agent's deep cancellation of a call in flight (run in the review's
+re-check: 0.4.1 ends at `executor.mjs:1214`). A limit where the message
 is read closes them together, and whatever is written later. 256 is the
 builder's number: it is far below the depth at which any of these
 overflows (some thousands), and above what the library fingerprints: the
@@ -1999,3 +2004,45 @@ where one is reached is not the same from one run to the next.
 `test/deep.test.mjs` sends 200,000 levels each way on stdio and over
 HTTP: the agent's requests, a call and a cancellation, and the server's
 result, error, list of tools and notification.
+
+**X260. Over HTTP, the upstream's own error answer to `tools/list` goes
+on as it is, and the executor's own error in its place is sent as JSON
+(0.4.2).** The number is out of order: X251 to X253 name other choices
+in the later design. X250 answers for a list the executor is to filter
+and cannot read, and let one answer through: the upstream's error under
+the request's id. Two things follow from the review's re-check.
+
+An upstream may refuse a request it could not read, or a session it does
+not know, with a 4xx and a JSON-RPC error under a null id. As X250 was
+first built, the agent was given -32603 in place of the upstream's
+words. Now a JSON body that is an error answer and nothing more is
+handed on as it was, with its status and content type, under whatever
+id it has (`errorAnswer` in `jsonrpc.mjs`): one object whose members are
+`jsonrpc` (`"2.0"`), `id` (text, a whole number or null) and `error` (an
+object with a whole number `code` and a text `message`), each once and
+written exactly so, nested no deeper than 256 levels, with no member
+name given twice at any depth. Such a body has no `result`, under any
+spelling, for any reader, so it holds no list of tools as a client
+reads one. What its `message` and `data` say is the upstream's to
+choose, as in its error under the request's id. Everything else is
+answered as X250 has it: a result beside the error, a member the
+executor does not know, a list of messages, a byte order mark, an error
+that is not such an object.
+
+Where the executor writes its own error in place of the upstream's
+answer, the body is the executor's, so it is sent as
+`application/json; charset=utf-8` with its own length and
+`cache-control: no-store`, as the executor's other refusals are, and
+not under the upstream's content type (`text/html` for a page) or its
+word on caching. The status stays the upstream's, so that a client that
+acts on the status is not misled. The upstream's `content-length` and
+`content-encoding` were never handed on: of the upstream's headers only
+the content type, the session, the protocol version and the word on
+caching come back.
+
+The other way for the first: hand on every error under a null id as the
+text came. Not taken: a body with a `result` beside the error, or with
+`Result`, is a list to some reader. The other way for the second: keep
+the upstream's word on caching. Not taken: it was said of a body the
+agent is not given. `test/list.test.mjs` runs both, and fourteen bodies
+that are not such an error answer.

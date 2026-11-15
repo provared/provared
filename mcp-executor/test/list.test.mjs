@@ -15,7 +15,7 @@ import { gzipSync } from 'node:zlib';
 const { LIST_NOT_READ } = await import('../executor.mjs');
 const { CODES } = await import('../jsonrpc.mjs');
 const { httpWorld, call, request } = await import('./http-world.mjs');
-const { world } = await import('./world.mjs');
+const { until, world } = await import('./world.mjs');
 
 const DEPTH = 200000;
 
@@ -83,6 +83,39 @@ test('HTTP: a list of tools the executor cannot read is not handed on, as a JSON
     const usual = await request(w, 'alpha', 'tools/list', {});
     assert.ok(usual.json.result.tools.length > 0 && usual.json.result.tools.every((t) => t.name !== 'hidden'));
     assert.equal((await call(w, 'alpha', 'echo', { a: 1 })).status, 200, 'the executor goes on');
+  } finally {
+    await w.close();
+  }
+});
+
+// What stays (X250): the executor answers for a list only where it can match the answer to the request. These hold the limit as it is, and are not a promise.
+for (const how of ['id-twice', 'no-id', 'null-id', 'batch', 'bom']) {
+  test(`stdio: a list of tools on a line the executor cannot match to the request (${how}) is handed on as it was, and the request is not answered`, async () => {
+    const w = await world({ env: { FAKE_ODD_LIST: { value: how } } });
+    try {
+      const answer = w.client.request('tools/list', {}, { id: 'list-1', timeout: 1500 }).then(() => 'answered', () => 'not answered');
+      await until(() => w.client.rawText.includes('hidden'));
+      assert.equal(await answer, 'not answered');
+      assert.equal(w.logs.filter((e) => e.event === 'tools-list-not-read').length, 0);
+      assert.equal((await w.client.call('echo', { a: 1 })).result?.isError, undefined, 'the executor goes on');
+    } finally {
+      await w.close();
+    }
+  });
+}
+
+test('HTTP: a list of tools in an event the executor cannot match to the request (no id, another id, a list of messages) is handed on as it was', async () => {
+  const w = await httpWorld();
+  const tools = '{"tools":[{"name":"echo"},{"name":"hidden"}]}';
+  try {
+    for (const [how, data] of [['no id', () => `{"jsonrpc":"2.0","result":${tools}}`], ['another id', () => `{"jsonrpc":"2.0","id":"someone-else","result":${tools}}`], ['a list of messages', (id) => `[{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":${tools}}]`]]) {
+      w.upstream.rawList({ status: 200, headers: { 'content-type': 'text/event-stream' }, body: (id) => `data: ${data(id)}\n\n` });
+      const got = await request(w, 'alpha', 'tools/list', {}, { id: 'mine' });
+      assert.equal(got.status, 200, how);
+      assert.match(got.type, /^text\/event-stream/, how);
+      assert.ok(got.body.includes('hidden') && !got.body.includes('"mine"'), `${how}: ${got.body.slice(0, 200)}`);
+    }
+    assert.equal(w.logs.filter((e) => e.event === 'tools-list-not-read').length, 0);
   } finally {
     await w.close();
   }
