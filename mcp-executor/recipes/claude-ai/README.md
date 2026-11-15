@@ -201,7 +201,8 @@ address as a passkey's site. So try it at the proxy's https address. Below,
    `"by":"passkey"`). Then once more, in a browser without the passkey:
    type the recovery code in its box, then press Approve. No prompt
    follows. The guard says that the code you typed is spent, and that no
-   new one takes its place. Press Continue, once; the browser goes back
+   new one takes its place. Press Continue, once, within the 5 minutes
+   the page gives; the browser goes back
    to claude.ai (the log: `"owner-recovery-spent"`, then `"by":"recovery"`).
    The next authorisation page has no box for a code, and says that the
    code is spent. A new code comes from `owner --reset` and a new setup.

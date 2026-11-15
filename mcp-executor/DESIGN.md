@@ -2968,7 +2968,9 @@ specification has a client always send it. Its scheme and host may be in
 capitals, as that specification asks a server to take them; the path is
 compared as it is, so a path with a slash added is another resource.
 `state` comes back as it was, and `iss` with it (RFC 9207). A request
-waits at the page for 10 minutes, in the page's form (X228). An approved
+waits at the page for 10 minutes, in the page's form (X228); the page
+that says a recovery code is spent may hold it for up to five minutes
+more (X283). An approved
 request is answered once: the same form sent again gets no second code. A
 refusal is not kept, so the same page may still be approved after it.
 A code lasts 60 seconds, is kept only as its hash and in memory, and is
@@ -3555,9 +3557,11 @@ is a page, "The recovery code is spent", with one button, Continue, and a
 form that holds the same request with a note under its seal (X228) that
 the recovery code approved it, for this owner, and the agent that was
 chosen. Continue sends that form, the check passes it, and the browser
-goes back to the client, as after the first approval (X272). A page whose
-Continue is not pressed within the request's 10 minutes approves nothing;
-the code is spent all the same. The log says `owner-recovery-spent`, and
+goes back to the client, as after the first approval (X272). That page
+has five minutes of its own for Continue, counted from when the code was
+spent, or what was left of the request's 10 minutes where that is more
+(X283). A page whose Continue is not pressed in that time approves
+nothing; the code is spent all the same. The log says `owner-recovery-spent`, and
 the approval's line says `"by": "recovery"` (X274). Where the state
 cannot be written, the page says so (500), nothing is approved, and the
 code is not spent.
@@ -3722,6 +3726,37 @@ the page would then promise a spending that had not happened. To keep
 replacing the code and say on every page when one was last used: given
 up by the decision, since the code that works would still be with
 whoever used the last one.
+
+**X283. The page that says a code is spent has five minutes of its own.**
+A request lasts 10 minutes from when its authorisation page opened
+(X207). Until this choice the page that answers a recovery code's use
+(X282) held the request with that same end. So an owner who needed most
+of the 10 minutes to find the code typed it in time, the code was spent,
+and Continue, pressed after reading the page, was told that the request
+had ended: the code was gone, nothing was approved, and no page had named
+a limit. Now the request on that page ends no sooner than five minutes
+after the code was spent (`CONTINUE_LIFE` in `owner.mjs`). Where more
+than five minutes of the 10 were left, it keeps them: the page's time is
+never cut. The page says: "You have 5 minutes to press Continue, once",
+and that where the time runs out first nothing is approved and the code
+is spent all the same. A code typed after the 10 minutes is refused
+before it is spent, as before.
+
+It is the same request, under the same seal and the same id, with a later
+end; so it is still answered once (X207). The executor keeps the id of a
+request it approved until five minutes after that request's own end, and
+no longer only until its end: a request approved by the passkey on its
+first page is then not approved a second time by a Continue on a page
+that outlives the first. One code is spent once while the executor runs,
+and a restart ends every request (X228), so a request is given this time
+once at most, and no request lasts more than 15 minutes.
+
+Why five minutes: the page has a command to note down and one button;
+five minutes is enough to read it, and short beside the 10 a request
+has. The other way: to refuse a code, unspent, where under a minute of
+its page was left. Not taken: the owner would have to begin again from
+the client to use the code, and a code typed with just over a minute left
+would still leave too little time to read the page.
 
 What the tests show, and what they do not. `test/owner.test.mjs` runs the
 page's own steps (`owner-steps.mjs`) in Node.js against the executor's

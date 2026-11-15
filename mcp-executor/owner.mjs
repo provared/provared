@@ -69,6 +69,8 @@ const { checkAssertion, PASSKEY_METHODS, checkKey } = await passkeyChecks(LIBRAR
 /** How long a setup link and a challenge last, in milliseconds (X218, X273). */
 export const SETUP_LIFE = 15 * 60 * 1000;
 export const CHALLENGE_LIFE = 2 * 60 * 1000;
+/** How long the page that says a recovery code is spent has for its Continue, from when the code was spent, in milliseconds (X283). */
+export const CONTINUE_LIFE = 5 * 60 * 1000;
 /** A recovery code is this many random bytes, written in base32 (X276). */
 export const RECOVERY_BYTES = 20;
 /** The command that makes a new owner, and with it a new recovery code, as the command's own help writes it (bin.mjs, X282). */
@@ -200,7 +202,8 @@ function pageFiles() {
  * issuer     the executor's public address: the origin every signature must name, and its host the relying party
  * resource   the address a client is given for the executor, and "clients" the clients the settings list: what the setup page says to do next
  * store      {owner() -> the owner or null, setup() -> {hash, expires} or null, setOwner(owner), spendRecovery() -> whether this call spent the recovery code}: the front door's state file
- * withNote   (request, note) -> the same waiting request with the note sealed into it, as the text for the page's form; null where the text is not a request waiting at the page (X228)
+ * withNote   (request, note, {ownTime}) -> the same waiting request with the note sealed into it, as the text for the page's form; null where the text is not a request waiting at the page (X228).
+ *            With "ownTime", the request does not end before CONTINUE_LIFE from now (X283)
  * clientOf   (request) -> the client of a request waiting at the page, or null where the text is not one
  * page, json the front door's ways to answer with a page and with JSON
  * hashOf     SHA-256 in base64url, as the front door keeps its hashes
@@ -365,9 +368,9 @@ export function openPasskeyCheck({ issuer, resource = `${issuer}/mcp`, clients =
       const typed = fields.get(FIELD_RECOVERY) ?? '';
       if (typed.trim() !== '') {
         if (!sameText(hashOf(recoveryText(typed)), owner.recoveryHash)) return false;
-        // The request the page will hold is made first: where there is none to make, nothing is spent.
+        // The request the page will hold is made first: where there is none to make, nothing is spent. It has time of its own, so that a code typed late on its page is not spent for nothing (X283).
         const text = fields.get('request') ?? '';
-        const request = withNote(text, { recovery: owner.credentialId });
+        const request = withNote(text, { recovery: owner.credentialId }, { ownTime: true });
         if (typeof request !== 'string') return false;
         // The code is spent here, once: the store says whether this call spent it, and writes the state in the same step. Of two answers that hold the same code, at once or one after the other, one is told true; the other is told that the code was already used (X282).
         let spent = false;
@@ -389,7 +392,7 @@ export function openPasskeyCheck({ issuer, resource = `${issuer}/mcp`, clients =
               '<p>To have a recovery code again, stop the executor and run this on the server:</p>',
               `<pre id="owner-reset">${escape(RESET_COMMAND)}</pre>`,
               '<p>It removes the owner and ends every connection, and prints a setup link. The setup makes a new passkey and shows a new code. Until then the owner\'s passkey, where you still have it, approves connections as before.</p>',
-              `<p>Press Continue, once: the connection is approved when you do, and the browser goes back to ${escape(hostOf(clientOf(text) ?? ''))}.</p>`,
+              `<p id="owner-continue">You have ${CONTINUE_LIFE / 60000} minutes to press Continue, once: the connection is approved when you do, and the browser goes back to ${escape(hostOf(clientOf(text) ?? ''))}. If the time runs out first, nothing is approved, and the code is spent all the same.</p>`,
               '<p id="owner-status" role="status"></p>',
               // The page's script lets Continue be pressed once (X282). The page holds no secret.
               `<script type="module" src="${OWNER_PATH}/page.js"></script>`,

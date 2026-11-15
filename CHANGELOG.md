@@ -626,6 +626,15 @@
       and the opening of a stream came out of the half second the test
       left the token. The test now sets its clock from the moment before
       the token was made, and leaves two seconds.
+  - **Low faults found by a re-check of X282, fixed before any release**
+    (each fix has a test that fails without it):
+    - A recovery code typed late on its page was spent for nothing: the
+      page that follows kept the end of the first page's 10 minutes, so
+      its Continue was told that the request had ended, and no page had
+      named a limit. That page now has 5 minutes of its own, or what was
+      left of the 10 where that is more, and says so (X283). A request
+      is still answered once: the executor keeps an approved request's
+      id for five minutes past its end.
   - **Not built:** no upstream OAuth, no one-command setup, no dynamic
     client registration, no revocation endpoint. No passkey on a device
     (a computer's own, a phone, a security key) has been tried, and no client
@@ -643,7 +652,7 @@
     client, with its limits, and the steps to try the passkey by hand,
     with what to watch the first time.
   - **Tests**: `test/oauth.test.mjs`, 11 tests: the whole flow in plain
-    HTTP requests, and each refusal. `test/owner.test.mjs`, 28 tests: the
+    HTTP requests, and each refusal. `test/owner.test.mjs`, 29 tests: the
     page's own steps, and the page's script itself (`owner-page.mjs`)
     fetched from the executor and run on a stand-in page with the
     library's `passkey-browser.js` as served, with a software passkey;

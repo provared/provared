@@ -22,7 +22,7 @@ import { fileURLToPath } from 'node:url';
 
 const { call } = await import('./http-world.mjs');
 const { REQUEST_LIFE, makeOwnerSetup, readIssuer } = await import('../oauth.mjs');
-const { CHALLENGE_LIFE, LIBRARY_PROBLEM, RECOVERY_BYTES, RECOVERY_USED, RESET_COMMAND, SETUP_LIFE, base32, passkeyChecks } = await import('../owner.mjs');
+const { CHALLENGE_LIFE, CONTINUE_LIFE, LIBRARY_PROBLEM, RECOVERY_BYTES, RECOVERY_USED, RESET_COMMAND, SETUP_LIFE, base32, passkeyChecks } = await import('../owner.mjs');
 const { FIELD_CHALLENGE, FIELD_AUTHENTICATOR_DATA, FIELD_CLIENT_DATA, FIELD_SIGNATURE, FIELD_RECOVERY, SETUP_PATH, CHALLENGE_PATH, LINK_PATH, STORE_CODE, STORE_WAITING, setUp } = await import('../owner-steps.mjs');
 const { reopen, send, pkce, authorizeUrl, discover, ask, answer, connect, token, json, bearer, CALLBACK } = await import('./oauth-world.mjs');
 const { ownerWorld, softPasskey, setUpOwner, prove, sender, refusal, waiting, state, pageScript, runPage, softCredentials, softStorage } = await import('./owner-world.mjs');
@@ -670,7 +670,7 @@ test('the recovery code approves one connection in the passkey\'s place and is t
     assert.ok(one.paused.body.includes('<p id="owner-spent">The recovery code you typed is spent. It is good for this one connection, which Continue approves, and for nothing after it. No new code takes its place.</p>'));
     assert.ok(one.paused.body.includes('<p>To have a recovery code again, stop the executor and run this on the server:</p>\n<pre id="owner-reset">provared-mcp-executor owner --config &#60;settings&#62; --reset</pre>'));
     assert.ok(one.paused.body.includes('It removes the owner and ends every connection, and prints a setup link.'));
-    assert.ok(one.paused.body.includes(`<p>Press Continue, once: the connection is approved when you do, and the browser goes back to ${new URL(w.docs.client).host}.</p>`), one.paused.body);
+    assert.ok(one.paused.body.includes(`<p id="owner-continue">You have 5 minutes to press Continue, once: the connection is approved when you do, and the browser goes back to ${new URL(w.docs.client).host}. If the time runs out first, nothing is approved, and the code is spent all the same.</p>`), one.paused.body);
     assert.match(one.paused.body, /<button type="submit" name="decision" value="approve">Continue<\/button>/);
     const help = spawnSync(process.execPath, [BIN, '--help'], { encoding: 'utf8' }).stdout;
     assert.ok(help.split('\n').some((line) => line.trim().replace(/\s+/g, ' ').replace('[--reset]', '--reset') === RESET_COMMAND), 'the command is the one the help gives');
@@ -824,6 +824,79 @@ test('a recovery code whose request has ended is not spent; a page whose Continu
     await callsATool(w, await answer(w, fresh.request, { agent: fresh.agent, fields: {} }), fresh.p);
   } finally {
     await w.close();
+  }
+});
+
+test('a recovery code typed late on its page is not spent for nothing: the page that says it is spent has five minutes of its own for Continue, and says so; a code typed early keeps the time its page had; the request is still answered once', async () => {
+  assert.equal(CONTINUE_LIFE, 5 * 60 * 1000);
+  // Typed one second before the first page's 10 minutes end, and Continue pressed after them: approved.
+  {
+    const w = await ownerWorld();
+    try {
+      const { recoveryCode } = await setUpOwner(w);
+      const p = pkce();
+      const page = await ask(w, authorizeUrl(w, await discover(w), { pkce: p }));
+      w.clock.offset += REQUEST_LIFE - 1000;
+      const paused = await answer(w, page.request, { fields: { [FIELD_RECOVERY]: recoveryCode } });
+      assert.equal(paused.status, 200, paused.body);
+      assert.ok(paused.body.includes('<p id="owner-continue">You have 5 minutes to press Continue, once:'), paused.body);
+      w.clock.offset += 2000;
+      assert.equal((await answer(w, page.request, { fields: {} })).status, 400, 'the first page has ended');
+      await callsATool(w, await answer(w, hidden(paused.body, 'request'), { agent: hidden(paused.body, 'agent'), fields: {} }), p);
+      assert.equal(count(w, 'oauth-approved'), 1);
+    } finally {
+      await w.close();
+    }
+  }
+  // The five minutes end: Continue pressed after them approves nothing, and the code is spent.
+  {
+    const w = await ownerWorld();
+    try {
+      const { recoveryCode } = await setUpOwner(w);
+      const page = await ask(w, authorizeUrl(w, await discover(w), { pkce: pkce() }));
+      w.clock.offset += REQUEST_LIFE - 1000;
+      const paused = await answer(w, page.request, { fields: { [FIELD_RECOVERY]: recoveryCode } });
+      assert.equal(paused.status, 200, paused.body);
+      w.clock.offset += CONTINUE_LIFE;
+      assert.equal((await answer(w, hidden(paused.body, 'request'), { agent: hidden(paused.body, 'agent'), fields: {} })).status, 400);
+      assert.equal(count(w, 'oauth-approved'), 0);
+      assert.equal(state(w).owner.recoverySpent, true);
+    } finally {
+      await w.close();
+    }
+  }
+  // Typed at once, on a page with more than five minutes left: the page keeps the time it had, and is not cut to five minutes.
+  {
+    const w = await ownerWorld();
+    try {
+      const { recoveryCode } = await setUpOwner(w);
+      const one = await typeRecovery(w, recoveryCode);
+      w.clock.offset += REQUEST_LIFE - 1000;
+      await callsATool(w, await answer(w, one.request, { agent: one.agent, fields: {} }), one.p);
+    } finally {
+      await w.close();
+    }
+  }
+  // One request, one answer: a request the passkey approved is not approved again by the Continue of a page that outlives the first page's 10 minutes.
+  {
+    const w = await ownerWorld();
+    try {
+      const { passkey, recoveryCode } = await setUpOwner(w);
+      const p = pkce();
+      const page = await ask(w, authorizeUrl(w, await discover(w), { pkce: p }));
+      w.clock.offset += REQUEST_LIFE - 60 * 1000;
+      const paused = await answer(w, page.request, { fields: { [FIELD_RECOVERY]: recoveryCode } });
+      assert.equal(paused.status, 200, paused.body);
+      // In another tab, the same request is approved by the passkey.
+      await callsATool(w, await answer(w, page.request, { fields: await prove(w, passkey)(page.request) }), p);
+      // The first page's 10 minutes are over; the page with Continue has three minutes left.
+      w.clock.offset += 2 * 60 * 1000;
+      assert.equal((await answer(w, hidden(paused.body, 'request'), { agent: hidden(paused.body, 'agent'), fields: {} })).status, 400, 'answered once');
+      assert.equal(count(w, 'oauth-approved'), 1);
+      assert.equal(state(w).grants.length, 1);
+    } finally {
+      await w.close();
+    }
   }
 });
 

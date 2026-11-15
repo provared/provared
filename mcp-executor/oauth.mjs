@@ -33,7 +33,7 @@ import { closeSync, fsyncSync, openSync, readFileSync, renameSync, rmSync, write
 import http from 'node:http';
 import https from 'node:https';
 import { untilFree } from './files.mjs';
-import { OWNER_PATH, SETUP_LIFE, isOldOwner, openPasskeyCheck, readOwner } from './owner.mjs';
+import { CONTINUE_LIFE, OWNER_PATH, SETUP_LIFE, isOldOwner, openPasskeyCheck, readOwner } from './owner.mjs';
 
 /** Where the executor's own OAuth addresses are. */
 export const OAUTH_PATH = '/oauth';
@@ -616,10 +616,14 @@ export function openFrontDoor({ settings, now = Date.now, log = () => {}, ownerC
         return true;
       },
     },
-    /** The same waiting request with a note of the check's own sealed into it, as the text for the form; null where the text is not a waiting request. */
-    withNote: (text, note) => {
+    /**
+     * The same waiting request with a note of the check's own sealed into it, as the text for the form; null where the text is not a waiting request.
+     * With "ownTime", for the page that says a recovery code is spent, it ends no sooner than CONTINUE_LIFE from now (X283). It is the same request, under the same id, so it is still answered once.
+     */
+    withNote: (text, note, { ownTime = false } = {}) => {
       const r = waiting(text);
-      return r ? seals.seal({ ...r, note }) : null;
+      if (!r) return null;
+      return seals.seal({ ...r, note, ...(ownTime === true ? { expires: Math.max(r.expires, now() + CONTINUE_LIFE) } : {}) });
     },
     clientOf: (text) => waiting(text)?.client ?? null,
     page: (res, status, title, body) => sendPage(res, status, title, body, { scripts: true }),
@@ -814,7 +818,8 @@ export function openFrontDoor({ settings, now = Date.now, log = () => {}, ownerC
     }
     // An approved request is answered once: the same form sent again gets no second code.
     if (answered.has(r.id)) return problemPage(res, 400, 'This request has ended or is not known. Begin again from the client.');
-    answered.set(r.id, r.expires);
+    // Kept past the request's own end by CONTINUE_LIFE: the same request, on the page that says a recovery code is spent, may end that much later than the form approved here (X283).
+    answered.set(r.id, r.expires + CONTINUE_LIFE);
     const code = newToken();
     codes.set(hashOf(code), { client: r.client, redirectUri: r.redirectUri, challenge: r.challenge, scope: r.scope, agent, expires: now() + CODE_LIFE, used: false, grant: null });
     // With which proof it was approved, where the check names it: the passkey, the recovery code, or the setup that made the owner (X274).
