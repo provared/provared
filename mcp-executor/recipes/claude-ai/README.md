@@ -51,21 +51,22 @@ stand-in client. It has not been tried with claude.ai itself.
 - **The owner's passkey belongs to the public address.** The guard's page
   asks for the owner's passkey before a connection is approved (the
   guard's DESIGN.md, section 14.1). The passkey is tied to the host in
-  `oauth.issuer`. If that address changes, the passkey no longer opens the
-  owner's key, and only the recovery code does.
-- **A browser with PRF.** The passkey must give the PRF extension, in the
-  browser and in the place that keeps the passkey. Where the passkey on
-  the device gives none, or its prompt is closed, nothing is set up, and
-  the setup page offers a second button: a passkey on a phone or a
-  security key. Where that fails too, there is no owner. At the approval
-  page, the recovery code still works.
-- **The passkey is not tried in a real browser yet.** The tests run the
-  page's script on a stand-in page with a stand-in passkey, and read the
-  headers the pages are sent with. Outside the tests, the pages were tried
-  once in headless Chrome 157 at `http://127.0.0.1`, where an approval by
-  the recovery code went through. A passkey cannot be made there, so no
-  passkey, on any browser or authenticator, has been tried. The steps
-  below try the real thing by hand.
+  `oauth.issuer`. If that address changes, the passkey no longer works
+  there; the recovery code still approves a connection, and
+  `owner --reset` makes a new owner at the new address.
+- **Any passkey that verifies its user.** The guard asks nothing more of
+  the passkey than a fingerprint, a face or a PIN at each use. The browser
+  offers where to keep it: on this device, on a phone or on a security
+  key.
+- **Tried with a virtual authenticator, not with a device.** The tests run
+  the page's script on a stand-in page with a software passkey, and read
+  the headers the pages are sent with. Outside the tests, the pages were
+  run in headless Chromium 153 with a virtual authenticator, at
+  `http://localhost`: the setup and the first approval in one prompt, a
+  later approval, and one by the recovery code, each through to a tool
+  call. No passkey on a device (a computer's own, a phone, a security key)
+  has been tried, and neither has claude.ai itself. The steps below try
+  the real thing by hand.
 - **An approval is not in the book.** The guard's log says when a
   connection was approved and for which client; the agent's book holds
   only the receipts of its calls.
@@ -148,29 +149,35 @@ address as a passkey's site. So try it at the proxy's https address. Below,
    `provared-mcp-executor owner --config executor-oauth.json`. It prints a
    link, `https://guard.example.com/oauth/owner#…`. Copy it.
 3. Start the guard: `provared-mcp-executor http --config executor-oauth.json`.
-4. Within 15 minutes, open the link in the browser that is to hold the
-   passkey. Press "Make the passkey" and accept the browser's prompts. The
-   page shows a recovery code: write it down. The guard's log shows
-   `"event":"owner-set"`, and the state file (`oauth-state.json`) has an
-   `owner`. If the page says "Not done" and shows a second button, "Use a
-   passkey on a phone or a security key", the device's own passkey gives
-   no PRF or its prompt was closed: press the second button and follow the
-   browser. Note which browser and which place for the passkey worked.
-5. Open the same link again and press the button. The page says that an
-   owner is already set up.
-6. In claude.ai, add a custom connector with the address
-   `https://guard.example.com/mcp`. claude.ai opens the guard's page.
-   Choose the agent, press Approve, and use the passkey. The browser goes
+4. Within 15 minutes, open the link in the browser you use claude.ai in.
+   The page says what can be done next. Press nothing there, and leave it.
+5. In claude.ai, in the same browser, add a custom connector with the
+   address `https://guard.example.com/mcp`. claude.ai opens the guard's
+   page, headed "Approve claude.ai connecting to your guard". Choose the
+   agent and press Approve: one passkey prompt, which makes the owner's
+   passkey and approves this connection. The browser offers where to keep
+   the passkey (this device, a phone, a security key). The page then shows
+   a recovery code: write it down, then press Continue. The browser goes
    back to claude.ai, which shows the connector as connected. The guard's
-   log shows `"event":"oauth-approved"`. A tool call then gets a receipt in
-   that agent's book. Two things to watch, the first time:
+   log shows `"event":"owner-set"` and `"event":"oauth-approved"`, and the
+   state file (`oauth-state.json`) has an `owner`. A tool call then gets a
+   receipt in that agent's book. Note which browser and which place for
+   the passkey worked.
+
+   If claude.ai's page was opened before the link, it says that the guard
+   has no owner yet. Open the link in the same browser within 10 minutes
+   and press "Review the connection that is waiting": the same page comes
+   back, and Approve there is the one prompt. To make the passkey without
+   approving anything, press "Make the passkey" on the setup page instead.
+
+   Two things to watch, the first time:
    - **The answer is refused** with "The answer must come from the
      executor's own page", and the log shows `origin-refused`. The form
      must reach the guard with the `Origin` header of the guard's own
      address. The pages are sent with `Referrer-Policy: same-origin` so
      that a browser gives it; the tests read that header, and headless
-     Chrome 157 gave it at the local address, but no other browser and no
-     proxy has been tried. Look at the request's `Origin` in the browser's
+     Chromium 153 gave it at the local address, but no other browser and
+     no proxy has been tried. Look at the request's `Origin` in the browser's
      network view, and check that the proxy passes it on unchanged.
    - **The page seems stuck after Approve**, though the log shows
      `oauth-approved`. The page's policy lets its form go only to the
@@ -181,9 +188,12 @@ address as a passkey's site. So try it at the proxy's https address. Below,
      `form-action` message in its console. The connection was made all the
      same: claude.ai got the code. Note the address the browser was sent
      on to; the guard does not yet answer that case.
-7. In a browser without the passkey, begin the connection again. Type the
-   recovery code in its box, then press Approve. It is approved in the
-   same way.
+6. Open the setup link again. The page says that an owner is already set
+   up.
+7. Begin the connection again from claude.ai, and press Approve: one
+   passkey prompt, and the browser goes back to claude.ai. Then once more,
+   in a browser without the passkey: type the recovery code in its box,
+   then press Approve. It is approved with no prompt.
 8. Look at the headers: `curl -sI https://guard.example.com/oauth/owner`
    shows `content-security-policy: default-src 'none'; script-src 'self';
    connect-src 'self'; form-action 'self'; frame-ancestors 'none';

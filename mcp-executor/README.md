@@ -123,9 +123,7 @@ npm install -g provared-mcp-executor
 Or from a copy of the repository: in `mcp-executor`, `npm pack`, then
 `npm install -g ./provared-mcp-executor-0.5.0.tgz`.
 
-It needs Node.js 24.7 or later. For the owner's check over OAuth it
-depends on `@microtoll/identity` and `@microtoll/crypto-core`, at exactly
-0.1.1 (Apache 2.0). Otherwise it depends only on the `provared` library,
+It needs Node.js 24.7 or later. It depends only on the `provared` library,
 at version 0.7.0 or a later 0.7 version (`^0.7.0`): its receipts name
 `provared.tool-name` and `provared.tool-result`, which the format reserved
 in 0.7.0 and which a checker of 0.5.0 or 0.6.0 refuses (0.4.0 and
@@ -546,7 +544,9 @@ settings:
   https origin with no path. The executor itself still speaks plain HTTP;
   a reverse proxy in front of it gives it HTTPS at that address, and must
   pass the path and the `Origin` header on unchanged. Only
-  `http://127.0.0.1:<port>` is taken without HTTPS, for tests.
+  `http://127.0.0.1:<port>` and `http://localhost:<port>` are taken
+  without HTTPS, for tests (a browser makes a passkey at `localhost`, and
+  none at an IP address).
 - `clients` lists the clients that may connect, each by the https URL of
   its client metadata document. With none, no client can connect. There is
   no other way to register a client. The list admits a client as a whole,
@@ -597,7 +597,9 @@ What happens:
   `http://127.0.0.1` or `http://[::1]` may differ in its port). PKCE is
   required, with S256 only. The `resource` must be the executor's
   endpoint; its scheme and host may be in capitals.
-- The page shows the owner which client asks and which agent it would
+- The page shows the owner which client asks, named by the host of its
+  document's address ("Approve client.example connecting to your guard",
+  for a client whose document is at client.example), and which agent it would
   become, and asks for the owner's passkey (below). It cannot tell whose
   request it is, so **approve only a connection you began yourself, just
   now**: a page that came as a link from someone else is to be refused.
@@ -619,7 +621,7 @@ What happens:
   A call already taken is finished, within the `timeout`, and receipted.
 - Failed attempts are not counted, and shut nothing: a wrong answer, code
   or token is refused, and the right one passes straight after. What is
-  guarded is 128 or 256 random bits, or a signature. A request waiting at
+  guarded is 160 or 256 random bits, or a signature. A request waiting at
   the page is kept in the page's form, under a key the executor makes at
   each start and never writes down, so nothing anyone sends can push the
   owner's page out, and a start ends the pages that wait.
@@ -630,47 +632,71 @@ What happens:
   connections and their ends are in the executor's log only. The receipts
   say which agent acted, not which connection or client.
 
-The owner's check is by the owner's passkey (DESIGN.md, section 14.1). It
-uses two packages, `@microtoll/identity` and `@microtoll/crypto-core`, at
-exactly 0.1.1; they come with the executor when it is installed.
+The owner's check is by the owner's passkey (DESIGN.md, section 14.1): a
+plain passkey, with nothing more asked of it than that it verifies its
+user (a fingerprint, a face or a PIN). The executor checks its signature
+with the `provared` library's own check, and needs no other package.
 
 - **Set up the owner, once.** With the executor stopped, run
   `provared-mcp-executor owner --config executor-http.json`. It prints a
   link, `<issuer>/oauth/owner#<code>`, which works once, within 15
-  minutes. Start the executor and open the link in the browser that is to
-  hold the passkey. The page makes a passkey, a key that never leaves the
-  browser, and a recovery code, shown once: write it down. The executor
-  keeps only the key's public half and two locked copies of the key.
-- **Where the device's own passkey cannot be used.** The passkey must give
-  the PRF extension. Where the one on the device gives none, or its prompt
-  is closed, nothing is set up, and the page offers a second button: a
-  passkey on a phone or a security key. The executor keeps where the
-  passkey is (its transports), and the browser is told at each approval.
-  A transport name the executor does not know the form of is left out,
-  and the owner is set up without it.
-- **Approve a connection.** On the page, Approve asks for the passkey. On a
-  device without one that gives a PRF, type the recovery code first. The
-  page signs a challenge from the executor, which checks the signature.
+  minutes. Start the executor and open the link in the browser you will
+  approve connections in. Then do one of two things.
+  - Add the executor in your client, in the same browser. The client sends
+    you to the executor's page, which shows who asks to connect. **Approve**
+    there asks for one passkey prompt: it makes the owner's passkey and
+    approves that connection. The page then shows a recovery code, once:
+    write it down, then press **Continue**.
+  - Or press **Make the passkey** on the setup page. It makes the passkey,
+    shows the recovery code, and approves nothing; you add the executor in
+    your client afterwards.
+
+  If the client's page is opened first, it says that the executor has no
+  owner yet. Open the setup link in the same browser within 10 minutes:
+  it offers to show that connection again, and Approve there is the same
+  one prompt. Opening the link approves nothing by itself.
+- **What the executor keeps.** The passkey's identifier, its public key,
+  and a hash of the recovery code. Nothing that could stand in for the
+  passkey or the code.
+- **Where the passkey is kept.** The browser asks: on this device, on a
+  phone, or on a security key. The page names none of them.
+- **Approve a later connection.** On the page, Approve asks for the
+  passkey: one prompt. The passkey signs a challenge the executor made for
+  that one request, and the executor checks the signature against the
+  public key it keeps, for its own address, with the user verified.
+- **The recovery code.** 32 letters and digits, shown once at the setup.
+  Typed into its box on the page in place of the passkey, it approves that
+  one connection, as often as it is typed. It does not make a new passkey:
+  for that, reset the owner.
 - **The passkey belongs to the issuer's address.** If the public address
-  changes, only the recovery code opens the key.
+  changes, the passkey no longer works there. The recovery code still
+  approves a connection; `owner --reset` makes a new owner at the new
+  address.
 - **One owner.** `owner` is refused while an owner exists. `owner --reset`
   removes the owner and ends every connection, with its tokens, then
   prints a new link.
 - The pages run only the executor's own scripts, from its own address:
-  the page's script and the two packages' files. Nothing is loaded from
-  anywhere else. That is true of what the executor sends: a program on the
-  owner's own computer that changes the pages a browser shows can still
-  add a script of its own, and the owner's key is opened in that page.
+  the page's script and the library's own files. Nothing is loaded from
+  anywhere else. The setup link's code, and a request that waits where
+  there is no owner, are kept in the browser's storage for the executor's
+  address until they are used or have ended. That is true of what the
+  executor sends: a program on the owner's own computer that changes the
+  pages a browser shows, or reads the browser's storage, can still do
+  what the owner can.
 
 The program's interface takes another check, or none
 (`openHttpExecutor(settings, {ownerCheck})`); the executor counts no
 failed attempts, so what such a check asks for must not be guessable. The
-tests run the page's script on a stand-in page, with a stand-in passkey.
-In a real browser the pages have been tried once, outside the tests, in
-headless Chrome 157 at `http://127.0.0.1`: the scripts loaded under the
-page's policy, and an approval by the recovery code went through to a
-token and a tool call. A passkey cannot be made at an IP address, so the
-passkey ceremony has not been tried, with any browser or authenticator.
+tests run the page's script on a stand-in page, with a software passkey.
+In a real browser the pages have been run outside the tests, in headless
+Chromium 153 with a virtual authenticator that verifies its user, against
+the executor's own commands at `http://localhost` (an issuer the settings
+take for tests, since a browser makes no passkey at an IP address): the
+setup and the first approval in one prompt, in both orders; a later
+approval in one prompt; an approval by the recovery code; each through to
+a token and a tool call. A virtual authenticator is not a device: the
+pages have not been tried here with a computer's own authenticator, a
+phone or a security key.
 There is no
 revocation endpoint, no dynamic
 client registration, and no OAuth towards the upstream: the upstream still

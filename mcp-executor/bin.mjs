@@ -616,7 +616,7 @@ async function main(args) {
     }
     if (made.revoked > 0) process.stdout.write(`The owner was removed, and ${made.revoked} connection${made.revoked === 1 ? '' : 's'} ended, with ${made.revoked === 1 ? 'its' : 'their'} tokens.\n`);
     else if (args.includes('--reset')) process.stdout.write('The owner was removed. No connection was open.\n');
-    process.stdout.write(`Start the executor, then open this link in the browser that is to hold the owner's passkey. It works once, until ${new Date(made.expires).toISOString()}, and is not shown again:\n  ${made.link}\n`);
+    process.stdout.write(`Start the executor, then open this link in the browser you will approve connections in. It works once, until ${new Date(made.expires).toISOString()}, and is not shown again:\n  ${made.link}\nThen add the executor in your client, in the same browser: its page makes the owner's passkey and approves that connection in one prompt. Or make the passkey on the link's own page.\n`);
     return 0;
   }
   throw new Error(`Unknown command "${command}".\n\n${USAGE}`);

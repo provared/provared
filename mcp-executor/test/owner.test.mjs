@@ -21,7 +21,7 @@ import { fileURLToPath } from 'node:url';
 
 const { call } = await import('./http-world.mjs');
 const { REQUEST_LIFE, makeOwnerSetup, readIssuer } = await import('../oauth.mjs');
-const { CHALLENGE_LIFE, RECOVERY_BYTES, SETUP_LIFE } = await import('../owner.mjs');
+const { CHALLENGE_LIFE, RECOVERY_BYTES, SETUP_LIFE, base32 } = await import('../owner.mjs');
 const { FIELD_CHALLENGE, FIELD_AUTHENTICATOR_DATA, FIELD_CLIENT_DATA, FIELD_SIGNATURE, FIELD_RECOVERY, SETUP_PATH, CHALLENGE_PATH, LINK_PATH, STORE_CODE, STORE_WAITING, setUp } = await import('../owner-steps.mjs');
 const { reopen, send, pkce, authorizeUrl, discover, ask, answer, connect, token, json, bearer, CALLBACK } = await import('./oauth-world.mjs');
 const { ownerWorld, softPasskey, setUpOwner, prove, sender, refusal, waiting, state, pageScript, runPage, softCredentials, softStorage } = await import('./owner-world.mjs');
@@ -449,6 +449,23 @@ test('the recovery code approves a connection in the passkey\'s place, as often 
   } finally {
     await w.close();
   }
+});
+
+test('a recovery code is 20 random bytes in base32, as RFC 4648 writes it: the standard\'s own examples, and two codes are never the same', async () => {
+  // RFC 4648, section 10, without the padding.
+  for (const [text, written] of [['', ''], ['f', 'MY'], ['fo', 'MZXQ'], ['foo', 'MZXW6'], ['foob', 'MZXW6YQ'], ['fooba', 'MZXW6YTB'], ['foobar', 'MZXW6YTBOI']]) assert.equal(base32(Buffer.from(text)), written);
+  assert.equal(base32(new Uint8Array(RECOVERY_BYTES).fill(255)), '7'.repeat(32));
+  assert.equal(RECOVERY_BYTES, 20);
+  const codes = new Set();
+  for (let i = 0; i < 3; i += 1) {
+    const w = await ownerWorld();
+    try {
+      codes.add((await setUpOwner(w)).recoveryCode);
+    } finally {
+      await w.close();
+    }
+  }
+  assert.equal(codes.size, 3);
 });
 
 test('the setup link: used twice, expired, the wrong code, or not from the executor\'s page, it is refused', async () => {

@@ -73,7 +73,7 @@ const only = (v, keys) => isObject(v) && Object.keys(v).length === keys.length &
 
 /** Bytes in base32 (RFC 4648, section 6), with no padding. */
 const BASE32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-function base32(bytes) {
+export function base32(bytes) {
   let out = '';
   let held = 0;
   let bits = 0;
@@ -89,14 +89,9 @@ function base32(bytes) {
   if (bits > 0) out += BASE32[(held << (5 - bits)) & 31];
   return out;
 }
-const RECOVERY_FORM = new RegExp(`^[A-Z2-7]{${(RECOVERY_BYTES * 8) / 5}}$`);
 
-/** A recovery code as it was typed, in the form its hash was made from: its 32 characters, in capitals, with the spaces and hyphens taken out; or null where it is not one (X276). */
-export function recoveryText(typed) {
-  if (typeof typed !== 'string' || typed.length > 256) return null;
-  const text = typed.replace(/[\s-]/g, '').toUpperCase();
-  return RECOVERY_FORM.test(text) ? text : null;
-}
+/** A recovery code as it was typed, in the form its hash was made from: in capitals, with the spaces and hyphens taken out (X276). Whether it is the owner's is for its hash to say. */
+export const recoveryText = (typed) => String(typed).replace(/[\s-]/g, '').toUpperCase();
 
 /** What says that a state file holds an owner in the form of the builds before the plain passkey (never released). */
 export const isOldOwner = (v) => isObject(v) && Object.hasOwn(v, 'routingPublicKey');
@@ -327,10 +322,7 @@ export function openPasskeyCheck({ issuer, resource = `${issuer}/mcp`, clients =
       if (!owner) return false;
       if (isObject(note) && typeof note.setup === 'string') return sameText(note.setup, owner.credentialId);
       const typed = fields.get(FIELD_RECOVERY) ?? '';
-      if (typed.trim() !== '') {
-        const recovery = recoveryText(typed);
-        return recovery !== null && sameText(hashOf(recovery), owner.recoveryHash);
-      }
+      if (typed.trim() !== '') return sameText(hashOf(recoveryText(typed)), owner.recoveryHash);
       const text = fields.get(FIELD_CHALLENGE) ?? '';
       if (!isObject(note) || typeof note.challenge !== 'string' || !sameText(text, note.challenge) || !(note.expires > now()) || used.has(text)) return false;
       const signedBytes = bytesOf(text, 32);

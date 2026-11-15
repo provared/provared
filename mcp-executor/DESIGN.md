@@ -1304,10 +1304,10 @@ denials and, from 0.5.0, seals.
 
 **X1. A package of its own, `mcp-executor/`, named `provared-mcp-executor`,
 depending on `provared` 0.7.0 (`^0.7.0`; it was `>0.6.0 <0.8.0` until
-0.7.0 was cut, and `^0.6.0` until the reserved names of X12 came).** From
-0.5.0 it also depends on `@microtoll/identity` and `@microtoll/crypto-core`,
-at exactly 0.1.1, for the owner's check over OAuth (section 14.1), installed
-from its `package-lock.json`. Two files are copies of the gateway's
+0.7.0 was cut, and `^0.6.0` until the reserved names of X12 came).** It
+has no other runtime dependency: the owner's check over OAuth (section
+14.1) uses the library's own check of a passkey's signature (X270). Two
+files are copies of the gateway's
 (`files.mjs`; `test/local-library.mjs`), held identical by a test. Why: the
 package works by name once installed; copying keeps the two executors from
 depending on each other. The other way: an export from the gateway
@@ -2899,7 +2899,8 @@ that the connection changed.
 
 **X202. The issuer is the public address the settings name.**
 `oauth.issuer` is an origin with no path: `https://…`, or
-`http://127.0.0.1:<port>` for tests only. The resource is
+`http://127.0.0.1:<port>` for tests only (and `http://localhost:<port>`,
+X277). The resource is
 `<issuer><path>`. The resource's metadata is at the address RFC 9728
 section 3.1 gives for it (the path put after
 `/.well-known/oauth-protected-resource`), and nowhere else, since the
@@ -3070,7 +3071,7 @@ every request comes from the proxy, so the count was for the whole
 executor; and so anyone who could reach the executor could keep the owner
 from being set up, keep the owner from approving, and keep a client from
 refreshing, for as long as they liked, with a few requests. The count
-bought nothing in return. Everything it guarded is 128 or 256 random bits
+bought nothing in return. Everything it guarded is 160 or 256 random bits
 (the setup link's code, the recovery code, a challenge, a code, a token)
 or a signature, none of which can be guessed at any rate. So a request
 that proves itself is never refused for what others sent before it: the
@@ -3153,52 +3154,53 @@ the proxy's work. The settings' `listen` stays the local address.
 
 ### 14.1 The owner's check by the owner's passkey
 
-Built from 0.5.0 (`owner.mjs`, `owner-steps.mjs`, `owner-page.mjs`), as
-the founder approved it. It fills the interface of X212. The founder's own
-packages `@microtoll/identity` and `@microtoll/crypto-core` (Apache 2.0)
-do the cryptography, through their public functions only. They are
-runtime dependencies, pinned at exactly 0.1.1, installed from the
-package's `package-lock.json`: an exception, approved by the founder, to
-the guard's rule of no runtime dependency but `provared`. Neither has
-dependencies of its own. No code of theirs is copied into the repository,
-and `@microtoll/blind-store` is not used.
+Built from 0.5.0 (`owner.mjs`, `owner-steps.mjs`, `owner-page.mjs`). It
+fills the interface of X212. The owner's check is a plain passkey: nothing
+is asked of it but that it verifies its user. The executor checks a
+passkey's signature with the `provared` library's own check, and has no
+runtime dependency but that library (X270).
 
-In the packages' design the owner's passkey (its PRF output) opens a root
-key in the browser, and the server never verifies a passkey. A sign-in is
-proved by a signature over a challenge, with the page's origin bound in.
+Before 0.5.0 was released, this section described another design: the
+passkey had to give the PRF extension, whose output opened a key kept in
+the browser, and that key signed the executor's challenge; two packages
+did the cryptography. A device whose own passkey gives no PRF could not
+set an owner up at all, so the founder chose one plain passkey prompt.
+The choices that design needed are marked below as replaced (X217, X219,
+X220, X222, X230); nothing of it was ever released.
 
 The flow, as built:
 
 1. **The setup link.** On the server, with the executor stopped,
    `provared-mcp-executor owner --config …` prints a link,
    `<issuer>/oauth/owner#<code>`. It works once, for 15 minutes. So no one
-   who merely finds the address can claim the executor.
-2. **The setup page.** In the browser: a passkey made with
-   `createWebAuthn` (`createPasskeyWithPrf`, which gives its PRF output),
-   on the device itself or, where that fails, on a phone or a security key
-   (X230); `createIdentity`; `wrapRootKeyWithPrf`; and
-   `wrapRootKeyWithNewRecoveryCode`, whose code is shown once. The page
-   sends the executor the routing public key and the two unlock methods,
-   which are ciphertext.
-3. **The authorisation page.** When the owner presses Approve, the page
-   fetches the passkey's unlock method. The passkey's PRF output
-   (`evaluatePrf`) opens the root key (`unwrapRootKeyWithPrf`), and
-   `identityFromRootKey` gives the routing key. Where a device has no PRF,
-   the owner types the recovery code instead: the page fetches that unlock
-   method by the code's lookup hash and opens the root key with
-   `unwrapRootKeyWithRecoveryCode`. The page then asks for a challenge,
-   and signs `authMessage(origin, nonce)` with the routing key
-   (`signBytes`).
-4. **The check.** The executor checks the signature with
-   `verifyAuthSignature`, against the stored routing public key, with the
-   issuer as the origin and its own challenge as the nonce.
+   who merely finds the address can claim the executor (X218).
+2. **The setup.** In the browser, the library's own `createPasskey` makes
+   a passkey for the executor's host, with the user verified. The page
+   sends the executor the setup link's code, the passkey's identifier and
+   its public key (X271). The executor answers with a recovery code, which
+   it has just made and of which it keeps only a hash; the page shows it
+   once (X276).
+3. **The first approval, in the same prompt.** Where the owner opens the
+   setup link and then adds the executor in a client, in the same browser,
+   the client's page finds the link's code there. Approve on that page
+   makes the passkey, and the one setup message both makes the owner and
+   approves that one request. Where the client's page was opened first, the
+   setup link shows that page again while its request still waits (X272).
+4. **A later approval.** When the owner presses Approve, the page asks the
+   executor for a challenge for that request (X221), and the library's own
+   `signChallengeWithPasskey` has the passkey sign it (X273). The page
+   puts the passkey's three values in the form (X274). Without the
+   passkey, the owner types the recovery code in its box instead.
+5. **The check.** The executor checks the passkey's answer with the
+   library's `checkAssertion` (Web Authentication Level 3, section 7.2),
+   against the public key it keeps: the challenge is its own for this
+   request, the origin is the issuer, the relying party is the issuer's
+   host, a person was present and was verified, and the signature fits
+   the key.
 
-**X217. The namespace is `provared-mcp-executor`.** The executor and the
-page call `createCryptoCore({ namespace: 'provared-mcp-executor' })`, with
-every other option at the package's default (PBKDF2 at 310,000 iterations,
-hybrid sealing off). The namespace begins every key derivation label, so it
-never changes once an owner exists; a test pins it, in the executor and in
-the page's script. Why: the founder's choice, the package's name.
+**X217. Replaced by X270.** It fixed the namespace of the earlier design's
+key derivation labels (`provared-mcp-executor`). Nothing is derived now,
+so there is no namespace.
 
 **X218. The setup link, from a command on a stopped executor.** `owner`
 opens the files for itself alone, as a command with `--offline` does
@@ -3212,40 +3214,21 @@ way to get a secret from the server to the owner's browser once. The other
 way: a command that asks the running executor with the administrator's
 secret, which needs that secret set up first.
 
-**X219. The setup message.** `POST /oauth/owner/setup`, JSON:
-`{"code", "routingPublicKey", "passkey": {"credentialId", "prfSalt",
-"wrappedRootKey", "transports"}, "recovery": {"salt", "lookupHash",
-"wrappedRootKey"}}`.
-Bytes are base64url without padding, written as Node.js writes them. The
-lookup hash is the package's own text, 64 lower-case hexadecimal digits.
-The routing public key is 32 bytes, the PRF salt 32, the recovery salt 16,
-the credential id 1 to 1,023, each wrapped root key 1 to 1,024.
-`transports` is the list the browser gave for the passkey (X230): the
-executor keeps at most 8 names, each 1 to 32 lower-case letters, digits or
-hyphens, and leaves out any other member of the list; it may be left out,
-and is then kept as an empty list; one that is not a list is refused. No
-other
-member is taken; the package's `label` is not sent. The answer is
-`{"owner": "set"}`. A message that is not in this form is refused (400),
-and the link still works. Before it makes the passkey, the page asks
-`POST /oauth/owner/link` with `{"code"}` whether the link still works
-(`{"link": "open"}`, or the refusal the setup would get), so that no
-passkey is made for a setup the executor would refuse. Why: the members
-are the packages' own unlock methods, and nothing else; the bounds are the
-packages' sizes, and WebAuthn's for a credential id.
+**X219. Replaced by X271.** It was the setup message of the earlier
+design: a public key for signatures made in the browser, and two locked
+copies of the key behind it.
 
-**X220. The unlock methods, fetched by the page.** `POST
-/oauth/owner/passkey` with `{}` gives the passkey's four members. `POST
-/oauth/owner/recovery` with `{"lookupHash"}` gives the recovery code's
-three members, only where the lookup hash is the owner's; otherwise 404.
-Why: as the packages' own lookup, the recovery code's wrapped copy goes
-only to someone who knows the code. The passkey's opens only with the
-passkey.
+**X220. Replaced by X273 and X276.** It gave the page the two locked
+copies. Nothing is locked now: the page is told the passkey's identifier
+with its challenge (X273), and the recovery code goes to the executor in
+the form (X276). The addresses `/oauth/owner/passkey` and
+`/oauth/owner/recovery` are gone.
 
 **X221. The challenge.** `POST /oauth/owner/challenge` with `{"request"}`,
 the `request` field of a page waiting for the owner, gives `{"challenge",
-"request"}`: 32 random bytes in base64url, and the same request with that
-challenge and its end sealed into it (X228). The page puts the new request
+"request", "credentialId"}`: 32 random bytes in base64url, the same
+request with that challenge and its end sealed into it (X228), and the
+identifier of the passkey to ask (X273). The page puts the new request
 in its form in place of the one it had. So a request has one challenge,
 and a new one takes the old one's place. The challenge lasts 2 minutes and
 belongs to that request alone, since it is under the request's seal. The
@@ -3255,15 +3238,14 @@ twice; only the owner can add to them, so there is no cap, and nothing
 anyone sends can push the owner's challenge out. A wrong signature spends
 nothing. Until this choice was changed, the challenges were kept in
 memory, at most 1,000, and 1,000 requests from anyone pushed the owner's
-out. The page asks for the challenge only once the root key is open, so
-its 2 minutes are not spent at the passkey.
+out. The page asks for the challenge when the owner presses Approve, and
+the passkey's prompt follows at once: the 2 minutes are the time the owner
+has at that prompt. A prompt left longer is answered with a refusal, and
+Approve, pressed again, gets a new challenge.
 
-**X222. The answer's two fields.** The page fills `owner_challenge` and
-`owner_signature` (64 bytes in base64url) in the form, beside the request,
-the agent and the decision. The check passes only where the challenge is
-the one sealed into this request, has not expired and has not passed
-before, and the signature verifies. The signature is checked before
-anything is kept.
+**X222. Replaced by X274.** It named the two fields of the earlier
+design's answer: the challenge and a signature by the key kept in the
+browser.
 
 **X223. One owner; a reset ends every connection.** While an owner exists,
 `owner` is refused, and so is a setup message (409). `owner --reset`
@@ -3273,8 +3255,10 @@ a new owner should not inherit the old one's connections.
 
 **X224. The pages' files come from the executor.** It serves
 `owner-page.mjs` as `/oauth/owner/page.js`, `owner-steps.mjs` as
-`/oauth/owner/steps.js`, and the `.js` files of each package's `src/`
-under `/oauth/owner/lib/crypto-core/` and `/oauth/owner/lib/identity/`,
+`/oauth/owner/steps.js`, and the `.js` files of the `provared` library's
+`src/`, as Node.js finds the installed package, under
+`/oauth/owner/lib/provared/`: the page's script loads the library's
+`passkey-browser.js` from there, and what that file loads in turn. They are
 read once at the start, as `text/javascript` with `nosniff` and
 `no-store`; any other path there is 404. The setup page and the
 authorisation page are served under `default-src 'none'; script-src 'self';
@@ -3282,38 +3266,43 @@ connect-src 'self'; form-action 'self'` (and the client's origin, at the
 authorisation page); `frame-ancestors 'none'; base-uri 'none'`. They load
 one module script by its address, and nothing inline. Every `POST` under
 `/oauth/owner/` must come with an `Origin` that is the issuer, in JSON of
-at most 16 KiB. The recovery code's box has no name, so the form never
-sends it.
+at most 16 KiB.
 
-**X225. The passkey belongs to the issuer's host.** `createWebAuthn` is
-given `rpName: 'provared-mcp-executor'` and no `rpId`, so the browser ties
-the passkey to the page's host, the issuer's. Its user name is `Owner of
-<host>`. The passkey is made on the device itself (the package's default,
-`platform`) or, where that fails, on a phone or a security key (X230).
-After a change of public address the passkey no longer opens
-the root key, and only the recovery code does. The owner then signs in with
-the recovery code, or resets the owner (X223) to make a passkey at the new
-address. The founder accepted this.
+**X225. The passkey belongs to the issuer's host.** The library's
+`createPasskey` is given the site's name `provared-mcp-executor` and the
+user name `Owner of <host>`; it names the page's host name as the relying
+party, which is the issuer's. At each check the executor takes the relying
+party from its own settings, never from the page: the issuer's host name,
+without the port. After a change of public address the passkey no longer
+works there. The owner then approves with the recovery code (X276), or
+resets the owner (X223) to make a passkey at the new address. The founder
+accepted this.
 
 **X226. The owner is kept in the state file.** Beside the connections:
-`owner` (the routing public key, the two unlock methods as in X219, and
-when it was made) and `setup` (the link's hash and end). Nothing that opens
-them is kept. A file written before them reads as having neither; one
-whose owner or setup is not in this form stops the start.
+`owner` and `setup` (the link's hash and end). `owner` is `{"credentialId",
+"key", "recoveryHash", "created"}`: the passkey's identifier, 1 to 1,023
+bytes in base64url (Web Authentication's bounds); its public key as a JWK,
+in exactly the form the library takes for a passkey's key (`ES256`,
+`RS256` or `Ed25519`; the method is the key's `alg`, so it is not kept a
+second time); the SHA-256 of the recovery code, in base64url; and when the
+owner was made. Nothing that could stand in for the passkey or the code is
+kept. A file written before them reads as having neither; one whose owner
+or setup is not in this form stops the start (and X278).
 
 **X227. The answers of the owner's addresses.** JSON
 `{"error", "message"}`, with the codes `origin-refused` (403),
 `bad-request` (400), `owner-exists` (409), `setup-ended` (403: no link, or
 it has ended), `setup-refused` (403: not the link's code), `no-owner`
-(409), `not-found` (404) and `not-written` (500: the state file could not
-be written, so no owner was set up, and the link still works). No failed
-attempt is counted (X211).
+(409), `not-found` (404: not one of the executor's files), `not-allowed`
+(405) and `not-written` (500: the state file could not be written, so no
+owner was set up, and the link still works). No failed attempt is counted
+(X211).
 
 **X228. A request waiting at the page is kept in the page's form, under
 the executor's seal.** The hidden field `request` holds the request's
 fields (a random identifier of 32 bytes, the client, the redirect address,
 `state`, the PKCE challenge, the scope, its end, and what the owner's check
-has noted in it, X221) as a JWS in compact form with `HS256` (RFC 7515;
+has noted in it, X221 and X272) as a JWS in compact form with `HS256` (RFC 7515;
 RFC 7518, section 3.2): the fields as JSON, under HMAC-SHA-256 (RFC 2104).
 The header is always `{"alg":"HS256"}`; it is under the MAC with the
 fields, and the executor never reads an algorithm from it, so a text with
@@ -3354,48 +3343,237 @@ allowed when it arrived, cutting it would leave a call's outcome unknown,
 and it ends within the executor's `timeout`, with its receipt. A stream
 opened with an agent's own secret is not touched. No standard covers this.
 
-**X230. The passkey may be kept on a phone or a security key.** The setup
-page first asks for a passkey on the device itself (X225). Where that
-fails with the package's code `prf-unsupported` (the device's passkey
-gives no PRF) or `not-allowed` (its prompt was closed or refused), the
-page offers a second button, which asks for one on a phone or a security
-key: the package's own `createPasskeyWithPrf(name, {attachment:
-'cross-platform'})`. Nothing was set up by the first try, and the setup
-link still works. The package gives the passkey's `transports` (where the
-browser says it is kept: `internal`, `hybrid`, `usb` and so on). The
-executor keeps them with the passkey's unlock method (X219) and the page
-passes them to `evaluatePrf` at each unlock, so that the browser asks in
-the right place. At the setup, a name that is not in the executor's form
-(1 to 32 lower-case letters, digits or hyphens), or one past the eighth,
-is left out and the owner is set up without it: by then the passkey has
-been made, the names are a help to the browser and no more, and refusing
-the setup for one left a passkey that opened nothing. Every name WebAuthn
-defines today is in the form. Only the packages' public functions are
-used. There is
-still one passkey and one recovery code (X223). Why: on a device whose own
-passkey gives no PRF the setup otherwise stopped, with no owner and no
-recovery code. Which browsers and authenticators give PRF is theirs to
-say: no passkey has been tried here, on any of them (below).
+**X230. Replaced by X275.** It offered a second button, for a passkey on
+a phone or a security key, where the device's own gave no PRF, and kept
+the passkey's transports.
+
+**X270. A plain passkey, checked by the library's own check.** The owner
+is one passkey. The executor asks nothing of it but a signature made with
+its user verified: no extension, no attestation. Its signature is checked
+by the `provared` library's `checkAssertion`, which follows Web
+Authentication Level 3, section 7.2, as far as that applies without a
+session: the client data is an answer to "sign" (`webauthn.get`), for this
+challenge, at this origin and not inside another site's page; the
+authenticator data names this relying party, with the user present and
+verified, and nothing left over; and the signature (`ES256`, `RS256` or
+`Ed25519`) fits the key. The key's form is checked by the library's
+`checkKey`, at the setup and whenever the state file is read. The library
+has both functions but does not name them among its exports, so the
+executor loads them from the library's own files (`src/webauthn.js`,
+`src/keys.js`), found beside the library's main file as Node.js finds the
+package; a test runs them through the executor. So the executor's only
+runtime dependency is `provared`.
+
+Three things this does not do. It does not check how the passkey was made
+(Web Authentication, section 7.1): the setup asks for no attestation, and
+the public key is the one the browser's `getPublicKey()` gave, sent by the
+page. What makes a key the owner's is the setup link's code (X218) and
+nothing else: whoever holds the code could send any key, so a check of the
+ceremony would add nothing to whose key it is. It does not use the
+signature counter, which many passkeys leave at zero. And it does not
+look at the passkey's identifier in an answer: there is one owner and one
+key, and a signature that fits the key is the owner's.
+
+Why: a passkey with PRF could not be made on a device whose own
+authenticator gives none, and then there was no owner at all. A plain
+passkey is what every authenticator gives, and the library already checks
+one for the permissions people sign. The other way: have the library name
+`checkAssertion` among its exports, which needs a release of the library
+before the executor's.
+
+**X271. The setup message.** `POST /oauth/owner/setup`, JSON: `{"code",
+"credentialId", "key"}` and, where the page holds one, `"request"` (X272).
+`credentialId` is the passkey's identifier, 1 to 1,023 bytes in base64url
+without padding, written as Node.js writes it. `key` is its public key as
+a JWK, in exactly the library's form for a passkey's key (X226). No other
+member is taken. The answer is `{"owner": "set", "recoveryCode"}` (X276)
+and, where a request was sent, `"request"` (X272). A message that is not
+in this form is refused (400), and the link still works. Before it makes
+the passkey, the page asks `POST /oauth/owner/link` with `{"code"}`
+whether the link still works (`{"link": "open"}`, or the refusal the setup
+would get), so that no passkey is made for a setup the executor would
+refuse. Why: the identifier and the key are all that a later check needs.
+
+**X272. The setup and the first approval take one prompt.** The authority
+to make the owner is the setup link's code and nothing else (X218): there
+is no rule that the first visitor becomes the owner, and no request is
+approved without the owner pressing Approve on a page that shows it.
+Within that, the pages save the owner a second prompt.
+
+- The setup page keeps the link's code in the browser's storage for the
+  executor's address (`localStorage`), once the executor has said that the
+  link works. Only the executor's own scripts run at that address (X224),
+  so only they read it. The page takes the code out of the address bar, as
+  before.
+- The authorisation page, where the executor has no owner, says so, and
+  shows the request and the warning of X212 all the same. Where the
+  browser holds a code that still works, it says that Approve makes the
+  passkey and approves in one prompt. Approve then makes the passkey and
+  sends the setup message with the form's `request`. The executor makes
+  the owner and, where that request still waits, gives it back with a
+  note under its seal (X228) that the setup approved it, naming the new
+  owner's passkey. The page shows the recovery code and puts the request
+  in its form; the owner writes the code down and presses the same
+  button, now "Continue", and the form goes as any approval does. The
+  owner's check passes a request that carries that note, for that owner.
+  The code is spent by the setup.
+- Where the browser holds no code, the authorisation page keeps its
+  `request` in the same storage; the fields of a request are not secret
+  (X228). The setup page, opened afterwards, sends it with the code to
+  `/oauth/owner/link`, which answers `"waiting": "<the client's host>"`
+  only where that request still waits (X207's 10 minutes, by the
+  executor's clock, under its seal). The page then offers "Review the
+  connection that is waiting": a form that posts the request to
+  `/oauth/authorize` with `decision=show`. The executor answers with the
+  authorisation page for that same request (the same identifier and the
+  same end), from the executor's own page only (`Origin`), and approves
+  nothing by it. Approve there is the one prompt, as above. A request
+  that has ended is not offered, and is taken out of the storage.
+- The setup page alone still makes the passkey ("Make the passkey"),
+  approves nothing, and says what to do next: add the executor's address
+  in a client the settings list.
+
+What this costs. Someone can begin a request and send its link to the
+owner before the owner is set up (X212). The owner who opens it and then
+the setup link is shown that request, by its client's host, with the
+warning, and it is approved only if they press Approve: the same as at any
+later approval, and no more than 10 minutes after the page was made. A
+request that ends between Approve and the setup message is not approved,
+and the owner is set up all the same, since by then the passkey has been
+made. The code and a waiting request stay in the browser's storage until
+they are used or found to have ended; a program on the owner's computer
+that reads the browser's storage can read them, as it could already
+change the pages (X212). A browser with no storage loses only the one
+prompt. A start ends every waiting request (X228), and `owner` needs the
+executor stopped (X218): so the link is to be made before the start, and
+a request begun before a restart must be begun again from the client.
+
+Why: the founder asked for one prompt. Approving on the code's authority
+is no weaker than the two steps were: whoever holds the code can make
+themselves the owner and then approve anything. The other ways: a second
+prompt straight after the first, which proves nothing more; or to approve
+the waiting request as soon as the setup link is opened, which would let
+a request sent to the owner by someone else through without being shown.
+
+**X273. What the passkey signs.** The challenge given to the passkey is
+the SHA-256 of the executor's 32 challenge bytes (X221), which the page's
+script works out with the library's `sha256` and hands to the library's
+`signChallengeWithPasskey`, with the passkey's identifier and the page's
+host name as the relying party, the user verified. Why: `checkAssertion`
+takes the bytes that had to be signed and holds the client data's
+challenge against their SHA-256; the bytes here are the executor's
+challenge itself, with nothing added. The origin and the relying party
+are bound in by the passkey's own answer, and the request by the seal the
+challenge is under, so no label of the executor's own is needed, and none
+was invented. The identifier comes with the challenge (X221): it is no
+secret, and the browser needs it to ask the right passkey.
+
+**X274. The answer's fields.** The page fills four hidden fields in the
+form, beside the request, the agent and the decision: `owner_challenge`
+(the 32 bytes), `owner_authenticator_data` (37 to 1,024 bytes),
+`owner_client_data` (at most 4,096 bytes) and `owner_signature` (at most
+1,024 bytes), each in base64url. The recovery code's box is the field
+`owner_recovery` (X276). The check passes where one of three things
+holds: the request carries the setup's note for this owner (X272); the
+recovery code is the owner's; or the challenge is the one sealed into
+this request, has not expired and has not passed before, and
+`checkAssertion` says the signature is valid, with the issuer as the
+origin and the issuer's host name as the relying party. A signing method
+this computer cannot check counts as not proved. The signature is checked
+before anything is kept.
+
+**X275. One call makes the passkey, wherever the browser keeps it.** The
+page calls the library's `createPasskey`, as it is: the methods `ES256`,
+`Ed25519` and `RS256`, the user verified, no attestation, and no
+authenticator named. So the browser itself offers what it has: the
+device's own authenticator, a phone, or a security key. There is no
+second button, and the passkey's transports are not kept: the library's
+function neither gives them nor takes them, and with one passkey named by
+its identifier a browser finds it without them. Why: the second button
+existed to get round a device with no PRF, which no longer matters; the
+library's call is the one already used where people sign permissions.
+The other way: a call of the executor's own to the browser, to name an
+authenticator or keep transports, which would be a second copy of the
+library's.
+
+**X276. The recovery code.** At the setup the executor makes 20 random
+bytes (160 bits) with Node.js's `randomBytes` and writes them in base32
+(RFC 4648): 32 letters and digits, shown in eight groups of four with
+hyphens. It is in the answer to the setup message, once; the executor
+keeps the SHA-256 of the 32 characters, in base64url, as it keeps its
+tokens (X208), and the code itself nowhere. Typed into its box on the
+authorisation page, it goes to the executor in the form, and approves
+that one request in the passkey's place; the page's script then asks for
+no passkey. As typed, spaces and hyphens are taken out and small letters
+made capitals; what is left is hashed, and the hashes are compared in
+constant time. It may be used as
+often as it is typed: it is not spent. It approves, and does nothing
+else: it does not make a new passkey and does not show the owner
+anything. To replace a lost passkey, the owner is reset on the server
+(X223), which ends every connection. Why: 160 random bits cannot be
+guessed, so a plain hash is enough, as for a token; and a code that could
+set up a new passkey would be a second setup link that never ends. The
+other way: a code that is spent by one use, which leaves an owner
+without a passkey one approval from a reset.
+
+**X277. The issuer may be `http://localhost` with a port, for tests.**
+Beside `http://127.0.0.1` (X202). A client's document at
+`http://127.0.0.1` is taken where the issuer is either. Why: a browser
+makes no passkey at an IP address, and treats `localhost` as this
+computer and as a secure context, so this is the one way to try the
+owner's passkey in a browser with no proxy and no certificate. The
+executor's `listen` is unchanged.
+
+**X278. An owner in the earlier form stops the start.** A state file
+whose `owner` holds `routingPublicKey` was written by a build of the
+design this one replaced, which was never released. The start stops and
+says to run `provared-mcp-executor owner --config <settings> --reset`;
+`owner` without `--reset` says the same. The reset removes that owner as
+it removes any, with every connection. Why: that owner's key opens
+nothing here, and a silent reset would end connections unasked.
+
+**X279. The page names the client by its host.** The authorisation page
+is headed "Approve `<host>` connecting to your guard", and its first line
+names the same host: that of the address of the client's metadata
+document, which the settings list (X203). The name a document gives
+itself (`client_name`) is not shown. Why: the host is what the owner put
+in the settings; a name is whatever the client's server says.
 
 What the tests show, and what they do not. `test/owner.test.mjs` runs the
-page's own steps (`owner-steps.mjs`) in Node.js, with the packages' own
-functions and a stand-in passkey that gives a made-up PRF output: a setup
-and a sign-in, a sign-in by the recovery code, and each refusal.
-`test/review3.test.mjs` runs the page's script itself (`owner-page.mjs`),
-fetched from the executor as a browser fetches it, on a stand-in page and
-with a stand-in for `navigator.credentials`, through the package's
-`createWebAuthn`. It also reads the headers the pages are sent with.
-`test/review4.test.mjs` makes the state file unwritable (a folder stands
-where its temporary file goes) while a connection is ended, and shows the
-end written by the timer and at the close, and the command's code 1 where
-it could not be; it does not kill the executor or cut its power.
-Outside the tests, the pages were tried once in a real browser, headless
-Chrome 157, at `http://127.0.0.1`: the scripts loaded under the page's
-policy, the form carried the executor's `Origin`, and an approval by the
-recovery code went through to a token and a tool call. A passkey cannot be
-made at an IP address, so the passkey ceremony itself has not been tried,
-with any browser or authenticator; the recipe's README says how to try it
-by hand. In that run a client whose callback sent the browser on to
+page's own steps (`owner-steps.mjs`) in Node.js against the executor's
+addresses, with a software passkey: the library's own test stand-in,
+which builds the three values a real passkey returns. It covers the setup
+and the first approval in one prompt, in each order; a later approval
+with an `ES256`, an `RS256` and an `Ed25519` key; the recovery code; and
+each refusal: a code used twice, expired or wrong; a request approved
+twice or ended; a challenge from another request, expired or never given;
+another origin, another relying party, the user not verified, another
+key; a state file in the earlier form. The same file runs the page's
+script itself (`owner-page.mjs`), fetched from the executor as a browser
+fetches it, with the library's `passkey-browser.js` as served, on a
+stand-in page with a stand-in for `navigator.credentials` and for the
+browser's storage. `test/review3.test.mjs` reads the headers the pages
+are sent with. `test/review4.test.mjs` makes the state file unwritable (a
+folder stands where its temporary file goes) while a connection is ended,
+and shows the end written by the timer and at the close, and the
+command's code 1 where it could not be; it does not kill the executor or
+cut its power.
+Outside the tests, the pages were run in a real browser: headless
+Chromium 153, driven by a script, with a virtual authenticator that
+verifies its user, against the commands `owner` and `http` at
+`http://localhost` (X277), with a stand-in client. The setup and the
+first approval took one prompt in each order; a later approval took one;
+the recovery code approved with none, and a wrong one was refused; each
+approval went through to a token and a tool call; the scripts loaded
+under the page's policy with nothing on the console. This was run with
+the library as published (0.7.0) and with this repository's. The first
+run of all stopped at its first page, which did not finish loading in 30
+seconds; the cause was not found, and it did not happen in the four runs
+after it. A virtual
+authenticator is not a device: no passkey on a computer's own
+authenticator, a phone or a security key has been tried here, and no client but the stand-in; the
+recipe's README says how to try them by hand. In an earlier run, of the
+earlier design, a client whose callback sent the browser on to
 another host was stopped by the page's own `form-action`, after the code
 had reached the callback: the executor does not yet answer that case, and
 the recipe says to watch for it.

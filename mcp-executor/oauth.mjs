@@ -721,7 +721,7 @@ export function openFrontDoor({ settings, now = Date.now, log = () => {}, ownerC
     showRequest(res, seals.seal({ id: newToken(), client: client.id, redirectUri: to, state: st, challenge, scope, expires: now() + REQUEST_LIFE }), client.id, to);
   }
 
-  /** The page for a request that waits, as its form holds it: who asks, named by its host, the warning, the agent, the owner's check and the two answers (X212). */
+  /** The page for a request that waits, as its form holds it: who asks, named by the host of its document's address and not by the name the document gives (X279), the warning, the agent, the owner's check and the two answers (X212). */
   function showRequest(res, sealed, clientId, to) {
     const where = new URL(to);
     const host = new URL(clientId).host;
