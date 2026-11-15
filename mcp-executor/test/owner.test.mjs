@@ -752,10 +752,10 @@ test('the same recovery code in several answers at once approves one connection 
     const { recoveryCode } = await setUpOwner(w);
     const d = await discover(w);
     // Two presses on one page, and two more pages open beside it: four answers with the one code, sent together.
-    const pages = [];
-    for (let i = 0; i < 3; i += 1) pages.push({ p: pkce() });
-    for (const page of pages) page.request = (await ask(w, authorizeUrl(w, d, { pkce: page.p }))).request;
-    const sent = [pages[0], pages[0], pages[1], pages[2]];
+    const open = [];
+    for (let i = 0; i < 3; i += 1) open.push({ p: pkce() });
+    for (const page of open) page.request = (await ask(w, authorizeUrl(w, d, { pkce: page.p }))).request;
+    const sent = [open[0], open[0], open[1], open[2]];
     const answers = await Promise.all(sent.map((page) => answer(w, page.request, { fields: { [FIELD_RECOVERY]: recoveryCode } })));
     assert.deepEqual(answers.map((r) => r.status).sort(), [200, 403, 403, 403]);
     for (const r of answers.filter((a) => a.status === 403)) assert.ok(r.body.includes(`<p>${shown(RECOVERY_USED)}</p>`), r.body);
@@ -765,7 +765,7 @@ test('the same recovery code in several answers at once approves one connection 
     // The one page with a Continue approves its own connection, once; none of the requests as the first pages had them is approved.
     const i = answers.findIndex((r) => r.status === 200);
     const body = answers[i].body;
-    for (const page of pages) assert.equal((await answer(w, page.request, { fields: {} })).status, 403);
+    for (const page of open) assert.equal((await answer(w, page.request, { fields: {} })).status, 403);
     const both = await Promise.all([1, 2].map(() => answer(w, hidden(body, 'request'), { agent: hidden(body, 'agent'), fields: {} })));
     assert.deepEqual(both.map((r) => r.status).sort(), [303, 400], 'Continue sent twice at once approves once');
     await callsATool(w, both.find((r) => r.status === 303), sent[i].p);

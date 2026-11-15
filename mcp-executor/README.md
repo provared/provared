@@ -714,16 +714,21 @@ with the `provared` library's own check, and needs no other package.
 
 The program's interface takes another check, or none
 (`openHttpExecutor(settings, {ownerCheck})`); the executor counts no
-failed attempts, so what such a check asks for must not be guessable. The
+failed attempts, so what such a check asks for must not be guessable. Such
+a check approves by answering `true`, or the name of the proof that
+passed (`passkey`, `recovery` or `setup`); any other answer refuses. The
 tests run the page's script on a stand-in page, with a software passkey.
 In a real browser the pages have been run outside the tests, in headless
 Chromium 153 with a virtual authenticator that verifies its user, against
 the executor's own commands at `http://localhost` (an issuer the settings
 take for tests, since a browser makes no passkey at an IP address): the
 setup and the first approval in one prompt, in both orders; a later
-approval in one prompt; an approval by the recovery code, with the new
-code shown before the browser went on; each through to a token and a tool
-call. A virtual authenticator is not a device: the
+approval in one prompt; an approval by the recovery code, as it then was,
+with a new code shown; each through to a token and a tool call. The
+recovery code as it now is, spent and not replaced, was run in a headless
+Chromium browser, version 157, with no authenticator: two presses of
+Approve, and of Continue, sent one form each, and the connection was
+approved once. A virtual authenticator is not a device: the
 pages have not been tried here with a computer's own authenticator, a
 phone or a security key.
 There is no
