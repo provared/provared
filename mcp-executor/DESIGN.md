@@ -1278,7 +1278,9 @@ passes its check, and the calls waiting to be acknowledged.
 **One program at a time.** A book and its copy are locked for the program
 that opens them to write, by a lock the operating system releases when
 the program ends (`lock.mjs`, X139). A command with `--offline` is not a
-start, and writes no receipt by itself (X143).
+start, and writes no receipt by itself (X143). The state file of an HTTP
+executor that takes connections is locked in the same way, for the
+executor that opens it and for the command `owner` (X285).
 
 **Who is asked.** Before a command sends the administrator's secret to a
 running executor, the executor signs the command's challenge and the
@@ -3064,7 +3066,8 @@ are tried for 10), so that a write that cannot be made is given up well
 inside the 10 seconds a client gives a sign-in request (X213). The file is
 read only once every agent's lock is held (`lock.mjs`), as the command
 `owner` writes it under the same locks: so what that command wrote is what
-a start reads, and a start cannot undo it.
+a start reads, and a start cannot undo it. The file has a lock of its own
+as well, taken before the agents' (X285).
 
 **X211. Failed attempts are not counted, and shut nothing.** Until this
 choice was changed, 5 failures at the owner's check in 15 minutes, or 20 at
@@ -3216,7 +3219,9 @@ so there is no namespace.
 **X218. The setup link, from a command on a stopped executor.** `owner`
 opens the files for itself alone, as a command with `--offline` does
 (`lock.mjs`), so it is refused while the executor runs, and the state file
-has one writer at a time. The code is 32 random bytes in base64url; the
+has one writer at a time. It takes the state file's own lock first
+(X285), so it is refused as well while an executor with other agents
+holds that file. The code is 32 random bytes in base64url; the
 state file keeps only its SHA-256 and its end, 15 minutes after the
 command. It is in the link's fragment, which a browser does not send in
 the address: the page sends it in the setup message. It is spent when an
@@ -3661,7 +3666,11 @@ code in every case.
 - **Spent in one step.** The front door's state has one operation for
   it, which looks whether the code is spent and, where it is not, writes
   that it is, with nothing waited for between the look and the write. It
-  answers whether this call spent the code. So of any number of answers
+  answers whether this call spent the code. The step is one program's:
+  it looks at that program's memory, which is the whole of the state
+  while one program holds the state file, and the file is locked for the
+  executor that opens it, so that no second one holds it (X285). So of
+  any number of answers
   that hold the same code, sent one after another or at once, for one
   request or several, one spends it and is shown the page; each of the
   others is refused (403) in words that say the code was already used,
@@ -3790,6 +3799,44 @@ back 800 ms and Refuse pressed 200 ms after Approve with the code typed:
 one form was sent, and the browser came to "The recovery code is spent".
 Not run in a browser: the same two presses after a passkey, which the
 tests' stand-in page shows.
+
+**X285. One program holds a state file, by a lock of the file's own.**
+An HTTP executor whose settings name `oauth` takes a lock named after
+the state file (`oauth.state`) before it reads anything, and holds it
+until it has closed. The command `owner` takes the same lock before it
+opens the agents' files, and holds it while it works. A second program
+that asks for it is refused at once, with the code `LOCKED`: "An
+executor is running on the state file … (oauth.state), or the command
+"owner" is at work on it", and that two executors need a state file
+each. Neither the state file nor any agent's files were read or written
+by then. The lock is the one X139
+describes, made by the same function under the same kind of name: the
+SHA-256 of the state file's path as the file system resolves it. It has
+the same limits (two paths to one file that the file system does not
+resolve, a shared folder, two containers that do not share a network).
+
+Why: until this choice only each agent's book was locked. An executor
+keeps the owner and the connections in its memory, and writes the whole
+of it over the state file at each change (X210). So a second executor
+whose settings named other agents and the same state file started
+without complaint; two settings files in one folder that both leave
+`state` at its default are enough. Each then held its own copy of the
+owner: the recovery code spent at one was unspent at the other, and
+approved a connection at each, which X282 says cannot happen; and each
+one's next write removed what the other had written, the mark of a spent
+code and its connections among them. An attacker cannot bring this
+about; an operator can, by mistake. X282's single step is one program's,
+and this lock is what makes one program the only one.
+
+What it does not do. A command at work on the agents' files with
+`--offline` (`seal`, `acknowledge`) does not open the state file, and
+takes no lock for it. A program that calls `makeOwnerSetup` itself, and
+not through the command, takes no lock. Behind the lock there is no
+second check, as there is for a book (X123, X132): two executors that
+got past it, in one of the ways above, would write over each other as
+before. The other way that was tried: to read the mark of a spent code
+from the file before spending. It was not enough: by then the second
+program had written its own memory over the file, mark and all.
 
 What the tests show, and what they do not. `test/owner.test.mjs` runs the
 page's own steps (`owner-steps.mjs`) in Node.js against the executor's

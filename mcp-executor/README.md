@@ -562,6 +562,11 @@ settings:
   keep others out of the folder), made sure to be on the disk before it
   takes the old file's place. Where it cannot be written, nothing is
   changed and the client is answered 500: it keeps the tokens it had.
+  One program holds a state file at a time: two executors need a state
+  file each. A second executor whose settings name the same file, with
+  whatever agents, does not start ("An executor is running on the state
+  file …"); two settings files in one folder that both leave `state` at
+  its default name the same file.
 - The end of a connection is the one change that does not wait for the
   file. A connection that is ended (a refresh token or a code used twice;
   at a start, a client off the list or an agent no longer marked) is
@@ -1307,7 +1312,12 @@ a running executor does nothing, and a second `http` on the same settings
 does not start; nor does a second `stdio`, where a client starts the
 executor twice on one settings file. Over HTTP a command with `--offline` takes every agent's
 lock, not only that of the agent it names. `status`, `check` and `compare`
-only read, take no lock, and may be run at any time. "What it does not do"
+only read, take no lock, and may be run at any time. The state file of an
+HTTP executor that takes connections (`oauth.state`) has a lock of the
+same kind, named after the state file: `http` takes it first and holds it
+while it runs, and `owner` holds it while it works, so a second `http`
+whose settings name the same state file does not start, whatever its
+agents ("An executor is running on the state file …"). "What it does not do"
 says where the lock does not reach.
 
 A command with `--offline` is not a start. It writes no receipt by itself
@@ -1556,7 +1566,10 @@ again once no call waits.
   executor from starting on those files, and gains nothing else. The lock
   has been tried on Windows only. Behind it, the book file and the copy
   are still checked before each write: a program that got past the lock
-  and wrote to them stops the executor at its next call.
+  and wrote to them stops the executor at its next call. The state
+  file's lock has the same limits, and nothing behind it: two executors
+  that got past it would each write their own memory over the file, and
+  lose each other's connections and the mark of a spent recovery code.
 - **The administrator's secret travels in the clear**, like the agents'.
   The commands check that they have reached the executor before they send
   it; they do not hide it from whoever can read the connection, and they

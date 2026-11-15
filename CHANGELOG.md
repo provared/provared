@@ -641,6 +641,16 @@
       an approval has been sent, the page's script now sends nothing
       more, and disables every submit button of the form, Refuse
       included (X284).
+    - Two executors whose settings named the same state file, with
+      other agents, both started. Each kept its own copy of the owner,
+      so the one recovery code approved a connection at each, and each
+      wrote over what the other had written. The state file now has a
+      lock of its own, of the kind a book has: `http` takes it before it
+      reads anything, and `owner` holds it while it works. A second
+      program is refused with the code `LOCKED` and is told that two
+      executors need a state file each (X285). Where a second `http` on
+      the same settings was refused before in words that named a book,
+      it is now refused in words that name the state file.
   - **Not built:** no upstream OAuth, no one-command setup, no dynamic
     client registration, no revocation endpoint. No passkey on a device
     (a computer's own, a phone, a security key) has been tried, and no client
@@ -658,7 +668,7 @@
     client, with its limits, and the steps to try the passkey by hand,
     with what to watch the first time.
   - **Tests**: `test/oauth.test.mjs`, 11 tests: the whole flow in plain
-    HTTP requests, and each refusal. `test/owner.test.mjs`, 29 tests: the
+    HTTP requests, and each refusal. `test/owner.test.mjs`, 30 tests: the
     page's own steps, and the page's script itself (`owner-page.mjs`)
     fetched from the executor and run on a stand-in page with the
     library's `passkey-browser.js` as served, with a software passkey;

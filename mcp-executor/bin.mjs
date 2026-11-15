@@ -83,6 +83,7 @@ import { compareCopyWithBook } from './compare.mjs';
 import { checkConfig, loadRules, openExecutor, readSettings, softwareEntry, statusFromFiles } from './executor.mjs';
 import { loadKeyFile, makeKeyFile, readIfThere } from './files.mjs';
 import { checkIdentity, plainAddress } from './identity.mjs';
+import { lockState } from './lock.mjs';
 import { makeRecorderKeyFile, readRecorderKeyFile } from './sealing.mjs';
 
 // http.mjs and oauth.mjs are loaded here, and not in the lines above: loading them holds the library's passkey checks against what the executor uses (owner.mjs, X281). Where the library lacks them, no command runs, as before; what is new is that the command then prints the executor's own message, and nothing round it, and ends with 1 (see the last lines). Any other error in loading them is thrown on as it is.
@@ -616,13 +617,18 @@ async function main(args) {
     const { settings, problems } = readHttpSettings(config, root);
     if (problems.length) throw new Error(`The settings have problems:\n- ${problems.join('\n- ')}`);
     process.stderr.write(`provared-mcp-executor: ${OFFLINE_NOTICE}\n`);
-    // The files are locked for this command alone, so the state file has one writer (lock.mjs).
-    const executor = await openOffline(config, root);
+    // The state file is locked for this command alone, and then the agents' files, so the state file has one writer, whatever agents an executor that holds it has (lock.mjs, X285).
+    const lock = await lockState(settings.oauth.state);
     let made;
     try {
-      made = makeOwnerSetup(settings, { reset: args.includes('--reset') });
+      const executor = await openOffline(config, root);
+      try {
+        made = makeOwnerSetup(settings, { reset: args.includes('--reset') });
+      } finally {
+        await executor.close();
+      }
     } finally {
-      await executor.close();
+      await lock.release();
     }
     if (made.revoked > 0) process.stdout.write(`The owner was removed, and ${made.revoked} connection${made.revoked === 1 ? '' : 's'} ended, with ${made.revoked === 1 ? 'its' : 'their'} tokens.\n`);
     else if (args.includes('--reset')) process.stdout.write('The owner was removed. No connection was open.\n');

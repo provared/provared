@@ -2,7 +2,9 @@
 // opens them to write (stdio, http, or a command run with --offline), it
 // takes a lock named after the book file, and keeps it until it has closed
 // the files or has ended. A second program that asks for the same lock is
-// refused at once, before it has read or written anything.
+// refused at once, before it has read or written anything. The front door's
+// state file (oauth.state) is locked in the same way, for the HTTP executor
+// that opens it and for the command "owner" (lockState, X285).
 //
 // The lock is a listener that the operating system takes away when the
 // program ends, however it ends, so that no lock is left behind by a
@@ -81,14 +83,41 @@ function alive(address) {
  * one) holds it.
  * @param {string} bookPath
  */
-export async function lockFiles(bookPath) {
-  const address = lockAddress(lockName(bookPath));
-  const held = () => Object.assign(new Error(`An executor is running on the book ${bookPath} and its copy, or a command is at work on them. One program writes them at a time: stop the executor first, or wait for the command to end. Nothing was read or written.`), { code: 'LOCKED' });
+export function lockFiles(bookPath) {
+  return lock(bookPath, {
+    held: `An executor is running on the book ${bookPath} and its copy, or a command is at work on them. One program writes them at a time: stop the executor first, or wait for the command to end. Nothing was read or written.`,
+    failed: (why) => `The lock for the book ${bookPath} could not be taken (${why}), so the executor does not open it.`,
+  });
+}
+
+/**
+ * Take the lock for the front door's state file (oauth.state), in the same
+ * way and under the same kind of name: the SHA-256 of the file's resolved
+ * path. An HTTP executor whose settings name "oauth" takes it before it
+ * reads anything, and holds it until it has closed; the command "owner"
+ * holds it while it works. So two executors whose settings name the same
+ * state file, with whatever agents, do not both run: each would keep the
+ * owner and the connections in its own memory and write the whole of it
+ * over the file (X285). Gives {release}; throws, with code LOCKED, where
+ * another program (or this one) holds it.
+ * @param {string} statePath
+ */
+export function lockState(statePath) {
+  return lock(statePath, {
+    held: `An executor is running on the state file ${statePath} (oauth.state), or the command "owner" is at work on it. One program holds a state file at a time: stop the other first, or wait for the command to end. Two executors need a state file each: name another in this one's settings ("oauth", "state"). Neither the state file nor any agent's files were read or written.`,
+    failed: (why) => `The lock for the state file ${statePath} (oauth.state) could not be taken (${why}), so the executor does not open it.`,
+  });
+}
+
+/** Take the lock named after a path: "held" is what is said where another program holds it, "failed" where it could not be taken for another reason. */
+async function lock(path, words) {
+  const address = lockAddress(lockName(path));
+  const held = () => Object.assign(new Error(words.held), { code: 'LOCKED' });
   let server;
   try {
     server = await listen(address);
   } catch (e) {
-    if (e.code !== 'EADDRINUSE' && e.code !== 'EACCES') throw new Error(`The lock for the book ${bookPath} could not be taken (${e.code ?? e.message}), so the executor does not open it.`);
+    if (e.code !== 'EADDRINUSE' && e.code !== 'EACCES') throw new Error(words.failed(e.code ?? e.message));
     // A socket file is left behind by a program that has ended; a named pipe and an abstract socket are not.
     const file = process.platform !== 'win32' && process.platform !== 'linux';
     if (!file || e.code === 'EACCES' || (await alive(address))) throw held();

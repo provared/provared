@@ -14,7 +14,7 @@ import './local-library.mjs'; // first: "provared" is this repository's own libr
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { copyFileSync, cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
@@ -24,7 +24,8 @@ const { call } = await import('./http-world.mjs');
 const { REQUEST_LIFE, makeOwnerSetup, readIssuer } = await import('../oauth.mjs');
 const { CHALLENGE_LIFE, CONTINUE_LIFE, LIBRARY_PROBLEM, RECOVERY_BYTES, RECOVERY_USED, RESET_COMMAND, SETUP_LIFE, base32, passkeyChecks } = await import('../owner.mjs');
 const { FIELD_CHALLENGE, FIELD_AUTHENTICATOR_DATA, FIELD_CLIENT_DATA, FIELD_SIGNATURE, FIELD_RECOVERY, SETUP_PATH, CHALLENGE_PATH, LINK_PATH, STORE_CODE, STORE_WAITING, setUp } = await import('../owner-steps.mjs');
-const { reopen, send, pkce, authorizeUrl, discover, ask, answer, connect, token, json, bearer, CALLBACK } = await import('./oauth-world.mjs');
+const { oauthWorld, reopen, send, pkce, authorizeUrl, discover, ask, answer, connect, token, json, bearer, CALLBACK } = await import('./oauth-world.mjs');
+const { openHttpExecutor } = await import('../http.mjs');
 const { ownerWorld, softPasskey, setUpOwner, prove, sender, refusal, waiting, state, pageScript, runPage, softCredentials, softStorage } = await import('./owner-world.mjs');
 
 const BIN = fileURLToPath(new URL('../bin.mjs', import.meta.url));
@@ -1165,6 +1166,55 @@ test('the command "owner": a link on a stopped executor; refused while it runs; 
     assert.equal(owner('--again').status, 2, 'an unknown option does nothing');
   } finally {
     await w.close();
+  }
+});
+
+test('one program holds a state file: a second executor whose settings name the same state file, with agents and books of its own, does not start, and is told why; nor does the command "owner" work on it; a command on the second one\'s own books is not stopped; once the first has closed, the second starts', async () => {
+  const a = await ownerWorld();
+  // The second executor: its own folder, agents, books and port; the first one's issuer, client list and state file.
+  const b = await oauthWorld({ open: false });
+  let second = null;
+  try {
+    await setUpOwner(a);
+    b.settings.oauth = { issuer: a.issuer, clients: [a.docs.client], state: a.statePath };
+    const open = (more = {}) => openHttpExecutor(b.settings, { root: b.folder, log: () => {}, now: a.more.now, ...more });
+    /** What the second one's folder holds: each name, with a file's size. */
+    const files = () => readdirSync(b.folder, { recursive: true }).map(String).sort().map((name) => {
+      const s = statSync(join(b.folder, name));
+      return [name, s.isDirectory() ? 'folder' : s.size];
+    });
+    const before = { state: readFileSync(a.statePath, 'utf8'), files: files() };
+    await assert.rejects(open(), (e) => {
+      assert.equal(e.code, 'LOCKED', e.message);
+      assert.equal(e.message, `An executor is running on the state file ${a.statePath} (oauth.state), or the command "owner" is at work on it. One program holds a state file at a time: stop the other first, or wait for the command to end. Two executors need a state file each: name another in this one's settings ("oauth", "state"). Neither the state file nor any agent's files were read or written.`);
+      return true;
+    });
+    // The command "owner" on the second one's settings: refused in the same words, and nothing written.
+    const settingsFile = join(b.folder, 'second.json');
+    writeFileSync(settingsFile, JSON.stringify(b.settings));
+    const owner = spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', BIN, 'owner', '--config', settingsFile, '--reset'], { encoding: 'utf8', windowsHide: true, timeout: 60000 });
+    assert.equal(owner.status, 2, owner.stderr);
+    assert.match(owner.stderr, /An executor is running on the state file .* \(oauth\.state\)/);
+    assert.doesNotMatch(owner.stdout, /oauth\/owner#/);
+    assert.equal(readFileSync(a.statePath, 'utf8'), before.state);
+    assert.notEqual(state(a).owner, null, 'the owner is still there');
+    assert.deepEqual(files().filter(([name]) => name !== 'second.json'), before.files, 'nothing of the second one\'s was made or changed');
+    // The lock is the state file's alone: a command at work on the second one's own books (offline) opens them, and the first one runs on.
+    await (await open({ offline: true })).close();
+    assert.equal((await ask(a, authorizeUrl(a, await discover(a), { pkce: pkce() }))).status, 200);
+    // Once the first has closed, the second starts on the file, and reads the owner the first one kept.
+    await a.executor.close();
+    a.executor = null;
+    second = await open();
+    await second.close();
+    second = null;
+    // And gave the lock up at its close: the first starts again.
+    await reopen(a);
+    assert.notEqual(state(a).owner, null);
+  } finally {
+    await second?.close();
+    await a.close();
+    await b.close();
   }
 });
 

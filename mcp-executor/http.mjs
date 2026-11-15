@@ -36,6 +36,7 @@ import { EXECUTOR_STOPPED, LIST_NOT_READ, NOT_FOR_KEYS, NO_RECORDER_WARNING, SHA
 import { CHALLENGE, identify, plainAddress } from './identity.mjs';
 import { CODES, MAX_LINE_BYTES, idKey, isId, readMessage, responseText, spliceId, topLevelId, unsafeInteger } from './jsonrpc.mjs';
 import { openLocalSessions, readSessionSettings } from './local.mjs';
+import { lockState } from './lock.mjs';
 import { CLIENT_LIMIT, OAUTH_PATH, OAUTH_TIMEOUT, WELL_KNOWN, openFrontDoor, readOAuthSettings } from './oauth.mjs';
 
 /** The most a POST body may be, unless the settings say otherwise: 10 MiB, as the gateway takes. */
@@ -392,6 +393,8 @@ export async function openHttpExecutor(config, more = {}) {
     for (const release of releases.splice(0)) await release();
   };
   try {
+    // The front door's state file is locked for this program first, before anything is read: a second executor whose settings name the same state file, with whatever agents, does not start (lock.mjs, X285). A command at work on the agents' files (offline) does not open the state file, and takes no lock for it; the command "owner", which writes it, takes the lock itself.
+    if (settings.oauth && !offline) releases.push((await lockState(settings.oauth.state)).release);
     for (const [name, paths] of settings.agents) {
       // Each agent's book and copy are locked for this program before anything of theirs is read (lock.mjs).
       const prepared = await prepareAgent(paths, settings, shared, { now });
@@ -405,7 +408,7 @@ export async function openHttpExecutor(config, more = {}) {
       agent.sessions = new Set();
       agents.set(name, agent);
     }
-    // The front door's state file is read only now, with the locks held: the command "owner" works on it under the same locks, so what it wrote is what is read, and nothing it writes later is undone. "ownerCheck" is the owner's check at its page: left out (as the command "http" leaves it), the one by the owner's passkey (owner.mjs); null, none.
+    // The front door's state file is read only now, with the locks held, its own among them: the command "owner" works on it under the same locks, so what it wrote is what is read, and nothing it writes later is undone. "ownerCheck" is the owner's check at its page: left out (as the command "http" leaves it), the one by the owner's passkey (owner.mjs); null, none.
     if (settings.oauth && !offline) door = openFrontDoor({ settings, now, log, ownerCheck: more.ownerCheck });
   } catch (e) {
     await releaseAll();
