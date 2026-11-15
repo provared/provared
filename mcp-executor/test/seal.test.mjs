@@ -965,6 +965,27 @@ test('a start on the same files while the executor before it is ending waits for
   await second.close();
 });
 
+test('over stdio a start asks again for as long as the executor before it gives its server to end, and 5 seconds more: with shutdownWait at 8 seconds, a lock let go after 11 seconds is waited for', async () => {
+  const { lockFiles } = await import('../lock.mjs');
+  // 8 seconds for the server to end, so a start asks for 13: past the 10 it asks for at least.
+  const w = await world({ open: false, config: { shutdownWait: 8000 } });
+  // The lock, held as an executor that is ending holds it.
+  const held = await lockFiles(join(w.folder, 'book.jsonl'));
+  let second = null;
+  try {
+    let outcome = 'asking';
+    const opening = openExecutor(w.settings, { root: w.folder, log: () => {}, serverStderr: null });
+    opening.then(() => (outcome = 'started'), () => (outcome = 'refused'));
+    await pause(11000);
+    assert.equal(outcome, 'asking', 'after 11 seconds the start is still asking for the lock');
+    await held.release();
+    second = await opening;
+  } finally {
+    await held.release();
+    if (second) await second.close();
+  }
+});
+
 test('a seal does not hold up the rest of the program while it is signed', async () => {
   const w = await sealedWorld({ open: false });
   const ex = await offline(w);

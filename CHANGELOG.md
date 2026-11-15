@@ -366,7 +366,10 @@
       start asks again for the lock for 10 seconds (over stdio, for
       `shutdownWait` and 5 seconds more where that is longer), so that
       a client that restarts the executor while the one before is ending
-      is not refused; a command asks once (X164).
+      is not refused; a command asks once (X164). A test now holds the
+      longer wait over stdio (`shutdownWait` at 8 seconds, a lock let go
+      after 11): until it, taking that rule out made no test fail. The
+      code is unchanged.
     - A `done` line of the copy names the kind of outcome (`"outcome":
       "answer"`, say) only beside the outcome's documents (X165). Where
       those documents could not be made and the book could not be
