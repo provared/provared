@@ -946,6 +946,29 @@ test('a log that throws at the line that says the code is spent does not turn th
   }
 });
 
+test('a log that throws at the line of the approval does not leave the code spent and nothing approved: Continue sends the browser back with its code, and the connection calls a tool', async () => {
+  const w = await ownerWorld();
+  try {
+    const { recoveryCode } = await setUpOwner(w);
+    let thrown = 0;
+    w.more.log = (e) => {
+      if (e.event === 'oauth-approved') {
+        thrown += 1;
+        throw new Error('the log could not be written');
+      }
+      w.logs.push(e);
+    };
+    await reopen(w);
+    const one = await typeRecovery(w, recoveryCode);
+    assert.equal(state(w).owner.recoverySpent, true);
+    assert.equal(one.paused.status, 200, one.paused.body);
+    await callsATool(w, await answer(w, one.request, { agent: one.agent, fields: {} }), one.p);
+    assert.equal(thrown, 1, 'the log was asked, and threw');
+  } finally {
+    await w.close();
+  }
+});
+
 test('a recovery code is 20 random bytes in base32, as RFC 4648 writes it: the standard\'s own examples, and two codes are never the same', async () => {
   // RFC 4648, section 10, without the padding.
   for (const [text, written] of [['', ''], ['f', 'MY'], ['fo', 'MZXQ'], ['foo', 'MZXW6'], ['foob', 'MZXW6YQ'], ['fooba', 'MZXW6YTB'], ['foobar', 'MZXW6YTBOI']]) assert.equal(base32(Buffer.from(text)), written);

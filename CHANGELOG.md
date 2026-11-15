@@ -670,7 +670,11 @@
       log that threw at the line `owner-recovery-spent`, the code was
       spent and the owner was told only that the check did not pass,
       with no page to continue from. That line can no longer change the
-      answer (X286).
+      answer (X286). Nor can the approval's own line, `oauth-approved`,
+      one step later: a log that threw there had Continue answered 500,
+      with the code spent and nothing approved. The browser is now sent
+      back with its code whether or not the log took the line (X286; a
+      test in `test/owner.test.mjs` fails without it).
   - **Not built:** no upstream OAuth, no one-command setup, no dynamic
     client registration, no revocation endpoint. No passkey on a device
     (a computer's own, a phone, a security key) has been tried, and no client
@@ -688,7 +692,7 @@
     client, with its limits, and the steps to try the passkey by hand,
     with what to watch the first time.
   - **Tests**: `test/oauth.test.mjs`, 11 tests: the whole flow in plain
-    HTTP requests, and each refusal. `test/owner.test.mjs`, 31 tests: the
+    HTTP requests, and each refusal. `test/owner.test.mjs`, 32 tests: the
     page's own steps, and the page's script itself (`owner-page.mjs`)
     fetched from the executor and run on a stand-in page with the
     library's `passkey-browser.js` as served, with a software passkey;

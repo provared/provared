@@ -3898,8 +3898,16 @@ the page that says the code is spent follows. The command's own log
 writes to standard error and does not throw; this could happen only to a
 program that opens the executor as a library and gives it a log of its
 own. Where the line is lost, the state file still holds the mark, and the
-approval's line still says `"by": "recovery"`. Not changed: the other
-log lines of an approval. One that throws at `owner-recovery-refused`
+approval's line still says `"by": "recovery"`. The approval's own line,
+`oauth-approved`, comes one step later: the approval is kept, and then
+the line is written, before the browser is sent back with its code.
+Where the log threw there, Continue was answered 500 and the browser got
+no code, so the recovery code was spent and nothing was approved. That
+line is now written inside a `try` too: the browser is sent back with
+its code whether or not the log took it, and `oauth-connected` follows
+when the client exchanges the code. So two lines are covered,
+`owner-recovery-spent` and `oauth-approved`. Not changed: the other log
+lines of an approval. One that throws at `owner-recovery-refused`
 gives the plain refusal in place of the words that say the code was
 used, with nothing spent by that answer; the executor does not guard
 every line against a log that throws.
@@ -3912,7 +3920,7 @@ and the first approval in one prompt, in each order; a later approval
 with an `ES256`, an `RS256` and an `Ed25519` key; the recovery code,
 spent by its use and not replaced, typed again, and sent in four answers
 at once (X282), typed late on its page (X283), with a log that throws
-(X286), and with a second executor on the same state file (X285); a
+at the spent line or at the approval's line (X286), and with a second executor on the same state file (X285); a
 setup whose answer is lost; a request
 kept only by the owner's press, and not replaced by another page; and
 each refusal: a code used twice, expired or wrong; a request approved

@@ -823,7 +823,12 @@ export function openFrontDoor({ settings, now = Date.now, log = () => {}, ownerC
     const code = newToken();
     codes.set(hashOf(code), { client: r.client, redirectUri: r.redirectUri, challenge: r.challenge, scope: r.scope, agent, expires: now() + CODE_LIFE, used: false, grant: null });
     // With which proof it was approved, where the check names it: the passkey, the recovery code, or the setup that made the owner (X274).
-    log({ event: 'oauth-approved', agent, client: r.client, ...(proved === true ? {} : { by: proved }) });
+    // The approval is kept, and the browser goes back with its code, whether or not the log took the line: a log that throws here must not leave a spent recovery code and nothing approved (X286).
+    try {
+      log({ event: 'oauth-approved', agent, client: r.client, ...(proved === true ? {} : { by: proved }) });
+    } catch {
+      // Not logged. The code is kept, and the line oauth-connected follows when the client exchanges it.
+    }
     back(res, r.redirectUri, { code, state: r.state });
   }
 
