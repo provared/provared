@@ -245,9 +245,9 @@ each part protects against, is in
 - **Two programs beside an agent, each on npm with its own README:**
   [the recorder beside Claude Code](integrations/claude-code/README.md)
   (`npm install -g provared-claude-code`, also installable as a Claude
-  Code plugin), which checks and receipts Claude Code's tool calls but
-  for eight that only talk to the person or change what the model itself
-  holds; and [the executor for MCP tool servers](mcp-executor/README.md)
+  Code plugin), which checks and receipts Claude Code's tool calls,
+  except eight that only talk to the person or change what the model
+  itself holds; and [the executor for MCP tool servers](mcp-executor/README.md)
   (`npm install -g provared-mcp-executor`), which stands between agents and a tool server, holds the server's
   credential, and countersigns
   each receipt with keys of its own.

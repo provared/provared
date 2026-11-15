@@ -55,7 +55,7 @@ provared-claude-code check --issuer <your passkey's thumbprint>
 ```
 
 `use` puts the signed permission in place and starts the recorder.
-From then on Claude Code's tool calls in that project, but for the eight
+From then on Claude Code's tool calls in that project, except the eight
 above, are checked and recorded. `check` gives the checker's answer for the book, trusting the
 passkey you name and no other.
 

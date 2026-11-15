@@ -124,8 +124,8 @@ Use version 0.4.2 or later. Every version from 0.1.0 to 0.4.1 has two
 weaknesses: in front of a tool server whose JSON reader ignores capitals
 in names, or, over stdio, one that ends a line at a bare carriage return,
 an agent could have a tool run that the executor never checked, with no
-receipt or with a receipt that names a different tool. npm marks those
-versions as deprecated. The security advisory,
+receipt or with a receipt that names a different tool, or get a call past
+a rule on its content. npm marks those versions as deprecated. The security advisory,
 https://github.com/provared/provared/security/advisories/GHSA-q53c-6wvv-gfj8,
 says which servers are affected and what to check; `CHANGELOG.md` in the
 repository has the details.

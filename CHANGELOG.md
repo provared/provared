@@ -14,7 +14,7 @@
   `integrations/claude-code/actions.mjs`, are not recorded, and the
   README names them. Its README says the plugin installs library 0.8.0
   from its lockfile, where it said 0.6.0. The executor's README says the
-  MCP Registry lists 0.4.2. No code changes.
+  MCP Registry lists 0.4.2. The record page and its generator, tools/make-record-page.mjs, name the eighth tool left out, the end of the conversation. No other code changes.
 - **`provared-mcp-executor` 0.4.2 (15 November 2026): a security fix for
   two weaknesses. In front of a tool server whose JSON reader ignores
   capitals, or of one that ends a line at a bare carriage return, an
