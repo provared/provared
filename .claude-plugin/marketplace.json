@@ -9,7 +9,7 @@
     {
       "name": "provared-recorder",
       "source": "./integrations/claude-code",
-      "description": "Records Claude Code with Provared: each tool call is checked against a permission you sign with your own passkey, refused if it is outside it, and receipted if it is taken.",
+      "description": "Records Claude Code with Provared: its tool calls are checked against a permission you sign with your own passkey, refused if they are outside it, and receipted if they are taken. Eight tools that only talk to you or change what the model itself holds are not recorded.",
       "category": "security"
     }
   ]
