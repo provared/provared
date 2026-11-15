@@ -463,7 +463,7 @@ test('attack: a request from a browser page. An Origin is refused unless the set
 });
 
 test('two simultaneous calls by one agent, and by two agents: each book holds its own receipts in order, and the limits hold per agent', async () => {
-  const w = await httpWorld({ config: { maxWaiting: 2 } });
+  const w = await httpWorld({ config: { maxWaiting: 2, timeout: 10000 } });
   try {
     const [slow, fast] = await Promise.all([call(w, 'alpha', 'slow', { ms: 300, tag: 'first' }, { id: 'a-1' }), (async () => {
       await pause(50);
@@ -487,9 +487,11 @@ test('two simultaneous calls by one agent, and by two agents: each book holds it
     assert.equal(stubsOf(await bookOf(w, 'beta')).length, 1);
     assert.equal(copyOf(w, 'beta').lines.length, 2);
 
-    // The limit on calls in progress is each agent's own.
-    const first = call(w, 'alpha', 'slow', { ms: 400 }, { id: 'l-1' });
-    const second = call(w, 'alpha', 'slow', { ms: 400 }, { id: 'l-2' });
+    // The limit on calls in progress is each agent's own. The two calls take 3 seconds (within the 10 seconds a call may
+    // take here), so that they are still in progress after the three calls below, each of which waits for the disk (on
+    // a slow one, several tenths of a second a time).
+    const first = call(w, 'alpha', 'slow', { ms: 3000 }, { id: 'l-1' });
+    const second = call(w, 'alpha', 'slow', { ms: 3000 }, { id: 'l-2' });
     await pause(100);
     const third = await call(w, 'alpha', 'echo', {}, { id: 'l-3' });
     assert.equal(third.json.error.code, 1001);

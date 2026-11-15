@@ -12,8 +12,7 @@
     below), merged from the released line, with its tests; its choices
     are X241, X248, X249, X250 and X260 in `DESIGN.md`, after this
     work's own.
-  - **The central sealer's tests on a slow disk** (no change to the
-    program). In `test/central-sealer.test.mjs` the sealer and the
+  - **Tests on a slow disk** (no change to the program). In `test/central-sealer.test.mjs` the sealer and the
     executor run in one process, and each holds its one thread while a
     line goes to the disk. On Linux in a container here that took 100
     to 370 ms a time, so the tests that gave the sealer 400 or 500 ms
@@ -26,7 +25,11 @@
     so the file never ended under the workflow's command, which has no
     time limit. Now whatever a test leaves open is closed after it
     (`closeAll` in `test/sealer-world.mjs`), and a test whose start
-    fails reports that failure, not "w.close is not a function".
+    fails reports that failure, not "w.close is not a function". The
+    same disk made one older test in `test/http.test.mjs` fail once
+    ("two simultaneous calls by one agent, and by two agents"): its two
+    calls of 400 ms had ended before the calls meant to find them in
+    progress. They now take 3 seconds, and a call may take 10 there.
   - **The recorder's keys.** The settings may name a recorder:
     `"recorder": {"keys": <file>, "name": <text>, "sealEvery":
     <milliseconds>}`. `keys` makes its key file where there is none
