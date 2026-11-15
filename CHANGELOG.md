@@ -30,6 +30,9 @@
     ("two simultaneous calls by one agent, and by two agents"): its two
     calls of 400 ms had ended before the calls meant to find them in
     progress. They now take 3 seconds, and a call may take 10 there.
+    And in `test/review2.test.mjs` the first R1 test, which wants an
+    answer "at once, not by the timeout", took over its 2 seconds once:
+    a call may now take 10 seconds there, and "at once" is under 5.
   - **The recorder's keys.** The settings may name a recorder:
     `"recorder": {"keys": <file>, "name": <text>, "sealEvery":
     <milliseconds>}`. `keys` makes its key file where there is none

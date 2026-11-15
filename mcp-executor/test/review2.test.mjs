@@ -31,11 +31,13 @@ function rawLines(w) {
 }
 
 test('R1: a tool result holding a whole number beyond 2^53 - 1 reaches the client with its digits exact, at once, and the receipt says the result could not be fingerprinted', async () => {
-  const w = await world({ config: { tools: { bigint: { action: 'tool.run' }, echo: { action: 'provared.data.read' } } } });
+  // A call may take 10 seconds here, and "at once" is under 5: room for a slow disk (each line written holds the thread
+  // for up to a few tenths of a second), and still far from the time-out.
+  const w = await world({ config: { timeout: 10000, tools: { bigint: { action: 'tool.run' }, echo: { action: 'provared.data.read' } } } });
   try {
     const started = Date.now();
     const r = await w.client.call('bigint', {}, { id: 'b1' });
-    assert.ok(Date.now() - started < 2000, 'answered at once, not by the timeout');
+    assert.ok(Date.now() - started < 5000, 'answered at once, not by the timeout');
     assert.equal(r.result.content[0].text, 'ok');
     const raw = rawLines(w).find((l) => l.includes('"snowflake"'));
     assert.ok(raw.includes('"snowflake":1234567890123456789'), 'the digits are exactly as the server wrote them');
