@@ -378,6 +378,16 @@
       an address and no token yet (X157), in the end-to-end test and
       in the test of the settings. With each of the seven taken out
       again, its test fails.
+    - What was left of the timing fault of the tests (no change to the
+      program). The short time limits are gone from
+      `test/central-sealer.test.mjs` ("Tests on a slow disk", above).
+      The error that hid a failed start, "w.close is not a function",
+      could still come from the other tests: a world made for the
+      stdio executor or the HTTP executor and not yet opened had
+      nothing to close it with. Both now have (`test/world.mjs`,
+      `test/http-world.mjs`; over HTTP it closes the made-up
+      upstream), one test holds that, and the end-to-end test closes
+      its executor where it fails part-way, so that the file ends.
   - **Tests** (`test/seal.test.mjs`, `test/seal-http.test.mjs`; 41
     tests): the seal checks under the recorder's keys with the library's
     checker, chains to the seal before, and a reader who names another

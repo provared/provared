@@ -12,7 +12,7 @@ import { join } from 'node:path';
 import { afterEach, test } from 'node:test';
 
 const { leafFingerprint } = await import('provared');
-const { openWorld, pause, signSlip, tempFolder, until } = await import('./world.mjs');
+const { openWorld, pause, signSlip, tempFolder, until, world } = await import('./world.mjs');
 const { httpWorld, openHttpWorld, call } = await import('./http-world.mjs');
 const { RECORDER, centralWorld, closeAll, largeAnswer, refusal, sealerFolder, standIn } = await import('./sealer-world.mjs');
 const { lockFiles } = await import('../lock.mjs');
@@ -23,6 +23,24 @@ afterEach(closeAll);
 const { checkConfig, readSettings, statusFromFiles } = await import('../executor.mjs');
 const { centralSealer } = await import('../sealing.mjs');
 const { startSealer } = await import('../../sealer/sealer.mjs');
+
+test('a test\'s world whose executor was never opened closes without an error of its own, so that a start that fails is what the test reports (review 3.2, F5)', async () => {
+  // Over stdio there is nothing to close yet.
+  const w = await world({ open: false });
+  await w.close();
+  // Over HTTP the made-up upstream is closed, and no longer listens.
+  const h = await httpWorld({ agents: ['alpha'], open: false });
+  assert.equal((await fetch(h.settings.upstream.url, { method: 'POST', body: '{}' })).status > 0, true, 'the upstream listens until it is closed');
+  await h.close();
+  await assert.rejects(fetch(h.settings.upstream.url, { method: 'POST', body: '{}' }));
+  // With a central sealer, the same.
+  const c = await centralWorld({ open: false });
+  try {
+    await c.close();
+  } finally {
+    await c.sealer.stop();
+  }
+});
 
 /** The status of the link to the sealer, once it says what is wrong. */
 const problemShown = (w) =>

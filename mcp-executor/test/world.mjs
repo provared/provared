@@ -102,6 +102,8 @@ export async function world({ slip = {}, config = {}, env = {}, open = true, mor
     return text.split('\n').filter(Boolean).map((l) => JSON.parse(l));
   };
   w.executorPrivateKeys = async () => (await loadKeyFile(join(folder, 'keys', 'executor.jwk'), 'agent')).privateKeys;
+  // Until an executor is open there is nothing to close: so a test whose start fails reports that, and not "w.close is not a function".
+  w.close = async () => {};
   if (open) await openWorld(w, more);
   return w;
 }

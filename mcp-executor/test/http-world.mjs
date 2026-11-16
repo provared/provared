@@ -69,6 +69,8 @@ export async function httpWorld({ agents = ['alpha', 'beta'], config = {}, slips
   };
   w.configPath = join(folder, 'executor-http.json');
   writeFileSync(w.configPath, JSON.stringify(w.settings));
+  // Until an executor is open only the upstream is to be closed: so a test whose start fails reports that, and not "w.close is not a function".
+  w.close = () => upstream.close();
   if (open) await openHttpWorld(w, more);
   return w;
 }

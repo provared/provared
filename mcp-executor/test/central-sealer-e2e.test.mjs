@@ -127,6 +127,8 @@ test('central sealer, end to end: the sealer\'s program is set up by its own com
     // Neither the settings nor what the commands wrote holds the token.
     for (const text of [readFileSync(w.configPath, 'utf8'), keys.stdout, keys.stderr, status.stdout, status.stderr]) assert.equal(text.includes(token), false);
   } finally {
+    // Where the test failed before it closed the executor, it is closed here, so that the file ends.
+    await w.close();
     await sealer.stop();
   }
 });
