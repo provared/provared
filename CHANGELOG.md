@@ -809,8 +809,8 @@
         sealer listens on 127.0.0.1 only, so the two programs are on one
         computer. `DESIGN.md`, X147 to X159.
       - Tests (`test/central-sealer.test.mjs`,
-        `test/central-sealer-e2e.test.mjs`, `test/same-files.test.mjs`; 40
-        tests, 36, 2 and 2, with those of the third review and its
+        `test/central-sealer-e2e.test.mjs`, `test/same-files.test.mjs`; 41
+        tests, 37, 2 and 2, with those of the third review and its
         re-check below): the
         sealer's program set up by its own commands and run
         as a process of its own on 127.0.0.1, ended and started again
@@ -1029,6 +1029,11 @@
         the fingerprint the sealer named (`heldSeal` in `executor.mjs`).
         One test in `test/central-sealer.test.mjs`, with a denial written
         between the two; it fails with the old condition put back.
+      - A test of `heldSeal` by itself, so that each of its conditions is
+        held: a seal the book's check faults is not taken as held. No
+        running executor is known to reach that case, since the writer's
+        book always passes its check, so no other test failed with the
+        condition taken out; this one does.
     - **Tests** (`test/seal.test.mjs`, `test/seal-http.test.mjs`; 53
       tests, 29 and 24, with those of the second and third reviews): the
       seal checks under the recorder's keys with the library's

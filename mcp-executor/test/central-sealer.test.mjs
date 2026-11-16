@@ -20,7 +20,7 @@ const { connectSealer } = await import('../sealer-client.mjs');
 
 // What a failed test left open is closed, so that the file still ends where no time limit ends it.
 afterEach(closeAll);
-const { checkConfig, readSettings, statusFromFiles } = await import('../executor.mjs');
+const { checkConfig, heldSeal, readSettings, statusFromFiles } = await import('../executor.mjs');
 const { centralSealer } = await import('../sealing.mjs');
 const { startSealer } = await import('../../sealer/sealer.mjs');
 
@@ -493,6 +493,24 @@ test('central sealer: one seal that comes two ways, with a denial written betwee
     await w.fake.close();
     await w.sealer.stop();
   }
+});
+
+test('central sealer: a seal is taken as held already only where the book\'s check finds nothing wrong with its line, wherever it stands (review 3.2 re-check, finding 5)', () => {
+  const lines = ['{"slip":1}', '{"stub":1}', '{"seal":"S"}', '{"denial":1}'];
+  const book = `${lines.join('\n')}\n`;
+  const sound = () => [
+    { index: 0, kind: 'slip', problems: [], fingerprint: 'P' },
+    { index: 1, kind: 'stub', problems: [], fingerprint: 'R' },
+    { index: 2, kind: 'seal', problems: [], fingerprint: 'S' },
+    { index: 3, kind: 'denial', problems: [], fingerprint: 'D' },
+  ];
+  assert.equal(heldSeal(book, sound(), lines[2], 'S')?.index, 2, 'a sound seal that is not the last line is found');
+  const faulted = sound();
+  faulted[2].problems = ['its signature does not check'];
+  assert.equal(heldSeal(book, faulted, lines[2], 'S'), null, 'a seal the check faults is not taken as held');
+  assert.equal(heldSeal(book, sound(), lines[2], 'T'), null, 'another fingerprint named');
+  assert.equal(heldSeal(book, sound(), '{"seal":"S" }', 'S'), null, 'another line, by one byte');
+  assert.equal(heldSeal(book, sound(), lines[1], 'R'), null, 'a line that is no seal');
 });
 
 test('central sealer: a seal that differs from the book\'s last line in anything is not passed over as the same seal: the book refuses it and the agent stops (review 3.2, F1)', async () => {

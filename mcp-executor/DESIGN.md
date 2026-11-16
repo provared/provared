@@ -3294,7 +3294,10 @@ stands, so nothing is passed over that the book does not hold as that
 seal. Every seal of the central sealer's reaches the book through
 `addCentralSeal`, which tells the link of it (`sealed`) as it is added,
 or stops the agent where the file could not be written; so a seal passed
-over leaves nothing between the book and the sealer untold.
+over leaves nothing between the book and the sealer untold. That the
+check finds nothing wrong with the line is a guard that no running
+executor is known to reach, since the writer's book always passes its
+check; a test of `heldSeal` by itself holds it.
 
 Anything else goes to `add` as before, and a refusal there stops the
 agent (X155): an entry that differs in one byte, a line of the book
