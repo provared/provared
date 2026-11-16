@@ -61,6 +61,10 @@
       "types": "./src/dev.d.ts",
       "default": "./src/dev.js"
     },
+    "./net/timestamp": {
+      "types": "./net/timestamp.d.ts",
+      "default": "./net/timestamp.js"
+    },
     "./package.json": "./package.json"
   },
   "bin": {

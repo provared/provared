@@ -63,9 +63,17 @@ test('only the command that fetches block headers makes requests, and only throu
     assert.doesNotMatch(text, /'node:(net|http|https|http2|dgram|tls|dns)'/, path);
     if (path !== join('bin', 'provared-headers.mjs')) assert.doesNotMatch(text, /\bfrom\s+'[^']*\bnet\//, path);
   }
-  // net/ holds the one file that does, and it reaches only the nodes it is handed.
-  assert.deepEqual(files('net', /\.js$/), [join('net', 'headers.js')]);
+  // net/ holds the two files that do: the one reaches only the nodes it is handed, the other only the time-stamp
+  // service it is handed. Neither names an address.
+  assert.deepEqual(files('net', /\.js$/).sort(), [join('net', 'headers.js'), join('net', 'timestamp.js')]);
   assert.doesNotMatch(read(join('net', 'headers.js')), /https?:\/\/|seed/i);
+  assert.doesNotMatch(read(join('net', 'timestamp.js')), /https?:\/\/[a-z0-9]|seed/i);
+  // The library's own entry points never load net/; only its own entry does.
+  const pkg = JSON.parse(read('package.json'));
+  for (const [name, entry] of Object.entries(pkg.exports)) {
+    const target = typeof entry === 'string' ? entry : entry.default;
+    assert.equal(target.startsWith('./net/'), name === './net/timestamp', name);
+  }
 });
 
 test('nothing from a record is ever written as markup', () => {
