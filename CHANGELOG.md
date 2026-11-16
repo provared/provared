@@ -204,8 +204,8 @@
       sealer listens on 127.0.0.1 only, so the two programs are on one
       computer. `DESIGN.md`, X147 to X159.
     - Tests (`test/central-sealer.test.mjs`,
-      `test/central-sealer-e2e.test.mjs`, `test/same-files.test.mjs`; 38
-      tests, 34, 2 and 2, with those of the third review below): the
+      `test/central-sealer-e2e.test.mjs`, `test/same-files.test.mjs`; 39
+      tests, 35, 2 and 2, with those of the third review below): the
       sealer's program set up by its own commands and run
       as a process of its own on 127.0.0.1, ended and started again
       while calls go on, with the timer's seals; a sealer stopped and
@@ -388,8 +388,13 @@
       `test/http-world.mjs`; over HTTP it closes the made-up
       upstream), one test holds that, and the end-to-end test closes
       its executor where it fails part-way, so that the file ends.
-  - **Tests** (`test/seal.test.mjs`, `test/seal-http.test.mjs`; 41
-    tests): the seal checks under the recorder's keys with the library's
+    - The count of tests under "Tests", below, said 41 for
+      `test/seal.test.mjs` and `test/seal-http.test.mjs`, the number
+      before the second review. The two files hold 29 and 24, and the
+      entry says so.
+  - **Tests** (`test/seal.test.mjs`, `test/seal-http.test.mjs`; 53
+    tests, 29 and 24, with those of the second and third reviews): the
+    seal checks under the recorder's keys with the library's
     checker, chains to the seal before, and a reader who names another
     recorder is told; other keys in the recorder's file stop the start;
     a changed book file is not sealed; the timer's rules, on both
