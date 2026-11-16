@@ -465,7 +465,9 @@
     texts are not to change once 0.5.0 is published. For a central
     sealer they are X147 to X159; X152 (the sealer must answer at a
     start), X153 (the limit of unsent lines) and X156 (no line while a
-    seal may have been signed) wait for the founder's review.
+    seal may have been signed) wait for the founder's review. Those of
+    the second review are X160 to X166, and those of the third X167 to
+    X171.
 
 - **`provared-mcp-executor` 0.4.2 (15 November 2026): a security fix for
   two weaknesses. In front of a tool server whose JSON reader ignores

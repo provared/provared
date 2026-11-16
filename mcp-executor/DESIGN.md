@@ -600,7 +600,8 @@ Built so far of stage 2: the rules on the content of a change (section
 acknowledging a call sent under a permission no longer in force, and the
 status (below; X120 to X146); and a book sealed by a central sealer,
 which holds the recorder's keys away from the executor (below; X147 to
-X159).
+X159). Two reviews of these changed parts of them: X160 to X166, and
+X167 to X171.
 
 **Sealing.** The settings name a recorder (`recorder`: its key file, a
 name, and `sealEvery`). A seal is the library's (format description,
