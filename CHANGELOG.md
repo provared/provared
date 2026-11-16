@@ -809,8 +809,9 @@
         sealer listens on 127.0.0.1 only, so the two programs are on one
         computer. `DESIGN.md`, X147 to X159.
       - Tests (`test/central-sealer.test.mjs`,
-        `test/central-sealer-e2e.test.mjs`, `test/same-files.test.mjs`; 39
-        tests, 35, 2 and 2, with those of the third review below): the
+        `test/central-sealer-e2e.test.mjs`, `test/same-files.test.mjs`; 40
+        tests, 36, 2 and 2, with those of the third review and its
+        re-check below): the
         sealer's program set up by its own commands and run
         as a process of its own on 127.0.0.1, ended and started again
         while calls go on, with the timer's seals; a sealer stopped and
@@ -1017,6 +1018,17 @@
         or `\\?\` in front (X162 closes it; the test of the short name
         now holds `\\?\` too). The README names a share of the computer's
         own drive as a path that is another lock.
+    - **Fixes from a re-check of the third review's fixes:**
+      - One seal that comes two ways is passed over wherever the book
+        holds it, not only as its last line (X167). Where a line was
+        written between the two arrivals (the denial of a call for a tool
+        no rule names), the second was put to the book, which refused it,
+        and the agent was stopped with the same untrue message as before.
+        Now nothing is added where any line of the book is the entry byte
+        for byte and the book's check takes that line as a sound seal under
+        the fingerprint the sealer named (`heldSeal` in `executor.mjs`).
+        One test in `test/central-sealer.test.mjs`, with a denial written
+        between the two; it fails with the old condition put back.
     - **Tests** (`test/seal.test.mjs`, `test/seal-http.test.mjs`; 53
       tests, 29 and 24, with those of the second and third reviews): the
       seal checks under the recorder's keys with the library's

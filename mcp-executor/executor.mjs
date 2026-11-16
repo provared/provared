@@ -925,6 +925,23 @@ export function describeContentRules(settings, content, about) {
   return { path: settings.contentRules, fingerprint: content.fingerprint, rules: content.names, statedInSlip: software ? software.some((x) => x?.sha256 === content.fingerprint) : null };
 }
 
+/**
+ * The entry of a seal the book holds already, of the book's check
+ * ("entries"), or null: the line at its place in "book" is "line" byte for
+ * byte, the check finds nothing wrong with it, and its fingerprint is
+ * "named". Wherever it stands in the book: a seal that came two ways, with a
+ * line written between the two, is found as well as one at the end (X167,
+ * review 3.2 re-check). Used where the central sealer hands back a seal.
+ * @param {string} book
+ * @param {Array<{index: number, kind: string, problems: unknown[], fingerprint?: string}>} entries
+ * @param {string} line
+ * @param {string} named
+ */
+export function heldSeal(book, entries, line, named) {
+  const lines = book.split('\n');
+  return entries.find((e) => e.kind === 'seal' && e.problems.length === 0 && e.fingerprint === named && lines[e.index] === line) ?? null;
+}
+
 // --- one agent, running ---
 
 /**
@@ -984,11 +1001,13 @@ export async function openAgent(prepared, { settings, executorKeys, now, log, na
    * "named" is the fingerprint the sealer gave for a seal it had signed
    * before (its "latest"), where that is how the seal came. After an
    * answer that was lost, the same seal can come two ways, one after the
-   * other. The second finds it in the book: nothing is added then, and
-   * the two do not disagree. That holds only where the book's last line
-   * is this entry byte for byte, the book's own check takes that line as
-   * a sound seal, and its fingerprint by that check is the one the sealer
-   * named. A seal that differs in anything goes to "add" as before.
+   * other, and a line (a denial) can be written between the two. The
+   * second finds it in the book: nothing is added then, and the two do not
+   * disagree. That holds only where one of the book's lines, wherever it
+   * stands, is this entry byte for byte, the book's own check takes that
+   * line as a sound seal, and its fingerprint by that check is the one the
+   * sealer named (heldSeal). A seal that differs in anything goes to "add"
+   * as before.
    */
   async function addCentralSeal(entry, named) {
     // At a start, a permission new to the book is in the writer and not yet in the file: the seal covers the file, and would come after it.
@@ -1001,9 +1020,9 @@ export async function openAgent(prepared, { settings, executorKeys, now, log, na
       } catch {
         line = null; // not a line of a book: "add" refuses it below
       }
-      if (line !== null && book.endsWith(`\n${line}\n`)) {
-        const last = (await writer.check()).entries.at(-1);
-        if (last.kind === 'seal' && last.problems.length === 0 && last.fingerprint === named) return { entry: last.index, fingerprint: last.fingerprint };
+      if (line !== null && book.includes(`\n${line}\n`)) {
+        const held = heldSeal(book, (await writer.check()).entries, line, named);
+        if (held) return { entry: held.index, fingerprint: held.fingerprint };
       }
     }
     try {

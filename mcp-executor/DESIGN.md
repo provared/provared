@@ -3277,16 +3277,28 @@ next round, or `seal`) is handed the same seal and adds it. The one
 handed over first then came to a book that held it already; the book
 refused it, and the agent was stopped as under X155, with a sound book
 and a message that was not true. Now `addCentralSeal` adds nothing where
-all three of these hold:
-- the book's last line is the entry byte for byte, the entry written
-  out with the library's `entryLine`, as `add` writes it;
+all three of these hold of one of the book's lines (`heldSeal`):
+- the line is the entry byte for byte, the entry written out with the
+  library's `entryLine`, as `add` writes it, wherever it stands in the
+  book;
 - the book's own check takes that line as a seal with nothing wrong;
 - its fingerprint by that check is the one the sealer named for its
   latest seal.
 
+This held at first only of the book's last line. A re-check found that
+a line written between the two arrivals (the denial of a call for a tool
+no rule names, which is written whatever the doubt) left the seal no
+longer last, so the agent was stopped as before; hence any line. The
+book's check must take the line as a sound seal at the place where it
+stands, so nothing is passed over that the book does not hold as that
+seal. Every seal of the central sealer's reaches the book through
+`addCentralSeal`, which tells the link of it (`sealed`) as it is added,
+or stops the agent where the file could not be written; so a seal passed
+over leaves nothing between the book and the sealer untold.
+
 Anything else goes to `add` as before, and a refusal there stops the
-agent (X155): an entry that differs in one byte, the book's last line
-where it is no seal, or the book's last seal under another fingerprint.
+agent (X155): an entry that differs in one byte, a line of the book
+where it is no seal, or a seal of the book under another fingerprint.
 A seal newly signed, the answer to `seal`, comes with no fingerprint
 named and always goes to `add`. Why the line and the fingerprint both:
 the fingerprint is the sealer's word until the book's check has made it,

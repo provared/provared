@@ -461,6 +461,40 @@ test('central sealer: one seal that comes two ways after a lost answer is added 
   }
 });
 
+test('central sealer: one seal that comes two ways, with a denial written between the two, is added once, and the agent stays at work (review 3.2 re-check, finding 1)', async () => {
+  const w = await lostSealWorld();
+  try {
+    await until(w.asked, { timeout: 30000 });
+    // A seal is asked for: it takes the agent's turn. Behind it, a call for a tool no rule names, whose denial is a line.
+    const second = w.executor.seal();
+    await pause(50);
+    const between = w.client.call('no_such_tool', {});
+    await pause(200);
+    // Only now is the seal the executor's own question found handed to the turn, behind the denial.
+    w.letGo();
+    const sealed = await second;
+    assert.equal(sealed.entry, 2);
+    const denied = refusal(await between);
+    assert.equal(denied.code, 'unlisted');
+    assert.equal((await w.checked()).entries[3]?.fingerprint, denied.denial, 'the denial is written after the seal');
+    // The seal comes again, no longer the book's last line: nothing is added and nothing is wrong.
+    const third = await w.executor.seal();
+    assert.equal(third.entry, 4);
+    assert.equal(w.executor.stopped(), null, 'the agent is not stopped');
+    assert.equal(w.logs.some((e) => e.event === 'sealer-disagrees'), false);
+    assert.deepEqual(w.logs.filter((e) => e.event === 'sealed').map((e) => e.entry), [2, 4], 'each seal is added once');
+    const c = await w.checked();
+    assert.equal(c.summary.problemFound, false);
+    assert.deepEqual(c.entries.map((e) => e.kind), ['slip', 'stub', 'seal', 'denial', 'seal']);
+    assert.equal(refusal(await w.client.call('echo', {})), null, 'calls are taken');
+    await w.level();
+  } finally {
+    await w.close();
+    await w.fake.close();
+    await w.sealer.stop();
+  }
+});
+
 test('central sealer: a seal that differs from the book\'s last line in anything is not passed over as the same seal: the book refuses it and the agent stops (review 3.2, F1)', async () => {
   // The same fingerprint named, another entry: the first answer hands the seal over with a member beside it.
   const changed = await lostSealWorld({ first: (entry) => ({ ...entry, beside: 'not the seal the book holds' }) });
