@@ -44,6 +44,9 @@ const USAGE = `provared-gateway: a reverse proxy that writes a Provared receipt 
 PROVARED_GATEWAY_ADMIN_SECRET; "seal --offline", "acknowledge --offline" and "repair" work on the files
 of a stopped gateway, and need no secret.`;
 
+/** Text from an answer, on one line and with no character that steers a terminal. */
+const plainText = (v) => String(v).replace(/[\p{Cc}\p{Zl}\p{Zp}]/gu, ' ');
+
 function option(args, name) {
   const at = args.indexOf(name);
   if (at === -1) return undefined;
@@ -230,7 +233,8 @@ async function main(args) {
       const gateway = await openGateway(config, { root });
       const sealed = await gateway.seal(agent);
       await gateway.close();
-      console.log(`Sealed (the book was opened here; no gateway may be running on it): entry ${sealed.entry} of ${agent}'s book is the seal ${sealed.fingerprint}.`);
+      console.log(`Sealed (the book was opened here; no gateway may be running on it): entry ${sealed.entry} of ${agent}'s book is the seal ${sealed.fingerprint}${sealed.stamped === true ? ', with a time-stamp' : ''}.`);
+      if (sealed.stampProblem) console.error(`The seal has no time-stamp: ${plainText(sealed.stampProblem.message)} (${plainText(sealed.stampProblem.code)})`);
       return 0;
     }
     let answer;
@@ -244,7 +248,8 @@ async function main(args) {
       console.error(`The book was not sealed: ${answer.value.message ?? answer.status}`);
       return 1;
     }
-    console.log(`Sealed: entry ${answer.value.entry} of ${agent}'s book is the seal ${answer.value.fingerprint}.`);
+    console.log(`Sealed: entry ${answer.value.entry} of ${agent}'s book is the seal ${answer.value.fingerprint}${answer.value.stamped === true ? ', with a time-stamp' : ''}.`);
+    if (answer.value.stampProblem) console.error(`The seal has no time-stamp: ${plainText(answer.value.stampProblem.message)} (${plainText(answer.value.stampProblem.code)})`);
     return 0;
   }
   if (command === 'start') {
