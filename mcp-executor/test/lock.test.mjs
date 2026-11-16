@@ -4,7 +4,7 @@
 
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -160,6 +160,52 @@ test('a program that holds the folder of a socket file is the only one that may 
     }
   } finally {
     for (const address of addresses) rmSync(`${address}.clearing`, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a socket file that nothing answers at and this user may not take away, as another user\'s in /tmp that may be connected to, or a link that leads nowhere, refuses the lock and is named in the refusal (review 3.2 re-check, finding 3)', { skip: socketFiles }, async () => {
+  const dir = folder();
+  const book = join(dir, 'alpha.book.jsonl');
+  const address = `/tmp/provared-mcp-executor-${lockName(book)}.sock`;
+  // In /tmp only a file's owner may take it away. The tests have one user, so taking a file away is refused as it is
+  // there (EPERM) in a program of its own, for the lock's own file alone; everything else is as it is.
+  const asks = (how, path) => `${process.platform === 'linux' ? "Object.defineProperty(process, 'platform', { value: 'darwin' });" : ''}
+    const fs = (await import('node:fs')).default;
+    const unlink = fs.unlinkSync;
+    fs.unlinkSync = (p) => {
+      if (p === ${JSON.stringify(address)}) throw Object.assign(new Error('operation not permitted'), { code: 'EPERM' });
+      return unlink(p);
+    };
+    (await import('node:module')).syncBuiltinESMExports();
+    const lock = await import(${JSON.stringify(new URL('../lock.mjs', import.meta.url).href)});
+    try {
+      await (await lock[${JSON.stringify(how)}](${JSON.stringify(path)})).release();
+      console.log('held');
+    } catch (e) {
+      console.log(e.code + ': ' + e.message);
+    }`;
+  const said = (how, path) => spawnSync(process.execPath, ['--input-type=module', '-e', asks(how, path)], { encoding: 'utf8' }).stdout.trim();
+  const words = new RegExp(`^LOCKED: An executor is running on the book .* The lock's socket file, ${address.replaceAll('.', '\\.')}, is not held by any program: nothing answers at it\\. But this user may not take it away \\(EPERM\\): it belongs to another user, or is a link that leads nowhere\\. .* Nothing was read or written\\.$`);
+  try {
+    // A socket file left behind that anyone may connect to.
+    await leftBehind(address);
+    chmodSync(address, 0o777);
+    assert.match(said('lockFiles', book), words, 'a socket file');
+    assert.ok(existsSync(address), 'the socket file is not cleared away');
+    assert.ok(!existsSync(`${address}.clearing`), 'the folder is taken away');
+    rmSync(address, { force: true });
+    // A link that leads nowhere.
+    symlinkSync(join(dir, 'nothing-here'), address);
+    assert.match(said('lockFiles', book), words, 'a link');
+    assert.ok(lstatSync(address).isSymbolicLink(), 'the link is not taken away');
+    rmSync(address, { force: true });
+    // With the file this user's to take away, the lock is taken.
+    symlinkSync(join(dir, 'nothing-here'), address);
+    assert.equal(spawnSync(process.execPath, ['--input-type=module', '-e', asks('lockFiles', book).replace(`p === ${JSON.stringify(address)}`, 'false')], { encoding: 'utf8' }).stdout.trim(), 'held');
+  } finally {
+    rmSync(address, { force: true });
+    rmSync(`${address}.clearing`, { recursive: true, force: true });
     rmSync(dir, { recursive: true, force: true });
   }
 });

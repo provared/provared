@@ -1808,7 +1808,9 @@ again once no call waits.
   takes it away. A socket file left by another user's program (an
   executor once run as root, say) cannot be asked or cleared away by
   this user: the lock is refused, and the refusal names the file, for
-  that user or an administrator to take away. A program that takes the lock's name first keeps the
+  that user or an administrator to take away. So it is where such a file
+  may be asked and nothing answers, and where a link of another user's
+  that leads nowhere is in its place. A program that takes the lock's name first keeps the
   executor from starting on those files, and gains nothing else. The lock
   has been tried on Windows and on Linux, not on a Mac; the tests of the
   socket file run on Linux and not on Windows, where Node.js has no

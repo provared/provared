@@ -3417,7 +3417,17 @@ X162 to X164, found two faults. Both were looked for in this one.
   the file and says who can take it away. `alive` gives the code of the
   refusal (`EACCES`, `EPERM`) in place of `true`; `lockAt` puts the file
   and the code on its `LOCKED` error (`notAsked`, `why`); `lockFiles`
-  writes the sentence. No function's arguments or result change.
+  writes the sentence. No function's arguments or result change. A
+  later re-check found two more files another user can leave that reach
+  the same end with the old words: a socket file this user may connect
+  to (made under a umask of 0), where nothing answers, and a link that
+  leads nowhere. Both are told from a live file, and neither can be taken
+  away by this user. The lock is still refused; `lockAt` now puts the
+  file and the code of the refusal to take it away on its `LOCKED` error
+  (`notCleared`, `why`), and the refusal, of `lockFiles` and `lockState`
+  alike, names the file, says that no program holds it and that that
+  user or an administrator takes it away. Its test makes taking the file
+  away fail as `/tmp` makes it fail, since the tests have one user.
 - *On Windows, a folder's short name, or `\\?\` in front.* Not here:
   X162 resolves the folder with `realpathSync.native`, which gives one
   name for all of them. A test now holds `\\?\` beside the short name.

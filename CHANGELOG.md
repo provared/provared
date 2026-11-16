@@ -1051,6 +1051,14 @@
         system for the two locks): while the folder is there nobody
         listens, through `lockAt`, `lockFiles` or `lockState`. It fails
         with the old `lockAt` put back.
+      - Two more files of another user's in `/tmp` are named in the
+        refusal of the lock (X171): a socket file that this user may
+        connect to and where nothing answers, and a link that leads
+        nowhere. Both had been refused with "An executor is running …"
+        alone. `lockAt` puts `notCleared` and `why` on its `LOCKED`
+        error. One test in `test/lock.test.mjs`, for both, which runs
+        where there are socket files and makes taking the file away fail
+        as `/tmp` does; it fails with the fix taken out.
     - **Tests** (`test/seal.test.mjs`, `test/seal-http.test.mjs`; 53
       tests, 29 and 24, with those of the second and third reviews): the
       seal checks under the recorder's keys with the library's

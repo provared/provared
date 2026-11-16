@@ -22,7 +22,10 @@
 //            lock is then refused until it is taken away.
 //            A socket file of another user's may not be connected to, so
 //            it cannot be told from a live one, nor cleared away: the lock
-//            is refused, and the refusal names the file.
+//            is refused, and the refusal names the file. So it is, and so
+//            named, where nothing answers at the file and this user may
+//            not take it away: another user's that this user may connect
+//            to, or a link that leads nowhere.
 // <name> is the SHA-256, in hexadecimal, of the book file's path as the
 // file system resolves it. Nothing is ever sent over the listener: a
 // connection to it is closed at once.
@@ -166,7 +169,9 @@ export async function lockAt(address, { file = process.platform !== 'win32' && p
     try {
       unlinkSync(address);
     } catch (e) {
-      if (e.code !== 'ENOENT') throw locked();
+      // Nothing answers at the file, and this user may not take it away: another user's that this user may connect
+      // to, or a link that leads nowhere, left in /tmp, where only its owner takes a file away. The refusal names it.
+      if (e.code !== 'ENOENT') throw Object.assign(locked(), { notCleared: address, why: e.code ?? e.message });
     }
     try {
       return await listen(address);
@@ -244,7 +249,9 @@ async function lock(path, { held, failed, what, wait }) {
           ? ` Or a program was stopped as it took the lock, and left the folder ${e.clearing}: where no executor and no command is at work on ${what}, take that folder away.`
           : e.notAsked
             ? ` The lock's socket file, ${e.notAsked}, belongs to another user: this user may not ask whether a program still holds it (${e.why}), and cannot take it away. Where no executor and no command of that user's is at work on ${what}, the file was left behind by one that has ended, and that user or an administrator takes it away.`
-            : '';
+            : e.notCleared
+              ? ` The lock's socket file, ${e.notCleared}, is not held by any program: nothing answers at it. But this user may not take it away (${e.why}): it belongs to another user, or is a link that leads nowhere. That user or an administrator takes it away.`
+              : '';
         throw Object.assign(new Error(held(left)), { code: LOCKED });
       }
       await new Promise((done) => setTimeout(done, Math.min(250, end - Date.now())));
