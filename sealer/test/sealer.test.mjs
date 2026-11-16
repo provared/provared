@@ -1155,6 +1155,33 @@ async function largeAnswer(offer, { declared }) {
   };
 }
 
+test('a recorder follows no redirect: what listens at the sealer\'s address cannot send the question elsewhere (X288)', async () => {
+  const token = toBase64url(nodeCrypto.randomBytes(32));
+  // Where a redirect would send the question, and what listens at the sealer's address, which answers with a redirect.
+  const reached = [];
+  const elsewhere = http.createServer((q, a) => {
+    reached.push(q.url);
+    a.writeHead(200, { 'content-type': 'application/json' }).end('{}');
+  });
+  await new Promise((done) => elsewhere.listen(0, '127.0.0.1', done));
+  let status = 307;
+  const redirecting = http.createServer((q, a) => {
+    q.resume();
+    a.writeHead(status, { location: `http://127.0.0.1:${elsewhere.address().port}${q.url}` }).end();
+  });
+  await new Promise((done) => redirecting.listen(0, '127.0.0.1', done));
+  try {
+    const client = connectSealer({ address: `http://127.0.0.1:${redirecting.address().port}`, recorder: 'agent-one', token });
+    for (status of [301, 302, 303, 307, 308]) await assert.rejects(client.about(), Error, String(status));
+    assert.deepEqual(reached, [], 'no question reached the address a redirect named');
+  } finally {
+    redirecting.closeAllConnections();
+    elsewhere.closeAllConnections();
+    await new Promise((done) => redirecting.close(done));
+    await new Promise((done) => elsewhere.close(done));
+  }
+});
+
 test('a recorder reads an answer up to 8 MiB and no further, with its length declared or not: what listens at the sealer\'s address cannot fill its memory', async () => {
   const token = toBase64url(nodeCrypto.randomBytes(32));
   for (const declared of [false, true]) {

@@ -835,6 +835,33 @@ test('central sealer: an answer larger than an answer may be is read up to the l
   }
 });
 
+test('central sealer: the executor\'s client follows no redirect: what listens at the sealer\'s address cannot send the question elsewhere (X288)', async () => {
+  const token = randomBytes(32).toString('base64url');
+  // Where a redirect would send the question, and what listens at the sealer's address, which answers with a redirect.
+  const reached = [];
+  const elsewhere = http.createServer((q, a) => {
+    reached.push(q.url);
+    a.writeHead(200, { 'content-type': 'application/json' }).end('{}');
+  });
+  await new Promise((done) => elsewhere.listen(0, '127.0.0.1', done));
+  let status = 307;
+  const redirecting = http.createServer((q, a) => {
+    q.resume();
+    a.writeHead(status, { location: `http://127.0.0.1:${elsewhere.address().port}${q.url}` }).end();
+  });
+  await new Promise((done) => redirecting.listen(0, '127.0.0.1', done));
+  try {
+    const client = connectSealer({ address: `http://127.0.0.1:${redirecting.address().port}`, recorder: RECORDER, token });
+    for (status of [301, 302, 303, 307, 308]) await assert.rejects(client.about(), Error, String(status));
+    assert.deepEqual(reached, [], 'no question reached the address a redirect named');
+  } finally {
+    redirecting.closeAllConnections();
+    elsewhere.closeAllConnections();
+    await new Promise((done) => redirecting.close(done));
+    await new Promise((done) => elsewhere.close(done));
+  }
+});
+
 test('central sealer: an answer that is not in the form the protocol gives is not used', async () => {
   const w = await centralWorld({ open: false });
   let wrong = '/held';

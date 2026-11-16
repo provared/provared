@@ -721,11 +721,13 @@ export function connectSealer({ address, recorder, token, fetchImpl = fetch, clo
     const nonce = toBase64url(nodeCrypto.randomBytes(32));
     const head = sealerHmac(key, LABELS.head, recorder, path, time, nonce, String(bytes.length)).toString('base64url');
     const proof = sealerHmac(key, LABELS.question, recorder, path, time, nonce, sha256(bytes)).toString('base64url');
-    // The body goes as bytes, so its length is declared (Content-Length), as the first proof says.
+    // The body goes as bytes, so its length is declared (Content-Length), as the first proof says. A redirect is not
+    // followed: the question goes to the sealer's address and nowhere else, whatever listens there says.
     const r = await fetchImpl(new URL(path, address), {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'provared-sealer-recorder': recorder, 'provared-sealer-time': time, 'provared-sealer-nonce': nonce, 'provared-sealer-head': head, 'provared-sealer-proof': proof },
       body: bytes,
+      redirect: 'error',
     });
     // The answer is read up to the limit and no further, since whatever listens at the address may send it: a length
     // declared over the limit is refused before any of the body is read, and the body is read piece by piece, with a

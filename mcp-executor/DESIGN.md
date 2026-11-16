@@ -3435,6 +3435,25 @@ X162 to X164, found two faults. Both were looked for in this one.
   own drive (`\\localhost\D$\…`, `\\127.0.0.1\D$\…`) and `::$DATA`
   after the file's name.
 
+The choices from X288 on come from a re-check of the fixes of the third
+review. They are numbered after the last choice of section 14, which was
+written in the meantime.
+
+**X288. The sealer's client follows no redirect.** `connectSealer`
+(`sealer/sealer.mjs`, and its copy `sealer-client.mjs`, X151) called
+`fetch` with no `redirect`, so it followed one. It takes only
+`http://127.0.0.1:<port>` as the sealer's address, but whatever listens
+there (any program on the computer, while the sealer is stopped) could
+answer 307 and have the question sent again to the address it named:
+the body and the five `provared-sealer-` headers, though not the token.
+Nothing the answer from there said was used, since it is held to its
+size and its proof like any other. The `fetch` now carries
+`redirect: 'error'`, the fetch standard's own way to refuse a redirect:
+an answer of 301, 302, 303, 307 or 308 makes the question fail, as one
+that is not answered, and it is sent nowhere else. A test in each
+package holds it. `provared-sealer` stays at 0.1.0, which is not
+published.
+
 ## 14. The executor as an OAuth-protected connector
 
 Over HTTP an agent may also connect through OAuth, from 0.5.0, where the

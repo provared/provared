@@ -809,8 +809,8 @@
         sealer listens on 127.0.0.1 only, so the two programs are on one
         computer. `DESIGN.md`, X147 to X159.
       - Tests (`test/central-sealer.test.mjs`,
-        `test/central-sealer-e2e.test.mjs`, `test/same-files.test.mjs`; 42
-        tests, 37, 2 and 3, with those of the third review and its
+        `test/central-sealer-e2e.test.mjs`, `test/same-files.test.mjs`; 43
+        tests, 38, 2 and 3, with those of the third review and its
         re-check below): the
         sealer's program set up by its own commands and run
         as a process of its own on 127.0.0.1, ended and started again
@@ -1059,6 +1059,17 @@
         error. One test in `test/lock.test.mjs`, for both, which runs
         where there are socket files and makes taking the file away fail
         as `/tmp` does; it fails with the fix taken out.
+      - The sealer's client follows no redirect (X288). `connectSealer`
+        followed one, so whatever listened at the sealer's address could
+        have the question, with its five `provared-sealer-` headers but
+        not the token, sent again to an address it named. Its `fetch`
+        now carries `redirect: 'error'`, and an answer of 301, 302, 303,
+        307 or 308 makes the question fail. The change is in
+        `sealer/sealer.mjs` (`provared-sealer` stays 0.1.0, not
+        published) and in the executor's copy, `sealer-client.mjs`. One
+        test in each package (`sealer/test/sealer.test.mjs`,
+        `test/central-sealer.test.mjs`); each fails with the line taken
+        out of its file.
     - **Tests** (`test/seal.test.mjs`, `test/seal-http.test.mjs`; 53
       tests, 29 and 24, with those of the second and third reviews): the
       seal checks under the recorder's keys with the library's
