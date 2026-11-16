@@ -465,7 +465,7 @@ test('attack: a request from a browser page. An Origin is refused unless the set
 });
 
 test('two simultaneous calls by one agent, and by two agents: each book holds its own receipts in order, and the limits hold per agent', async () => {
-  const w = await httpWorld({ config: { maxWaiting: 2 } });
+  const w = await httpWorld({ config: { maxWaiting: 2, timeout: 10000 } });
   try {
     const [slow, fast] = await Promise.all([call(w, 'alpha', 'slow', { ms: 300, tag: 'first' }, { id: 'a-1' }), (async () => {
       await pause(50);
@@ -490,9 +490,9 @@ test('two simultaneous calls by one agent, and by two agents: each book holds it
     assert.equal(copyOf(w, 'beta').lines.length, 2);
 
     // The limit on calls in progress is each agent's own.
-    // Two calls that stay with the upstream long enough for what follows, however busy the computer: the test waits until both are in hand, and asks its two refusals, which take no time, before anything else.
-    const first = call(w, 'alpha', 'slow', { ms: 2000 }, { id: 'l-1' });
-    const second = call(w, 'alpha', 'slow', { ms: 2000 }, { id: 'l-2' });
+    // Two calls that stay with the upstream long enough for what follows, however busy the computer or slow the disk: 3 seconds each, within the 10 a call may take here; the test waits until both are in hand, and asks its two refusals, which take no time, before anything else.
+    const first = call(w, 'alpha', 'slow', { ms: 3000 }, { id: 'l-1' });
+    const second = call(w, 'alpha', 'slow', { ms: 3000 }, { id: 'l-2' });
     await until(() => w.executor.agent('alpha').calls() === 2);
     const third = await call(w, 'alpha', 'echo', {}, { id: 'l-3' });
     assert.equal(third.json.error.code, 1001);

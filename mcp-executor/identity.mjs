@@ -26,7 +26,15 @@
 // No primitive is new: the signatures are made by the library's signers for
 // the key file, and checked with the same Web Crypto methods the library
 // uses.
+//
+// The command needs the executor's public keys and no private key
+// (X166). It takes them from the executor's key file, of which it uses the
+// public parts alone, or from a file of the public keys alone, which
+// "keys --public-keys <file>" writes and "--public-keys <file>" names: the
+// form of a key file, {"about": …, "keys": [Ed25519, ML-DSA-87]}, with no
+// private part in it.
 
+import { readFileSync } from 'node:fs';
 import { fromBase64url, toBase64url, utf8 } from 'provared';
 
 /** The first line of the text the executor signs. */
@@ -38,6 +46,43 @@ const METHODS = ['Ed25519', 'ML-DSA-87'];
 /** An address as both ends write it: an IPv4 address reached over IPv6 is the IPv4 address. */
 export function plainAddress(address) {
   return typeof address === 'string' ? address.replace(/^::ffff:(?=\d+\.\d+\.\d+\.\d+$)/i, '') : '';
+}
+
+/** What the file of the executor's public keys says about itself. */
+export const PUBLIC_KEYS_ABOUT = 'The public keys of the executor: what "status", "seal" and "acknowledge" check a running executor\'s signatures against (--public-keys). It holds no private key and is no secret. Keep it where only the administrator can change it.';
+
+/** The public part of a key in a key file, with nothing else of it; null where it is not a key of that method. */
+function publicPart(jwk, alg) {
+  if (jwk === null || typeof jwk !== 'object') return null;
+  if (alg === 'Ed25519') return jwk.kty === 'OKP' && jwk.crv === 'Ed25519' && typeof jwk.x === 'string' ? { alg, crv: 'Ed25519', kty: 'OKP', x: jwk.x } : null;
+  return jwk.kty === 'AKP' && jwk.alg === alg && typeof jwk.pub === 'string' ? { alg, kty: 'AKP', pub: jwk.pub } : null;
+}
+
+/**
+ * The executor's two public keys, read from a file: the executor's own key
+ * file, or a file of its public keys alone (X166). Only the public parts
+ * are taken, and no private key is loaded, so a file with none will do.
+ * Throws, in plain words, where the file cannot be read or holds no usable
+ * keys: each key must be one that a signature can be checked with.
+ * @param {string} path
+ * @returns {Promise<object[]>} the public keys (Ed25519, then ML-DSA-87)
+ */
+export async function readPublicKeys(path) {
+  let jwks;
+  try {
+    jwks = JSON.parse(readFileSync(path, 'utf8').replace(/^﻿/, ''))?.keys;
+  } catch (e) {
+    throw new Error(`The key file ${path} could not be read (${e.code ?? 'it is not JSON'}).`);
+  }
+  const keys = Array.isArray(jwks) && jwks.length === METHODS.length ? METHODS.map((alg, i) => publicPart(jwks[i], alg)) : [null];
+  let usable = keys.every((key) => key !== null);
+  try {
+    if (usable) for (const key of keys) await globalThis.crypto.subtle.importKey('jwk', key, { name: key.alg }, false, ['verify']);
+  } catch {
+    usable = false;
+  }
+  if (!usable) throw new Error(`The file ${path} holds no usable keys of the executor. It must hold the executor's two public keys, ${METHODS.join(' and then ')}: the file that "provared-mcp-executor keys --public-keys <file>" writes, or the executor's own key file.`);
+  return keys;
 }
 
 function helloBytes(challenge, address, port) {

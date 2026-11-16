@@ -31,9 +31,10 @@ import { argumentsFingerprint, checkBook, countersign, denialCodes, entryLine, f
 import { loadCopyKey, openCopy, readCopy, unfinished } from './copy.mjs';
 import { aboutSlip, bookFile, loadKeyFile, readIfThere, slipFrom, untilFree } from './files.mjs';
 import { CODES, MAX_LINE_BYTES, foldName, idKey, isId, misspelt, notificationLine, oneLine, readLines, readMessage, repeatedName, responseLine, responseText, spliceId, topLevelId, unsafeInteger } from './jsonrpc.mjs';
-import { lockFiles } from './lock.mjs';
+import { LOCK_WAIT_MS, lockFiles } from './lock.mjs';
 import { RULES_DOCUMENT, RULE_DOCUMENT, RULES_ENTRY_PREFIX, TOOL_NAME, lookUp, readPointer, readRules, rulesFingerprint, statesContentRules, testCall } from './rules.mjs';
-import { loadRecorder, localSealer, readRecorderKeyFile } from './sealing.mjs';
+import { RECORDER_NAME } from './sealer-client.mjs';
+import { SEALER_BEHIND, SEALER_MAX_UNSENT, SEALER_MAX_UNSENT_MAX, SEALER_TIMEOUT, SEALER_TIMEOUT_MAX, SEALER_TIMEOUT_MIN, centralSealer, loadRecorder, localSealer, readRecorderKeyFile } from './sealing.mjs';
 
 /** The document, in each stub and denial, whose fingerprint is that of the executor's own identifier for the call (a label, not a reserved name). */
 export const CALL_DOCUMENT = 'executor.call';
@@ -93,7 +94,7 @@ const TRACEPARENT = /^[0-9a-f]{2}-([0-9a-f]{32})-[0-9a-f]{16}-[0-9a-f]{2}$/;
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,255}$/;
 const MAX_SAFE = Number.MAX_SAFE_INTEGER;
 /** The settings "keys" does not need: the passkeys' thumbprints and, over HTTP, the agents' secret hashes. */
-const NOT_FOR_KEYS = /(^|\.)(issuerKeys|secretHash)$/;
+const NOT_FOR_KEYS = /(^|\.)(issuerKeys|secretHash)$|^recorder\.sealer(\.|$)/;
 
 /** The error thrown where a call was never made, so that the stub writer writes nothing. */
 class NotSent extends Error {
@@ -273,20 +274,59 @@ export const UNLISTED_FORWARD_WARNING = 'unlisted is "forward": a call to a tool
  * given) and, where the books are to be sealed on a timer, "sealEvery" in
  * milliseconds. Into s.recorder; null where the settings name none, and
  * the executor then cannot seal.
+ *
+ * Or, in place of the key file, a central sealer that holds the recorder's
+ * keys ("sealer"): its address, the name it knows this recorder by, where
+ * the recorder's token is read from (a file, or a variable of the
+ * environment; never the settings), the fingerprint of the key set it
+ * signs with and, where wanted, how long a question to it may take and
+ * how many lines may be unsent before calls are refused. The two are not
+ * named together, and a central sealer's seals give its own name.
  */
 export function readRecorderSettings(config, s, at, root, warnings) {
   s.recorder = null;
   const r = config.recorder;
   if (r === undefined) return;
   if (!isObject(r)) return at('recorder', 'must be an object: keys and, where wanted, name and sealEvery.');
-  const out = { keys: null, name: r.name ?? s.name, sealEvery: r.sealEvery ?? null };
-  if (typeof r.keys !== 'string' || r.keys === '') at('recorder.keys', 'must be the path of the recorder\'s key file (provared-mcp-executor keys makes it).');
+  const out = { keys: null, sealer: null, name: r.name ?? s.name, sealEvery: r.sealEvery ?? null };
+  if (r.sealer !== undefined) {
+    // The recorder's keys are in one place: with a central sealer, or in a key file here, never both (X147).
+    if (r.keys !== undefined) at('recorder.keys', 'must not be named together with recorder.sealer: the recorder\'s keys are held by the central sealer, or in a key file here, not both.');
+    if (r.name !== undefined) at('recorder.name', 'must not be named together with recorder.sealer: a central sealer\'s seals give its own name.');
+    out.name = null;
+    out.sealer = readSealerSettings(r.sealer, at, root, warnings);
+  } else if (typeof r.keys !== 'string' || r.keys === '') at('recorder.keys', 'must be the path of the recorder\'s key file (provared-mcp-executor keys makes it).');
   else out.keys = pathFrom(root, r.keys);
-  if (typeof out.name !== 'string' || out.name.length < 1 || out.name.length > 200) at('recorder.name', 'must be text of 1 to 200 characters.');
+  if (r.sealer === undefined && (typeof out.name !== 'string' || out.name.length < 1 || out.name.length > 200)) at('recorder.name', 'must be text of 1 to 200 characters.');
   if (out.sealEvery !== null && (!Number.isInteger(out.sealEvery) || out.sealEvery < SEAL_EVERY_MIN || out.sealEvery > SEAL_EVERY_MAX)) at('recorder.sealEvery', 'must be a whole number of milliseconds from 1,000 to 604,800,000 (seven days): how often each book is sealed while the executor runs. Leave it out for no timer.');
   else if (out.sealEvery !== null && out.sealEvery < SEAL_EVERY_SHORT) warnings.push(`recorder.sealEvery: ${out.sealEvery} ms is less than a minute. Each seal adds about 52 KB to a book and takes a second or two to sign.`);
-  for (const k of Object.keys(r)) if (!['keys', 'name', 'sealEvery'].includes(k)) warnings.push(`recorder.${k}: not a setting; set aside.`);
+  for (const k of Object.keys(r)) if (!['keys', 'name', 'sealEvery', 'sealer'].includes(k)) warnings.push(`recorder.${k}: not a setting; set aside.`);
   s.recorder = out;
+}
+
+/** "recorder.sealer", read: {address, name, token: {file} or {env}, keySet, timeout, maxUnsent}; null where it has a problem. */
+function readSealerSettings(c, at, root, warnings) {
+  if (!isObject(c)) {
+    at('recorder.sealer', 'must be an object: address, name, token and keySet.');
+    return null;
+  }
+  let sound = true;
+  const no = (what, text) => {
+    sound = false;
+    at(`recorder.sealer.${what}`, text);
+  };
+  const out = { address: c.address, name: c.name, token: null, keySet: c.keySet, timeout: c.timeout ?? SEALER_TIMEOUT, maxUnsent: c.maxUnsent ?? SEALER_MAX_UNSENT };
+  if (typeof c.address !== 'string' || !/^http:\/\/127\.0\.0\.1:[1-9][0-9]{0,4}$/.test(c.address)) no('address', 'must be http://127.0.0.1:<port>: the central sealer listens on this computer only.');
+  if (typeof c.name !== 'string' || !RECORDER_NAME.test(c.name)) no('name', 'must be the name the sealer knows this recorder by ("provared-sealer add-recorder"): 1 to 63 small letters, digits and hyphens.');
+  if (typeof c.keySet !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(c.keySet)) no('keySet', 'must be the fingerprint of the key set the sealer signs with, as "provared-sealer init" prints it (43 characters).');
+  // The token is read from a file or from the environment, and is never written in the settings.
+  const from = c.token;
+  if (!isObject(from) || Object.keys(from).length !== 1 || !['file', 'env'].some((k) => typeof from[k] === 'string' && from[k] !== '')) no('token', 'must say where the recorder\'s token is read from: {"file": <path>} or {"env": <the name of a variable>}. The token itself is never written in the settings.');
+  else out.token = from.file !== undefined ? { file: pathFrom(root, from.file) } : { env: from.env };
+  if (!Number.isInteger(out.timeout) || out.timeout < SEALER_TIMEOUT_MIN || out.timeout > SEALER_TIMEOUT_MAX) no('timeout', `must be a whole number of milliseconds from ${SEALER_TIMEOUT_MIN} to ${SEALER_TIMEOUT_MAX}: how long one question to the sealer may take.`);
+  if (!Number.isInteger(out.maxUnsent) || out.maxUnsent < 0 || out.maxUnsent > SEALER_MAX_UNSENT_MAX) no('maxUnsent', `must be a whole number from 0 to ${SEALER_MAX_UNSENT_MAX}: how many lines of a book may be unsent before calls are refused.`);
+  for (const k of Object.keys(c)) if (!['address', 'name', 'token', 'keySet', 'timeout', 'maxUnsent'].includes(k)) warnings.push(`recorder.sealer.${k}: not a setting; set aside.`);
+  return sound ? out : null;
 }
 
 /**
@@ -554,6 +594,32 @@ export async function loadRules(path) {
   return { rules, fingerprint: await rulesFingerprint(parsed), names: rules.map((r) => r.name) };
 }
 
+/** Whether a file reads as a key file with no private part in any of its keys ("d" for Ed25519, "priv" for the two others): a file of public keys. */
+function holdsPublicKeysOnly(path) {
+  try {
+    const keys = JSON.parse(readFileSync(path, 'utf8')).keys;
+    return Array.isArray(keys) && keys.length > 0 && keys.every((k) => k !== null && typeof k === 'object' && k.d === undefined && k.priv === undefined);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Read a key file the executor signs with: its own, or an agent's. A file
+ * of public keys alone, such as "keys --public-keys" writes for the
+ * commands that ask a running executor, cannot be signed with; it is
+ * refused in plain words, where the reader (files.mjs, the gateway's) says
+ * "Unsupported key usage".
+ */
+export async function loadSigningKeys(path) {
+  try {
+    return await loadKeyFile(path, 'agent');
+  } catch (e) {
+    if (holdsPublicKeysOnly(path)) throw new Error(`The key file ${path} holds public keys only. The executor signs with private keys: name the key file that "provared-mcp-executor keys" made. A file of public keys is for the commands that ask a running executor (--public-keys).`);
+    throw e;
+  }
+}
+
 /**
  * Open what every agent shares: the executor's own keys, and the rules on
  * content where the settings name a rules file. Gives
@@ -562,7 +628,7 @@ export async function loadRules(path) {
  */
 export async function prepareShared(settings) {
   const warnings = [];
-  const executorKeys = await loadKeyFile(settings.executor.keys, 'agent');
+  const executorKeys = await loadSigningKeys(settings.executor.keys);
   let content = null;
   if (settings.contentRules) {
     content = await loadRules(settings.contentRules);
@@ -576,7 +642,8 @@ export async function prepareShared(settings) {
     }
   }
   // The recorder that seals, where the settings name one: its key file is read through sealing.mjs.
-  const sealer = settings.recorder ? localSealer(await loadRecorder(settings.recorder)) : null;
+  // Or a central sealer that holds the keys elsewhere: the executor then holds the recorder's token, and no key of the recorder's.
+  const sealer = !settings.recorder ? null : settings.recorder.sealer ? centralSealer(settings.recorder.sealer) : localSealer(await loadRecorder(settings.recorder));
   // The key files the executor held before: used only to countersign a receipt the administrator acknowledges.
   const formerKeys = [];
   for (const path of settings.executor.formerKeys ?? []) formerKeys.push(await loadKeyFile(path, 'agent'));
@@ -588,11 +655,12 @@ export async function prepareShared(settings) {
  * tool rules and the rules on content), its book, its copy and its stub
  * writer. "paths": slip, book, keys, issuerKeys, copy, copyKey. Says what
  * is wrong in one error. With "readOnly" nothing is written: no slip line to
- * the book file, no copy key made (checkConfig).
+ * the book file, no copy key made (checkConfig). "lockWait": how long to ask
+ * again for the lock while another program holds it (0: once).
  */
-export async function prepareAgent(paths, settings, shared, { now = Date.now, readOnly = false } = {}) {
+export async function prepareAgent(paths, settings, shared, { now = Date.now, readOnly = false, lockWait = 0 } = {}) {
   // One program writes a book and its copy at a time: the lock is taken before anything is read (lock.mjs).
-  const lock = readOnly ? null : await lockFiles(paths.book);
+  const lock = readOnly ? null : await lockFiles(paths.book, { wait: lockWait });
   try {
     return { ...(await readAgentFiles(paths, settings, shared, { now, readOnly })), release: () => (lock ? lock.release() : Promise.resolve()) };
   } catch (e) {
@@ -676,7 +744,9 @@ async function readAgentFiles(paths, settings, shared, { now, readOnly }) {
   if (read.lines.length > 0 && read.checked === 0) throw new Error(`No line of the copy ${paths.copy} checks under the copy key ${paths.copyKey}: the key is not the one the copy was written with. Put back the key the copy was written with.`);
   if (!read.sequence.ok) throw new Error(`The copy ${paths.copy} is not whole: ${read.sequence.problem} The executor does not start on a copy with a line missing, moved or put twice; look at it, and keep what it shows.`);
   const copy = copyKey ? openCopy(paths.copy, copyKey, settings.name, read.next) : null;
-  return { paths, warnings, agentKeys, about, file, writer, copy, read, options, checkOptions };
+  // For a central sealer: the book file's text as it was found, and the seals the book holds, each at its entry.
+  const seals = result.entries.filter((e) => e.kind === 'seal' && e.problems.length === 0).map((e) => ({ index: e.index, fingerprint: e.fingerprint }));
+  return { paths, warnings, agentKeys, about, file, writer, copy, read, options, checkOptions, onDisk, seals };
 }
 
 /**
@@ -687,14 +757,16 @@ async function readAgentFiles(paths, settings, shared, { now, readOnly }) {
  * is not running) the server's program and its credentials are not read:
  * no server is started.
  */
-async function prepare(config, root, { now = Date.now, readOnly = false, offline = false } = {}) {
+async function prepare(config, root, { now = Date.now, readOnly = false, offline = false, lockWait } = {}) {
   const { settings, problems, warnings } = readSettings(config, root);
   if (problems.length) throw new Error(`The settings have problems:\n- ${problems.join('\n- ')}`);
   if (!offline) resolveProgram(settings, root, warnings);
   const shared = await prepareShared(settings);
   warnings.push(...shared.warnings);
   const { env, credentialNames } = offline ? { env: {}, credentialNames: [] } : readProgramEnvironment(settings);
-  const agent = await prepareAgent({ ...settings.agent, copy: settings.executor.copy, copyKey: settings.executor.copyKey }, settings, shared, { now, readOnly });
+  // A start asks again for the lock while the executor before it may still be ending: for as long as its server is given to end, and 5 seconds more (10 seconds at least). A command asks once.
+  const wait = offline || readOnly ? 0 : (lockWait ?? Math.max(LOCK_WAIT_MS, settings.shutdownWait + 5000));
+  const agent = await prepareAgent({ ...settings.agent, copy: settings.executor.copy, copyKey: settings.executor.copyKey }, settings, shared, { now, readOnly, lockWait: wait });
   warnings.push(...agent.warnings);
   return { settings, warnings, agent, agentKeys: agent.agentKeys, executorKeys: shared.executorKeys, about: agent.about, env, credentialNames, read: agent.read, content: shared.content, sealer: shared.sealer, formerKeys: shared.formerKeys };
 }
@@ -704,7 +776,10 @@ export const NO_RECORDER_WARNING = 'recorder: none is named, so the executor can
 
 /** The recorder, as "check" and "status" show it: its name, the fingerprint of its key set (what a person checking names as the recorder they expect) and the timer. Null where the settings name none. */
 export function describeRecorder(settings, sealer) {
-  return sealer ? { name: sealer.name, fingerprint: sealer.fingerprint, sealEvery: settings.recorder.sealEvery } : null;
+  if (!sealer) return null;
+  // A central sealer: the key set it signs with as the settings name it, its address, and the name it knows this recorder by. Its seals give its own name.
+  if (sealer.central) return { fingerprint: sealer.fingerprint, sealEvery: settings.recorder.sealEvery, sealer: { address: sealer.address, recorder: sealer.name, maxUnsent: settings.recorder.sealer.maxUnsent } };
+  return { name: sealer.name, fingerprint: sealer.fingerprint, sealEvery: settings.recorder.sealEvery };
 }
 
 /**
@@ -798,7 +873,7 @@ export async function missingFiles(s, agents) {
     else {
       try {
         if (kind === 'recorder') await readRecorderKeyFile(path);
-        else await loadKeyFile(path, kind);
+        else await loadSigningKeys(path);
       } catch (e) {
         problems.push(`${what}: ${e.message}`);
       }
@@ -881,21 +956,88 @@ export async function openAgent(prepared, { settings, executorKeys, now, log, na
   };
   /** The calls sent under a permission no longer in force that have no receipt: while there are any, the agent takes no call. */
   let pending = [];
-  /** Why the agent takes no call: something it could not write, or calls that wait for the administrator. Null where it takes calls. */
-  const stoppedNow = () => stopped ?? (pending.length ? waitingWords(pending) : null);
+  /** The book's link to a central sealer, where the settings name one (sealing.mjs): every line the file gains is sent to it. */
+  let link = null;
+  /** Why the agent takes no call: something it could not write, a seal of the central sealer's that must be added first, or calls that wait for the administrator. Null where it takes calls. */
+  const stoppedNow = () => stopped ?? link?.doubt() ?? (pending.length ? waitingWords(pending) : null);
 
-  /** Append what the book gained to its file. False, and the agent stopped, where that failed. */
+  /** Append what the book gained to its file, and send the new lines' leaf fingerprints to the central sealer, where there is one. False, and the agent stopped, where the file could not be written. */
   function save() {
     try {
       file.save(writer.book());
-      return true;
     } catch (e) {
       stop(`the book could not be written (${e.message}).`, 'book-not-written');
       return false;
     }
+    // Only what is in the file is sent.
+    link?.wrote(writer.book());
+    return true;
+  }
+
+  /**
+   * Add a seal the central sealer signed, through the stub writer's "add",
+   * which takes it only if the whole book still passes its check with it.
+   * A seal the book refuses was signed over other lines than the book
+   * holds: the two do not agree, and the agent is stopped. Gives {entry,
+   * fingerprint} as the book's own check has them.
+   *
+   * "named" is the fingerprint the sealer gave for a seal it had signed
+   * before (its "latest"), where that is how the seal came. After an
+   * answer that was lost, the same seal can come two ways, one after the
+   * other. The second finds it in the book: nothing is added then, and
+   * the two do not disagree. That holds only where the book's last line
+   * is this entry byte for byte, the book's own check takes that line as
+   * a sound seal, and its fingerprint by that check is the one the sealer
+   * named. A seal that differs in anything goes to "add" as before.
+   */
+  async function addCentralSeal(entry, named) {
+    // At a start, a permission new to the book is in the writer and not yet in the file: the seal covers the file, and would come after it.
+    if (!started && !file.holds(writer.book())) throw Object.assign(new Error('The central sealer signed a seal over the book as its file stands, which the book never took, and the permission in force is new to the book: its line would come before the seal. Start the executor once with the permission the book last held, so that the seal is added; then with the new one.'), { notTaken: true });
+    if (typeof named === 'string') {
+      const book = writer.book();
+      let line = null;
+      try {
+        line = entryLine(entry);
+      } catch {
+        line = null; // not a line of a book: "add" refuses it below
+      }
+      if (line !== null && book.endsWith(`\n${line}\n`)) {
+        const last = (await writer.check()).entries.at(-1);
+        if (last.kind === 'seal' && last.problems.length === 0 && last.fingerprint === named) return { entry: last.index, fingerprint: last.fingerprint };
+      }
+    }
+    try {
+      await writer.add(entry);
+    } catch (e) {
+      link.fail(`the central sealer signed a seal that the book does not take (${e.message}), so the book and what the sealer holds of it do not agree.`);
+      throw new Error(`The agent is stopped: ${stopped}`);
+    }
+    if (!save()) throw new Error(`The seal is in the executor's memory, and the book file could not be written: ${stopped}`);
+    const added = (await writer.check()).entries.at(-1);
+    link.sealed(added.index, added.fingerprint);
+    agentLog({ event: 'sealed', entry: added.index, seal: added.fingerprint, by: 'central-sealer' });
+    return { entry: added.index, fingerprint: added.fingerprint };
+  }
+
+  let started = false;
+  if (sealer?.central) {
+    const book = writer.book();
+    link = sealer.open({
+      first: book.slice(0, book.indexOf('\n')),
+      seals: prepared.seals,
+      now,
+      log: agentLog,
+      disagree: (why) => stop(why, 'sealer-disagrees'),
+      // A seal the sealer signed and the book never took: at a start it is added at once; later, in the agent's turn.
+      takeBack: (entry, named) => (started ? inTurn(() => addCentralSeal(entry, named)) : addCentralSeal(entry, named)),
+    });
+    // Before anything is written: the sealer must answer, and what it holds must agree with the book file.
+    await link.start(prepared.onDisk);
   }
   // The slip's line, where the book did not hold it yet, reaches the file here, as every line does.
   if (!save()) throw new Error(`The book file ${paths.book} could not be written: ${stopped}`);
+  // And the sealer must take it, with every line before it, before the agent takes a call.
+  if (link) await link.level();
 
   /** How many calls a start will give a late receipt, left alone because this is not a start. */
   let lateWaiting = 0;
@@ -972,13 +1114,20 @@ export async function openAgent(prepared, { settings, executorKeys, now, log, na
   function seal({ onlyIfNew = false, olderThan = null } = {}) {
     if (!sealer) throw new Error('The settings name no recorder ("recorder"), so the executor cannot seal.');
     return inTurn(async () => {
-      if (stoppedNow()) throw new Error(`The agent is stopped: ${stoppedNow()}`);
+      // A seal of the central sealer's that waits to be added does not hold up a seal: asking for one is how it is added.
+      const why = stopped ?? (pending.length ? waitingWords(pending) : null);
+      if (why) throw new Error(`The agent is stopped: ${why}`);
       if (lateWaiting) throw new Error(`The copy shows ${lateWaiting} call(s) with no receipt in the book, which the executor's next start will give one. The book is not sealed before that: start the executor, and seal then.`);
       fileAsLeft();
       const result = await writer.check();
       const last = result.entries.filter((e) => e.kind === 'seal' && e.problems.length === 0).at(-1);
       if (onlyIfNew && last && last.index === result.size - 1) return { sealed: false, reason: 'nothing-new' };
       if (olderThan !== null && last && now() - Date.parse(last.content.when) < olderThan) return { sealed: false, reason: 'not-due' };
+      if (link) {
+        // The central sealer signs over the lines it was sent, and only once it holds every one; its seal's entry is added as it is.
+        const { entry, named } = await link.seal(last?.fingerprint, now());
+        return { sealed: true, ...(await addCentralSeal(entry, named)) };
+      }
       const sealed = await sealer.seal(writer.book(), { previous: last?.fingerprint, when: now() });
       await writer.add({ seal: sealed.record });
       if (!save()) throw new Error(`The seal is in the executor's memory, and the book file could not be written: ${stopped}`);
@@ -1118,11 +1267,14 @@ export async function openAgent(prepared, { settings, executorKeys, now, log, na
       waiting: calls.size,
       fileHoldsBook: file.holds(writer.book()),
       receiptsAtNextStart: lateWaiting,
+      // With a central sealer: how many lines it has not answered for and since when, when it last answered, and what is wrong.
+      ...(link ? { sealer: link.status() } : {}),
     };
   }
 
   /** The tool calls in progress or waiting their turn, by the client's id. @type {Map<string, object>} */
   const calls = new Map();
+  started = true;
   return {
     name,
     paths,
@@ -1136,13 +1288,20 @@ export async function openAgent(prepared, { settings, executorKeys, now, log, na
     stopped: stoppedNow,
     save,
     inTurn,
+    /** With a central sealer, for a call about to be sent: null, or {unsent, since, problem} where more lines are unsent than the settings allow (sealing.mjs). */
+    sealerBehind: async () => (link ? link.behind() : null),
+    /** With a central sealer: why no line may be written to the book now, or null. */
+    sealInDoubt: () => link?.doubt() ?? null,
     seal,
     acknowledge,
     report,
     /** The calls that wait for the administrator, as the status shows them. */
     pending: () => pending.map(shownCall),
-    /** Give up the lock on the book and its copy, once nothing more is to be written (lock.mjs). */
-    release: prepared.release,
+    /** Give up the lock on the book and its copy, once nothing more is to be written (lock.mjs). With a central sealer, first one last try to send it what it lacks; nothing more is sent after. */
+    release: async () => {
+      if (link) await link.end();
+      await prepared.release();
+    },
     calls,
   };
 }
@@ -1314,6 +1473,8 @@ export async function reportFromFiles(paths, settings, shared, { now = Date.now 
     checkedAt: new Date(now()).toISOString(),
     receiptsMissing: sorted.pending.map(shownCall),
     receiptsAtNextStart: sorted.late.length,
+    // With a central sealer: it is asked, once, how many lines of this book it holds. Nothing is sent of the book but its first line's leaf fingerprint.
+    ...(shared.sealer?.central ? { sealer: await shared.sealer.look(onDisk) } : {}),
   };
 }
 
@@ -1469,7 +1630,8 @@ export function callCore({ settings, content, executorKeys, now }) {
       const refuse = async (reason, request, source, codes, ruleName) => {
         let denial = null;
         try {
-          const d = await agent.inTurn(() => writer.deny(request, { source, ...(codes ? { codes } : {}) }));
+          // No line is written while a seal of the central sealer's waits to be added: a seal sits after exactly the entries it covers.
+          const d = await agent.inTurn(() => (agent.sealInDoubt() ? { written: false } : writer.deny(request, { source, ...(codes ? { codes } : {}) })));
           if (d.written) denial = d.fingerprint;
           agent.save();
         } catch (e) {
@@ -1508,6 +1670,10 @@ export function callCore({ settings, content, executorKeys, now }) {
         done = await agent.inTurn(async () => {
           if (agent.stopped()) return { stopped: true };
           if (call.cancelled) return { withdrawn: true };
+          // With a central sealer: no call is sent while more lines are unsent than the settings allow. One try to send them is waited for, within the time a question may take.
+          const behind = await agent.sealerBehind();
+          if (agent.stopped()) return { stopped: true };
+          if (behind) return { behind };
           if (!file.holds(writer.book()) && !agent.save()) return { stopped: true };
           let intact;
           try {
@@ -1592,9 +1758,12 @@ export function callCore({ settings, content, executorKeys, now }) {
             // book could not be written, the line holds what the executor knew of the
             // outcome and no stub, and the call stays unfinished: the next start
             // writes the receipt from the "sending" line and these documents.
+            // The kind of outcome is named only beside its documents: a line with
+            // none holds no record of the outcome, as a receipt from it then says
+            // (NO_RECORD_OF_OUTCOME), and names no kind of one either.
             const added = result.detailsAfter?.added ? afterDocuments : [];
             try {
-              copy.note({ kind: 'done', call: callId, when: new Date(now()).toISOString(), outcome: outcome.kind, ...(saved ? { stub: result.stub.fingerprint } : {}), countersigned: cs.accepted, ...(csFingerprint ? { countersignature: csFingerprint } : {}), documents: added });
+              copy.note({ kind: 'done', call: callId, when: new Date(now()).toISOString(), ...(added.length ? { outcome: outcome.kind } : {}), ...(saved ? { stub: result.stub.fingerprint } : {}), countersigned: cs.accepted, ...(csFingerprint ? { countersignature: csFingerprint } : {}), documents: added });
             } catch (e) {
               agent.stop(`its own copy could not be written (${e.message}).`, 'copy-not-written');
             }
@@ -1627,6 +1796,11 @@ export function callCore({ settings, content, executorKeys, now }) {
       if (done.stopped) {
         log({ event: 'refused', call: callId, tool: name, code: 'executor-stopped' });
         return answerError(CODES.notRecorded, `The executor takes no call: ${agent.stopped()}`);
+      }
+      if (done.behind) {
+        // Refused as a rule of the executor's refuses: a denial in the book, a line in the copy, and a tool error for the model.
+        const b = done.behind;
+        return refuse({ code: SEALER_BEHIND, message: `The central sealer has not taken ${b.unsent} line(s) of the book${b.since ? `, the oldest written at ${b.since}` : ''}, more than the settings allow to be unsent (recorder.sealer.maxUnsent), so the call was not sent. It can be made again once the sealer has caught up.` }, { action: rule.action, ...(got.amount ? { amount: got.amount } : {}), with: settings.service, details: asked }, 'rule');
       }
       if (!done.done) {
         const codes = denialCodes(done.answer);
@@ -1667,14 +1841,14 @@ export function callCore({ settings, content, executorKeys, now }) {
  * and cannot be attached.
  *
  * @param {object} config the settings, as in executor.example.json
- * @param {{root?: string, now?: () => number, log?: (event: object) => void, serverStderr?: NodeJS.WritableStream|null, offline?: boolean}} [more]
+ * @param {{root?: string, now?: () => number, log?: (event: object) => void, serverStderr?: NodeJS.WritableStream|null, offline?: boolean, lockWait?: number}} [more] "lockWait": how long a start asks again for a lock that is held, in place of the rule (for tests)
  */
 export async function openExecutor(config, more = {}) {
   const root = more.root ?? process.cwd();
   const now = more.now ?? Date.now;
   const log = more.log ?? ((event) => process.stderr.write(`${JSON.stringify({ provared: 'mcp-executor', ...event })}\n`));
   const offline = more.offline === true;
-  const p = await prepare(config, root, { now, offline });
+  const p = await prepare(config, root, { now, offline, lockWait: more.lockWait });
   const { settings, about, content } = p;
   for (const w of p.warnings) log({ event: 'warning', message: w });
   let agent;

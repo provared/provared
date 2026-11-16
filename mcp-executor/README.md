@@ -107,7 +107,10 @@ also keeps its own copy of every call, apart from the agent's log, which can
 be held against the log to find a receipt that was left out
 (`compare`). Where the settings name a recorder, the executor can seal the
 book with the recorder's keys, by command or on a timer (`seal`; see
-"Sealing, acknowledging, and what the executor says about itself").
+"Sealing, acknowledging, and what the executor says about itself"). The
+recorder's keys are in a file of the executor's, or with a central
+sealer, a program of its own that is sent the fingerprint of each line
+as it is written and signs the seals.
 
 Evidence, not a verdict. The whole design, with every choice numbered for
 review, is in `DESIGN.md`. The format is described in the Provared format
@@ -354,8 +357,10 @@ The settings (`executor-http.example.json` is a start): `name`, `service`,
 `tools`, `contentRules`, `unlisted`, `hideUnlisted`, `timeout`,
 `denialsPerHour`, `callIdInMeta`, `maxWaiting` and `recorder` as below; and
 
-- `listen`: `host` (default `127.0.0.1`; another address is warned about)
-  and `port` (default 8796). `path`: the endpoint (default `/mcp`).
+- `listen`: `host` (default `127.0.0.1`; another address is warned about;
+  name one address rather than every address, see "Through a forwarder
+  the command refuses") and `port` (default 8796). `path`: the endpoint
+  (default `/mcp`).
 - `upstream`: `url` (http or https; plain http off this computer is warned
   about) and `credential`: `{"file": <path>}`, the file that holds the
   bearer token, readable by the executor alone. Without `credential` the
@@ -835,9 +840,11 @@ holds the settings for particular clients.
 - `recorder`: optional; the recorder that seals the book: `keys`, its key
   file; `name`, a label on each seal (the executor's `name` unless
   given); and `sealEvery`, how often the book is sealed while the executor
-  runs, in milliseconds (no timer unless given). The example settings
-  name none. See "Sealing, acknowledging, and what the executor says
-  about itself".
+  runs, in milliseconds (no timer unless given). Or, in place of `keys`
+  and `name`, `sealer`: a central sealer that holds the recorder's keys
+  (`address`, `name`, `token`, `keySet`, and, where wanted, `timeout`
+  and `maxUnsent`). The example settings name none. See "Sealing,
+  acknowledging, and what the executor says about itself".
 - `tools`: each tool the agent may call, by its exact name, with the action
   name the slip uses for it and, where it applies, its amount: a fixed
   `value`, the whole number at a JSON Pointer (RFC 6901) in the call's
@@ -862,8 +869,8 @@ holds the settings for particular clients.
   from the server is treated as any line the executor cannot read
   (DESIGN.md, X250 and X253). The folding is a little wider than
   capitals: it also makes one of the long s and `s`, the Kelvin sign and
-  `k`, the sharp s and `ss`, the dotless i and `i`, and the ligatures and
-  their letters.
+  `k`, the sharp s and `ss`, the dotless i, the dotted capital I and `i`,
+  and the ligatures and their letters.
 - `contentRules`: optional; the path of a file of rules on the content of
   a change, tested before a call is let through (see "Rules on the content
   of a change" below). Its fingerprint is named in every receipt and
@@ -874,7 +881,13 @@ holds the settings for particular clients.
   `forward`, a content rule that names a tool no rule in `tools` names
   stops the start.
 - `hideUnlisted`: whether `tools/list` comes back without such tools.
-  Default true.
+  Default true. Where the executor cannot read the server's answer to
+  `tools/list` so as to leave them out, it does not hand the answer on:
+  the request is answered with the error -32603 under its id. The
+  server's own error goes on as it is, over HTTP with its status. An
+  answer the executor cannot match to the request (on stdio a line with
+  an id given twice, no id, a list of messages or a byte order mark; over
+  HTTP an event with no id or another's) is handed on as it was.
 - `timeout`: how long the server is given to answer a call, in
   milliseconds (default 300,000; from 1,000 to 86,400,000). After it the
   executor cancels the call and writes the receipt with an error.
@@ -898,7 +911,8 @@ holds the settings for particular clients.
   uses, and how Python opens its standard input on Windows. This holds
   for a server that reads its input as UTF-8; one that reads it as
   another encoding may still cut a line inside a character beyond ASCII,
-  which can spoil a message and cannot hide a call.
+  which can spoil a message and cannot hide a call. Versions up to 0.4.1
+  wrote the agent's message as it came.
 - `maxWaiting`: the most tool calls in progress or waiting their turn at
   once (default 16; 1 to 1,000). A call past it is answered with error 1001
   and nothing is written. At most 256 `tools/list` requests may wait for
@@ -1060,8 +1074,12 @@ sent on with no content rule tested.
   (versions up to 0.4.1 took both for absent, so that in front of a
   program that reads names without regard to capitals the rule was
   skipped). A rule still does not see such a name in an object it does
-  not walk through, and it folds capitals only: a program that takes two
-  names for one in some other way acts on what the rule did not see.
+  not walk through. And it takes two names for one only where they
+  differ in capitals, or in a few letters that some programs take as the
+  same (the long s and `s`, the Kelvin sign and `k`, the sharp s and
+  `ss`, the dotless i, the dotted capital I and `i`, the ligatures and
+  their letters): a program that takes two names for one in some other
+  way acts on what the rule did not see.
 - That a value of another kind is read as the program reads it. Where
   the way to a pointer stops, with names still to follow, at a value that
   is neither an object nor a list (a text, a number, true, false or
@@ -1290,6 +1308,137 @@ the settings name a recorder, the executor expects every seal in a book to
 be that recorder's: on a book sealed with other keys it does not start,
 because the book does not pass its check.
 
+**A central sealer.** The recorder's keys need not be among the
+executor's files. In place of `keys`, the settings may name a central
+sealer: the program `provared-sealer` (`sealer/` in the repository),
+run by someone other than whoever runs the executor. It holds the
+recorder's three keys, and the executor holds none of them. The executor
+sends it the leaf fingerprint of each line of a book as the line is
+written, never the line, except the book's first line, the permission
+(format description, section 21.7), and asks it for the seals. The
+sealer signs only over what it was sent.
+
+```json
+"recorder": {
+  "sealer": {
+    "address": "http://127.0.0.1:8797",
+    "name": "files-executor",
+    "token": { "file": "keys/sealer-token" },
+    "keySet": "<the fingerprint of the sealer's key set>"
+  },
+  "sealEvery": 3600000
+}
+```
+
+- `address`: where the sealer listens: `http://127.0.0.1:<port>`. The
+  sealer listens on 127.0.0.1 only, so the two programs run on one
+  computer.
+- `name`: the name the sealer knows this recorder by: 1 to 63 small
+  letters, digits and hyphens.
+- `token`: where the recorder's token is read from: `{"file": <path>}`
+  or `{"env": <the name of a variable>}`. The token is never written in
+  the settings, and no command prints it. Keep the file for the
+  executor's user alone.
+- `keySet`: the fingerprint of the key set the sealer signs with, as
+  `provared-sealer init` prints it. It is what a person who checks a book
+  names as the recorder they expect. The executor expects every seal in a
+  book to be signed with it, and does not start where the sealer says it
+  signs with another.
+- `timeout`: how long one question to the sealer may take, in
+  milliseconds: 5,000 unless given, from 100 to 60,000. The question for
+  a seal is given 30 seconds.
+- `maxUnsent`: how many lines of a book may be unsent before that
+  agent's calls are refused: 100 unless given, from 0 to 10,000.
+
+`keys` and `name` may not be named beside `sealer`: the recorder's keys
+are in one place, and a central sealer's seals give its own name.
+
+To set it up:
+
+```
+provared-sealer init --folder /srv/sealer --name "Example Ltd central sealer"
+provared-mcp-executor keys --config executor.json
+provared-sealer add-recorder --folder /srv/sealer --agent <fingerprint> files-executor
+provared-sealer start --folder /srv/sealer
+```
+
+`init` prints the fingerprint of the sealer's key set, for `keySet`.
+Where the settings name a sealer, `keys` says on its standard error the
+fingerprint of each agent's key set, which `add-recorder` takes with
+`--agent`: the sealer starts a recorder's books only from permissions
+for the agents it was told. `add-recorder` prints the token, once; put
+it in the token file. Then start the sealer, and then the executor.
+
+*What is sent.* Every line reaches a book file in one place of the
+program, and from there its leaf fingerprint goes to the sealer: the
+permission's line, each receipt, each denial and each seal. A line is
+sent only once it is in the file. Each question names the place of its
+first line, and the place moves on only by the sealer's answer, so no
+line is left out or sent out of order.
+
+*Where the sealer does not answer.* No question waits longer than
+`timeout`. The lines not yet sent stay in the book file, and are sent in
+order when the sealer answers again; it is tried every two seconds. A
+sealer that was started again holds each book only up to its latest
+seal, so it is sent the lines since. While no more than `maxUnsent`
+lines are unsent, calls are taken. Past that, a call waits for one more
+try, at most `timeout`, and is then refused as a rule of the executor's
+refuses: a denial in the book, and a tool error with the code
+`sealer-behind`, until the sealer has caught up. A denial is a line too;
+`denialsPerHour` bounds how many are written. The answer to a call is
+not held back until the sealer has its receipt. No seal is asked for
+until the sealer holds every line.
+
+*At a start.* The sealer must answer, or the executor does not start;
+nor does a command that opens the files to write (`--offline`). Before
+anything is written, what the sealer holds is compared with the book
+file: that it signs with the key set of the settings; that it holds no
+more lines than the file; that its latest seal is the book's last; and
+that no later book follows this one. Where they do not agree, the
+executor does not start, and says why. A sealer whose record is behind
+the book's seals (lost, or put back to an older one) must be brought up
+to date with the sealer's own `update`; this program does not do that.
+A seal the sealer signed over the book as it stands, which the book
+never took (the executor stopped between the two), is added then. The
+lines after the latest seal cannot be compared: the sealer holds
+fingerprints, and gives none back. A change among them is found when the
+next seal is added: the book refuses the seal, the agent is stopped,
+and the executor does not start on that book again.
+
+*A seal.* The executor first asks the sealer what it holds, and sends
+what it lacks; then it asks for a seal, naming the book's last seal and
+the time by its own clock. The seal's entry is added through the stub
+writer as the sealer gave it. Where the sealer refuses, there is no
+seal, and the agent goes on. Where no answer comes, the sealer may have
+signed: a seal sits after exactly the entries it covers, so no line is
+written, and no call is taken, until the sealer has said. The executor
+asks again every two seconds, and adds the seal before any other line
+if there is one. A seal asked for in that moment (the timer's next
+round, or `seal`) may be handed the same seal: it is added once, and the
+agent goes on. Only a seal that is not the book's last line, byte for
+byte, is put to the book, which refuses one signed over other lines.
+
+*What such a seal shows, and what it does not.* It shows that the
+sealer's keys signed the number of entries and the top fingerprint of
+the tree the sealer built from the fingerprints it was sent. Whoever
+runs the executor holds no key that makes a seal, so they cannot change
+or leave out a line that a seal covers and seal again. While the sealer
+keeps its record, it signs one history of a book: a line it was sent is
+in its next seal, changed or not in the file, unless the sealer is
+started again before that seal. It does not show that the lines are
+true, nor that every call has a line. The executor still holds the
+agent's keys and its own, and a line is in its operator's hands until it
+is sent: an executor that its operator has changed can leave a call out
+before anything reaches the sealer (`compare`, and a copy kept where the
+operator cannot change it, are the checks for that). The sealer sees no
+line but the first. Whoever holds the recorder's token and the agent's
+keys can have another book sealed, from another permission for the same
+agent; the sealer's own README says what it can and cannot tell apart.
+The sealer listens on 127.0.0.1 with no TLS, so the two programs are
+kept apart by two user accounts on one computer: whoever can read both
+accounts' files holds everything. A checker cannot tell a seal made by a
+central sealer from one made beside the agent.
+
 **`seal`** seals one book now. The executor asks the library for a seal
 over the book as it stands, naming the seal before it where there is one,
 and adds it to the book through the stub writer, which takes it only if
@@ -1300,7 +1449,10 @@ of the same agent that is in progress, and that agent's next call waits
 for the seal: on the computer this was built on, a seal took just under
 two seconds to sign and added about 52 KB to the book. The slowest of the
 three signatures is made outside the program's own thread, so other
-agents' calls are served meanwhile.
+agents' calls are served meanwhile. Such signatures are made one at a
+time: where several books are sealed at once, each seal after the first
+waits its turn (and so does the next call of that seal's agent), and
+other agents' calls do not.
 
 Over HTTP, `seal --agent <name>` asks the running executor
 (`POST /provared/seal`, with the body `{"agent": "<name>"}`). Over stdio
@@ -1313,8 +1465,12 @@ needs no secret: whoever can write those files can do as much.
 at a time. Before `stdio`, `http` or a command with `--offline` reads
 them, it takes a lock named after the book file, which the operating
 system takes away when the program ends, however it ends. A second program
-is refused at once ("An executor is running on the book …"), having read
-and written nothing: so `seal --offline` or `acknowledge --offline` beside
+is refused ("An executor is running on the book …"), having read and
+written nothing. A command asks once. A start (`stdio`, `http`) asks
+again for 10 seconds (over stdio, for `shutdownWait` and 5 seconds more
+where that is longer) before it is refused, so that a client that starts
+the executor again while the one before is still ending is not turned
+away. So `seal --offline` or `acknowledge --offline` beside
 a running executor does nothing, and a second `http` on the same settings
 does not start; nor does a second `stdio`, where a client starts the
 executor twice on one settings file. Over HTTP a command with `--offline` takes every agent's
@@ -1381,16 +1537,59 @@ challenge, 32 random bytes it has just made, with no secret, to a fourth
 address, `POST /provared/hello`. The executor answers with two signatures,
 by the two keys of its own key file (the keys it countersigns with), over
 the challenge and the address and port at which it received the request.
-The command checks them against the public keys in `executor.keys`, which
-it must be able to read, and against the address and port it connected
+The command checks them against the executor's public keys, and against
+the address and port it connected
 to; only then does it send the secret, on that same connection. Where the
 check fails it says "… did not show that it is the executor of these
 settings … The administrator's secret was not sent." and ends with code
 2. `POST /provared/hello` needs no secret, signs for anyone who asks, and
 signs nothing but that text, which cannot be taken for a record: a
-challenge must be 43 characters of base64url. This shows the command that
+challenge must be 43 characters of base64url. Since anyone may ask, it
+reads a body of 256 bytes at most and waits 1 second at most for it. It
+signs for 8 such questions at once, and for 4 from one address; a
+further one is answered 503 (`busy`) and nothing is signed for it. A
+question counts only once its body has arrived whole, so a caller who
+never ends a body takes no place. A command that is told `busy` asks
+again after half a second, five times in all; if the answer is still
+`busy` it says "… says that it is busy … The administrator's secret was
+not sent. Run the command again." and ends with code 2. Programs at one
+address count as one caller, so a program on the administrator's own
+computer that asks without pause can still make a command wait or fail
+in this way. This shows the command that
 it reached the executor; it does not hide the secret from whoever can read
 the connection, which is plain HTTP.
+
+**The keys a command checks with.** A command needs the executor's two
+public keys and no private key. It takes them from `executor.keys`, of
+which it reads the public parts alone. Where the administrator may not
+read that file, write the public keys alone to a new file, as the
+executor's user:
+
+```
+provared-mcp-executor keys --config executor-http.json --public-keys executor-public.json
+```
+
+and name that file to `status`, `seal` or `acknowledge` with
+`--public-keys executor-public.json`; the command then reads it in place
+of `executor.keys`. The file has the form of a key file with nothing
+private in it and is no secret, but whoever can change it can make the
+command trust another listener: keep it where only the administrator can
+change it. A file that holds no usable keys (not the two keys, Ed25519 and
+then ML-DSA-87) is said to hold none, and nothing is sent. The executor
+itself signs, and does not start on a file of public keys.
+
+**Through a forwarder the command refuses.** Through an SSH tunnel, a
+published container port or a reverse proxy, the address the executor
+signs is not the one the command connected to, so the command refuses and
+sends no secret: that is the defence working, since the command cannot
+tell such a forwarder from a listener in the middle. Run the command where
+it reaches the executor directly: on the executor's computer, or inside
+its container. Name one address in `listen.host` rather than every address
+(`0.0.0.0` or `::`): on Windows, another program of the same user can
+listen on `127.0.0.1` at the executor's port while the executor listens
+on every address. The check keeps the administrator's secret from such a
+program; an agent that connects to `127.0.0.1` would still hand it the
+agent's own secret.
 
 **`status`**, asked of a running HTTP executor, gives the recorder's name,
 the fingerprint of its key set and the timer, and for each agent: the
@@ -1412,6 +1611,19 @@ will give a late receipt (`receiptsAtNextStart`). It cannot show what a
 running executor holds only in memory: whether it has stopped, or the
 calls in progress. Where the files cannot be opened as a start would open
 them, it gives the reason in `problem`.
+
+Where the settings name a central sealer, the recorder is shown by the
+fingerprint of the sealer's key set, the sealer's address, the name it
+knows the recorder by and `maxUnsent`, and each agent has a member
+`sealer`. From a running executor: how many lines of the book the sealer
+has not answered for (`unsent`), when the oldest of them was written
+(`since`), when the sealer last answered (`answeredAt`) and what is
+wrong (`problem`, or null). From the files, the sealer is asked, once,
+how many lines of the book it holds: `reached`, `holds`, `unsent` and
+its latest seal (`latestSeal`), with `problem` where it could not be
+asked or holds more lines than the file; `since` is known only to a
+running executor, whose log names it too (`sealer-behind`). Lines that
+are unsent do not change the code `status` ends with.
 
 `status` ends with code 0 where every book it shows passes its check (or
 is not there yet), no call waits to be acknowledged and no agent has
@@ -1550,28 +1762,55 @@ again once no call waits.
   nothing outside the executor shows when a book was sealed.
 - **What a seal shows.** That the recorder's keys signed the book as it
   stood, so a later change to an entry before the seal no longer passes
-  the check. The recorder's sealing keys are in a file on the executor in
-  this version, beside the agent's keys and the executor's own: whoever
-  can read the executor's files can write a book of their own and seal
-  it. A central sealer away from the executor, seals held elsewhere and
+  the check. Where the recorder's sealing keys are in a file on the
+  executor, beside the agent's keys and the executor's own, whoever can
+  read the executor's files can write a book of their own and seal it.
+  With a central sealer they hold no key that makes a seal; what such a
+  seal shows and does not is set out under "A central sealer". Seals held elsewhere and
   witnesses are not built here. A book cut back to an earlier seal still
-  passes its check by itself.
+  passes its check by itself; an executor with a central sealer does not
+  start on one, while the sealer keeps its record.
+- **With a central sealer, not built.** Bringing a sealer up to date
+  after its record was lost or put back (the sealer's `update`): the
+  executor stops and says so. A second book under one permission (the
+  book numbers of the format description, section 21.6): a new book file
+  under a permission whose first book the sealer holds is not started
+  on. Going on, under a central sealer, with a book already sealed with
+  a key file. A sealer on another computer: the sealer listens on
+  127.0.0.1 only. A time-stamp beside the sealer's seal was not tried.
+  Between the sealer's answer about what it holds and the question for a
+  seal, a sealer that is started again signs over the lines it then
+  holds: for a book with no seal yet, that is a seal the book refuses,
+  and the agent is stopped.
 - **Sealing is off unless the settings name a recorder**, and there is no
   timer unless they give `sealEvery`. Over stdio a book is sealed only
   while the client runs the executor, or by `seal --offline` while it
   does not.
 - **Where the lock does not reach.** The lock that keeps two programs off
   one book is named after the book file's path as the file system
-  resolves it. Two paths that reach one file through a link the file
-  system does not resolve, or two computers' views of a shared folder,
-  are two locks. On Windows it is a named pipe; on Linux a socket in the
+  resolves it, the folder written out in full (a short name on Windows
+  included, and `\\?\` in front of a path there changes nothing) and the
+  file's own name as written. Two paths that reach one
+  file through a link the file system does not resolve, a short name for
+  the book file itself, a share of the computer's own drive
+  (`\\localhost\D$\…`), or two computers' views of a shared folder, are
+  two locks. On Windows it is a named pipe; on Linux a socket in the
   abstract namespace, which belongs to a network namespace, so two
   containers that share a folder and not a network do not see each
-  other's lock; on other systems a socket file in `/tmp`, where two
-  programs that start at the same instant after a third was stopped can
-  both get it. A program that takes the lock's name first keeps the
+  other's lock; on other systems a socket file in `/tmp`, which a
+  program stopped leaves behind: the next start clears it away, and only
+  the one that first makes the folder `<socket file>.clearing` beside
+  it may. A program stopped in the moment it holds that folder leaves it,
+  and the lock is then refused, with the folder named, until someone
+  takes it away. A socket file left by another user's program (an
+  executor once run as root, say) cannot be asked or cleared away by
+  this user: the lock is refused, and the refusal names the file, for
+  that user or an administrator to take away. A program that takes the lock's name first keeps the
   executor from starting on those files, and gains nothing else. The lock
-  has been tried on Windows only. Behind it, the book file and the copy
+  has been tried on Windows and on Linux, not on a Mac; the tests of the
+  socket file run on Linux and not on Windows, where Node.js has no
+  socket files, and the socket file's way was tried on Linux with
+  Node.js told it runs on another system. Behind it, the book file and the copy
   are still checked before each write: a program that got past the lock
   and wrote to them stops the executor at its next call. The state
   file's lock has the same limits, and nothing behind it: two executors
@@ -1579,8 +1818,10 @@ again once no call waits.
   lose each other's connections and the mark of a spent recovery code.
 - **The administrator's secret travels in the clear**, like the agents'.
   The commands check that they have reached the executor before they send
-  it; they do not hide it from whoever can read the connection, and they
-  need to read `executor.keys` to make the check.
+  it; they do not hide it from whoever can read the connection. To make
+  the check they need the executor's public keys, from `executor.keys` or
+  from a file of the public keys alone (`--public-keys`), and they refuse
+  through a tunnel, a published container port or a reverse proxy.
 - **A call set aside has no receipt**, and the book does not show it;
   only the executor's copy and its log do, and `compare` from then on.
 - **An acknowledged receipt says what the copy says.** Its date is the

@@ -136,6 +136,11 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
       if (method === 'hang') return; // never answers
       // Opens a session of the client's naming, with the status it asks for (a session id on a non-2xx answer is the review's case).
       if (method === 'with-session') return json(res, params.status ?? 200, { jsonrpc: '2.0', id, result: {} }, { 'mcp-session-id': params.session });
+      if (method === 'tools/list' && state.rawList) {
+        // An answer to tools/list exactly as the test gives it: the status, the headers and the body (text or bytes, or a function of the request's id that gives one).
+        res.writeHead(state.rawList.status, state.rawList.headers);
+        return res.end(typeof state.rawList.body === 'function' ? state.rawList.body(id) : state.rawList.body);
+      }
       if (method === 'tools/list' && state.oddList === 'error') return failure(res, id, -32601, 'This server lists no tools.');
       if (method === 'tools/list' && (state.deepList || state.oddList)) {
         // A list the executor cannot read, as a JSON body or as an event: its first tool's schema nested very deeply; or ("twice") a member named twice beside it; or a result with no "tools", and the tools under "Tools"; or ("other-id") a list under another id.
@@ -296,6 +301,10 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
         /** Answer tools/list, from now on, with a list the executor cannot read in the way named, or ("error") with an error; null: as usual. */
         oddList: (kind) => {
           state.oddList = kind;
+        },
+        /** Answer tools/list, from now on, with exactly this: {status, headers, body (text or bytes, or a function of the request's id)}; null: as usual. */
+        rawList: (answer) => {
+          state.rawList = answer;
         },
         get elsewhere() {
           return state.elsewhere;

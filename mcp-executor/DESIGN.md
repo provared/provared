@@ -224,7 +224,8 @@ each call: `sending` (before the call goes to the server; on the disk
 first), `done` (once the stub is in the book, with the stub's and the
 countersignature's fingerprints and the documents added after the call;
 or, where the book could not be written, with those documents and no
-stub, so that the call stays unfinished), `refused` (with the reason, the
+stub, so that the call stays unfinished; the kind of outcome only where
+there are such documents, X165), `refused` (with the reason, the
 codes and the denial's fingerprint), `withdrawn` (cancelled before it
 was sent) and `set-aside` (a call that was sent and has no receipt, which
 the administrator set aside; X130). Each line carries its number from 0 and HMAC-SHA-256 (RFC 2104)
@@ -1026,11 +1027,15 @@ agent's request is answered with the error -32603 under its id, with the
 words of `LIST_NOT_READ`, and the log says `tools-list-not-read`
 (`executor.mjs` on stdio; `http.mjs` for a JSON body, for an event, and
 for the answer of a local program).
-The server's own error to `tools/list` goes on as it is. Before, in
+The server's own error to `tools/list` goes on as it is (over HTTP, as
+X260 has it). Before, in
 every version, such a list was handed on unfiltered. What stays: a line
 of the server's that the executor cannot match to any request (an id
-given twice, or no id), and an event under another id, are handed on as
-they were, and may hold anything the server chooses to write.
+given twice, no id or a null one, a list of messages, a byte order mark
+before the message), and an event with no id, under another id or
+holding a list of messages, are handed on as they were, and may hold
+anything the server chooses to write: a list of tools too, with the
+request not answered.
 `test/list.test.mjs` runs each on stdio and over HTTP.
 
 Why: the same review found that the first build of 0.4.2, never
@@ -1042,8 +1047,9 @@ closed that one place, and others were left, on both sides: an agent's
 cancellation of a call in flight is written afresh for the server; a
 server's error is written out for the receipt, and its list of tools is
 written afresh once filtered. Each calls itself in the same way: one
-deep answer of the server's ended the executor (run), and the agent's
-cancellation is the same code path (read, not run on its own). A limit where the message
+deep answer of the server's ended the executor (run), and so did the
+agent's deep cancellation of a call in flight (run in the review's
+re-check: 0.4.1 ends at `executor.mjs:1214`). A limit where the message
 is read closes them together, and whatever is written later. 256 is the
 builder's number: it is far below the depth at which any of these
 overflows (some thousands), and above what the library fingerprints: the
@@ -1135,6 +1141,50 @@ method without regard to capitals ran the call. No MCP server is known
 to read a method or a tool's name so; the usual SDKs compare them
 exactly. What stays: any other method in other capitals is sent on as it
 is, as any method the executor does not act on.
+
+**X260. Over HTTP, the upstream's own error answer to `tools/list` goes
+on as it is, and the executor's own error in its place is sent as JSON
+(0.4.2).** X250 answers for a list the executor is to filter
+and cannot read, and let one answer through: the upstream's error under
+the request's id. Two things follow from the review's re-check.
+
+An upstream may refuse a request it could not read, or a session it does
+not know, with a 4xx and a JSON-RPC error under a null id. As X250 was
+first built, the agent was given -32603 in place of the upstream's
+words. Now a JSON body that is an error answer and nothing more is
+handed on as it was, with its status and content type, under whatever
+id it has (`errorAnswer` in `jsonrpc.mjs`): one object whose members are
+`jsonrpc` (`"2.0"`), `id` (text, a whole number or null) and `error` (an
+object with a whole number `code` and a text `message`), each once and
+written exactly so, nested no deeper than 256 levels, with no member
+name given twice at any depth. Such a body has no `result`, under any
+spelling, for any reader, so it holds no list of tools as a client
+reads one. What its `message` and `data` say is the upstream's to
+choose, as in its error under the request's id. Everything else is
+answered as X250 has it: a result beside the error, a member the
+executor does not know, a list of messages, a byte order mark, an error
+that is not such an object.
+
+Where the executor writes its own error in place of the upstream's
+answer, the body is the executor's, so it is sent as
+`application/json; charset=utf-8` with its own length and
+`cache-control: no-store`, as the executor's other refusals are, and
+not under the upstream's content type (`text/html` for a page) or its
+word on caching. The status stays the upstream's, so that a client that
+acts on the status is not misled. The upstream's `content-length` and
+`content-encoding` were never handed on: of the upstream's headers only
+the content type, the session, the protocol version and the word on
+caching come back.
+
+The other way for the first: hand on every error under a null id as the
+text came. Not taken: a body with a `result` beside the error, or with
+`Result`, is a list to some reader. The other way for the second: keep
+the upstream's word on caching. Not taken: it was said of a body the
+agent is not given. `test/list.test.mjs` runs both, and fourteen bodies
+that are not such an error answer. This is for an upstream over HTTP. In
+front of a local program the answer is the line the program gave under
+the request's own id, and its own error goes on as it is (X250,
+`answerLocal`).
 
 ## 11. F-157: rules on the content of a change
 
@@ -1305,7 +1355,10 @@ Built so far of stage 2: the rules on the content of a change (section
 11); the HTTP transport with several agents on one executor (section
 10); and, in 0.5.0, sealing a book by command and on a timer,
 acknowledging a call sent under a permission no longer in force, and the
-status (below; X120 to X146).
+status (below; X120 to X146); and a book sealed by a central sealer,
+which holds the recorder's keys away from the executor (below; X147 to
+X159). Two reviews of these changed parts of them: X160 to X166, and
+X167 to X171.
 
 **Sealing.** The settings name a recorder (`recorder`: its key file, a
 name, and `sealEvery`). A seal is the library's (format description,
@@ -1319,6 +1372,25 @@ every `sealEvery` milliseconds, a book that holds an entry after its last
 seal is sealed (at a start, only where that seal is at least `sealEvery`
 old, or there is none), each agent's book in a round of its own. Every
 use of the recorder's key file goes through `sealing.mjs`.
+
+**A central sealer.** In place of the key file, the settings may name a
+central sealer (`recorder.sealer`): the program in `sealer/`, which
+holds the recorder's three keys (format description, section 21.7). The
+executor then holds the recorder's token and no key of the recorder's.
+From `save()` in `openAgent`, the one place where a line reaches a book
+file, the leaf fingerprint of each new line is sent to the sealer, in
+order, each at its place (the sealer's `extend`; the book's first line
+itself with the first of them). The questions, their HMAC proofs and the
+check of each answer are the sealer's own client, copied
+(`sealer-client.mjs`, X151); the leaf fingerprint is the library's. A
+seal is asked of the sealer, only once it has answered for every line,
+and its entry is added through the stub writer's `add`. At a start the
+sealer must answer, and what it holds is compared with the book file
+(the sealer's `held` and `latest`). While it does not answer, the lines
+wait in the book file, the status says how many and since when, and past
+a limit the agent's calls are refused with a denial. Everything of this
+is in `sealing.mjs`; `executor.mjs` calls it from `save()`, from `seal`,
+at the start of an agent, and before a call is sent.
 
 **Acknowledging.** A call the copy shows as sent, with no receipt in the
 book, under another permission than the one in force, waits for the
@@ -1342,13 +1414,17 @@ executor that opens it and for the command `owner` (X285).
 
 **Who is asked.** Before a command sends the administrator's secret to a
 running executor, the executor signs the command's challenge and the
-address it was asked at with its own keys (`identity.mjs`, X138).
+address it was asked at with its own keys (`identity.mjs`, X138). The
+command checks that with the executor's public keys alone (X166).
 
 Still to build:
 
 - An outside time-stamp beside a seal; seals held elsewhere and witnesses
-  (library 0.6.0); a central sealer that holds the recorder's keys away
-  from the executor (`sealer/`; X134 says where it fits).
+  (library 0.6.0).
+- With a central sealer (X158): bringing a sealer up to date after its
+  record was lost or put back; a second book under one permission; a
+  sealer on another computer, which the sealer's program does not yet
+  allow.
 - The copy shipped line by line to a place the executor's operator cannot
   change (a sealer, a witness, an append-only store).
 - Content read in other forms than JSON (YAML, TOML, `key = value`
@@ -2573,7 +2649,7 @@ executor left it, which is the check made before a call is sent (section
 8). A seal waits behind a call in progress and holds up that agent's
 next: about two seconds, most of it the SLH-DSA signature, which is made
 outside the program's own thread so that other agents are served
-meanwhile (X145).
+meanwhile (X145), one at a time (X161).
 
 **X124. Over stdio there is no administrator's address: `seal` and
 `acknowledge` take `--offline` only, and `status` reads the files.** The
@@ -2721,7 +2797,8 @@ denial and a seal alike (the permission's line went to the file from
 `prepareAgent` until the review of 0.5.0): that is where each new line's
 leaf fingerprint would be sent as it is written. A book looks
 the same either way: the format description (section 21.7) says a seal
-made from fingerprints is the same record. Nothing of this is built.
+made from fingerprints is the same record. This was written before it
+was built; X147 to X159 are what was built, in those two places.
 
 **X135. No outside time-stamp is written.** A seal's time is the
 recorder's own word. The README says so under its limits, as the
@@ -2787,9 +2864,10 @@ What is fixed, and why:
 - *No secret at `hello`, and none without `admin`.* It answers 404 where
   the settings name no administrator, as the other addresses do.
 What it does not do: it does not encrypt. Whoever can read the connection
-reads the secret; the README says so. The command must be able to read
-`executor.keys`, which holds the private keys too: run it as the
-executor's user. The other ways: never send the secret and answer the
+reads the secret; the README says so. As first built, the command had to
+be able to read `executor.keys`, which holds the private keys too, and so
+to run as the executor's user; since X166 it needs the public keys alone.
+The other ways: never send the secret and answer the
 executor's challenge with an HMAC of it, which needs the executor to keep
 the secret and not its hash; or take the executor's public keys from the
 agents' permissions, which a command could read as another user, but
@@ -2902,6 +2980,419 @@ by the fingerprint of its key set, as the checker does, for whoever
 compares without the recorder's key file, and the answer says which
 recorder was expected, or that none was. `secret` says that the secret it
 makes may be an agent's or the administrator's.
+
+The choices from X147 on are for a book sealed by a central sealer
+(section 12). X152, X153 and X156 are for the founder's review.
+
+**X147. The settings name a central sealer in place of the recorder's
+key file, never beside it.** `recorder.sealer`: `address`, `name`,
+`token`, `keySet` and, where wanted, `timeout` and `maxUnsent`;
+`recorder.sealEvery` as before. `recorder.keys` or `recorder.name` beside
+`recorder.sealer` is a problem with the settings. Why: the point of a
+central sealer is that whoever runs the executor holds no key that makes
+a seal; a key file kept as a second way, for when the sealer does not
+answer, would give that back, and a book would then hold seals of two
+key sets, of which a reader expects one. The seals give the sealer's own
+name, so a name here would say nothing. Without `recorder.sealer`
+nothing changes: the key file is read as in X120. The other way: both,
+with the key file used while the sealer is away.
+
+**X148. The settings name the key set the sealer signs with
+(`recorder.sealer.keySet`), and the executor does not ask for it.** It
+is the fingerprint `provared-sealer init` prints, the one a reader
+names. Every check the executor makes of a book expects it (X122), so
+`check`, `compare` and the reading of the files need no answer from the
+sealer; at the sealer's first answer its own word for its key set
+(`about`) is held against it, and another stops the start. Why: what a
+reader is told to expect is then written down by the person who set the
+executor up, and not taken from whoever answers at the address. The
+other way: take the key set from the sealer at each start.
+
+**X149. The recorder's token is read from a file or from the
+environment, and is never in the settings.** `recorder.sealer.token` is
+`{"file": <path>}` or `{"env": <name>}`, one of the two; a value
+written there is a problem, and is not repeated in the message. What is
+read must have the form of a token (32 bytes in base64url) and is never
+logged or printed. The same two ways as the tool server's credentials
+(`server.env`), without the third, a value in the settings.
+
+**X150. Each line is sent from `save()`, once it is in the book file, at
+its place.** The link to the sealer (`sealing.mjs`) is told the text the
+file now holds; it works out the leaf fingerprint of each new line with
+the library's `leafFingerprint` and sends them with the sealer's
+`extend`, naming the place of the first. The place moves on only by the
+sealer's own answer, which must be the place plus the number sent. The
+book's first line goes itself with the first question, as the sealer
+asks. One question is asked at a time, for every book of one executor,
+so that several agents do not fill the sealer's sixteen places. Nothing
+is kept but the count of lines the sealer has answered for: the lines
+that wait are the book file's own. The answer to a call is not held back
+until the sealer has its receipt: the tool has done its work by then,
+and holding the answer would protect nothing.
+
+**X151. The sealer's client is a copy, `sealer-client.mjs`, held to the
+sealer's by a test, declaration by declaration.** The executor depends
+on the library alone, as before. The copy holds the labels, the proofs,
+the members a question may hold and `connectSealer`; a test
+(`test/same-files.test.mjs`) takes each of the ten declarations from the
+copy and from `sealer/sealer.mjs` and holds them the same byte for
+byte, and holds that the copy has no other code. Why not the package:
+`provared-sealer` is not published, and it is the program that keeps the
+keys and signs, which the executor should not carry. Why not the whole
+file, as X1 does for `files.mjs`: the client is one part of a file that
+also holds the server and the key files. The other way: the sealer's
+client in a file of its own in `sealer/`, copied whole; that changes the
+sealer's package, which this step does not.
+
+**X152. At a start the sealer must answer, and what it holds is compared
+with the book file before anything is written (for the founder's
+review).** Compared: the key set (X148); that the sealer holds no more
+lines than the file; that its latest seal is the book's last seal; that
+no later book follows this one. Where they do not agree, the executor
+does not start. Where the sealer's latest seal covers exactly the lines
+of the file and is not in it, the sealer signed and the book never took
+the seal (X156): it is asked for (`latest`) and added, then. Not
+compared, because it cannot be: the lines after the sealer's latest
+seal, of which the sealer holds fingerprints and gives none back; a
+change among them shows when the next seal is added (X155). After the
+permission's line is written, the sealer must also take every line of
+the file before the agent takes a call, so that a sealer that was not
+told this agent stops the start. A command with `--offline` opens the
+files the same way. Why the sealer must answer: an executor that
+started without it could write a line where a seal the sealer had
+signed must stand, and nothing could then put the two right. The other
+way: start, and queue; it needs the executor to remember across a stop
+that a seal was asked for.
+
+**X153. While the sealer does not answer, lines wait, in order, and past
+a limit calls are refused (for the founder's review).** No question
+waits longer than `recorder.sealer.timeout` (5,000 ms unless given; 100
+to 60,000). After a question that failed, the lines are sent again
+every two seconds. A sealer that answers that the place is not the one
+it holds (`out-of-step`: it was started again, and stands at its latest
+seal) is asked what it holds, compared as at a start, and sent the
+lines from there; after three such rounds in a row it is given up on
+until the next try. `recorder.sealer.maxUnsent` (100 unless given; 0 to
+10,000) is how many lines of one book may be unsent: past it, a call
+waits for one try to send them, at most `timeout`, and none where a try
+failed within the last second; it is then refused as a rule of the
+executor's refuses, with a denial, a line in the copy and the code
+`sealer-behind`. The denial is a line, and so unsent too;
+`denialsPerHour` bounds them. Receipts written late at a start and
+acknowledged receipts are not held to the limit: their calls were sent
+already. A sealer's refusal to take lines (the recorder past its number
+of books, say) leaves them unsent in the same way, with the sealer's
+words in the status. Why a limit in lines: it bounds what whoever runs
+the executor could still change unseen. The other ways: a limit in
+time; no call at all while a line is unsent (`maxUnsent` 0 gives that).
+
+**X154. A seal is asked of the sealer only after it has said what it
+holds.** In the agent's turn: the sealer is asked (`held`), compared as
+at a start, and sent what it lacks; only where it then answers for every
+line, and its latest seal is the book's last, is `seal` asked, with
+`previous` and with `when`, the executor's clock, as with a key file
+(the sealer takes a time within 300 seconds of its own). The question
+may take 30 seconds. The entry is added whole through the stub writer's
+`add`; the seal's place and fingerprint, as the executor reports and
+keeps them, come from the book's own check, not from the sealer's
+answer. A refusal by the sealer leaves the book without a seal and the
+agent at work. Why ask first: a sealer started again stands at its
+latest seal, or at the first line; asked for a seal as it stood, it
+would sign over fewer lines than the book holds.
+
+**X155. A seal the book refuses stops the agent, and the executor does
+not start on that book again.** The sealer signed over other lines than
+the book holds: the book file was changed after the lines were sent, or
+other lines were sent. The sealer's latest seal is then one the book can
+never hold, and the sealer signs no other history. Nothing the executor
+could do would make the two agree, so it stops (`sealer-disagrees`) and
+keeps both as they are.
+
+**X156. Where a seal may have been signed and the answer did not come,
+no line is written until the sealer has said (for the founder's
+review).** A seal sits after exactly the entries it covers, so a line
+written before a seal that was signed would shut that seal out for
+good. Until the sealer has said, the agent takes no call, answering as
+it does when stopped, and writes no denial. The sealer is asked again
+every two seconds, and at the next seal or start; a seal it signed is
+added in the agent's turn, before any other line. At a start with a
+permission new to the book, the seal cannot be added, since the
+permission's line would come first: the executor says so, and is
+started once with the permission the book last held. The other way:
+write on, and lose the book's seals.
+
+**X157. What the status says, and `keys`.** Each agent has `sealer`:
+from a running executor `address`, `recorder`, `unsent`, `since`,
+`answeredAt` and `problem`; from the files, where the sealer is asked
+once (`held`), `reached`, `holds`, `unsent`, `latestSeal` and `problem`.
+`since` is in a running executor's memory only. Unsent lines do not
+change the code `status` ends with: they are ordinary while a sealer is
+away. `recorder` shows the sealer's key set, its address, the
+recorder's name and `maxUnsent`. Where the settings name a sealer,
+`keys` says the fingerprint of each agent's key set, which the sealer
+is told when the recorder is added, and makes no recorder's key file;
+it runs before `recorder.sealer` is complete.
+
+**X158. Not built.** Bringing a sealer up to date after its record was
+lost or put back (the sealer's `update`): the executor stops, and says
+that it is to be done with the sealer's own client. A second book under
+one permission (format description, section 21.6): the executor seals
+first books only, and a new book file under a permission whose first
+book the sealer holds is not started on. Going on, under a central
+sealer, with a book already sealed with a key file (X122 refuses it).
+Witnesses for the seals, and seals held elsewhere. A time-stamp that a
+sealer puts beside its seal is added with the entry, and was not tried.
+
+**X159. A limit that is the sealer's protocol's.** The question for a
+seal names the seal before, and not the number of lines the seal should
+cover. A sealer that is started again between its answer about what it
+holds and the question for a seal signs over the lines it then holds.
+For a book that has a seal, that is none new, and it refuses. For a
+book with no seal yet, it signs over the first line alone; the book
+refuses that seal, and X155 applies. The executor cannot close this from
+its side; a question for a seal that named the number of lines would.
+
+The choices from X160 on come from a second review of the fixes to
+`seal`, `acknowledge` and `status`.
+
+**X160. `POST /provared/hello` reads little, for a short time, from few
+callers at once.** It needs no secret, so anyone who can reach the
+executor may ask. A challenge is some 60 bytes of JSON, so a body of
+more than 256 bytes is refused with 400 and nothing is signed; a body
+that has not arrived whole within 5 seconds is refused with 400, where
+the agents' own `timeout` may be minutes; and where 8 such questions are
+already in hand a ninth is answered 503 (`busy`) at once, with nothing
+read and nothing signed. These are fixed numbers, not settings: a
+command sends one question and waits for one answer. A caller can still
+ask again and again, one after another; each answer costs two
+signatures. X168 changes the 5 seconds to 1, and what the 8 count.
+
+**X161. One SLH-DSA signature at a time.** Node.js's thread pool has
+four threads unless `UV_THREADPOOL_SIZE` says otherwise, and a call needs
+it too: its receipt is signed there and the upstream's name is looked up
+there. Each agent's round of the timer starts at the same moment, so four
+books with something new filled the pool for the two seconds or so of
+their third signatures, and every agent's call waited. `sealing.mjs` now
+makes these signatures one after another, for every recorder in the
+program, so that sealing takes one thread of the pool at most. The
+fourth of four seals asked for at once is then done some four signatures
+later, where it had been one, and that agent's next call, which waits
+for its own seal, waits that much longer. Other agents' calls do not
+wait. The rounds were not set apart in time instead: the
+queue holds however the seals are asked for, by the timer or by
+`seal --agent`.
+
+**X162. The lock's name, on Windows, writes the folder out in full.**
+`lockName` resolves the book's folder with `realpathSync.native`, which
+writes a short name (`C:\Users\LONGNA~1`) out in full, and falls back to
+`realpathSync` where that fails. A guard started with a short name and a
+command run with the long one had taken two locks. The book file's own
+name is still taken as written, since the file may not be there yet.
+
+**X163. A socket file left behind is cleared by one program at a time
+(not Windows or Linux).** The program that makes the folder
+`<socket file>.clearing` looks again, clears the file away, listens and
+takes the folder away; a program that cannot make the folder is refused
+(or asks again, X164). Two programs that started together after a third
+was stopped had both cleared the file and both listened. A socket file
+that gives no answer within 2 seconds counts as live: the start had
+waited for ever. A folder left by a program stopped in that moment is
+not taken away by itself, since that would let two programs in again;
+the refusal names it, to be taken away by hand. Not run on a Mac: the
+tests of this branch run on Linux, where a socket file works the same
+way when it is asked for.
+
+**X164. A start asks again for a lock that is held.** For 10 seconds
+over HTTP; over stdio, for `shutdownWait` and 5 seconds more where that
+is longer, since the guard before keeps the lock while its server is
+given that time to end. A command (`seal`, `acknowledge` with
+`--offline`) asks once, as before: it is run by hand, and a person can run
+it again. A client that started the executor again at once had been
+refused where 0.4.1 started.
+
+**X165. A `done` line names the kind of outcome only beside its
+documents.** The third fixed text of an acknowledged receipt, "The
+executor recorded that it was sending this call, and has no record of
+its outcome.", was approved word for word and does not change. It is
+written where the copy holds no document of the outcome. A `done` line
+with no stub and no documents (the documents could not be made, and the
+book could not be written) had still named the kind, `"outcome":
+"answer"` or another, so the copy held something of the outcome after
+all. Such a line now names no kind, so the text is true wherever it is
+written. Nothing reads the kind back: it was for whoever reads the copy.
+A line with documents names its kind as before.
+
+**X166. A command checks a running executor with its public keys alone
+(for the founder's review).** Under X138 the command read `executor.keys`
+with the reader that loads the private keys. So the administrator, who
+until then needed only a secret, had to be able to read the keys that
+countersign every receipt, and a file of the public keys alone was
+refused ("Unsupported key usage for Ed25519 key"). The command now takes
+the public parts of the two keys and loads no private key
+(`readPublicKeys` in `identity.mjs`). What is fixed, and why:
+- *Where the keys are read.* From `executor.keys`, as before; or from the
+  file that `--public-keys <file>` names to `status`, `seal` and
+  `acknowledge`, in place of it. The option is refused where the command
+  asks no running executor (`--offline`, and the stdio executor's
+  settings), so that it is not taken for something it does not do.
+- *The file of public keys.* The form of a key file with nothing private
+  in it: `{"about": <a sentence>, "keys": [<Ed25519>, <ML-DSA-87>]}`,
+  each key the public JSON Web Key that `keys` prints in the `with`
+  entry. `keys --public-keys <file>` writes it, for the HTTP executor's
+  settings, to a new file: it overwrites nothing and refuses a key file
+  of the settings. The plainest form there is: no new format, no new
+  label, no signed byte.
+- *The check is the same.* Both signatures, over the same text, the
+  address and port the command connected to, and the same connection
+  (X138). The file must hold exactly the two keys, Ed25519 and then
+  ML-DSA-87, each one that Web Crypto takes as a key to check a signature
+  with. Anything else is said to hold no usable keys, and nothing is
+  sent, not even a challenge.
+- *What the file is trusted for.* Whoever can change the file the command
+  reads can make it trust another listener, as with `executor.keys` and
+  with the settings themselves. The file is no secret; it is kept where
+  only the administrator can change it.
+- *The executor still needs its private keys.* A start, `check`, `keys`
+  or a command with `--offline` that is given a file of public keys says
+  that it holds public keys only (`loadSigningKeys` in `executor.mjs`;
+  `files.mjs` is the gateway's file byte for byte, and is left as it is).
+
+Through a forwarder (an SSH tunnel, a published container port, a
+reverse proxy) the address the executor signs is not the one the command
+connected to, and the command refuses. That is X138 as designed, and the
+README now says it. The other way to the public keys, not built: from
+the agents' permissions, checked against `issuerKeys` as a start checks
+them. `issuerKeys` is in the settings the command already trusts, so it
+would be as strong; but the command would read and check every agent's
+permission where a file of two keys is plainer.
+
+The choices from X167 on come from a third review, of the book sealed by
+a central sealer and of the fixes above.
+
+**X167. A seal that comes a second time, by another way, is not added
+again and stops nothing.** After an answer that was lost (X156) the
+executor asks the sealer every two seconds, and a seal it finds is
+handed to the agent's turn. A seal asked for in that moment (the timer's
+next round, or `seal`) is handed the same seal and adds it. The one
+handed over first then came to a book that held it already; the book
+refused it, and the agent was stopped as under X155, with a sound book
+and a message that was not true. Now `addCentralSeal` adds nothing where
+all three of these hold:
+- the book's last line is the entry byte for byte, the entry written
+  out with the library's `entryLine`, as `add` writes it;
+- the book's own check takes that line as a seal with nothing wrong;
+- its fingerprint by that check is the one the sealer named for its
+  latest seal.
+
+Anything else goes to `add` as before, and a refusal there stops the
+agent (X155): an entry that differs in one byte, the book's last line
+where it is no seal, or the book's last seal under another fingerprint.
+A seal newly signed, the answer to `seal`, comes with no fingerprint
+named and always goes to `add`. Why the line and the fingerprint both:
+the fingerprint is the sealer's word until the book's check has made it,
+and the line alone would let any last line pass as "the seal". The link
+also hands one seal to the agent's turn at a time (`sealing.mjs`): while
+one waits there, a later question that finds the same seal hands nothing
+over, so that a turn that is long in coming does not gather the same
+seal many times, each with a check of the whole book. The other way:
+tell the two cases apart by the book's refusal; `add` gives one refusal
+for every entry it does not take.
+
+**X168. A `hello` takes a place only once its body is whole, and a
+command that is told `busy` asks again.** Under X160 a question took one
+of the 8 places from the moment it arrived, for up to 5 seconds. A
+caller with no secret who kept 8 questions open, each with a body begun
+and never ended, and began each again when it was given up on, filled
+every place: `status`, `seal` and `acknowledge` were then answered 503
+and ended with code 2. What is fixed now, as numbers and not settings:
+- *The body has 1 second* (it had 5). A command sends its 60 bytes at
+  once.
+- *A place is taken once the body has arrived whole and holds a
+  challenge*, and is kept for the two signatures alone. So the places
+  bound the signing, and a caller who sends a body slowly, or never
+  ends it, holds none. A caller cannot keep a place either: it is given
+  up when the answer is written, whether or not the caller reads it.
+- *Of the 8 places, callers at one address hold 4 at most.* A fifth
+  from that address is answered 503 (`busy`) while others still find a
+  place. The address is the one the connection comes from. Callers at
+  one address count as one caller: a program on the administrator's own
+  computer shares the administrator's four places.
+- *The command asks again.* Told `busy`, a command waits half a second
+  and asks again, five times in all, then says that what answers is
+  busy and that the secret was not sent. It had said that what answers
+  "did not show that it is the executor", which was not the reason.
+  `busy` is taken on the listener's word: the command sends it nothing
+  but the challenge, each time.
+
+What stays: questions whose bodies are not whole are not counted, so
+their number is not bounded here. Each holds a connection for a second
+and 256 bytes at most; the number of connections to the executor is not
+bounded either. And a caller can still ask whole questions as fast as the
+executor signs, which costs two signatures each (X160). The other ways:
+a count of unfinished questions for each address, which a program at
+the administrator's own address fills as before; the oldest unfinished
+question giving way to a new one, which bounds them and is more to get
+right.
+
+**X169. An answer at the sealer's address is read up to 8 MiB and no
+further.** The client read the whole answer into memory and looked at
+its size afterwards, before its proof. Whatever listens at
+`recorder.sealer.address` could so send as much as it liked for as long
+as a question may take: while the sealer is stopped, any program on the
+computer can take its port, and the executor asks every two seconds.
+With 200 MB offered, the executor's side read all of it and its memory
+rose from 54 MB to 679 MB; it now takes 16 MB off the listener and
+stays at 80 MB. A length declared over the limit is refused before any
+of the body is read; a body is read piece by piece with a count, and
+the reading stops, and the connection is given up, once the count
+passes the limit. The words of the refusal are as they were. The change
+is made in `sealer/sealer.mjs`, the sealer's own client, and copied
+(X151): the test that holds the copy holds this too.
+
+**X170. What the test of the copy takes for a comment.** X151's test
+holds that `sealer-client.mjs` has no code but the ten declarations and
+two import lines. It had let through any line that began `//`, `/**` or
+` *`, and so a line of code after a comment mark (`/** */ run();`). It
+now takes for a comment only: a line that begins `//`; a line that
+begins `/**` and ends with the first `*/` in it; or a block that opens
+with `/**` alone on a line and closes with ` */` alone on a line, every
+line between beginning ` * ` (or being ` *`) and holding no `*/`. A
+line that holds a carriage return, U+2028 or U+2029 counts as code,
+since each ends a `//` comment. These are the forms the copy's comments
+have. The other way: read the file with a JavaScript parser; the
+package has none, and takes no dependency for a test.
+
+**X171. A socket file of another user's is named in the refusal (not
+Windows or Linux); and what a re-check of the lock found here.** A
+re-check of the lock on another branch, whose `lock.mjs` is older than
+X162 to X164, found two faults. Both were looked for in this one.
+- *Two programs taking over one socket file left behind.* Not here:
+  X163 closes it. On Linux, with Node.js told it runs on another system
+  so that `lock.mjs` takes the socket file's way: a file left behind by
+  a program ended by force, then 8 starts at one moment, 60 rounds; 2
+  starts one straight after the other, 150 rounds; and 8 starts that ask
+  again for 10 seconds, 30 rounds. Never two holders at once, never a
+  folder left. With the folder of X163 taken out of a copy, the same
+  probe found two holders at once in 28 of 30 rounds and in 15 of 60.
+  The re-check's own fix (every program that takes the lock looks a
+  moment later whether the name still leads to its own listener) is
+  therefore not added.
+- *A file left by another user.* Here too. A socket file left in `/tmp`
+  by a program of another user (an executor once run as root) may not
+  be connected to, so it cannot be told from a live one; and `/tmp`
+  lets only its owner take it away. The start was refused with "An
+  executor is running on the book …", which need not be so. The lock is
+  still refused, since nothing else is safe, and the refusal now names
+  the file and says who can take it away. `alive` gives the code of the
+  refusal (`EACCES`, `EPERM`) in place of `true`; `lockAt` puts the file
+  and the code on its `LOCKED` error (`notAsked`, `why`); `lockFiles`
+  writes the sentence. No function's arguments or result change.
+- *On Windows, a folder's short name, or `\\?\` in front.* Not here:
+  X162 resolves the folder with `realpathSync.native`, which gives one
+  name for all of them. A test now holds `\\?\` beside the short name.
+  Still another lock, and said in the README: a share of the computer's
+  own drive (`\\localhost\D$\…`, `\\127.0.0.1\D$\…`) and `::$DATA`
+  after the file's name.
 
 ## 14. The executor as an OAuth-protected connector
 

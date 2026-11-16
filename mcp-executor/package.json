@@ -54,6 +54,7 @@
     "files.mjs",
     "rules.mjs",
     "sealing.mjs",
+    "sealer-client.mjs",
     "lock.mjs",
     "identity.mjs",
     "bin.mjs",

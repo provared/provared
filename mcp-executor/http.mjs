@@ -34,9 +34,9 @@ import https from 'node:https';
 import { unfinished } from './copy.mjs';
 import { EXECUTOR_STOPPED, LIST_NOT_READ, NOT_FOR_KEYS, NO_RECORDER_WARNING, SHARED_KEYS, SHORT_NAME, UNLISTED_FORWARD_WARNING, callCore, describeContentRules, describeRecorder, describeSlip, describeTools, filteredList, isObject, isPlaceholder, missingFiles, openAgent, pathFrom, placeholderProblems, prepareAgent, prepareShared, programProblems, readAgentPaths, readCredentialFile, readIdentity, readFormerKeys, readKnobs, readProgramEnvironment, readRecorderSettings, readServerSettings, readShutdownWait, readToolRules, reportFromFiles, resolveProgram, sealTimer, serverIds } from './executor.mjs';
 import { CHALLENGE, identify, plainAddress } from './identity.mjs';
-import { CODES, MAX_LINE_BYTES, idKey, isId, readMessage, responseText, spliceId, topLevelId, unsafeInteger } from './jsonrpc.mjs';
+import { CODES, MAX_LINE_BYTES, errorAnswer, idKey, isId, readMessage, responseText, spliceId, topLevelId, unsafeInteger } from './jsonrpc.mjs';
 import { openLocalSessions, readSessionSettings } from './local.mjs';
-import { lockState } from './lock.mjs';
+import { LOCK_WAIT_MS, lockState } from './lock.mjs';
 import { CLIENT_LIMIT, OAUTH_PATH, OAUTH_TIMEOUT, WELL_KNOWN, openFrontDoor, readOAuthSettings } from './oauth.mjs';
 
 /** The most a POST body may be, unless the settings say otherwise: 10 MiB, as the gateway takes. */
@@ -63,6 +63,17 @@ export const CREDENTIAL_REMOVED = '[a credential was removed by the Provared exe
 export const ADMIN_PATH = '/provared';
 /** The most a body sent to one of the executor's own addresses may be: 64 KiB. */
 export const ADMIN_BODY_LIMIT = 64 * 1024;
+/**
+ * POST /provared/hello needs no secret, so anyone may ask: the most its
+ * body may be (bytes), how long the body may take (milliseconds), how many
+ * such questions are signed for at once, and how many of those for callers
+ * at one address. A question takes a place only once its body has arrived
+ * whole, so a caller who never ends a body holds none (X168).
+ */
+export const HELLO_BODY_LIMIT = 256;
+export const HELLO_WAIT_MS = 1000;
+export const HELLO_AT_ONCE = 8;
+export const HELLO_PER_CALLER = 4;
 
 /** The agent's headers that go on to the upstream. Every other is dropped: a header is a way to carry a token, and the upstream must get none but the executor's. */
 const FORWARDED_HEADERS = ['accept', 'accept-language', 'content-type', 'mcp-session-id', 'last-event-id'];
@@ -368,7 +379,7 @@ export function sseEvent(others, data) {
  * their receipts now (openAgent).
  *
  * @param {object} config the settings, as in executor-http.example.json
- * @param {{root?: string, now?: () => number, log?: (event: object) => void, serverStderr?: NodeJS.WritableStream|null}} [more] "serverStderr": where the standard error of a local program goes (by default, the executor's own; null, nowhere)
+ * @param {{root?: string, now?: () => number, log?: (event: object) => void, serverStderr?: NodeJS.WritableStream|null, offline?: boolean, lockWait?: number, identify?: typeof identify}} [more] "serverStderr": where the standard error of a local program goes (by default, the executor's own; null, nowhere); "lockWait": how long a start asks again for a book's lock that is held, in place of LOCK_WAIT_MS (for tests); "identify": what signs a challenge sent to POST /provared/hello, in place of identity.mjs's (for tests, which make it slow)
  */
 export async function openHttpExecutor(config, more = {}) {
   const root = more.root ?? process.cwd();
@@ -399,11 +410,14 @@ export async function openHttpExecutor(config, more = {}) {
     if (settings.oauth && !offline) releases.push((await lockState(settings.oauth.state)).release);
     for (const [name, paths] of settings.agents) {
       // Each agent's book and copy are locked for this program before anything of theirs is read (lock.mjs).
-      const prepared = await prepareAgent(paths, settings, shared, { now });
+      // A start asks again for the lock for 10 seconds, while the executor before it may still be ending; a command asks once.
+      const prepared = await prepareAgent(paths, settings, shared, { now, lockWait: offline ? 0 : (more.lockWait ?? LOCK_WAIT_MS) });
       releases.push(prepared.release);
       warnings.push(...prepared.warnings.map((w) => `agents.${name}: ${w}`));
       // A command at work on the files (offline) is not a start: it writes no late receipt by itself.
       const agent = await openAgent(prepared, { settings, executorKeys: shared.executorKeys, now, log, name, sealer: shared.sealer, late: !offline, formerKeys: shared.formerKeys });
+      // From here the agent's own release is used: with a central sealer it first sends what the sealer lacks.
+      releases[releases.length - 1] = agent.release;
       agent.hash = paths.secretHash ? Buffer.from(paths.secretHash) : null;
       agent.open = 0;
       /** The sessions this agent opened, oldest first. */
@@ -833,13 +847,16 @@ export async function openHttpExecutor(config, more = {}) {
             if (filtered?.hidden) agent.log({ event: 'tools-hidden', hidden: filtered.hidden });
             out = filtered ? filtered.text : (spliceId(out, clientId) ?? out);
           }
-          // A list of tools that is to be filtered and cannot be read (or is under another id, or is no message) is not handed on: the agent is answered with an error under its id (X250). The upstream's own error under the request's id goes on as it is.
-          if (list && !filtered && !(m && read.kind === 'response' && foundId === serverId && Object.hasOwn(m, 'error'))) {
+          // A list of tools that is to be filtered and cannot be read (or is under another id, or is no message) is not handed on: the agent is answered with an error under its id (X250). The upstream's own error goes on as it is, with its status: under the request's id; or, under any id or a null one, where it is an error answer and nothing more, which holds no result for any reader and so no list (X260).
+          let own = false;
+          if (list && !filtered && !(m && read.kind === 'response' && foundId === serverId && Object.hasOwn(m, 'error')) && !errorAnswer(text)) {
             agent.log({ event: 'tools-list-not-read' });
             out = listNotRead(clientId);
+            own = true;
           }
           const body_ = Buffer.from(scrub(out));
-          res.writeHead(status, { ...returned, 'content-type': type || JSON_TYPE, 'content-length': body_.length });
+          // The executor's own error is JSON whatever the upstream sent, and is not to be stored: the upstream's content type and its word on caching were about the body that is not handed on (X260).
+          res.writeHead(status, own ? { ...returned, 'content-type': JSON_TYPE, 'cache-control': 'no-store', 'content-length': body_.length } : { ...returned, 'content-type': type || JSON_TYPE, 'content-length': body_.length });
           done(res.end(body_));
         });
       });
@@ -866,14 +883,14 @@ export async function openHttpExecutor(config, more = {}) {
    * GET stream or a long answer must not be cut, so the body's reading has
    * a limit of its own (X119).
    */
-  function readBody(req, limit = settings.bodyLimit) {
+  function readBody(req, limit = settings.bodyLimit, wait = settings.timeout) {
     const declared = Number(req.headers['content-length']);
     if (Number.isFinite(declared) && declared > limit) return Promise.resolve(null);
     return new Promise((done, failed) => {
       const chunks = [];
       let size = 0;
       let over = false;
-      const timer = setTimeout(() => failed(Object.assign(new Error('The body did not arrive whole in time.'), { code: 'BODY_TIMEOUT' })), settings.timeout);
+      const timer = setTimeout(() => failed(Object.assign(new Error('The body did not arrive whole in time.'), { code: 'BODY_TIMEOUT' })), wait);
       timer.unref();
       const settle = (f) => (v) => {
         clearTimeout(timer);
@@ -912,6 +929,11 @@ export async function openHttpExecutor(config, more = {}) {
 
   // --- the executor's own addresses, for the administrator ---
 
+  /** How many POST /provared/hello are being signed for, in all and for the callers at each address. */
+  let hellos = 0;
+  const hellosBy = new Map();
+  /** What signs a challenge: identity.mjs's, or a test's in its place. */
+  const signHello = more.identify ?? identify;
   const isAdmin = (secret) => {
     const given = Buffer.from(secretHash(secret));
     return admin !== null && given.length === admin.length && timingSafeEqual(given, admin);
@@ -935,16 +957,31 @@ export async function openHttpExecutor(config, more = {}) {
     if (admin === null) return adminRefuse(res, 404, 'not-found', 'This executor has no administrator\'s secret ("admin"), so its own addresses answer nothing.');
     // Before a command sends the secret it asks the executor to show that it is the executor (identity.mjs). No secret is needed, and none should be sent.
     if (req.method === 'POST' && path === `${ADMIN_PATH}/hello`) {
+      // Anyone may ask, so little is read, for a short time: a challenge is some 60 bytes of JSON.
       let asked;
       try {
-        asked = JSON.parse((await readBody(req, ADMIN_BODY_LIMIT))?.toString('utf8') ?? '');
+        asked = JSON.parse((await readBody(req, HELLO_BODY_LIMIT, HELLO_WAIT_MS))?.toString('utf8') ?? '');
       } catch {
         asked = null;
       }
       if (!isObject(asked) || typeof asked.challenge !== 'string' || !CHALLENGE.test(asked.challenge)) return adminRefuse(res, 400, 'bad-request', 'Send a challenge of 32 random bytes in base64url: {"challenge": "<43 characters>"}.', { connection: 'close' });
-      const address = plainAddress(req.socket.localAddress);
-      const port = req.socket.localPort;
-      return adminJson(res, 200, { executor: 'provared-mcp-executor', address, port, signatures: await identify(shared.executorKeys.privateKeys, asked.challenge, address, port) });
+      // Only a question that has arrived whole takes a place, and keeps it for the two signatures alone: the places bound
+      // the signing, and a caller who sends a body slowly, or never ends it, holds none. Callers at one address share part of them.
+      const caller = plainAddress(req.socket.remoteAddress);
+      const theirs = hellosBy.get(caller) ?? 0;
+      if (hellos >= HELLO_AT_ONCE || theirs >= HELLO_PER_CALLER) return adminRefuse(res, 503, 'busy', `The executor is answering ${hellos >= HELLO_AT_ONCE ? `${HELLO_AT_ONCE} such questions, the most it takes at once` : `${HELLO_PER_CALLER} such questions from this address, the most it takes from one address at once`}. Ask again.`, { connection: 'close' });
+      hellos += 1;
+      hellosBy.set(caller, theirs + 1);
+      try {
+        const address = plainAddress(req.socket.localAddress);
+        const port = req.socket.localPort;
+        return adminJson(res, 200, { executor: 'provared-mcp-executor', address, port, signatures: await signHello(shared.executorKeys.privateKeys, asked.challenge, address, port) });
+      } finally {
+        hellos -= 1;
+        const left = hellosBy.get(caller) - 1;
+        if (left > 0) hellosBy.set(caller, left);
+        else hellosBy.delete(caller);
+      }
     }
     const secret = bearer(req);
     if (!secret || !isAdmin(secret)) {

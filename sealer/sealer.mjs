@@ -727,8 +727,26 @@ export function connectSealer({ address, recorder, token, fetchImpl = fetch, clo
       headers: { 'content-type': 'application/json', 'provared-sealer-recorder': recorder, 'provared-sealer-time': time, 'provared-sealer-nonce': nonce, 'provared-sealer-head': head, 'provared-sealer-proof': proof },
       body: bytes,
     });
-    const answer = Buffer.from(await r.arrayBuffer());
-    if (answer.length > MAX_BODY_BYTES) throw new Error('The sealer\'s answer is larger than an answer may be.');
+    // The answer is read up to the limit and no further, since whatever listens at the address may send it: a length
+    // declared over the limit is refused before any of the body is read, and the body is read piece by piece, with a
+    // count that stops at the limit. The rest is not read, and the connection is given up.
+    const tooLarge = () => new Error('The sealer\'s answer is larger than an answer may be.');
+    if (Number(r.headers.get('content-length')) > MAX_BODY_BYTES) {
+      await r.body?.cancel().catch(() => {});
+      throw tooLarge();
+    }
+    const pieces = [];
+    let size = 0;
+    const reader = r.body?.getReader();
+    for (let piece = await reader?.read(); piece && !piece.done; piece = await reader.read()) {
+      size += piece.value.length;
+      if (size > MAX_BODY_BYTES) {
+        await reader.cancel().catch(() => {});
+        throw tooLarge();
+      }
+      pieces.push(piece.value);
+    }
+    const answer = Buffer.concat(pieces);
     if (!sameProof(r.headers.get('provared-sealer-proof'), sealerHmac(key, LABELS.answer, proof, String(r.status), sha256(answer)))) {
       // A sealer that holds too many bodies at once says so before it has read the question, so with no proof. Nothing it
       // says is used either; but what to do is to ask again later, not to look for an impostor.
