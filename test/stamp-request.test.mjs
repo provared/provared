@@ -74,10 +74,11 @@ test('a time-stamp made for another fingerprint is not kept', { skip }, async ()
 });
 
 test('an answer larger than is read is refused, whether its length is given or not', { skip }, async () => {
-  for (const mode of ['big', 'big-unsized']) {
-    tsa.mode = mode;
-    await assert.rejects(askForStamp(fingerprint(), { address: tsa.address }), refusedWith('stamp-not-given', new RegExp(`${MAX_REPLY_BYTES} bytes read`)), mode);
-  }
+  // A length given over the limit is refused before the body is read; a body with no length given, once it passes the limit.
+  tsa.mode = 'big';
+  await assert.rejects(askForStamp(fingerprint(), { address: tsa.address }), refusedWith('stamp-not-given', new RegExp(`is 20000 bytes, more than the ${MAX_REPLY_BYTES} bytes read`)));
+  tsa.mode = 'big-unsized';
+  await assert.rejects(askForStamp(fingerprint(), { address: tsa.address }), refusedWith('stamp-not-given', new RegExp(`longer than the ${MAX_REPLY_BYTES} bytes read`)));
 });
 
 test('a redirect is not followed: the request reaches no other address', { skip }, async () => {
