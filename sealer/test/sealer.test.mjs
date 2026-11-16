@@ -15,6 +15,7 @@ import { spawnSync } from 'node:child_process';
 import nodeCrypto from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
+import net from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import v8 from 'node:v8';
@@ -1111,4 +1112,75 @@ test('the command: init, keys, add-recorder and release-unsealed', async () => {
   assert.equal(run('keys', '--folder', folder).status, 0);
   assert.equal(run('nonsense', '--folder', folder).status, 2);
   assert.equal(run('--help').status, 0);
+});
+
+const MIB = 1024 * 1024;
+/**
+ * A listener that is not the sealer: it answers any question with status
+ * 200, no proof, and a body of "offer" bytes, its length declared or not.
+ * Gives {address, sent(): how many bytes it has handed over, close()}.
+ */
+async function largeAnswer(offer, { declared }) {
+  let sent = 0;
+  const chunk = Buffer.alloc(MIB, 0x20);
+  const sockets = new Set();
+  const server = net.createServer((socket) => {
+    sockets.add(socket);
+    socket.on('error', () => {});
+    socket.on('close', () => sockets.delete(socket));
+    let begun = false;
+    socket.on('data', () => {
+      if (begun) return;
+      begun = true;
+      socket.write(`HTTP/1.1 200 OK\r\ncontent-type: application/json\r\n${declared ? `content-length: ${offer}\r\n` : ''}connection: close\r\n\r\n`);
+      const pump = () => {
+        while (sent < offer && !socket.destroyed) {
+          sent += chunk.length;
+          if (!socket.write(chunk)) return socket.once('drain', pump);
+        }
+        socket.end();
+      };
+      pump();
+    });
+  });
+  await new Promise((done) => server.listen(0, '127.0.0.1', done));
+  return {
+    address: `http://127.0.0.1:${server.address().port}`,
+    sent: () => sent,
+    close: () =>
+      new Promise((done) => {
+        for (const s of sockets) s.destroy();
+        server.close(() => done());
+      }),
+  };
+}
+
+test('a recorder reads an answer up to 8 MiB and no further, with its length declared or not: what listens at the sealer\'s address cannot fill its memory', async () => {
+  const token = toBase64url(nodeCrypto.randomBytes(32));
+  for (const declared of [false, true]) {
+    const big = await largeAnswer(96 * MIB, { declared });
+    try {
+      // How many bytes of the answer's body the client took.
+      let taken = 0;
+      const counting = async (url, init) => {
+        const r = await fetch(url, init);
+        const counted = r.body.pipeThrough(
+          new TransformStream({
+            transform(piece, controller) {
+              taken += piece.length;
+              controller.enqueue(piece);
+            },
+          }),
+        );
+        return new Response(counted, { status: r.status, headers: r.headers });
+      };
+      const client = connectSealer({ address: big.address, recorder: 'agent-one', token, fetchImpl: counting });
+      await assert.rejects(client.about(), /The sealer's answer is larger than an answer may be\./, `declared: ${declared}`);
+      if (declared) assert.ok(taken < MIB, `a length declared over the limit: ${taken} bytes of the body were taken`);
+      else assert.ok(taken > 8 * MIB && taken <= 9 * MIB, `no length declared: ${taken} bytes of the body were taken`);
+      assert.ok(big.sent() <= 40 * MIB, `the listener handed over ${big.sent()} of its ${96 * MIB} bytes before the connection was given up`);
+    } finally {
+      await big.close();
+    }
+  }
 });

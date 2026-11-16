@@ -204,7 +204,7 @@
       sealer listens on 127.0.0.1 only, so the two programs are on one
       computer. `DESIGN.md`, X147 to X159.
     - Tests (`test/central-sealer.test.mjs`,
-      `test/central-sealer-e2e.test.mjs`, `test/same-files.test.mjs`; 32
+      `test/central-sealer-e2e.test.mjs`, `test/same-files.test.mjs`; 33
       tests): the sealer's program set up by its own commands and run
       as a process of its own on 127.0.0.1, ended and started again
       while calls go on, with the timer's seals; a sealer stopped and
@@ -337,6 +337,22 @@
       a listener that answers `busy`, asked five times and sent no
       secret. Each of the six parts of the fix, undone, makes its test
       fail.
+    - An answer at the sealer's address is read up to 8 MiB and no
+      further (X169). The client read the whole answer into memory
+      before it looked at its size or its proof, so whatever listened
+      at `recorder.sealer.address` (any program on the computer, while
+      the sealer is stopped) could fill the executor's memory: with 200
+      MB offered, all of it was read and memory rose from 54 MB to 679
+      MB. A length declared over the limit is now refused before the
+      body is read, and a body is read in pieces with a count that
+      stops the reading at the limit: of the same 200 MB, 16 MB left
+      the listener and memory stayed at 80 MB. The change is in
+      `sealer/sealer.mjs` (`connectSealer`; `provared-sealer` stays
+      0.1.0, not published) and in the executor's copy,
+      `sealer-client.mjs`, which the test `same-files.test.mjs` holds
+      the same. One test in each package, with 96 MiB offered, its
+      length declared and not; each part of the fix, undone in either
+      file, makes a test fail.
   - **Tests** (`test/seal.test.mjs`, `test/seal-http.test.mjs`; 41
     tests): the seal checks under the recorder's keys with the library's
     checker, chains to the seal before, and a reader who names another

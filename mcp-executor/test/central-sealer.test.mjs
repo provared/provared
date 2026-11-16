@@ -5,14 +5,15 @@
 
 import './local-library.mjs'; // first: "provared" is this repository's own library
 import assert from 'node:assert/strict';
+import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import { join } from 'node:path';
 import { afterEach, test } from 'node:test';
 
 const { leafFingerprint } = await import('provared');
-const { openWorld, signSlip, until } = await import('./world.mjs');
-const { RECORDER, centralWorld, closeAll, refusal, sealerFolder, standIn } = await import('./sealer-world.mjs');
+const { openWorld, signSlip, tempFolder, until } = await import('./world.mjs');
+const { RECORDER, centralWorld, closeAll, largeAnswer, refusal, sealerFolder, standIn } = await import('./sealer-world.mjs');
 
 // What a failed test left open is closed, so that the file still ends where no time limit ends it.
 afterEach(closeAll);
@@ -723,6 +724,26 @@ test('central sealer: a book that a later book follows at the sealer is not star
     await assert.rejects(openWorld(w), /The executor does not start: the central sealer holds a later book that follows this one/);
   } finally {
     await w.sealer.stop();
+  }
+});
+
+test('central sealer: an answer larger than an answer may be is read up to the limit and no further, with its length declared or not (review 3.2, F3)', async () => {
+  const MIB = 1024 * 1024;
+  const file = join(tempFolder(), 'sealer-token');
+  writeFileSync(file, `${randomBytes(32).toString('base64url')}\n`);
+  for (const declared of [false, true]) {
+    // Whatever listens at the sealer's address, while the sealer is stopped, say: 96 MiB, where an answer may be 8.
+    const big = await largeAnswer(96 * MIB, { declared });
+    try {
+      const sealer = centralSealer({ address: big.address, name: RECORDER, token: { file }, keySet: 'A'.repeat(43), timeout: 30000, maxUnsent: 100 });
+      // One question, as the status read from the files asks it.
+      const got = await sealer.look('{"a line of a book":1}\n');
+      assert.equal(got.reached, false);
+      assert.match(got.problem, /The sealer's answer is larger than an answer may be\./, `declared: ${declared}`);
+      assert.ok(big.sent() <= 40 * MIB, `declared: ${declared}: the listener handed over ${big.sent()} of its ${96 * MIB} bytes before the connection was given up`);
+    } finally {
+      await big.close();
+    }
   }
 });
 

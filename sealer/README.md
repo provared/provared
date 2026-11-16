@@ -216,7 +216,9 @@ HMAC-SHA-256 under the token over `provared sealer v1: the sealer's
 answer`, the question's proof, the status and the SHA-256 of the
 answer's body. So the token never travels, a program that listens in the
 sealer's place learns nothing it can use, and the recorder can tell an
-answer from the sealer from any other.
+answer from the sealer from any other. `connectSealer` reads an answer
+up to 8 MiB and no further, whether its length is declared or not, so
+such a program cannot fill the recorder's memory with its answer.
 `connectSealer({ address, recorder, token })` in `sealer.mjs` does all
 this. Its calls take the library's arguments, with one difference: the
 last argument of `extend`, `seal` and `update` (`more`) may hold only

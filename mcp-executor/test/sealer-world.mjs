@@ -175,6 +175,48 @@ export async function standIn({ token, real = null, answer }) {
   return made;
 }
 
+/**
+ * A listener that is not the sealer: it answers any question with status
+ * 200, no proof, and a body of "offer" bytes, its length declared or not.
+ * Gives {address, sent(): how many bytes it has handed over, close()}.
+ */
+export async function largeAnswer(offer, { declared }) {
+  let sent = 0;
+  const chunk = Buffer.alloc(1024 * 1024, 0x20);
+  const sockets = new Set();
+  const server = net.createServer((socket) => {
+    sockets.add(socket);
+    socket.on('error', () => {});
+    socket.on('close', () => sockets.delete(socket));
+    let begun = false;
+    socket.on('data', () => {
+      if (begun) return;
+      begun = true;
+      socket.write(`HTTP/1.1 200 OK\r\ncontent-type: application/json\r\n${declared ? `content-length: ${offer}\r\n` : ''}connection: close\r\n\r\n`);
+      const pump = () => {
+        while (sent < offer && !socket.destroyed) {
+          sent += chunk.length;
+          if (!socket.write(chunk)) return socket.once('drain', pump);
+        }
+        socket.end();
+      };
+      pump();
+    });
+  });
+  await new Promise((done) => server.listen(0, '127.0.0.1', done));
+  const made = {
+    address: `http://127.0.0.1:${server.address().port}`,
+    sent: () => sent,
+    close: () =>
+      new Promise((done) => {
+        for (const s of sockets) s.destroy();
+        server.close(() => done());
+      }),
+  };
+  opened.standIns.push(made);
+  return made;
+}
+
 /** Run the sealer's command to its end: {code, stdout, stderr}. */
 export function sealerCommand(args) {
   const r = spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', SEALER_BIN, ...args], { encoding: 'utf8', windowsHide: true });

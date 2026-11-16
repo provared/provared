@@ -2571,6 +2571,21 @@ the administrator's own address fills as before; the oldest unfinished
 question giving way to a new one, which bounds them and is more to get
 right.
 
+**X169. An answer at the sealer's address is read up to 8 MiB and no
+further.** The client read the whole answer into memory and looked at
+its size afterwards, before its proof. Whatever listens at
+`recorder.sealer.address` could so send as much as it liked for as long
+as a question may take: while the sealer is stopped, any program on the
+computer can take its port, and the executor asks every two seconds.
+With 200 MB offered, the executor's side read all of it and its memory
+rose from 54 MB to 679 MB; it now takes 16 MB off the listener and
+stays at 80 MB. A length declared over the limit is refused before any
+of the body is read; a body is read piece by piece with a count, and
+the reading stops, and the connection is given up, once the count
+passes the limit. The words of the refusal are as they were. The change
+is made in `sealer/sealer.mjs`, the sealer's own client, and copied
+(X151): the test that holds the copy holds this too.
+
 **X241. A message is refused where a name in it differs only in capitals
 from one the executor reads (0.4.2).** The number is the one this choice
 has in the later design, so that one number names one choice. Three
