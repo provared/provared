@@ -12,8 +12,11 @@ import { join } from 'node:path';
 import { afterEach, test } from 'node:test';
 
 const { leafFingerprint } = await import('provared');
-const { openWorld, signSlip, tempFolder, until } = await import('./world.mjs');
+const { openWorld, pause, signSlip, tempFolder, until } = await import('./world.mjs');
+const { httpWorld, openHttpWorld, call } = await import('./http-world.mjs');
 const { RECORDER, centralWorld, closeAll, largeAnswer, refusal, sealerFolder, standIn } = await import('./sealer-world.mjs');
+const { lockFiles } = await import('../lock.mjs');
+const { connectSealer } = await import('../sealer-client.mjs');
 
 // What a failed test left open is closed, so that the file still ends where no time limit ends it.
 afterEach(closeAll);
@@ -563,6 +566,21 @@ test('central sealer: a seal the sealer signed that the book never took is added
     await assert.rejects(openWorld(w), /The executor does not start: .*The sealer's answer with its latest seal is not in the form its protocol gives/);
     await empty.close();
     assert.equal(w.lines().length, 2);
+    // A sealer that names one seal as its latest and hands over a seal under another fingerprint: the same (review 3.2, F4).
+    // The seal handed over is the true one, so only the fingerprint beside it tells.
+    const misnamed = await standIn({
+      token: w.sealer.token,
+      real: `http://127.0.0.1:${w.sealer.port}`,
+      answer: async (path, body, forward) => {
+        if (path !== '/latest') return forward();
+        const real = await forward();
+        return { latest: { ...real.latest, fingerprint: 'A'.repeat(43) } };
+      },
+    });
+    w.settings.recorder.sealer.address = misnamed.address;
+    await assert.rejects(openWorld(w), /The executor does not start: .*The sealer's answer with its latest seal is not in the form its protocol gives/);
+    await misnamed.close();
+    assert.equal(w.lines().length, 2, 'the seal was not added');
     w.settings.recorder.sealer.address = `http://127.0.0.1:${w.sealer.port}`;
     await openWorld(w);
     const c = await w.checked();
@@ -892,6 +910,26 @@ test('central sealer: the status read from the files asks the sealer how many li
   }
 });
 
+test('central sealer: the status read from the files shows nothing held by a sealer that signs with another key set than the settings name (review 3.2, F4)', async () => {
+  const w = await centralWorld();
+  try {
+    // A book with no seal yet, so that the book's own check has nothing to say about the key set.
+    await w.client.call('echo', {});
+    await w.level();
+    await w.close();
+    const other = 'A'.repeat(43);
+    const status = await statusFromFiles({ ...w.settings, recorder: { sealer: { ...w.settings.recorder.sealer, keySet: other } } }, w.folder);
+    assert.equal(status.agent.sound, true);
+    assert.equal(status.agent.sealer.reached, false);
+    assert.equal(status.agent.sealer.holds, undefined, 'what it holds is not shown');
+    assert.match(status.agent.sealer.problem, new RegExp(`signs with the key set ${w.sealer.keySet}, and the settings name ${other}`));
+    // The same book and the sealer's own key set: it is asked, and answers.
+    assert.equal((await statusFromFiles(w.settings, w.folder)).agent.sealer.holds, 2);
+  } finally {
+    await w.sealer.stop();
+  }
+});
+
 test('central sealer: the settings name a sealer or a key file, never both; the token is read from a file or the environment and is never in the settings', async () => {
   const w = await centralWorld({ open: false });
   try {
@@ -910,6 +948,11 @@ test('central sealer: the settings name a sealer or a key file, never both; the 
     assert.match(problems({ sealer: { ...central, timeout: 50 } }), /recorder\.sealer\.timeout/);
     assert.match(problems({ sealer: { ...central, maxUnsent: -1 } }), /recorder\.sealer\.maxUnsent/);
     assert.match(problems({ sealer: 'http://127.0.0.1:8797' }), /recorder\.sealer: must be an object/);
+    // "keys" reads the settings before recorder.sealer is complete (X157): the sealer gives the token only once it is told
+    // the agent's key set, which "keys" makes. Every other reading names what is missing (review 3.2, F4).
+    const early = { sealer: { address: central.address } };
+    assert.match(problems(early), /recorder\.sealer\.name: .*\n.*recorder\.sealer\.keySet: .*\n.*recorder\.sealer\.token: /);
+    assert.deepEqual(readSettings({ ...w.settings, recorder: early }, w.folder, { keysOnly: true }).problems, []);
     assert.equal(readFileSync(w.configPath, 'utf8').includes(w.sealer.token), false, 'the token is not in the settings file');
     // "check" reads the token and asks the sealer nothing.
     await w.sealer.stop();
@@ -938,5 +981,143 @@ test('central sealer: the settings name a sealer or a key file, never both; the 
     }
   } finally {
     await w.sealer.stop();
+  }
+});
+
+test('central sealer: at the end of a book\'s link, what is unsent is sent in one last try, and nothing is sent after it (review 3.2, F4)', async () => {
+  const w = await centralWorld();
+  let link = null;
+  try {
+    await w.client.call('echo', {});
+    await w.level();
+    await w.close();
+    // The book's own link to the sealer, opened as the executor opens it, through a stand-in that can be made to give no answer.
+    let away = false;
+    const fake = await standIn({ token: w.sealer.token, real: w.settings.recorder.sealer.address, answer: (path, body, forward) => (away ? null : forward()) });
+    const sealer = centralSealer({ address: fake.address, name: RECORDER, token: { file: join(w.folder, 'keys', 'sealer-token') }, keySet: w.sealer.keySet, timeout: 20000, maxUnsent: 100 });
+    link = sealer.open({ first: w.lines()[0] });
+    const text = w.bookText();
+    await link.start(text);
+    assert.equal((await w.held()).size, 2);
+    // A line is written while the sealer gives no answer: it waits, and is to be sent again two seconds on.
+    away = true;
+    const more = `${text}{"a line":"written while the sealer gave no answer"}\n`;
+    link.wrote(more);
+    await until(() => link.status().problem !== null, { timeout: 30000 });
+    assert.equal(link.status().unsent, 1);
+    // The sealer answers again, and the link is ended at once, before that next try: the end sends the line itself.
+    away = false;
+    await link.end();
+    assert.equal((await w.held()).size, 3, 'the line was sent at the end');
+    assert.equal(link.status().unsent, 0);
+    // After the end nothing is sent, whatever is written.
+    const asked = fake.seen.length;
+    link.wrote(`${more}{"a line":"written after the end"}\n`);
+    await pause(500);
+    assert.equal(fake.seen.length, asked, 'no question after the end');
+    assert.equal((await w.held()).size, 3);
+  } finally {
+    await link?.end();
+    await w.sealer.stop();
+  }
+});
+
+/**
+ * For the two tests below: a stand-in for the sealer that gives no answer
+ * while "away" is true and, while "holding" is true, keeps each question
+ * until "letGo()" and then passes it on. "kept" is how many it keeps.
+ */
+async function holdingStandIn(token, real) {
+  const state = { away: false, holding: false, kept: 0, letGo: () => {} };
+  const gate = new Promise((done) => {
+    state.letGo = () => {
+      state.holding = false;
+      done();
+    };
+  });
+  state.fake = await standIn({
+    token,
+    real,
+    answer: async (path, body, forward) => {
+      if (state.away) return null;
+      if (state.holding) {
+        state.kept += 1;
+        await gate;
+      }
+      return forward();
+    },
+  });
+  return state;
+}
+
+/**
+ * The end of an executor with a line the sealer lacks: the last try to
+ * send it is kept by the stand-in, and until it is answered the lock on the
+ * book is not let go; once it is, the lock is free and the sealer holds
+ * the line. "close" ends the executor; "held" asks the real sealer how many
+ * lines it holds; "lines" is how many the book file holds.
+ */
+async function endsBeforeTheLockIsFree(s, { book, close, held, lines }) {
+  // The sealer answers again, slowly: whatever it is asked now, it keeps.
+  s.away = false;
+  s.holding = true;
+  const closing = close();
+  await until(() => s.kept >= 1, { timeout: 30000 });
+  // Time for a lock that was let go too early to be seen free.
+  await pause(500);
+  await assert.rejects(lockFiles(book), (e) => e.code === 'LOCKED', 'the lock is held while the last question to the sealer is out');
+  s.letGo();
+  await closing;
+  const lock = await lockFiles(book, { wait: 10000 });
+  await lock.release();
+  assert.equal(await held(), lines(), 'the sealer holds every line');
+}
+
+test('central sealer, over stdio: at the end the link to the sealer is ended, with its last try, before the lock on the book is let go (review 3.2, F4)', async () => {
+  const w = await centralWorld({ open: false, sealer: { timeout: 20000 } });
+  const s = await holdingStandIn(w.sealer.token, w.settings.recorder.sealer.address);
+  try {
+    w.settings.recorder.sealer.address = s.fake.address;
+    await openWorld(w);
+    s.away = true;
+    assert.equal(refusal(await w.client.call('echo', {})), null);
+    assert.equal((await problemShown(w)).unsent, 1);
+    await endsBeforeTheLockIsFree(s, { book: join(w.folder, 'book.jsonl'), close: () => w.close(), held: async () => (await w.held()).size, lines: () => w.lines().length });
+  } finally {
+    s.away = false;
+    s.letGo();
+    await w.close();
+    await w.sealer.stop();
+  }
+});
+
+test('central sealer, over HTTP: at the end each agent\'s link to the sealer is ended, with its last try, before the lock on its book is let go (review 3.2, F4)', async () => {
+  const w = await httpWorld({ agents: ['alpha'], open: false });
+  const made = await sealerFolder([w.agents.alpha.agentKeys]);
+  const running = await startSealer({ folder: made.folder, port: made.port });
+  const s = await holdingStandIn(made.token, running.address);
+  let closed = false;
+  const close = async () => {
+    if (closed) return;
+    closed = true;
+    await w.close();
+  };
+  try {
+    writeFileSync(join(w.folder, 'secrets', 'sealer-token'), `${made.token}\n`);
+    w.settings.recorder = { sealer: { address: s.fake.address, name: RECORDER, token: { file: 'secrets/sealer-token' }, keySet: running.fingerprint, timeout: 20000 } };
+    await openHttpWorld(w);
+    const lines = () => readFileSync(w.agents.alpha.book, 'utf8').split('\n').filter(Boolean);
+    const sealer = connectSealer({ address: running.address, recorder: RECORDER, token: made.token });
+    const held = async () => (await sealer.held(Buffer.from(await leafFingerprint(lines()[0])).toString('base64url'))).size;
+    s.away = true;
+    assert.ok((await call(w, 'alpha', 'echo', {})).json.result);
+    await until(async () => (await w.executor.report()).agents.alpha.sealer.problem !== null, { timeout: 30000 });
+    assert.equal(await held(), 1);
+    await endsBeforeTheLockIsFree(s, { book: w.agents.alpha.book, close, held, lines: () => lines().length });
+  } finally {
+    s.away = false;
+    s.letGo();
+    if (w.executor) await close();
+    await running.close();
   }
 });

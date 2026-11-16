@@ -204,8 +204,9 @@
       sealer listens on 127.0.0.1 only, so the two programs are on one
       computer. `DESIGN.md`, X147 to X159.
     - Tests (`test/central-sealer.test.mjs`,
-      `test/central-sealer-e2e.test.mjs`, `test/same-files.test.mjs`; 33
-      tests): the sealer's program set up by its own commands and run
+      `test/central-sealer-e2e.test.mjs`, `test/same-files.test.mjs`; 38
+      tests, 34, 2 and 2, with those of the third review below): the
+      sealer's program set up by its own commands and run
       as a process of its own on 127.0.0.1, ended and started again
       while calls go on, with the timer's seals; a sealer stopped and
       started in the same process; the limit of unsent lines; a sealer
@@ -353,6 +354,30 @@
       the same. One test in each package, with 96 MiB offered, its
       length declared and not; each part of the fix, undone in either
       file, makes a test fail.
+    - Seven defences that no test held now have one each (no change to
+      the program). The review took 52 defences out one at a time; for
+      seven, no test failed. (1) The test that holds the executor's
+      copy of the sealer's client to "no other code"
+      (`test/same-files.test.mjs`) let through a line of code that
+      began with a comment mark, such as `/** */ run();`. It now takes
+      for a comment only a line that begins `//`, a block comment on
+      one line that ends at its first closing mark, or a block that
+      opens and closes on lines of their own with every line between
+      beginning ` *`; a line that holds a carriage return or a line or
+      paragraph separator counts as code. A second test puts fifteen
+      such lines into the copy and holds that each is found. (2) At
+      the end of a book's link to the sealer, the last try to send
+      what is unsent, and nothing sent after it. (3, 4) Over stdio and
+      over HTTP, the link is ended, with that last try, before the
+      lock on the book is let go: the lock is refused while the
+      sealer's answer is out. (5) A seal that the sealer hands back
+      under another fingerprint than the one it named as its latest is
+      not added. (6) The status read from the files shows nothing held
+      by a sealer that signs with another key set than the settings
+      name. (7) `keys` runs on settings whose `recorder.sealer` names
+      an address and no token yet (X157), in the end-to-end test and
+      in the test of the settings. With each of the seven taken out
+      again, its test fails.
   - **Tests** (`test/seal.test.mjs`, `test/seal-http.test.mjs`; 41
     tests): the seal checks under the recorder's keys with the library's
     checker, chains to the seal before, and a reader who names another

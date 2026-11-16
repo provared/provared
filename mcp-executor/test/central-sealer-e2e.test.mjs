@@ -43,17 +43,24 @@ test('central sealer, end to end: the sealer\'s program is set up by its own com
   const init = sealerCommand(['init', '--folder', folder, '--name', 'The end-to-end sealer (invented)']);
   assert.equal(init.code, 0, init.stderr);
   const keySet = /Key set:\s+(\S+)/.exec(init.stdout)[1];
-  w.settings.recorder = { sealer: { address: `http://127.0.0.1:${port}`, name: RECORDER, token: { file: 'keys/sealer-token' }, keySet, timeout: 1000 }, sealEvery: 1000 };
+  // The settings as they stand before the recorder is added at the sealer: they name the sealer's address, and no token yet.
+  w.settings.recorder = { sealer: { address: `http://127.0.0.1:${port}` }, sealEvery: 1000 };
   writeFileSync(w.configPath, JSON.stringify(w.settings));
-  // The executor's "keys" prints the fingerprint of the agent's key set, which the sealer is told when the recorder is added.
+  // The executor's "keys" runs on them (X157), and prints the fingerprint of the agent's key set, which the sealer is told when the recorder is added.
   const keys = await run(['keys', '--config', w.configPath]);
   assert.equal(keys.code, 0, keys.stderr);
   const agent = /the fingerprint of the key set of the agent is (\S+):/.exec(keys.stderr)[1];
   assert.equal(agent, await keySetFingerprint(w.agentKeys));
+  // Every other command names what the settings lack.
+  const early = await run(['check', '--config', w.configPath]);
+  assert.notEqual(early.code, 0);
+  assert.match(early.stdout + early.stderr, /recorder\.sealer\.token/);
   const added = sealerCommand(['add-recorder', '--folder', folder, '--agent', agent, RECORDER]);
   assert.equal(added.code, 0, added.stderr);
   const token = added.stdout.trim().split('\n').at(-1).trim();
   writeFileSync(join(w.folder, 'keys', 'sealer-token'), `${token}\n`);
+  w.settings.recorder = { sealer: { address: `http://127.0.0.1:${port}`, name: RECORDER, token: { file: 'keys/sealer-token' }, keySet, timeout: 1000 }, sealEvery: 1000 };
+  writeFileSync(w.configPath, JSON.stringify(w.settings));
 
   const bookText = () => readFileSync(join(w.folder, 'book.jsonl'), 'utf8');
   const checked = () => checkBook(bookText(), { issuerKeys: w.settings.agent.issuerKeys, sealKeys: [keySet] });

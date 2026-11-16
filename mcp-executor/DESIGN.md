@@ -2586,6 +2586,19 @@ passes the limit. The words of the refusal are as they were. The change
 is made in `sealer/sealer.mjs`, the sealer's own client, and copied
 (X151): the test that holds the copy holds this too.
 
+**X170. What the test of the copy takes for a comment.** X151's test
+holds that `sealer-client.mjs` has no code but the ten declarations and
+two import lines. It had let through any line that began `//`, `/**` or
+` *`, and so a line of code after a comment mark (`/** */ run();`). It
+now takes for a comment only: a line that begins `//`; a line that
+begins `/**` and ends with the first `*/` in it; or a block that opens
+with `/**` alone on a line and closes with ` */` alone on a line, every
+line between beginning ` * ` (or being ` *`) and holding no `*/`. A
+line that holds a carriage return, U+2028 or U+2029 counts as code,
+since each ends a `//` comment. These are the forms the copy's comments
+have. The other way: read the file with a JavaScript parser; the
+package has none, and takes no dependency for a test.
+
 **X241. A message is refused where a name in it differs only in capitals
 from one the executor reads (0.4.2).** The number is the one this choice
 has in the later design, so that one number names one choice. Three
