@@ -1358,7 +1358,8 @@ acknowledging a call sent under a permission no longer in force, and the
 status (below; X120 to X146); and a book sealed by a central sealer,
 which holds the recorder's keys away from the executor (below; X147 to
 X159). Two reviews of these changed parts of them: X160 to X166, and
-X167 to X171.
+X167 to X171; and a re-check of the fixes of the later one, X288 and
+X289.
 
 **Sealing.** The settings name a recorder (`recorder`: its key file, a
 name, and `sealEvery`). A seal is the library's (format description,
@@ -3454,6 +3455,24 @@ that is not answered, and it is sent nowhere else. A test in each
 package holds it. `provared-sealer` stays at 0.1.0, which is not
 published.
 
+**X289. A start asks again for the lock on its state file, as for a
+book's (the founder's decision; amends X285 for starts only).** Under
+X285 an HTTP executor whose settings name `oauth` asked once for the
+lock on its state file and was refused at once where it was held, while
+the same start asked again for each book's lock for 10 seconds (X164).
+So a client that started the executor again while the one before was
+still ending was turned away by the state file's lock, which X164 had
+been made to prevent. `openHttpExecutor` now passes `lockState` the
+same time as the books' locks, 10 seconds (`LOCK_WAIT_MS`, or the
+`lockWait` a test gives). The command `owner` still asks once, as every
+command does under X164: a person runs it by hand and can run it again,
+and it then opens the agents' files as a command, asking once for each
+book's lock, so that waiting for the state file alone would only move
+the refusal to the book. A command with `--offline` still takes no lock
+for the state file. A test holds that a start waits and then starts once
+the executor before has closed, and that it is refused once its time is
+up.
+
 ## 14. The executor as an OAuth-protected connector
 
 Over HTTP an agent may also connect through OAuth, from 0.5.0, where the
@@ -4418,7 +4437,8 @@ An HTTP executor whose settings name `oauth` takes a lock named after
 the state file (`oauth.state`) before it reads anything, and holds it
 until it has closed. The command `owner` takes the same lock before it
 opens the agents' files, and holds it while it works. A second program
-that asks for it is refused at once, with the code `LOCKED`: "An
+that asks for it is refused at once (a start, since X289, after asking
+again as for a book's lock), with the code `LOCKED`: "An
 executor is running on the state file … (oauth.state), or the command
 "owner" is at work on it", and that two executors need a state file
 each. Neither the state file nor any agent's files were read or written

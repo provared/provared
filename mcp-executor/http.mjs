@@ -379,7 +379,7 @@ export function sseEvent(others, data) {
  * their receipts now (openAgent).
  *
  * @param {object} config the settings, as in executor-http.example.json
- * @param {{root?: string, now?: () => number, log?: (event: object) => void, serverStderr?: NodeJS.WritableStream|null, offline?: boolean, lockWait?: number, identify?: typeof identify}} [more] "serverStderr": where the standard error of a local program goes (by default, the executor's own; null, nowhere); "lockWait": how long a start asks again for a book's lock that is held, in place of LOCK_WAIT_MS (for tests); "identify": what signs a challenge sent to POST /provared/hello, in place of identity.mjs's (for tests, which make it slow)
+ * @param {{root?: string, now?: () => number, log?: (event: object) => void, serverStderr?: NodeJS.WritableStream|null, offline?: boolean, lockWait?: number, identify?: typeof identify}} [more] "serverStderr": where the standard error of a local program goes (by default, the executor's own; null, nowhere); "lockWait": how long a start asks again for a book's lock, or the state file's, that is held, in place of LOCK_WAIT_MS (for tests); "identify": what signs a challenge sent to POST /provared/hello, in place of identity.mjs's (for tests, which make it slow)
  */
 export async function openHttpExecutor(config, more = {}) {
   const root = more.root ?? process.cwd();
@@ -407,7 +407,8 @@ export async function openHttpExecutor(config, more = {}) {
   };
   try {
     // The front door's state file is locked for this program first, before anything is read: a second executor whose settings name the same state file, with whatever agents, does not start (lock.mjs, X285). A command at work on the agents' files (offline) does not open the state file, and takes no lock for it; the command "owner", which writes it, takes the lock itself.
-    if (settings.oauth && !offline) releases.push((await lockState(settings.oauth.state)).release);
+    // A start asks again for it as for a book's lock, for 10 seconds, while the executor before it may still be ending (X289).
+    if (settings.oauth && !offline) releases.push((await lockState(settings.oauth.state, { wait: more.lockWait ?? LOCK_WAIT_MS })).release);
     for (const [name, paths] of settings.agents) {
       // Each agent's book and copy are locked for this program before anything of theirs is read (lock.mjs).
       // A start asks again for the lock for 10 seconds, while the executor before it may still be ending; a command asks once.

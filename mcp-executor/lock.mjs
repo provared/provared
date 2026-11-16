@@ -214,7 +214,8 @@ export function lockFiles(bookPath, { wait = 0 } = {}) {
  * state file, with whatever agents, do not both run: each would keep the
  * owner and the connections in its own memory and write the whole of it
  * over the file (X285). Gives {release}; throws, with code LOCKED, where
- * another program (or this one) holds it. "wait" as for lockFiles.
+ * another program (or this one) holds it. "wait" as for lockFiles: a start
+ * asks again, as for a book's lock, and "owner" asks once (X289).
  * @param {string} statePath
  * @param {{wait?: number}} [o]
  */

@@ -1253,7 +1253,8 @@ test('one program holds a state file: a second executor whose settings name the 
       return [name, s.isDirectory() ? 'folder' : s.size];
     });
     const before = { state: readFileSync(a.statePath, 'utf8'), files: files() };
-    await assert.rejects(open(), (e) => {
+    // Asked once (a start asks again for 10 seconds, X289; the test below shows that).
+    await assert.rejects(open({ lockWait: 0 }), (e) => {
       assert.equal(e.code, 'LOCKED', e.message);
       assert.equal(e.message, `An executor is running on the state file ${a.statePath} (oauth.state), or the command "owner" is at work on it. One program holds a state file at a time: stop the other first, or wait for the command to end. Two executors need a state file each: name another in this one's settings ("oauth", "state"). Neither the state file nor any agent's files were read or written.`);
       return true;
@@ -1279,6 +1280,35 @@ test('one program holds a state file: a second executor whose settings name the 
     second = null;
     // And gave the lock up at its close: the first starts again.
     await reopen(a);
+    assert.notEqual(state(a).owner, null);
+  } finally {
+    await second?.close();
+    await a.close();
+    await b.close();
+  }
+});
+
+test('a start asks again for the lock on its state file, as for a book\'s, and has it once the executor before has let it go; given up on once its time is up (X289)', async () => {
+  const a = await ownerWorld();
+  const b = await oauthWorld({ open: false });
+  let second = null;
+  try {
+    await setUpOwner(a);
+    b.settings.oauth = { issuer: a.issuer, clients: [a.docs.client], state: a.statePath };
+    const open = (more = {}) => openHttpExecutor(b.settings, { root: b.folder, log: () => {}, now: a.more.now, ...more });
+    // Asked for a short time, while the first holds it: refused once that time is up, and not before.
+    const began = Date.now();
+    await assert.rejects(open({ lockWait: 1200 }), (e) => e.code === 'LOCKED' && /on the state file/.test(e.message));
+    assert.ok(Date.now() - began >= 1100, `${Date.now() - began} ms`);
+    // A start with the time a start has, while the first ends a second later: it starts, on the owner the first kept.
+    const starting = open();
+    starting.catch(() => {}); // awaited below
+    await new Promise((done) => setTimeout(done, 1000));
+    await a.executor.close();
+    a.executor = null;
+    second = await starting;
+    await second.close();
+    second = null;
     assert.notEqual(state(a).owner, null);
   } finally {
     await second?.close();

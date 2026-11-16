@@ -582,7 +582,7 @@
       client, with its limits, and the steps to try the passkey by hand,
       with what to watch the first time.
     - **Tests**: `test/oauth.test.mjs`, 11 tests: the whole flow in plain
-      HTTP requests, and each refusal. `test/owner.test.mjs`, 33 tests: the
+      HTTP requests, and each refusal. `test/owner.test.mjs`, 34 tests: the
       page's own steps, and the page's script itself (`owner-page.mjs`)
       fetched from the executor and run on a stand-in page with the
       library's `passkey-browser.js` as served, with a software passkey;
@@ -1070,6 +1070,16 @@
         test in each package (`sealer/test/sealer.test.mjs`,
         `test/central-sealer.test.mjs`); each fails with the line taken
         out of its file.
+      - A start asks again for the lock on its state file for 10
+        seconds, as for a book's lock, before it is refused (X289, the
+        founder's decision; it amends X285 for starts). It had been
+        refused at once, so a client that started the executor again
+        while the one before was still ending was turned away. The
+        command `owner` still asks once, as every command does (X164).
+        One test in `test/owner.test.mjs`: a start that waits and then
+        starts once the executor before has closed, and one refused once
+        its time is up; it fails with the old call put back. The test of
+        X285 asks once.
     - **Tests** (`test/seal.test.mjs`, `test/seal-http.test.mjs`; 53
       tests, 29 and 24, with those of the second and third reviews): the
       seal checks under the recorder's keys with the library's
@@ -1124,8 +1134,8 @@
       sealer they are X147 to X159; X152 (the sealer must answer at a
       start), X153 (the limit of unsent lines) and X156 (no line while a
       seal may have been signed) wait for the founder's review. Those of
-      the second review are X160 to X166, and those of the third X167 to
-      X171.
+      the second review are X160 to X166, those of the third X167 to
+      X171, and those of the re-check of its fixes X288 and X289.
 
 - **`provared-mcp-executor` 0.4.2 (15 November 2026): a security fix for
   two weaknesses. In front of a tool server whose JSON reader ignores

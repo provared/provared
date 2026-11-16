@@ -1481,7 +1481,9 @@ HTTP executor that takes connections (`oauth.state`) has a lock of the
 same kind, named after the state file: `http` takes it first and holds it
 while it runs, and `owner` holds it while it works, so a second `http`
 whose settings name the same state file does not start, whatever its
-agents ("An executor is running on the state file …"). "What it does not do"
+agents ("An executor is running on the state file …"). As for a book,
+`http` asks again for it for 10 seconds before it is refused, and `owner`
+asks once. "What it does not do"
 says where the lock does not reach.
 
 A command with `--offline` is not a start. It writes no receipt by itself
