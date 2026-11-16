@@ -34,7 +34,7 @@ import { CODES, MAX_LINE_BYTES, foldName, idKey, isId, misspelt, notificationLin
 import { LOCK_WAIT_MS, lockFiles } from './lock.mjs';
 import { RULES_DOCUMENT, RULE_DOCUMENT, RULES_ENTRY_PREFIX, TOOL_NAME, lookUp, readPointer, readRules, rulesFingerprint, statesContentRules, testCall } from './rules.mjs';
 import { RECORDER_NAME } from './sealer-client.mjs';
-import { SEALER_BEHIND, SEALER_MAX_UNSENT, SEALER_MAX_UNSENT_MAX, SEALER_TIMEOUT, SEALER_TIMEOUT_MAX, SEALER_TIMEOUT_MIN, centralSealer, loadRecorder, localSealer, readRecorderKeyFile } from './sealing.mjs';
+import { SEALER_BEHIND, SEALER_MAX_UNSENT, SEALER_MAX_UNSENT_MAX, SEALER_TIMEOUT, SEALER_TIMEOUT_MAX, SEALER_TIMEOUT_MIN, centralSealer, loadRecorder, localSealer, readRecorderKeyFile, readStampSettings, stampFor, stampHook } from './sealing.mjs';
 
 /** The document, in each stub and denial, whose fingerprint is that of the executor's own identifier for the call (a label, not a reserved name). */
 export const CALL_DOCUMENT = 'executor.call';
@@ -288,7 +288,12 @@ export function readRecorderSettings(config, s, at, root, warnings) {
   const r = config.recorder;
   if (r === undefined) return;
   if (!isObject(r)) return at('recorder', 'must be an object: keys and, where wanted, name and sealEvery.');
-  const out = { keys: null, sealer: null, name: r.name ?? s.name, sealEvery: r.sealEvery ?? null };
+  const out = { keys: null, sealer: null, name: r.name ?? s.name, sealEvery: r.sealEvery ?? null, stamp: null };
+  if (r.stamp !== undefined) {
+    // With a central sealer, the sealer asks for the time-stamps, under its own settings: the seal comes to the book whole.
+    if (r.sealer !== undefined) at('recorder.stamp', 'must not be named together with recorder.sealer: a central sealer asks for its seals\' time-stamps itself (the "stamp" of its own settings).');
+    else out.stamp = readStampSettings(r.stamp, 'recorder.stamp', at);
+  }
   if (r.sealer !== undefined) {
     // The recorder's keys are in one place: with a central sealer, or in a key file here, never both (X147).
     if (r.keys !== undefined) at('recorder.keys', 'must not be named together with recorder.sealer: the recorder\'s keys are held by the central sealer, or in a key file here, not both.');
@@ -300,7 +305,7 @@ export function readRecorderSettings(config, s, at, root, warnings) {
   if (r.sealer === undefined && (typeof out.name !== 'string' || out.name.length < 1 || out.name.length > 200)) at('recorder.name', 'must be text of 1 to 200 characters.');
   if (out.sealEvery !== null && (!Number.isInteger(out.sealEvery) || out.sealEvery < SEAL_EVERY_MIN || out.sealEvery > SEAL_EVERY_MAX)) at('recorder.sealEvery', 'must be a whole number of milliseconds from 1,000 to 604,800,000 (seven days): how often each book is sealed while the executor runs. Leave it out for no timer.');
   else if (out.sealEvery !== null && out.sealEvery < SEAL_EVERY_SHORT) warnings.push(`recorder.sealEvery: ${out.sealEvery} ms is less than a minute. Each seal adds about 52 KB to a book and takes a second or two to sign.`);
-  for (const k of Object.keys(r)) if (!['keys', 'name', 'sealEvery', 'sealer'].includes(k)) warnings.push(`recorder.${k}: not a setting; set aside.`);
+  for (const k of Object.keys(r)) if (!['keys', 'name', 'sealEvery', 'sealer', 'stamp'].includes(k)) warnings.push(`recorder.${k}: not a setting; set aside.`);
   s.recorder = out;
 }
 
@@ -643,7 +648,8 @@ export async function prepareShared(settings) {
   }
   // The recorder that seals, where the settings name one: its key file is read through sealing.mjs.
   // Or a central sealer that holds the keys elsewhere: the executor then holds the recorder's token, and no key of the recorder's.
-  const sealer = !settings.recorder ? null : settings.recorder.sealer ? centralSealer(settings.recorder.sealer) : localSealer(await loadRecorder(settings.recorder));
+  // Where the settings give a time-stamp service, each seal signed here is sent to it (sealing.mjs, "recorder.stamp").
+  const sealer = !settings.recorder ? null : settings.recorder.sealer ? centralSealer(settings.recorder.sealer) : localSealer(await loadRecorder(settings.recorder), { stamp: settings.recorder.stamp ? await stampHook(settings.recorder.stamp) : null });
   // The key files the executor held before: used only to countersign a receipt the administrator acknowledges.
   const formerKeys = [];
   for (const path of settings.executor.formerKeys ?? []) formerKeys.push(await loadKeyFile(path, 'agent'));
@@ -779,7 +785,9 @@ export function describeRecorder(settings, sealer) {
   if (!sealer) return null;
   // A central sealer: the key set it signs with as the settings name it, its address, and the name it knows this recorder by. Its seals give its own name.
   if (sealer.central) return { fingerprint: sealer.fingerprint, sealEvery: settings.recorder.sealEvery, sealer: { address: sealer.address, recorder: sealer.name, maxUnsent: settings.recorder.sealer.maxUnsent } };
-  return { name: sealer.name, fingerprint: sealer.fingerprint, sealEvery: settings.recorder.sealEvery };
+  // The time-stamp service each seal is sent to, where the settings give one.
+  const stamp = settings.recorder.stamp ? { stamp: { address: settings.recorder.stamp.address, timeout: settings.recorder.stamp.timeout } } : {};
+  return { name: sealer.name, fingerprint: sealer.fingerprint, sealEvery: settings.recorder.sealEvery, ...stamp };
 }
 
 /**
@@ -1144,14 +1152,28 @@ export async function openAgent(prepared, { settings, executorKeys, now, log, na
       if (olderThan !== null && last && now() - Date.parse(last.content.when) < olderThan) return { sealed: false, reason: 'not-due' };
       if (link) {
         // The central sealer signs over the lines it was sent, and only once it holds every one; its seal's entry is added as it is.
-        const { entry, named } = await link.seal(last?.fingerprint, now());
-        return { sealed: true, ...(await addCentralSeal(entry, named)) };
+        const { entry, named, stampProblem } = await link.seal(last?.fingerprint, now());
+        const added = await addCentralSeal(entry, named);
+        if (stampProblem) agentLog({ event: 'stamp-not-given', entry: added.entry, seal: added.fingerprint, code: stampProblem.code, reason: stampProblem.message });
+        return { sealed: true, ...added, ...(stampProblem ? { stampProblem } : {}) };
       }
       const sealed = await sealer.seal(writer.book(), { previous: last?.fingerprint, when: now() });
-      await writer.add({ seal: sealed.record });
+      // An outside time-stamp, where the settings give a service. A seal is never lost for want of one: where the service
+      // gives none, or the book does not take the seal with it, the seal goes in without it and the reason is said.
+      let { stamps, stampProblem } = sealer.stamp ? await stampFor(sealer.stamp, sealed.fingerprintBytes) : {};
+      if (stamps) {
+        try {
+          await writer.add({ seal: sealed.record, stamps });
+        } catch (e) {
+          stamps = undefined;
+          stampProblem = { code: 'stamp-not-given', message: `The book did not take the seal with its time-stamp (${e.message}), so the seal went in without it.` };
+        }
+      }
+      if (!stamps) await writer.add({ seal: sealed.record });
       if (!save()) throw new Error(`The seal is in the executor's memory, and the book file could not be written: ${stopped}`);
-      agentLog({ event: 'sealed', entry: result.size, seal: sealed.fingerprint });
-      return { sealed: true, entry: result.size, fingerprint: sealed.fingerprint };
+      agentLog({ event: 'sealed', entry: result.size, seal: sealed.fingerprint, ...(stamps ? { stamped: true } : {}) });
+      if (stampProblem) agentLog({ event: 'stamp-not-given', entry: result.size, seal: sealed.fingerprint, code: stampProblem.code, reason: stampProblem.message });
+      return { sealed: true, entry: result.size, fingerprint: sealed.fingerprint, ...(stamps ? { stamped: true } : {}), ...(stampProblem ? { stampProblem } : {}) };
     });
   }
 
@@ -2211,10 +2233,10 @@ export async function openExecutor(config, more = {}) {
     /** The recorder that seals: its name, the fingerprint of its key set and the timer; null where the settings name none. */
     recorder: describeRecorder(settings, p.sealer),
     attach,
-    /** Seal the book now, with the recorder's keys: {entry, fingerprint}. */
+    /** Seal the book now, with the recorder's keys: {entry, fingerprint}, with "stamped" or "stampProblem" where a time-stamp was asked for. */
     async seal() {
-      const { entry, fingerprint: seal } = await agent.seal();
-      return { entry, fingerprint: seal };
+      const { entry, fingerprint: seal, stamped, stampProblem } = await agent.seal();
+      return { entry, fingerprint: seal, ...(stamped ? { stamped } : {}), ...(stampProblem ? { stampProblem } : {}) };
     },
     /** The administrator acknowledges the calls sent under a permission no longer in force, and may set some aside: {written, setAside, remaining}. */
     acknowledge: (o) => agent.acknowledge(o),

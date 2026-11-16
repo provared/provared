@@ -184,6 +184,11 @@ function samePath(a, b) {
   return process.platform === 'win32' ? x.toLowerCase() === y.toLowerCase() : x === y;
 }
 
+/** Text from an answer, on one line and with no character that steers a terminal. */
+const plainText = (v) => String(v).replace(/[\p{Cc}\p{Zl}\p{Zp}]/gu, ' ');
+/** What "Sealed: ..." adds where the seal carries a time-stamp. */
+const stampWords = (sealed) => (sealed?.stamped === true ? ', with a time-stamp' : '');
+
 /** Whether the settings are the HTTP executor's (several agents, one upstream) rather than the stdio executor's. */
 const isHttp = (config) => config !== null && typeof config === 'object' && !Array.isArray(config) && Object.hasOwn(config, 'agents');
 
@@ -627,7 +632,8 @@ async function main(args) {
       const executor = await openOffline(config, root);
       try {
         const sealed = await (name === null ? executor.seal() : executor.seal(name));
-        process.stdout.write(`Sealed: entry ${sealed.entry} of ${whose} is the seal ${sealed.fingerprint}.\n`);
+        process.stdout.write(`Sealed: entry ${sealed.entry} of ${whose} is the seal ${sealed.fingerprint}${stampWords(sealed)}.\n`);
+        if (sealed.stampProblem) process.stderr.write(`provared-mcp-executor: the seal has no time-stamp: ${plainText(sealed.stampProblem.message)} (${plainText(sealed.stampProblem.code)})\n`);
       } finally {
         await executor.close();
       }
@@ -639,7 +645,8 @@ async function main(args) {
       process.stderr.write(`provared-mcp-executor: the book was not sealed: ${answer.value?.message ?? answer.status}\n`);
       return 1;
     }
-    process.stdout.write(`Sealed: entry ${answer.value.entry} of ${whose} is the seal ${answer.value.fingerprint}.\n`);
+    process.stdout.write(`Sealed: entry ${answer.value.entry} of ${whose} is the seal ${answer.value.fingerprint}${stampWords(answer.value)}.\n`);
+    if (answer.value.stampProblem) process.stderr.write(`provared-mcp-executor: the seal has no time-stamp: ${plainText(answer.value.stampProblem.message)} (${plainText(answer.value.stampProblem.code)})\n`);
     return 0;
   }
   if (command === 'acknowledge') {

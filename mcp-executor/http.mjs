@@ -1024,12 +1024,12 @@ export async function openHttpExecutor(config, more = {}) {
     }
   }
 
-  /** Seal an agent's book now, with the recorder's keys: {agent, entry, fingerprint}. */
+  /** Seal an agent's book now, with the recorder's keys: {agent, entry, fingerprint}, with "stamped" or "stampProblem" where a time-stamp was asked for. */
   async function seal(name) {
     const agent = agents.get(name);
     if (!agent) throw new Error(`The executor has no agent named "${name}".`);
-    const { entry, fingerprint } = await agent.seal();
-    return { agent: name, entry, fingerprint };
+    const { entry, fingerprint, stamped, stampProblem } = await agent.seal();
+    return { agent: name, entry, fingerprint, ...(stamped ? { stamped } : {}), ...(stampProblem ? { stampProblem } : {}) };
   }
 
   /** The administrator acknowledges an agent's calls sent under a permission no longer in force, and may set some aside (openAgent's "acknowledge"): {agent, written, setAside, remaining}. */

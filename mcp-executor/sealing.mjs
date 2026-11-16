@@ -65,20 +65,89 @@ export async function loadRecorder(recorder) {
   return { name: recorder.name, keys, privateKeys: [privateKeys[0], privateKeys[1], third], fingerprint: await keySetFingerprint(keys) };
 }
 
+// --- an outside time-stamp on each seal (format description, section 21.2) ---
+//
+// Where the settings give a time-stamp service ("recorder.stamp"), each
+// seal signed here is sent to it as its fingerprint, and the time-stamp it
+// gives goes on the seal's line, in "stamps". The request and the check of
+// the answer are the library's (provared/net/timestamp, loaded only where
+// the setting is given). A time-stamp that is not given never costs the
+// seal: the seal goes into the book without one, and the reason is said.
+
+/** How long the request for a time-stamp may take, unless the settings say otherwise, and the least and the most they may say: milliseconds. */
+export const STAMP_TIMEOUT = 10000;
+export const STAMP_TIMEOUT_MIN = 100;
+export const STAMP_TIMEOUT_MAX = 60000;
+
+/**
+ * "recorder.stamp", read: {address, timeout}; null where it has a problem.
+ * The address is an address on the web (http: or https:) with no user name,
+ * password or fragment. No service is named here.
+ */
+export function readStampSettings(c, where, at) {
+  if (c === null || typeof c !== 'object' || Array.isArray(c)) {
+    at(where, 'must be an object: the address of a time-stamp service and, where wanted, a time limit.');
+    return null;
+  }
+  let sound = true;
+  const no = (what, text) => {
+    sound = false;
+    at(`${where}.${what}`, text);
+  };
+  const out = { address: c.address, timeout: c.timeout ?? STAMP_TIMEOUT };
+  let url = null;
+  try {
+    url = typeof c.address === 'string' ? new URL(c.address) : null;
+  } catch {
+    url = null;
+  }
+  if (!url || !['http:', 'https:'].includes(url.protocol) || url.username !== '' || url.password !== '' || url.hash !== '') no('address', 'must be the whole address of a time-stamp service (RFC 3161), beginning http:// or https://, with no user name, password or fragment.');
+  if (!Number.isInteger(out.timeout) || out.timeout < STAMP_TIMEOUT_MIN || out.timeout > STAMP_TIMEOUT_MAX) no('timeout', `must be a whole number of milliseconds from ${STAMP_TIMEOUT_MIN} to ${STAMP_TIMEOUT_MAX}: how long the request for a time-stamp may take.`);
+  for (const k of Object.keys(c)) if (!['address', 'timeout'].includes(k)) no(k, 'is not a setting of a time-stamp service: it takes "address" and "timeout".');
+  return sound ? out : null;
+}
+
+/** The function that asks the service the settings give for a time-stamp over a seal's fingerprint (the library's stampService). */
+export async function stampHook({ address, timeout }) {
+  let net;
+  try {
+    net = await import('provared/net/timestamp');
+  } catch (e) {
+    throw new Error(`recorder.stamp: the library installed has no client for a time-stamp service (provared/net/timestamp), so no time-stamp can be asked for (${e.code ?? e.message}).`);
+  }
+  return net.stampService({ address, timeout });
+}
+
+/**
+ * Ask for a time-stamp over a seal's fingerprint. Never throws: gives
+ * {stamps: [item]} or {stampProblem: {code, message}}.
+ */
+export async function stampFor(stamp, fingerprintBytes) {
+  try {
+    return { stamps: [await stamp(fingerprintBytes.slice())] };
+  } catch (e) {
+    const message = typeof e?.message === 'string' && e.message !== '' ? e.message : 'The time-stamp service gave no time-stamp.';
+    return { stampProblem: { code: typeof e?.code === 'string' && e.code.startsWith('stamp-') ? e.code : 'stamp-not-given', message } };
+  }
+}
+
 /**
  * A sealer that signs here, with the recorder's keys from its key file.
  * @param {{name: string, keys: object[], privateKeys: any[], fingerprint: string}} recorder as loadRecorder gives it
- * @returns {{fingerprint: string, name: string, seal: (book: string, fields: {previous?: string, when: number}) => Promise<{record: object, fingerprint: string}>}}
+ * @param {{stamp?: ((fingerprintBytes: Uint8Array) => Promise<string>) | null}} [more] asks a time-stamp service for a time-stamp over each seal
+ * @returns {{fingerprint: string, name: string, stamp: Function|null, seal: (book: string, fields: {previous?: string, when: number}) => Promise<{record: object, fingerprint: string, fingerprintBytes: Uint8Array}>}}
  */
-export function localSealer(recorder) {
+export function localSealer(recorder, { stamp = null } = {}) {
   return {
     /** The fingerprint of the recorder's key set. */
     fingerprint: recorder.fingerprint,
     name: recorder.name,
+    /** Asks for a time-stamp over a seal's fingerprint, or null where the settings give no service. */
+    stamp,
     /** A seal over the book as it stands, naming the seal before it where there is one. */
     async seal(book, { previous, when }) {
       const sealed = await writeSeal(book, { by: { keys: recorder.keys, name: recorder.name }, ...(previous ? { previous } : {}), when }, recorder.privateKeys);
-      return { record: sealed.record, fingerprint: sealed.fingerprint };
+      return { record: sealed.record, fingerprint: sealed.fingerprint, fingerprintBytes: sealed.fingerprintBytes };
     },
   };
 }
@@ -481,7 +550,9 @@ export function centralSealer(s) {
           schedule();
           throw new Error(`The central sealer signed no seal: ${answer.refused.message} (${answer.refused.code})`);
         }
-        return { entry: answer.entry };
+        // A time-stamp the sealer asked for and was not given: the seal is signed all the same, and the reason is handed on.
+        const stampProblem = isObject(answer.stampProblem) && typeof answer.stampProblem.message === 'string' ? { code: String(answer.stampProblem.code), message: answer.stampProblem.message } : null;
+        return { entry: answer.entry, ...(stampProblem ? { stampProblem } : {}) };
       },
       /** What the status shows of the link: how many lines are unsent and since when, when the sealer last answered, and what is wrong. */
       status: () => ({ address: s.address, recorder: s.name, unsent: lines - confirmed, since: since === null ? null : new Date(since).toISOString(), answeredAt: answeredAt === null ? null : new Date(answeredAt).toISOString(), problem: broken ?? doubt ?? problem }),
