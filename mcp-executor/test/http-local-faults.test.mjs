@@ -686,12 +686,19 @@ test('a program that writes much, answers and ends at once: its exit does not ov
 });
 
 test('the stop reaches what a program started: a server behind a launcher that passes no signal on is ended with it, and counts until it has gone (X252)', { skip: POSIX ? false : 'Windows has no process groups: there the one process the executor started is ended, as the README says' }, async () => {
+  // A process that has ended but is not yet reaped (a zombie) has gone: where nothing reaps orphans, as in a container
+  // with no init, a server whose launcher has ended stays a zombie, and a signal 0 to it still succeeds.
   const alive = (pid) => {
     try {
       process.kill(pid, 0);
-      return true;
     } catch {
       return false;
+    }
+    try {
+      const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+      return stat.slice(stat.lastIndexOf(')') + 2, stat.lastIndexOf(')') + 3) !== 'Z';
+    } catch {
+      return true;
     }
   };
   const pidsOf = (file) => (existsSync(file) ? readFileSync(file, 'utf8').split('\n').filter(Boolean).map(Number) : []);

@@ -81,7 +81,10 @@
       `local.mjs` alone with the clock in the test's hands: the five
       faults that the re-check put into the code and that passed every
       test are each caught now. The test of the launcher runs on Linux and
-      macOS only. Three tests that depended on the computer's speed no
+      macOS only, and takes a server that has ended but is not yet reaped
+      (a zombie) to have gone: in a container with no init, nothing reaps
+      a server whose launcher has ended, and the test failed there though
+      the executor had ended it. Three tests that depended on the computer's speed no
       longer do (`seal.test.mjs`, `http.test.mjs`, and the timeouts of
       1,000 ms where a test starts a program), and the made-up server's
       log is read in whole lines.
