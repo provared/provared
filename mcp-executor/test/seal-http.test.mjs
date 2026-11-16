@@ -18,7 +18,7 @@ const { httpWorld, openHttpWorld, call, rawRequest } = await import('./http-worl
 const { signSlip, until, pause } = await import('./world.mjs');
 const { CALL_DOCUMENT, TOOL_DOCUMENT, RESULT_DOCUMENT, WRITTEN_LATE_DOCUMENT, ACKNOWLEDGED_DOCUMENT } = await import('../executor.mjs');
 const { ADMIN_BODY_LIMIT, checkHttpConfig, newSecret, openHttpExecutor, readHttpSettings, secretHash, httpStatusFromFiles } = await import('../http.mjs');
-const { checkIdentity } = await import('../identity.mjs');
+const { checkIdentity, identify } = await import('../identity.mjs');
 
 // The fixed texts of an acknowledged receipt, by their fingerprints written out (seal.test.mjs holds the texts).
 const ACKNOWLEDGED_FINGERPRINT = 'poJcnPoQB6EyH2Pvp2ZPgD6_2XrDua1XAOpPHBaUezI';
@@ -471,7 +471,57 @@ test('POST /provared/hello: the executor signs a fresh challenge and the address
   }
 });
 
-test('POST /provared/hello, which anyone may ask: a body of 256 bytes at most, 5 seconds at most for it to arrive, and 8 such questions in hand at once', async () => {
+/** One whole question to POST /provared/hello, with a fresh challenge, from a local address where "from" names one: {status, json}. */
+function hello(w, { from } = {}) {
+  return new Promise((done, failed) => {
+    const data = JSON.stringify({ challenge: randomBytes(32).toString('base64url') });
+    const req = http.request({ host: '127.0.0.1', port: w.address.port, path: '/provared/hello', method: 'POST', agent: false, ...(from ? { localAddress: from } : {}), headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(data) } }, (res) => {
+      const chunks = [];
+      res.on('data', (c) => chunks.push(c));
+      res.on('error', failed);
+      res.on('end', () => {
+        let json;
+        try {
+          json = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+        } catch {
+          json = undefined;
+        }
+        done({ status: res.statusCode, json });
+      });
+    });
+    req.on('error', failed);
+    req.end(data);
+  });
+}
+
+/**
+ * An executor whose signing of a challenge waits, while "held.on" is true,
+ * until "held.letGo()" is called: so that a test can have whole questions
+ * in hand. "held.waiting" is how many wait.
+ */
+async function slowHelloWorld() {
+  const w = await adminWorld({ agents: ['alpha'], open: false });
+  const held = { on: true, waiting: 0, letGo: () => {} };
+  const gate = new Promise((done) => {
+    held.letGo = () => {
+      held.on = false;
+      done();
+    };
+  });
+  await openHttpWorld(w, {
+    identify: async (...given) => {
+      if (held.on) {
+        held.waiting += 1;
+        await gate;
+      }
+      return identify(...given);
+    },
+  });
+  w.held = held;
+  return w;
+}
+
+test('POST /provared/hello, which anyone may ask: a body of 256 bytes at most, 1 second at most for it to arrive, and no place taken by a question whose body is not whole (review 3.2, F2)', async () => {
   // A long timeout for the agents' calls, so that a wait cut short is the hello's own.
   const w = await adminWorld({ agents: ['alpha'], config: { timeout: 120000 } });
   const open = [];
@@ -496,27 +546,152 @@ test('POST /provared/hello, which anyone may ask: a body of 256 bytes at most, 5
     assert.equal(long.status, 400);
     assert.equal(long.json.signatures, undefined);
     assert.equal((await ask(w, 'POST', '/provared/hello', { secret: null, body: JSON.stringify({ challenge, filler: 'x'.repeat(150) }) })).status, 200, 'under 256 bytes is taken');
-    // A body that never ends is given up on after 5 seconds, not after the agents' timeout.
+    // A body that never ends is given up on after 1 second: not after the agents' timeout, and not after the 5 seconds it had.
     const began = Date.now();
     const slow = await Promise.race([unfinished(), pause(15000).then(() => 'no answer')]);
     const took = Date.now() - began;
     assert.equal(slow, 400);
-    assert.ok(took >= 4500 && took < 12000, `${took} ms`);
-    // Eight in hand at once: the ninth is turned away at once, and nothing is signed for it.
-    const eight = Array.from({ length: 8 }, unfinished);
-    await pause(500);
-    const ninth = await ask(w, 'POST', '/provared/hello', { secret: null, body: { challenge } });
-    assert.equal(ninth.status, 503);
-    assert.equal(ninth.json.code, 'busy');
-    assert.equal(ninth.json.signatures, undefined);
-    // Once those are given up on, the executor answers again.
-    assert.deepEqual(await Promise.all(eight), Array(8).fill(400));
+    assert.ok(took >= 900 && took < 4500, `${took} ms`);
+    // Unfinished questions take no place, however many: each is given up on, and nothing is signed for it.
+    const many = Array.from({ length: 20 }, unfinished);
+    assert.deepEqual(await Promise.all(many), Array(20).fill(400));
     const after = await ask(w, 'POST', '/provared/hello', { secret: null, body: { challenge } });
     assert.equal(after.status, 200, after.body);
     // An agent's call was not held up by them.
     assert.ok((await call(w, 'alpha', 'echo', {})).json.result);
   } finally {
     for (const req of open) req.destroy();
+    await w.close();
+  }
+});
+
+test('unfinished questions to POST /provared/hello, begun again as each is given up on, do not keep the administrator\'s commands out (review 3.2, F2)', async () => {
+  const w = await adminWorld({ agents: ['alpha'] });
+  const secret = { env: { [ENV]: w.admin } };
+  let holding = true;
+  let begun = 0;
+  const open = new Set();
+  /** One question whose body is begun and never ended, begun again as soon as the executor gives it up. */
+  const hold = () => {
+    if (!holding) return;
+    const req = http.request({ host: '127.0.0.1', port: w.address.port, path: '/provared/hello', method: 'POST', agent: false, headers: { 'content-type': 'application/json', 'content-length': '60' } });
+    begun += 1;
+    open.add(req);
+    const again = () => {
+      if (open.delete(req)) setTimeout(hold, 20);
+    };
+    req.on('response', (res) => {
+      res.resume();
+      again();
+    });
+    req.on('error', again);
+    req.on('close', again);
+    req.write('{"challenge":"');
+  };
+  try {
+    const direct = settingsAt(w, 'direct.json', w.address.port);
+    // Twelve at once, where eight had filled every place.
+    for (let i = 0; i < 12; i++) hold();
+    await pause(300);
+    for (const args of [['status'], ['seal', '--agent', 'alpha'], ['status']]) {
+      const r = await run([...args, '--config', direct], secret);
+      assert.equal(r.code, 0, `${args[0]}: ${r.stderr}`);
+    }
+    assert.ok(begun >= 12, 'the questions were begun');
+  } finally {
+    holding = false;
+    for (const req of open) req.destroy();
+    await w.close();
+  }
+});
+
+test('POST /provared/hello: 8 whole questions are signed for at once, and 4 for the callers at one address; a further one is answered "busy" and nothing is signed for it (review 3.2, F2)', { skip: NO_SECOND }, async () => {
+  const w = await slowHelloWorld();
+  const secret = { env: { [ENV]: w.admin } };
+  try {
+    // Four from 127.0.0.1 are in hand: a fifth from there is turned away, and so is a command, which asks from there.
+    // A question that is turned away is answered at once; one that is taken waits here to be signed for, and gives no answer.
+    const soon = (answer) => Promise.race([answer, pause(10000).then(() => ({ status: 'no answer: the question was taken', json: {} }))]);
+    const four = Array.from({ length: 4 }, () => hello(w));
+    await until(() => w.held.waiting === 4, { timeout: 30000 });
+    const fifth = await soon(hello(w));
+    assert.equal(fifth.status, 503);
+    assert.equal(fifth.json.code, 'busy');
+    assert.match(fifth.json.message, /4 such questions from this address/);
+    assert.equal(fifth.json.signatures, undefined);
+    const busy = await run(['status', '--config', settingsAt(w, 'direct.json', w.address.port)], secret);
+    assert.equal(busy.code, 2);
+    assert.match(busy.stderr, /What answers at 127\.0\.0\.1:\d+ says that it is busy: each of the 5 times this command asked, .*\(503, "busy"\)\. The administrator's secret was not sent\. Run the command again\./);
+    assert.doesNotMatch(busy.stderr, /did not show that it is the executor/);
+    assert.equal(busy.stdout, '');
+    // A caller at another address still finds a place: four more, and then all eight are taken.
+    const more = Array.from({ length: 4 }, () => hello(w, { from: SECOND }));
+    await until(() => w.held.waiting === 8, { timeout: 30000 });
+    const ninth = await soon(hello(w, { from: '127.0.0.3' }));
+    assert.equal(ninth.status, 503);
+    assert.equal(ninth.json.code, 'busy');
+    assert.match(ninth.json.message, /8 such questions, the most it takes at once/);
+    assert.equal(ninth.json.signatures, undefined);
+    assert.equal(w.held.waiting, 8, 'nothing was signed for the questions turned away');
+    // Once those are signed for, the places are free again.
+    w.held.letGo();
+    for (const answered of await Promise.all([...four, ...more])) {
+      assert.equal(answered.status, 200);
+      assert.equal(answered.json.signatures.length, 2);
+    }
+    assert.equal((await hello(w)).status, 200);
+    const ok = await run(['status', '--config', settingsAt(w, 'direct.json', w.address.port)], secret);
+    assert.equal(ok.code, 0, ok.stderr);
+  } finally {
+    w.held.letGo();
+    await w.close();
+  }
+});
+
+test('a command whose challenge is answered "busy" asks again, five times in all, and then goes by the answer it gets; the secret is sent to no listener that says "busy" (review 3.2, F2)', async () => {
+  const w = await adminWorld({ agents: ['alpha'] });
+  const secret = { env: { [ENV]: w.admin } };
+  const seen = [];
+  let busyFor = Infinity;
+  // A listener that answers "busy" as the executor does, and after "busyFor" such answers makes up signatures.
+  const listener = http.createServer((req, res) => {
+    const chunks = [];
+    req.on('data', (c) => chunks.push(c));
+    req.on('end', () => {
+      seen.push({ at: Date.now(), url: req.url, authorization: req.headers.authorization ?? null, body: Buffer.concat(chunks).toString('utf8') });
+      if (seen.length <= busyFor) {
+        res.writeHead(503, { 'content-type': 'application/json', connection: 'close' });
+        return res.end(JSON.stringify({ taken: false, code: 'busy', message: 'The executor is answering 8 such questions, the most it takes at once. Ask again.' }));
+      }
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ executor: 'provared-mcp-executor', address: '127.0.0.1', port: 1, signatures: ['AAAA', 'BBBB'] }));
+    });
+  });
+  try {
+    const at = settingsAt(w, 'at-listener.json', await listenOn(listener));
+    // Busy every time: asked five times, half a second apart, and told so.
+    const busy = await run(['status', '--config', at], secret);
+    assert.equal(busy.code, 2);
+    assert.match(busy.stderr, /says that it is busy: each of the 5 times this command asked, .* The administrator's secret was not sent\. Run the command again\./);
+    assert.doesNotMatch(busy.stderr, /did not show that it is the executor/);
+    assert.equal(busy.stdout, '');
+    assert.equal(seen.length, 5);
+    assert.ok(seen[4].at - seen[0].at >= 1800, `${seen[4].at - seen[0].at} ms between the first and the fifth`);
+    // Busy twice, then an answer: the command asks a third time and goes by that answer, here signatures that do not check.
+    seen.length = 0;
+    busyFor = 2;
+    const then = await run(['seal', '--agent', 'alpha', '--config', at], secret);
+    assert.equal(then.code, 2);
+    assert.match(then.stderr, /did not show that it is the executor of these settings: its signatures do not check .* The administrator's secret was not sent\./);
+    assert.equal(seen.length, 3);
+    for (const s of seen) {
+      assert.equal(s.url, '/provared/hello');
+      assert.equal(s.authorization, null);
+      assert.ok(!s.body.includes(w.admin));
+    }
+  } finally {
+    listener.close();
+    listener.closeAllConnections();
     await w.close();
   }
 });

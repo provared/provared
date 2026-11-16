@@ -1144,9 +1144,17 @@ settings … The administrator's secret was not sent." and ends with code
 2. `POST /provared/hello` needs no secret, signs for anyone who asks, and
 signs nothing but that text, which cannot be taken for a record: a
 challenge must be 43 characters of base64url. Since anyone may ask, it
-reads a body of 256 bytes at most, waits 5 seconds at most for it, and
-takes 8 such questions at once; a ninth is answered 503 and nothing is
-signed for it. This shows the command that
+reads a body of 256 bytes at most and waits 1 second at most for it. It
+signs for 8 such questions at once, and for 4 from one address; a
+further one is answered 503 (`busy`) and nothing is signed for it. A
+question counts only once its body has arrived whole, so a caller who
+never ends a body takes no place. A command that is told `busy` asks
+again after half a second, five times in all; if the answer is still
+`busy` it says "… says that it is busy … The administrator's secret was
+not sent. Run the command again." and ends with code 2. Programs at one
+address count as one caller, so a program on the administrator's own
+computer that asks without pause can still make a command wait or fail
+in this way. This shows the command that
 it reached the executor; it does not hide the secret from whoever can read
 the connection, which is plain HTTP.
 

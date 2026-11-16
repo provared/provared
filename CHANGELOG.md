@@ -293,7 +293,8 @@
       bytes at most, waits 5 seconds at most for it, and takes 8 such
       questions at once; a ninth is answered 503 with nothing signed
       (X160). Before, it read up to 64 KiB for as long as `timeout`, for
-      any number of callers.
+      any number of callers. The third review, below, changed the 5
+      seconds to 1 and what the 8 count.
   - **Fixes from a third review** (X167 on), of the book sealed by a
     central sealer and of the fixes above:
     - One seal that comes two ways is added once, and the agent is not
@@ -314,6 +315,27 @@
       where it is a receipt, and where it is the last seal under
       another fingerprint; and one hand-over while the turn does not
       come. Each of the five parts of the fix, undone, makes its test
+      fail.
+    - Unfinished questions to `POST /provared/hello` no longer keep the
+      administrator's commands out (X168). The limit of 8 above counted
+      a question from the moment it arrived, for up to 5 seconds, so a
+      caller with no secret who held 8 bodies begun and never ended,
+      each begun again when it was given up on, had `status`, `seal`
+      and `acknowledge` answered 503 and ended with code 2. Now a body
+      has 1 second; a question takes a place only once its body has
+      arrived whole, for the two signatures alone; and of the 8 places
+      callers at one address hold 4 at most. A command that is told
+      `busy` asks again after half a second, five times in all, and
+      then says that what answers is busy, where it had said that it
+      "did not show that it is the executor". Not closed: programs at
+      one address count as one caller, and a caller who sends whole
+      questions without pause still costs two signatures each. Four
+      tests in `test/seal-http.test.mjs` (three new, one changed): the
+      1 second and 20 unfinished questions that take no place; twelve
+      unfinished questions begun again and again while `status` and
+      `seal` end with 0; the 8 and the 4, with a signer made slow; and
+      a listener that answers `busy`, asked five times and sent no
+      secret. Each of the six parts of the fix, undone, makes its test
       fail.
   - **Tests** (`test/seal.test.mjs`, `test/seal-http.test.mjs`; 41
     tests): the seal checks under the recorder's keys with the library's

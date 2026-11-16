@@ -87,6 +87,9 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const VERSION = JSON.parse(readFileSync(join(HERE, 'package.json'), 'utf8')).version;
 /** The variable of the environment that holds the administrator's secret, for the commands that ask a running HTTP executor. */
 const ADMIN_SECRET_ENV = 'PROVARED_MCP_EXECUTOR_ADMIN_SECRET';
+/** How often a command asks a running executor that answers "busy" to its challenge, and how long it waits before it asks again: milliseconds. */
+const HELLO_TRIES = 5;
+const HELLO_PAUSE_MS = 500;
 
 const USAGE = `provared-mcp-executor ${VERSION}: an executor for MCP tool servers. It holds the server's credentials, checks each tool call against a permission a person signed, sends on the calls the permission allows, and writes a signed, countersigned receipt for each. Evidence, not a verdict.
 
@@ -292,7 +295,14 @@ async function askRunning(config, root, method, path, body, hint, publicKeys = n
     });
   try {
     const challenge = randomBytes(32).toString('base64url');
-    const hello = await send('POST', `${ADMIN_PATH}/hello`, {}, { challenge });
+    let hello;
+    for (let asked = 1; ; asked += 1) {
+      hello = await send('POST', `${ADMIN_PATH}/hello`, {}, { challenge });
+      // "busy" is no sign of another listener: the executor signs for few questions at once, and says to ask again.
+      if (hello.status !== 503 || hello.value?.code !== 'busy') break;
+      if (asked === HELLO_TRIES) throw new Error(`What answers at ${host}:${port} says that it is busy: each of the ${HELLO_TRIES} times this command asked, it answered that it is signing for as many such questions as it takes at once (503, "busy"). The administrator's secret was not sent. Run the command again.`);
+      await new Promise((done) => setTimeout(done, HELLO_PAUSE_MS));
+    }
     const notProved = (why) => new Error(`What answers at ${host}:${port} did not show that it is the executor of these settings: ${why} The administrator's secret was not sent.`);
     if (hello.status === 404 && hello.value?.code === 'not-found' && /no administrator's secret/.test(hello.value.message ?? '')) throw notProved('it says that its settings name no administrator\'s secret ("admin"), so its own addresses answer nothing.');
     if (hello.status !== 200 || hello.value === undefined) throw notProved(`it answered ${hello.status} where the executor signs the challenge it is sent.`);

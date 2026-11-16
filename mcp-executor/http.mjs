@@ -55,10 +55,17 @@ export const CREDENTIAL_REMOVED = '[a credential was removed by the Provared exe
 export const ADMIN_PATH = '/provared';
 /** The most a body sent to one of the executor's own addresses may be: 64 KiB. */
 export const ADMIN_BODY_LIMIT = 64 * 1024;
-/** POST /provared/hello needs no secret, so anyone may ask: the most its body may be (bytes), how long the body may take (milliseconds), and how many such questions are in hand at once. */
+/**
+ * POST /provared/hello needs no secret, so anyone may ask: the most its
+ * body may be (bytes), how long the body may take (milliseconds), how many
+ * such questions are signed for at once, and how many of those for callers
+ * at one address. A question takes a place only once its body has arrived
+ * whole, so a caller who never ends a body holds none (X168).
+ */
 export const HELLO_BODY_LIMIT = 256;
-export const HELLO_WAIT_MS = 5000;
+export const HELLO_WAIT_MS = 1000;
 export const HELLO_AT_ONCE = 8;
+export const HELLO_PER_CALLER = 4;
 
 /** The agent's headers that go on to the upstream. Every other is dropped: a header is a way to carry a token, and the upstream must get none but the executor's. */
 const FORWARDED_HEADERS = ['accept', 'accept-language', 'content-type', 'mcp-session-id', 'last-event-id'];
@@ -332,7 +339,7 @@ export function sseEvent(others, data) {
  * their receipts now (openAgent).
  *
  * @param {object} config the settings, as in executor-http.example.json
- * @param {{root?: string, now?: () => number, log?: (event: object) => void, offline?: boolean, lockWait?: number}} [more] "lockWait": how long a start asks again for a lock that is held, in place of LOCK_WAIT_MS (for tests)
+ * @param {{root?: string, now?: () => number, log?: (event: object) => void, offline?: boolean, lockWait?: number, identify?: typeof identify}} [more] "lockWait": how long a start asks again for a lock that is held, in place of LOCK_WAIT_MS (for tests); "identify": what signs a challenge sent to POST /provared/hello, in place of identity.mjs's (for tests, which make it slow)
  */
 export async function openHttpExecutor(config, more = {}) {
   const root = more.root ?? process.cwd();
@@ -867,8 +874,11 @@ export async function openHttpExecutor(config, more = {}) {
 
   // --- the executor's own addresses, for the administrator ---
 
-  /** How many POST /provared/hello are in hand. */
+  /** How many POST /provared/hello are being signed for, in all and for the callers at each address. */
   let hellos = 0;
+  const hellosBy = new Map();
+  /** What signs a challenge: identity.mjs's, or a test's in its place. */
+  const signHello = more.identify ?? identify;
   const isAdmin = (secret) => {
     const given = Buffer.from(secretHash(secret));
     return admin !== null && given.length === admin.length && timingSafeEqual(given, admin);
@@ -892,22 +902,30 @@ export async function openHttpExecutor(config, more = {}) {
     if (admin === null) return adminRefuse(res, 404, 'not-found', 'This executor has no administrator\'s secret ("admin"), so its own addresses answer nothing.');
     // Before a command sends the secret it asks the executor to show that it is the executor (identity.mjs). No secret is needed, and none should be sent.
     if (req.method === 'POST' && path === `${ADMIN_PATH}/hello`) {
-      // Anyone may ask, so little is read, for a short time, for few callers at once: a challenge is some 60 bytes of JSON.
-      if (hellos >= HELLO_AT_ONCE) return adminRefuse(res, 503, 'busy', `The executor is answering ${HELLO_AT_ONCE} such questions, the most it takes at once. Ask again.`, { connection: 'close' });
-      hellos += 1;
+      // Anyone may ask, so little is read, for a short time: a challenge is some 60 bytes of JSON.
+      let asked;
       try {
-        let asked;
-        try {
-          asked = JSON.parse((await readBody(req, HELLO_BODY_LIMIT, HELLO_WAIT_MS))?.toString('utf8') ?? '');
-        } catch {
-          asked = null;
-        }
-        if (!isObject(asked) || typeof asked.challenge !== 'string' || !CHALLENGE.test(asked.challenge)) return adminRefuse(res, 400, 'bad-request', 'Send a challenge of 32 random bytes in base64url: {"challenge": "<43 characters>"}.', { connection: 'close' });
+        asked = JSON.parse((await readBody(req, HELLO_BODY_LIMIT, HELLO_WAIT_MS))?.toString('utf8') ?? '');
+      } catch {
+        asked = null;
+      }
+      if (!isObject(asked) || typeof asked.challenge !== 'string' || !CHALLENGE.test(asked.challenge)) return adminRefuse(res, 400, 'bad-request', 'Send a challenge of 32 random bytes in base64url: {"challenge": "<43 characters>"}.', { connection: 'close' });
+      // Only a question that has arrived whole takes a place, and keeps it for the two signatures alone: the places bound
+      // the signing, and a caller who sends a body slowly, or never ends it, holds none. Callers at one address share part of them.
+      const caller = plainAddress(req.socket.remoteAddress);
+      const theirs = hellosBy.get(caller) ?? 0;
+      if (hellos >= HELLO_AT_ONCE || theirs >= HELLO_PER_CALLER) return adminRefuse(res, 503, 'busy', `The executor is answering ${hellos >= HELLO_AT_ONCE ? `${HELLO_AT_ONCE} such questions, the most it takes at once` : `${HELLO_PER_CALLER} such questions from this address, the most it takes from one address at once`}. Ask again.`, { connection: 'close' });
+      hellos += 1;
+      hellosBy.set(caller, theirs + 1);
+      try {
         const address = plainAddress(req.socket.localAddress);
         const port = req.socket.localPort;
-        return adminJson(res, 200, { executor: 'provared-mcp-executor', address, port, signatures: await identify(shared.executorKeys.privateKeys, asked.challenge, address, port) });
+        return adminJson(res, 200, { executor: 'provared-mcp-executor', address, port, signatures: await signHello(shared.executorKeys.privateKeys, asked.challenge, address, port) });
       } finally {
         hellos -= 1;
+        const left = hellosBy.get(caller) - 1;
+        if (left > 0) hellosBy.set(caller, left);
+        else hellosBy.delete(caller);
       }
     }
     const secret = bearer(req);

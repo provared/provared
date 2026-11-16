@@ -2402,7 +2402,7 @@ already in hand a ninth is answered 503 (`busy`) at once, with nothing
 read and nothing signed. These are fixed numbers, not settings: a
 command sends one question and waits for one answer. A caller can still
 ask again and again, one after another; each answer costs two
-signatures.
+signatures. X168 changes the 5 seconds to 1, and what the 8 count.
 
 **X161. One SLH-DSA signature at a time.** Node.js's thread pool has
 four threads unless `UV_THREADPOOL_SIZE` says otherwise, and a call needs
@@ -2534,6 +2534,42 @@ over, so that a turn that is long in coming does not gather the same
 seal many times, each with a check of the whole book. The other way:
 tell the two cases apart by the book's refusal; `add` gives one refusal
 for every entry it does not take.
+
+**X168. A `hello` takes a place only once its body is whole, and a
+command that is told `busy` asks again.** Under X160 a question took one
+of the 8 places from the moment it arrived, for up to 5 seconds. A
+caller with no secret who kept 8 questions open, each with a body begun
+and never ended, and began each again when it was given up on, filled
+every place: `status`, `seal` and `acknowledge` were then answered 503
+and ended with code 2. What is fixed now, as numbers and not settings:
+- *The body has 1 second* (it had 5). A command sends its 60 bytes at
+  once.
+- *A place is taken once the body has arrived whole and holds a
+  challenge*, and is kept for the two signatures alone. So the places
+  bound the signing, and a caller who sends a body slowly, or never
+  ends it, holds none. A caller cannot keep a place either: it is given
+  up when the answer is written, whether or not the caller reads it.
+- *Of the 8 places, callers at one address hold 4 at most.* A fifth
+  from that address is answered 503 (`busy`) while others still find a
+  place. The address is the one the connection comes from. Callers at
+  one address count as one caller: a program on the administrator's own
+  computer shares the administrator's four places.
+- *The command asks again.* Told `busy`, a command waits half a second
+  and asks again, five times in all, then says that what answers is
+  busy and that the secret was not sent. It had said that what answers
+  "did not show that it is the executor", which was not the reason.
+  `busy` is taken on the listener's word: the command sends it nothing
+  but the challenge, each time.
+
+What stays: questions whose bodies are not whole are not counted, so
+their number is not bounded here. Each holds a connection for a second
+and 256 bytes at most; the number of connections to the executor is not
+bounded either. And a caller can still ask whole questions as fast as the
+executor signs, which costs two signatures each (X160). The other ways:
+a count of unfinished questions for each address, which a program at
+the administrator's own address fills as before; the oldest unfinished
+question giving way to a new one, which bounds them and is more to get
+right.
 
 **X241. A message is refused where a name in it differs only in capitals
 from one the executor reads (0.4.2).** The number is the one this choice
