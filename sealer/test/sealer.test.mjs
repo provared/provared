@@ -1211,3 +1211,80 @@ test('a recorder reads an answer up to 8 MiB and no further, with its length dec
     }
   }
 });
+
+// --- an outside time-stamp on each seal: the settings' "stamp" ---
+//
+// The service is one on this computer that the OpenSSL program answers for
+// (the repository's test/helpers/tsa.mjs); where there is no OpenSSL
+// program, the test that needs it is skipped and says why.
+
+const { NO_OPENSSL, findOpenssl, startTestTsa } = await import('../../test/helpers/tsa.mjs');
+
+/** An address on this computer that nothing listens on: a port that was free a moment ago. */
+async function nobodyThere() {
+  const s = http.createServer();
+  await new Promise((done) => s.listen(0, '127.0.0.1', done));
+  const port = s.address().port;
+  await new Promise((done) => s.close(done));
+  return `http://127.0.0.1:${port}/`;
+}
+
+test('the settings\' "stamp": each seal carries the time-stamp the service gave, which counts for a reader who trusts the service', { skip: findOpenssl() ? false : NO_OPENSSL }, async () => {
+  const tsa = await startTestTsa();
+  const { folder, tokens } = await sealerFolder({ stamp: { address: tsa.address } });
+  const running = await startSealer({ folder });
+  try {
+    const client = connectSealer({ address: running.address, recorder: 'agent-one', token: tokens['agent-one'] });
+    const b = await smallBook();
+    await client.extend(b.first, 0, b.leaves, { line: b.line });
+    const s = await client.seal(b.first, { previous: null });
+    assert.equal(s.stampProblem, undefined);
+    assert.equal(s.entry.stamps.length, 1);
+    const c = await checkBook(lineOf([...b.lines, s.line]), { sealKeys: [running.fingerprint], stampServices: [tsa.authority] });
+    assert.deepEqual(c.problems, []);
+    assert.deepEqual(c.entries.at(-1).stamps.map((x) => [x.kind, x.state]), [['service', 'valid']]);
+    // The time-stamp is kept with the seal in the state.
+    assert.deepEqual(onDisk(folder).books[0].latest.entry.stamps, s.entry.stamps);
+  } finally {
+    await running.close();
+    await tsa.close();
+  }
+});
+
+test('the settings\' "stamp": a service that cannot be reached costs no seal, and the reason is given with it', async () => {
+  const { folder, tokens } = await sealerFolder({ stamp: { address: await nobodyThere(), timeout: 2000 } });
+  const running = await startSealer({ folder });
+  try {
+    const client = connectSealer({ address: running.address, recorder: 'agent-one', token: tokens['agent-one'] });
+    const b = await smallBook();
+    await client.extend(b.first, 0, b.leaves, { line: b.line });
+    const s = await client.seal(b.first, { previous: null });
+    assert.ok(s.entry, JSON.stringify(s.refused));
+    assert.equal(s.entry.stamps, undefined);
+    assert.equal(s.stampProblem.code, 'stamp-not-given');
+    assert.match(s.stampProblem.message, /could not be reached/);
+    assert.deepEqual((await checkBook(lineOf([...b.lines, s.line]), { sealKeys: [running.fingerprint] })).problems, []);
+    assert.equal(onDisk(folder).books[0].latest.entry.seal.payload, s.entry.seal.payload);
+  } finally {
+    await running.close();
+  }
+});
+
+test('the settings\' "stamp": left out, nothing is asked; given, it is an address on the web and a time limit in range, and not beside a "stamp" function', async () => {
+  for (const [stamp, words] of [
+    ['http://127.0.0.1/', /"stamp" must be an object/],
+    [{}, /"stamp\.address"/],
+    [{ address: 'ftp://127.0.0.1/' }, /"stamp\.address"/],
+    [{ address: 'http://user:secret@127.0.0.1/' }, /"stamp\.address"/],
+    [{ address: 'http://127.0.0.1/#x' }, /"stamp\.address"/],
+    [{ address: 'http://127.0.0.1/', timeout: 99 }, /"stamp\.timeout"/],
+    [{ address: 'http://127.0.0.1/', timeout: 60001 }, /"stamp\.timeout"/],
+    [{ address: 'http://127.0.0.1/', policy: '1.2.3' }, /holds "policy"/],
+  ]) {
+    const { folder } = await sealerFolder({}, []);
+    writeFileSync(join(folder, 'sealer.json'), JSON.stringify({ name: 'Example central sealer (invented)', port: 0, stamp }));
+    await refusedStart({ folder }, words);
+  }
+  const { folder } = await sealerFolder({ stamp: { address: 'http://127.0.0.1/' } }, []);
+  await refusedStart({ folder, stamp: async () => null }, /give one of the two/);
+});

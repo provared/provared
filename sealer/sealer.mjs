@@ -176,7 +176,7 @@ export function readSettings(folder) {
   const s = readJson(files.settings, 'The settings');
   if (s === null) throw new Error(`There are no settings (${files.settings}): run "provared-sealer init" first.`);
   if (typeof s !== 'object' || Array.isArray(s)) throw new Error('The settings must be a JSON object.');
-  for (const name of Object.keys(s)) if (!['name', 'port', 'signers'].includes(name)) throw new Error(`The settings hold "${name}", which the sealer does not know.`);
+  for (const name of Object.keys(s)) if (!['name', 'port', 'signers', 'stamp'].includes(name)) throw new Error(`The settings hold "${name}", which the sealer does not know.`);
   if (typeof s.name !== 'string' || s.name.length < 1 || s.name.length > 200) throw new Error('The settings\' "name" must be text of 1 to 200 characters: the name the seals give.');
   const port = s.port ?? DEFAULT_PORT;
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('The settings\' "port" must be a port number.');
@@ -186,7 +186,47 @@ export function readSettings(folder) {
     if (!METHODS.includes(alg)) throw new Error(`The settings' "signers" name "${alg}", which is not one of ${METHODS.join(', ')}.`);
     if (typeof path !== 'string' || path.length === 0) throw new Error(`The settings' "signers.${alg}" must be the path of a module.`);
   }
-  return { name: s.name, port, signers };
+  return { name: s.name, port, signers, stamp: s.stamp === undefined ? null : readStampSettings(s.stamp) };
+}
+
+// --- an outside time-stamp on each seal (format description, section 21.2) ---
+
+/** How long the request for a time-stamp may take, unless the settings say otherwise, and the least and the most they may say: milliseconds. */
+export const STAMP_TIMEOUT = 10000;
+export const STAMP_TIMEOUT_MIN = 100;
+export const STAMP_TIMEOUT_MAX = 60000;
+
+/**
+ * The settings' "stamp", read: {address, timeout}. The address is that of
+ * a time-stamp service (RFC 3161) on the web, http: or https:, with no user
+ * name, password or fragment. No service is named here.
+ */
+function readStampSettings(c) {
+  if (c === null || typeof c !== 'object' || Array.isArray(c)) throw new Error('The settings\' "stamp" must be an object: the address of a time-stamp service and, where wanted, a time limit.');
+  for (const k of Object.keys(c)) if (!['address', 'timeout'].includes(k)) throw new Error(`The settings' "stamp" holds "${k}", which is not a setting of a time-stamp service: it takes "address" and "timeout".`);
+  let url = null;
+  try {
+    url = typeof c.address === 'string' ? new URL(c.address) : null;
+  } catch {
+    url = null;
+  }
+  if (!url || !['http:', 'https:'].includes(url.protocol) || url.username !== '' || url.password !== '' || url.hash !== '') {
+    throw new Error('The settings\' "stamp.address" must be the whole address of a time-stamp service (RFC 3161), beginning http:// or https://, with no user name, password or fragment.');
+  }
+  const timeout = c.timeout ?? STAMP_TIMEOUT;
+  if (!Number.isInteger(timeout) || timeout < STAMP_TIMEOUT_MIN || timeout > STAMP_TIMEOUT_MAX) throw new Error(`The settings' "stamp.timeout" must be a whole number of milliseconds from ${STAMP_TIMEOUT_MIN} to ${STAMP_TIMEOUT_MAX}: how long the request for a time-stamp may take.`);
+  return { address: c.address, timeout };
+}
+
+/** The function that asks the service the settings give for a time-stamp over a seal's fingerprint (the library's stampService). */
+async function stampHook({ address, timeout }) {
+  let net;
+  try {
+    net = await import('provared/net/timestamp');
+  } catch (e) {
+    throw new Error(`The settings give a time-stamp service ("stamp"), and the library installed has no client for one (provared/net/timestamp): ${e.code ?? e.message}`);
+  }
+  return net.stampService({ address, timeout });
 }
 
 // --- keys ---
@@ -442,6 +482,9 @@ export async function startSealer({ folder, port, fresh = false, stamp, clock = 
   if (!Number.isSafeInteger(maxWaitingBytes) || maxWaitingBytes < 1) throw new Error('"maxWaitingBytes" must be a whole number, 1 or more.');
   const files = sealerFiles(folder);
   const settings = readSettings(folder);
+  // A time-stamp service the settings give, or a "stamp" function a program that embeds the sealer gives: not both.
+  if (stamp !== undefined && settings.stamp) throw new Error('The settings give a time-stamp service ("stamp"), and a "stamp" function was given too: give one of the two.');
+  if (settings.stamp) stamp = await stampHook(settings.stamp);
   const { by, signers, fingerprint } = await loadSigners(folder);
   const recorders = readRecorders(folder);
   takeLock(files.lock);
