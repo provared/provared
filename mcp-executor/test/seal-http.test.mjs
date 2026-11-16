@@ -611,7 +611,11 @@ test('POST /provared/hello: 8 whole questions are signed for at once, and 4 for 
   try {
     // Four from 127.0.0.1 are in hand: a fifth from there is turned away, and so is a command, which asks from there.
     // A question that is turned away is answered at once; one that is taken waits here to be signed for, and gives no answer.
-    const soon = (answer) => Promise.race([answer, pause(10000).then(() => ({ status: 'no answer: the question was taken', json: {} }))]);
+    const soon = (answer) => {
+      let timer;
+      const none = new Promise((done) => (timer = setTimeout(() => done({ status: 'no answer: the question was taken', json: {} }), 10000)));
+      return Promise.race([answer, none]).finally(() => clearTimeout(timer));
+    };
     const four = Array.from({ length: 4 }, () => hello(w));
     await until(() => w.held.waiting === 4, { timeout: 30000 });
     const fifth = await soon(hello(w));
