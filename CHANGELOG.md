@@ -809,8 +809,8 @@
         sealer listens on 127.0.0.1 only, so the two programs are on one
         computer. `DESIGN.md`, X147 to X159.
       - Tests (`test/central-sealer.test.mjs`,
-        `test/central-sealer-e2e.test.mjs`, `test/same-files.test.mjs`; 41
-        tests, 37, 2 and 2, with those of the third review and its
+        `test/central-sealer-e2e.test.mjs`, `test/same-files.test.mjs`; 42
+        tests, 37, 2 and 3, with those of the third review and its
         re-check below): the
         sealer's program set up by its own commands and run
         as a process of its own on 127.0.0.1, ended and started again
@@ -1034,6 +1034,10 @@
         running executor is known to reach that case, since the writer's
         book always passes its check, so no other test failed with the
         condition taken out; this one does.
+      - The count of the central sealer's tests, above, gave
+        `test/same-files.test.mjs` 2 tests; it holds 3, one of them of the
+        gateway's files. The README now names `::$DATA` after the book
+        file's name as another lock on Windows, as X171 said it did.
     - **Tests** (`test/seal.test.mjs`, `test/seal-http.test.mjs`; 53
       tests, 29 and 24, with those of the second and third reviews): the
       seal checks under the recorder's keys with the library's

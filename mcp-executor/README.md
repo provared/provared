@@ -1793,8 +1793,9 @@ again once no call waits.
   included, and `\\?\` in front of a path there changes nothing) and the
   file's own name as written. Two paths that reach one
   file through a link the file system does not resolve, a short name for
-  the book file itself, a share of the computer's own drive
-  (`\\localhost\D$\…`), or two computers' views of a shared folder, are
+  the book file itself, `::$DATA` after the book file's name on Windows,
+  a share of the computer's own drive (`\\localhost\D$\…`), or two
+  computers' views of a shared folder, are
   two locks. On Windows it is a named pipe; on Linux a socket in the
   abstract namespace, which belongs to a network namespace, so two
   containers that share a folder and not a network do not see each
