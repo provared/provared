@@ -1800,9 +1800,10 @@ again once no call waits.
   abstract namespace, which belongs to a network namespace, so two
   containers that share a folder and not a network do not see each
   other's lock; on other systems a socket file in `/tmp`, which a
-  program stopped leaves behind: the next start clears it away, and only
-  the one that first makes the folder `<socket file>.clearing` beside
-  it may. A program stopped in the moment it holds that folder leaves it,
+  program stopped leaves behind: the next start clears it away. Only the
+  program that first makes the folder `<socket file>.clearing` beside
+  it may listen there or clear it away. A program stopped in the moment
+  it holds that folder leaves it,
   and the lock is then refused, with the folder named, until someone
   takes it away. A socket file left by another user's program (an
   executor once run as root, say) cannot be asked or cleared away by

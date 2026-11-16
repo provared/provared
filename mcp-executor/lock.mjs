@@ -14,11 +14,12 @@
 //   others   a socket file in /tmp; one left behind by a program that has
 //            ended is told from a live one by trying to connect to it
 //            (no answer within 2 seconds counts as live). Only one program
-//            at a time may clear such a file away and listen in its place:
-//            it first makes a folder beside it, <socket file>.clearing,
-//            which a second program cannot make too, and takes it away
-//            once it listens. A program stopped in that moment leaves the
-//            folder, and the lock is then refused until it is taken away.
+//            at a time may try to listen there, or clear such a file away
+//            and listen in its place: it first makes a folder beside it,
+//            <socket file>.clearing, which a second program cannot make
+//            too, and takes it away once it listens or is refused. A
+//            program stopped in that moment leaves the folder, and the
+//            lock is then refused until it is taken away.
 //            A socket file of another user's may not be connected to, so
 //            it cannot be told from a live one, nor cleared away: the lock
 //            is refused, and the refusal names the file.
@@ -133,14 +134,18 @@ const locked = () => Object.assign(new Error('The lock is held.'), { code: LOCKE
  * @param {{file?: boolean}} [o]
  */
 export async function lockAt(address, { file = process.platform !== 'win32' && process.platform !== 'linux' } = {}) {
-  try {
-    return await listen(address);
-  } catch (e) {
-    if (e.code !== 'EADDRINUSE' && e.code !== 'EACCES') throw Object.assign(new Error(e.code ?? e.message), { code: 'CANNOT' });
-    // A socket file is left behind by a program that has ended; a named pipe and an abstract socket are not.
-    if (!file || e.code === 'EACCES') throw locked();
+  // A named pipe and an abstract socket are not left behind by a program that has ended: the first try is the only one.
+  if (!file) {
+    try {
+      return await listen(address);
+    } catch (e) {
+      if (e.code !== 'EADDRINUSE' && e.code !== 'EACCES') throw Object.assign(new Error(e.code ?? e.message), { code: 'CANNOT' });
+      throw locked();
+    }
   }
-  // One program at a time looks, clears the file away and listens: the one that makes the folder.
+  // A socket file is. One program at a time tries to listen, looks, clears the file away and listens again: the one
+  // that makes the folder. Its first try is made under the folder too, so that no program listens while another, which
+  // has found nobody answering, is about to clear the place away.
   const clearing = `${address}.clearing`;
   try {
     mkdirSync(clearing);
@@ -149,6 +154,12 @@ export async function lockAt(address, { file = process.platform !== 'win32' && p
     throw Object.assign(new Error(e.code ?? e.message), { code: 'CANNOT' });
   }
   try {
+    try {
+      return await listen(address);
+    } catch (e) {
+      if (e.code !== 'EADDRINUSE' && e.code !== 'EACCES') throw Object.assign(new Error(e.code ?? e.message), { code: 'CANNOT' });
+      if (e.code === 'EACCES') throw locked();
+    }
     const answers = await alive(address);
     // A file that may not be asked is another user's, and this user cannot clear it away either: the refusal names it.
     if (answers) throw Object.assign(locked(), typeof answers === 'string' ? { notAsked: address, why: answers } : {});

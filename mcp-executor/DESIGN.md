@@ -3190,15 +3190,23 @@ command run with the long one had taken two locks. The book file's own
 name is still taken as written, since the file may not be there yet.
 
 **X163. A socket file left behind is cleared by one program at a time
-(not Windows or Linux).** The program that makes the folder
-`<socket file>.clearing` looks again, clears the file away, listens and
-takes the folder away; a program that cannot make the folder is refused
-(or asks again, X164). Two programs that started together after a third
-was stopped had both cleared the file and both listened. A socket file
+(not Windows or Linux).** Every try for the lock is made under the
+folder `<socket file>.clearing`: the program that makes it tries to
+listen, and where the place is taken looks whether the file answers,
+clears it away where it does not, listens, and takes the folder away; a
+program that cannot make the folder is refused (or asks again, X164).
+Two programs that started together after a third was stopped had both
+cleared the file and both listened. The first try to listen was at first
+made without the folder, which left a gap (X171): while one program held
+the folder and had been told that nobody answered, because the holder
+had just let go and its file was gone, a third could listen at the
+empty place, and the first then cleared that new file away and listened
+too. Now no program listens while another holds the folder. A socket file
 that gives no answer within 2 seconds counts as live: the start had
 waited for ever. A folder left by a program stopped in that moment is
 not taken away by itself, since that would let two programs in again;
-the refusal names it, to be taken away by hand. Not run on a Mac: the
+the refusal names it, to be taken away by hand. Such a folder now also
+refuses a lock whose place is empty. Not run on a Mac: the
 tests of this branch run on Linux, where a socket file works the same
 way when it is asked for.
 
@@ -3381,17 +3389,25 @@ package has none, and takes no dependency for a test.
 Windows or Linux); and what a re-check of the lock found here.** A
 re-check of the lock on another branch, whose `lock.mjs` is older than
 X162 to X164, found two faults. Both were looked for in this one.
-- *Two programs taking over one socket file left behind.* Not here:
-  X163 closes it. On Linux, with Node.js told it runs on another system
-  so that `lock.mjs` takes the socket file's way: a file left behind by
-  a program ended by force, then 8 starts at one moment, 60 rounds; 2
-  starts one straight after the other, 150 rounds; and 8 starts that ask
-  again for 10 seconds, 30 rounds. Never two holders at once, never a
-  folder left. With the folder of X163 taken out of a copy, the same
-  probe found two holders at once in 28 of 30 rounds and in 15 of 60.
-  The re-check's own fix (every program that takes the lock looks a
-  moment later whether the name still leads to its own listener) is
-  therefore not added.
+- *Two programs taking over one socket file left behind.* For a file
+  left by a program ended by force, X163 closes it. On Linux, with
+  Node.js told it runs on another system so that `lock.mjs` takes the
+  socket file's way: such a file, then 8 starts at one moment, 60
+  rounds; 2 starts one straight after the other, 150 rounds; and 8
+  starts that ask again for 10 seconds, 30 rounds. Never two holders at
+  once, never a folder left. With the folder of X163 taken out of a
+  copy, the same probe found two holders at once in 28 of 30 rounds and
+  in 15 of 60. The re-check's own fix (every program that takes the lock
+  looks a moment later whether the name still leads to its own listener)
+  is not added. A later re-check found that X163 did not close it where
+  the holder lets go in the usual way, which takes its file away: the
+  first try to listen was made without the folder, so a third program
+  could listen in the moment between another's finding nobody there and
+  its clearing the place (two holders in 28 of 30 rounds, asked every
+  millisecond; not seen at a start's pace of every 250 ms). That first
+  try is now made under the folder too (X163), and a test holds that
+  nobody listens, for a book's lock or a state file's, while the folder
+  is there.
 - *A file left by another user.* Here too. A socket file left in `/tmp`
   by a program of another user (an executor once run as root) may not
   be connected to, so it cannot be told from a live one; and `/tmp`

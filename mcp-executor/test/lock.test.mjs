@@ -120,6 +120,50 @@ test('a socket file left behind is cleared away, a live one is not, and a folder
   }
 });
 
+/**
+ * What a program that takes the socket file's way says when it asks for a lock: on Linux, Node.js is told it runs on
+ * another system. "how" is lockFiles or lockState; gives "held", or the code and words of the refusal.
+ */
+function askAsSocketFile(how, path) {
+  const asks = `${process.platform === 'linux' ? "Object.defineProperty(process, 'platform', { value: 'darwin' });" : ''}
+    const lock = await import(${JSON.stringify(new URL('../lock.mjs', import.meta.url).href)});
+    try {
+      await (await lock[${JSON.stringify(how)}](${JSON.stringify(path)})).release();
+      console.log('held');
+    } catch (e) {
+      console.log(e.code + ': ' + e.message);
+    }`;
+  return spawnSync(process.execPath, ['--input-type=module', '-e', asks], { encoding: 'utf8' }).stdout.trim();
+}
+
+test('a program that holds the folder of a socket file is the only one that may listen there, even where no file is there yet; so for a book\'s lock and a state file\'s (review 3.2 re-check, finding 2)', { skip: socketFiles }, async () => {
+  const dir = folder();
+  const book = join(dir, 'alpha.book.jsonl');
+  const state = join(dir, 'oauth.state');
+  const addresses = [book, state].map((p) => `/tmp/provared-mcp-executor-${lockName(p)}.sock`);
+  try {
+    const path = join(dir, 'lock.sock');
+    // Another program has made the folder, found nobody answering, and is about to clear the place and listen.
+    mkdirSync(`${path}.clearing`);
+    await assert.rejects(lockAt(path, { file: true }), (e) => e.code === 'LOCKED' && e.clearing === `${path}.clearing`);
+    assert.ok(!existsSync(path), 'nobody listens while the folder is held');
+    rmSync(`${path}.clearing`, { recursive: true });
+    const server = await lockAt(path, { file: true });
+    await new Promise((done) => server.close(done));
+    // Both locks are taken through lockAt.
+    for (const [how, at, address] of [['lockFiles', book, addresses[0]], ['lockState', state, addresses[1]]]) {
+      mkdirSync(`${address}.clearing`);
+      assert.match(askAsSocketFile(how, at), new RegExp(`^LOCKED: .*left the folder ${address.replaceAll('.', '\\.')}\\.clearing`), how);
+      assert.ok(!existsSync(address), `${how}: nobody listens while the folder is held`);
+      rmSync(`${address}.clearing`, { recursive: true });
+      assert.equal(askAsSocketFile(how, at), 'held', `${how}: taken once the folder is gone`);
+    }
+  } finally {
+    for (const address of addresses) rmSync(`${address}.clearing`, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 // A socket file of another user's cannot be connected to. The tests have one user, so the file is made this user's own
 // and closed to everyone (mode 000), which refuses the connection in the same way. Root may connect to any file.
 const otherUsers = socketFiles || (process.getuid?.() === 0 && 'needs a user other than root, which may connect to any socket file');

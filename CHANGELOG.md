@@ -1038,6 +1038,19 @@
         `test/same-files.test.mjs` 2 tests; it holds 3, one of them of the
         gateway's files. The README now names `::$DATA` after the book
         file's name as another lock on Windows, as X171 said it did.
+      - Where the lock is a socket file (not Windows or Linux), every try
+        for it is now made under the folder `<socket file>.clearing`
+        (X163). The first try to listen had been made without the
+        folder, so two programs could hold one lock at once where a third
+        let it go in that moment; X171 had said X163 closed this, which
+        held only for a file left by a program ended by force. X163 and
+        X171 now say what is true. A folder left by a program stopped in
+        that moment now refuses the lock also where its place is empty.
+        One test in `test/lock.test.mjs`, which runs where there are
+        socket files (on Linux, with Node.js told it runs on another
+        system for the two locks): while the folder is there nobody
+        listens, through `lockAt`, `lockFiles` or `lockState`. It fails
+        with the old `lockAt` put back.
     - **Tests** (`test/seal.test.mjs`, `test/seal-http.test.mjs`; 53
       tests, 29 and 24, with those of the second and third reviews): the
       seal checks under the recorder's keys with the library's
