@@ -392,6 +392,26 @@
       `test/seal.test.mjs` and `test/seal-http.test.mjs`, the number
       before the second review. The two files hold 29 and 24, and the
       entry says so.
+    - The lock, after a re-check of an older `lock.mjs` (X171). Where
+      the lock is a socket file (not Windows or Linux), one left in
+      `/tmp` by another user's program, an executor once run as root,
+      say, may not be connected to and cannot be cleared away by this
+      user. The start was refused with "An executor is running on the
+      book …", whether or not one was. It is still refused, and the
+      refusal now names the file and says that that user or an
+      administrator takes it away (`lockAt` puts `notAsked` and `why`
+      on its `LOCKED` error). One test, which runs for a user other
+      than root on a system with socket files; it fails with the fix
+      taken out. The re-check's two other points do not hold here, and
+      the code for them is unchanged: two programs taking over one
+      socket file left behind (X163 closes it: on Linux, with Node.js
+      told it runs on another system, never two holders at once in 60
+      rounds of 8 starts, 150 rounds of 2 and 30 rounds of 8 starts
+      that ask again; with X163's folder taken out, 28 of 30 and 15 of
+      60), and a second lock on Windows through a folder's short name
+      or `\\?\` in front (X162 closes it; the test of the short name
+      now holds `\\?\` too). The README names a share of the computer's
+      own drive as a path that is another lock.
   - **Tests** (`test/seal.test.mjs`, `test/seal-http.test.mjs`; 53
     tests, 29 and 24, with those of the second and third reviews): the
     seal checks under the recorder's keys with the library's

@@ -17,6 +17,9 @@
 //            which a second program cannot make too, and takes it away
 //            once it listens. A program stopped in that moment leaves the
 //            folder, and the lock is then refused until it is taken away.
+//            A socket file of another user's may not be connected to, so
+//            it cannot be told from a live one, nor cleared away: the lock
+//            is refused, and the refusal names the file.
 // <name> is the SHA-256, in hexadecimal, of the book file's path as the
 // file system resolves it. Nothing is ever sent over the listener: a
 // connection to it is closed at once.
@@ -28,8 +31,10 @@
 // What it does not do. It names the path, not the file: two paths that
 // reach one file through a link the file system does not resolve, or
 // through two computers' views of a shared folder, are two locks. The
-// folder is written out in full, short names on Windows included; the
-// book file's own name is taken as written. On Linux
+// folder is written out in full, short names on Windows included, and
+// \\?\ in front of a path there changes nothing; the book file's own name
+// is taken as written, and a share of the computer's own drive
+// (\\localhost\D$\...) is another path. On Linux
 // the abstract namespace belongs to a network namespace, so two containers
 // that share a folder and not a network do not see each other's lock. A
 // program that takes the lock's name first keeps the executor from
@@ -88,7 +93,12 @@ function listen(address) {
   });
 }
 
-/** Whether a program is listening at a socket file: false where the file was left behind by one that has ended. No answer in time counts as live. */
+/**
+ * Whether a program is listening at a socket file: false where the file
+ * was left behind by one that has ended. No answer in time counts as live.
+ * A file this user may not connect to (another user's) cannot be asked: it
+ * counts as live too, and what is given is the code of that refusal.
+ */
 function alive(address, wait = ALIVE_WAIT_MS) {
   return new Promise((done) => {
     const socket = net.connect(address);
@@ -103,6 +113,7 @@ function alive(address, wait = ALIVE_WAIT_MS) {
     });
     socket.once('error', (e) => {
       clearTimeout(timer);
+      if (e.code === 'EACCES' || e.code === 'EPERM') return done(e.code);
       done(e.code !== 'ECONNREFUSED' && e.code !== 'ENOENT');
     });
   });
@@ -136,7 +147,9 @@ export async function lockAt(address, { file = process.platform !== 'win32' && p
     throw Object.assign(new Error(e.code ?? e.message), { code: 'CANNOT' });
   }
   try {
-    if (await alive(address)) throw locked();
+    const answers = await alive(address);
+    // A file that may not be asked is another user's, and this user cannot clear it away either: the refusal names it.
+    if (answers) throw Object.assign(locked(), typeof answers === 'string' ? { notAsked: address, why: answers } : {});
     try {
       unlinkSync(address);
     } catch (e) {
@@ -177,7 +190,11 @@ export async function lockFiles(bookPath, { wait = 0 } = {}) {
       if (e.code === 'CANNOT') throw new Error(`The lock for the book ${bookPath} could not be taken (${e.message}), so the executor does not open it.`);
       if (e.code !== LOCKED) throw e;
       if (Date.now() >= end) {
-        const left = e.clearing ? ` Or a program was stopped as it took the lock, and left the folder ${e.clearing}: where no executor and no command is at work on these files, take that folder away.` : '';
+        const left = e.clearing
+          ? ` Or a program was stopped as it took the lock, and left the folder ${e.clearing}: where no executor and no command is at work on these files, take that folder away.`
+          : e.notAsked
+            ? ` The lock's socket file, ${e.notAsked}, belongs to another user: this user may not ask whether a program still holds it (${e.why}), and cannot take it away. Where no executor and no command of that user's is at work on these files, the file was left behind by one that has ended, and that user or an administrator takes it away.`
+            : '';
         throw Object.assign(new Error(`An executor is running on the book ${bookPath} and its copy, or a command is at work on them. One program writes them at a time: stop the executor first, or wait for the command to end.${left} Nothing was read or written.`), { code: LOCKED });
       }
       await new Promise((done) => setTimeout(done, Math.min(250, end - Date.now())));

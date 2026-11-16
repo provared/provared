@@ -4,7 +4,7 @@
 
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -21,7 +21,7 @@ function shortName(path) {
   return r.status === 0 && short && short.toLowerCase() !== path.toLowerCase() ? short : null;
 }
 
-test('on Windows, a short name for the book\'s folder is the same lock as its full name', { skip: process.platform !== 'win32' && 'Windows only' }, async (t) => {
+test('on Windows, a short name for the book\'s folder is the same lock as its full name, and so is either with \\\\?\\ in front', { skip: process.platform !== 'win32' && 'Windows only' }, async (t) => {
   const dir = folder();
   try {
     const long = join(dir, 'a folder with a long name');
@@ -30,9 +30,13 @@ test('on Windows, a short name for the book\'s folder is the same lock as its fu
     if (!short) return t.skip('this file system makes no short names');
     assert.notEqual(short, long);
     assert.equal(lockName(join(short, 'alpha.book.jsonl')), lockName(join(long, 'alpha.book.jsonl')));
+    // The same file with the mark in front that tells Windows to take a path as written, before the full name and before the short one.
+    const marked = [`\\\\?\\${join(long, 'alpha.book.jsonl')}`, `\\\\?\\${join(short, 'alpha.book.jsonl')}`];
+    for (const path of marked) assert.equal(lockName(path), lockName(join(long, 'alpha.book.jsonl')), path);
     const held = await lockFiles(join(long, 'alpha.book.jsonl'));
     try {
       await assert.rejects(lockFiles(join(short, 'alpha.book.jsonl')), (e) => e.code === 'LOCKED');
+      for (const path of marked) await assert.rejects(lockFiles(path), (e) => e.code === 'LOCKED', path);
     } finally {
       await held.release();
     }
@@ -112,6 +116,42 @@ test('a socket file left behind is cleared away, a live one is not, and a folder
     await assert.rejects(lockAt(path, { file: true }), (e) => e.code === 'LOCKED' && e.clearing === `${path}.clearing`);
     assert.ok(existsSync(path), 'the socket file is not cleared while the folder is there');
   } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// A socket file of another user's cannot be connected to. The tests have one user, so the file is made this user's own
+// and closed to everyone (mode 000), which refuses the connection in the same way. Root may connect to any file.
+const otherUsers = socketFiles || (process.getuid?.() === 0 && 'needs a user other than root, which may connect to any socket file');
+
+test('a socket file left behind that this user may not ask, as another user\'s is not, refuses the lock, stays as it is, and is named in the refusal', { skip: otherUsers }, async () => {
+  const dir = folder();
+  // Where the lock of this book is, on a system whose lock is a socket file.
+  const book = join(dir, 'alpha.book.jsonl');
+  const address = `/tmp/provared-mcp-executor-${lockName(book)}.sock`;
+  try {
+    const path = join(dir, 'lock.sock');
+    await leftBehind(path);
+    chmodSync(path, 0o000);
+    await assert.rejects(lockAt(path, { file: true }), (e) => e.code === 'LOCKED' && e.notAsked === path && e.why === 'EACCES');
+    assert.ok(existsSync(path), 'the socket file is not cleared away');
+    assert.ok(!existsSync(`${path}.clearing`), 'the folder is taken away');
+    // The words of the refusal, from a program that takes the socket file's way: on Linux, Node.js is told it runs on another system.
+    await leftBehind(address);
+    chmodSync(address, 0o000);
+    const asks = `${process.platform === 'linux' ? "Object.defineProperty(process, 'platform', { value: 'darwin' });" : ''}
+      const { lockFiles } = await import(${JSON.stringify(new URL('../lock.mjs', import.meta.url).href)});
+      try {
+        await lockFiles(${JSON.stringify(book)});
+        console.log('held');
+      } catch (e) {
+        console.log(e.code + ': ' + e.message);
+      }`;
+    const said = spawnSync(process.execPath, ['--input-type=module', '-e', asks], { encoding: 'utf8' }).stdout;
+    assert.match(said, /^LOCKED: An executor is running on the book .* The lock's socket file, \/tmp\/provared-mcp-executor-[0-9a-f]{64}\.sock, belongs to another user: this user may not ask whether a program still holds it \(EACCES\), and cannot take it away\. .* Nothing was read or written\.$/m);
+    assert.ok(existsSync(address), 'the socket file is not cleared away');
+  } finally {
+    rmSync(address, { force: true });
     rmSync(dir, { recursive: true, force: true });
   }
 });

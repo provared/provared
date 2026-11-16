@@ -2599,6 +2599,38 @@ since each ends a `//` comment. These are the forms the copy's comments
 have. The other way: read the file with a JavaScript parser; the
 package has none, and takes no dependency for a test.
 
+**X171. A socket file of another user's is named in the refusal (not
+Windows or Linux); and what a re-check of the lock found here.** A
+re-check of the lock on another branch, whose `lock.mjs` is older than
+X162 to X164, found two faults. Both were looked for in this one.
+- *Two programs taking over one socket file left behind.* Not here:
+  X163 closes it. On Linux, with Node.js told it runs on another system
+  so that `lock.mjs` takes the socket file's way: a file left behind by
+  a program ended by force, then 8 starts at one moment, 60 rounds; 2
+  starts one straight after the other, 150 rounds; and 8 starts that ask
+  again for 10 seconds, 30 rounds. Never two holders at once, never a
+  folder left. With the folder of X163 taken out of a copy, the same
+  probe found two holders at once in 28 of 30 rounds and in 15 of 60.
+  The re-check's own fix (every program that takes the lock looks a
+  moment later whether the name still leads to its own listener) is
+  therefore not added.
+- *A file left by another user.* Here too. A socket file left in `/tmp`
+  by a program of another user (an executor once run as root) may not
+  be connected to, so it cannot be told from a live one; and `/tmp`
+  lets only its owner take it away. The start was refused with "An
+  executor is running on the book …", which need not be so. The lock is
+  still refused, since nothing else is safe, and the refusal now names
+  the file and says who can take it away. `alive` gives the code of the
+  refusal (`EACCES`, `EPERM`) in place of `true`; `lockAt` puts the file
+  and the code on its `LOCKED` error (`notAsked`, `why`); `lockFiles`
+  writes the sentence. No function's arguments or result change.
+- *On Windows, a folder's short name, or `\\?\` in front.* Not here:
+  X162 resolves the folder with `realpathSync.native`, which gives one
+  name for all of them. A test now holds `\\?\` beside the short name.
+  Still another lock, and said in the README: a share of the computer's
+  own drive (`\\localhost\D$\…`, `\\127.0.0.1\D$\…`) and `::$DATA`
+  after the file's name.
+
 **X241. A message is refused where a name in it differs only in capitals
 from one the executor reads (0.4.2).** The number is the one this choice
 has in the later design, so that one number names one choice. Three

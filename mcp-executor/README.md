@@ -1388,9 +1388,11 @@ again once no call waits.
 - **Where the lock does not reach.** The lock that keeps two programs off
   one book is named after the book file's path as the file system
   resolves it, the folder written out in full (a short name on Windows
-  included) and the file's own name as written. Two paths that reach one
+  included, and `\\?\` in front of a path there changes nothing) and the
+  file's own name as written. Two paths that reach one
   file through a link the file system does not resolve, a short name for
-  the book file itself, or two computers' views of a shared folder, are
+  the book file itself, a share of the computer's own drive
+  (`\\localhost\D$\…`), or two computers' views of a shared folder, are
   two locks. On Windows it is a named pipe; on Linux a socket in the
   abstract namespace, which belongs to a network namespace, so two
   containers that share a folder and not a network do not see each
@@ -1399,10 +1401,15 @@ again once no call waits.
   the one that first makes the folder `<socket file>.clearing` beside
   it may. A program stopped in the moment it holds that folder leaves it,
   and the lock is then refused, with the folder named, until someone
-  takes it away. A program that takes the lock's name first keeps the
+  takes it away. A socket file left by another user's program (an
+  executor once run as root, say) cannot be asked or cleared away by
+  this user: the lock is refused, and the refusal names the file, for
+  that user or an administrator to take away. A program that takes the lock's name first keeps the
   executor from starting on those files, and gains nothing else. The lock
-  has been tried on Windows only; the tests of the socket file run on
-  Linux and were not run on Windows, where Node.js has no socket files. Behind it, the book file and the copy
+  has been tried on Windows and on Linux, not on a Mac; the tests of the
+  socket file run on Linux and not on Windows, where Node.js has no
+  socket files, and the socket file's way was tried on Linux with
+  Node.js told it runs on another system. Behind it, the book file and the copy
   are still checked before each write: a program that got past the lock
   and wrote to them stops the executor at its next call.
 - **The administrator's secret travels in the clear**, like the agents'.
