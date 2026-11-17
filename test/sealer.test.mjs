@@ -31,6 +31,7 @@ import {
   writeSeal,
 } from '../src/index.js';
 import { treeBuilder, treeRoot } from '../src/tree.js';
+import { makeStampService } from './helpers/stamp.mjs';
 import { START, makeWorld } from './helpers/world.mjs';
 
 const NAME = 'Example central sealer (invented)';
@@ -410,6 +411,43 @@ test('the time-stamp hook: its stamp goes beside the seal; one that fails leaves
   assert.equal(bare.entry.stamps, undefined);
   assert.equal(bare.stampProblem.code, 'bad-field');
   assert.equal(failing.held(first).latest, bare.fingerprint);
+});
+
+test('the time-stamp hook is told the seal\'s own time and the latest time a service\'s time-stamp gave the seal before it (X307)', async () => {
+  const service = await makeStampService('ECDSA');
+  const stated = CLOCK - 60000;
+  const told = [];
+  const sealer = await sealerOf({ stamp: async (bytes, context) => (told.push(context), b64(await service.stamp(bytes, stated))) });
+  const rand = randomSource(4410);
+  const lines = [randomLine(rand), randomLine(rand)];
+  const first = b64(await leafFingerprint(lines[0]));
+  await sealer.extend(first, 0, await leavesOf(lines));
+  const s1 = await sealer.seal(first, { previous: null, when: CLOCK + 1500 });
+  assert.equal(s1.entry.stamps.length, 1, JSON.stringify(s1.stampProblem));
+  // The seal's time as a checker reads it, in whole seconds; no seal before it.
+  assert.deepEqual(told[0], { when: Math.floor((CLOCK + 1500) / 1000) * 1000, after: null });
+  const more = [s1.line, randomLine(rand)];
+  await sealer.extend(first, 2, await leavesOf(more));
+  const s2 = await sealer.seal(first, { previous: s1.fingerprint, when: CLOCK + 2000 });
+  assert.ok(s2.entry, JSON.stringify(s2.refused));
+  assert.deepEqual(told[1], { when: Math.floor((CLOCK + 2000) / 1000) * 1000, after: stated });
+});
+
+test('a time-stamp hook that gives no answer in time costs the seal nothing, and is said as "stamp-not-given" (X305)', async () => {
+  const sealer = await sealerOf({ stamp: () => new Promise(() => {}), signWithin: 4000 });
+  const first = b64(await leafFingerprint('{"a":2}'));
+  await sealer.extend(first, 0, [await leafFingerprint('{"a":2}')]);
+  const made = await sealer.seal(first, { previous: null });
+  assert.equal(made.entry.stamps, undefined);
+  assert.equal(made.stampProblem.code, 'stamp-not-given');
+  assert.match(made.stampProblem.message, /The time-stamp hook gave no answer within 4000 milliseconds/);
+  assert.equal(sealer.held(first).latest, made.fingerprint);
+  // A hook that throws something other than a refusal is said with the same code, its words kept.
+  const throwing = await sealerOf({ stamp: () => { throw new Error('the service is away'); } });
+  await throwing.extend(first, 0, [await leafFingerprint('{"a":2}')]);
+  const bare = await throwing.seal(first, { previous: null });
+  assert.equal(bare.stampProblem.code, 'stamp-not-given');
+  assert.match(bare.stampProblem.message, /the service is away/);
 });
 
 // ---- After the first independent review (choices K33 onwards) ----

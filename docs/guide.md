@@ -1174,15 +1174,21 @@ witness; `openWitness` needs Node.js), `consistencyProof`, `writeBook` and `make
 the seal's fingerprint to the service you choose and put its answer
 beside the seal. `provared/net/timestamp`, kept apart from the library,
 does that for you in Node.js: `askForStamp(fingerprintBytes, {address,
-timeout})` sends the request of RFC 3161 (SHA-256, a random 64-bit number
-used once, the certificate asked for) to the address you give, reads the
-answer up to 12,544 bytes within the time limit (10 seconds unless you
-say), follows no redirect, and gives the item of `stamps` only once
-`checkStamp` has passed it for that fingerprint, it carries the number
-used once that was sent, and its time is within 300 seconds of your
-clock; otherwise it throws a `Refusal` (`stamp-not-given`, or a code of
+timeout, when, after})` sends the request of RFC 3161 (SHA-256, a random
+64-bit number used once, the certificate asked for) to the address you
+give (no user name, password, query or fragment), reads the answer up to
+12,544 bytes within the time limit (10 seconds unless you say), follows
+no redirect, and gives the item of `stamps` only once `checkStamp` has
+passed it for that fingerprint, it carries the number used once that was
+sent, and its time is within 300 seconds of your clock and no more than
+300 seconds before `when` (the seal's own time) and `after` (the latest
+time a service's time-stamp gave a seal before it), where you give them;
+otherwise it throws a `Refusal` (`stamp-not-given`, or a code of
 `checkStamp`). `stampService({address, timeout})` gives the same as the
-`stamp` that `openSealer` takes. No service is named in this package. In a browser, `createPasskey`, `signSlipWithPasskey`,
+`stamp` that `openSealer` takes; `openSealer` gives its `stamp` a second
+argument, `{when, after}`, from the seal and the seal it holds before
+it. A `stamp` that gives no answer within `signWithin` costs no seal: the
+seal comes back with `stampProblem` (`stamp-not-given`). No service is named in this package. In a browser, `createPasskey`, `signSlipWithPasskey`,
 `approveWithPasskey` and `cancelWithPasskey` from
 `provared/passkey-browser`. For a slip with covered fields in a browser:
 `prepareSlip` with `cover`, then `signChallengeWithPasskey` with what it

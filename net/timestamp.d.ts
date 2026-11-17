@@ -11,11 +11,13 @@ export declare const MAX_REPLY_BYTES: number;
 export declare const STAMP_CLOCK_GAP_MS: number;
 /** How many random bytes the number used once holds. */
 export declare const NONCE_BYTES: number;
+/** The most characters of a service's own words that are shown. */
+export declare const MAX_SHOWN_CHARACTERS: number;
 
 /** The request of RFC 3161, section 2.4.1, in DER. */
 export declare function stampRequest(fingerprintBytes: Uint8Array, nonce: Uint8Array): Uint8Array;
 
-/** The address of a time-stamp service, read: http: or https:, no user name, password or fragment. */
+/** The address of a time-stamp service, read: http: or https:, no user name, password, query or fragment. */
 export declare function stampAddress(address: string): string;
 
 export interface StampOptions {
@@ -25,10 +27,14 @@ export interface StampOptions {
   timeout?: number;
   /** This device's clock, in milliseconds. */
   clock?: () => number;
+  /** The seal's own time, in milliseconds: a time-stamp more than 300 seconds before it is not kept. */
+  when?: number;
+  /** The latest time a service's time-stamp gave a seal before this one, in milliseconds: one more than 300 seconds before it is not kept. */
+  after?: number | null;
 }
 
 /** Ask a service for a time-stamp over a seal's fingerprint, and check it. Throws a Refusal ("stamp-not-given", or a code of checkStamp). */
 export declare function askForStamp(fingerprintBytes: Uint8Array, options: StampOptions): Promise<{ stamp: string; when: string; time: number; authority: string }>;
 
 /** The "stamp" of openSealer, for one service: gives the item of "stamps", the time-stamp in base64url. */
-export declare function stampService(options: StampOptions): (fingerprintBytes: Uint8Array) => Promise<string>;
+export declare function stampService(options: StampOptions): (fingerprintBytes: Uint8Array, context?: { when?: number; after?: number | null }) => Promise<string>;

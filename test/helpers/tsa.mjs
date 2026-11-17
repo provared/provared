@@ -13,6 +13,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import { join } from 'node:path';
+import { gzipSync } from 'node:zlib';
 import { tempFolder } from './temp.mjs';
 
 let found;
@@ -83,8 +84,15 @@ function imprintOf(query) {
  * fingerprint); "big" (a body larger than is read, with its length given);
  * "big-unsized" (the same, its length not given); "redirect" (to another
  * address that would answer well); "slow" (a good answer after "delay"
- * milliseconds); "status-500"; "garbage" (bytes that are not an answer).
- * @returns {Promise<{address: string, authority: string, requests: number, queries: Buffer[], reachedElsewhere: number, mode: string, delay: number, close: () => Promise<void>}>}
+ * milliseconds); "status-500"; "garbage" (bytes that are not an answer);
+ * "trailing" (a good answer with two bytes after it); "status-1" (a good
+ * answer whose status is 1, "granted with changes"); "big-token" (an answer
+ * within the size read whose time-stamp is larger than the format allows);
+ * "drip" (a good answer's first bytes, then the rest after "delay"
+ * milliseconds); "gzip" (a good answer, compressed); "gzip-bomb" (a small
+ * compressed body that opens to 100,000 bytes); "answer" (the bytes of
+ * "answer", as they are).
+ * @returns {Promise<{address: string, authority: string, requests: number, queries: Buffer[], reachedElsewhere: number, mode: string, delay: number, answer: Uint8Array|null, close: () => Promise<void>}>}
  */
 export async function startTestTsa() {
   const program = findOpenssl();
@@ -110,7 +118,7 @@ export async function startTestTsa() {
     return readFileSync(join(folder, `m${n}.der`));
   };
 
-  const state = { address: '', authority, requests: 0, queries: [], reachedElsewhere: 0, mode: 'good', delay: 0, close: null };
+  const state = { address: '', authority, requests: 0, queries: [], reachedElsewhere: 0, mode: 'good', delay: 0, answer: null, close: null };
   const elsewhere = http.createServer((q, a) => {
     state.reachedElsewhere += 1;
     q.resume();
@@ -156,6 +164,39 @@ export async function startTestTsa() {
             return a.writeHead(500).end();
           case 'garbage':
             return send(Buffer.from('not an answer'));
+          case 'trailing':
+            return send(Buffer.concat([reply(query), Buffer.from([0, 0])]));
+          case 'status-1': {
+            // The status is the first thing in the answer: SEQUENCE { INTEGER 0 }, after the answer's own tag and length.
+            const bytes = Buffer.from(reply(query));
+            const at = bytes.indexOf(Buffer.from('3003020100', 'hex'));
+            if (at < 0 || at > 4) throw new Error('the status was not where it was looked for');
+            bytes[at + 4] = 1;
+            return send(bytes);
+          }
+          case 'big-token': {
+            // SEQUENCE { SEQUENCE { INTEGER 0 }, SEQUENCE of 12,298 bytes }: a time-stamp of 12,302 bytes, in an answer of 12,311.
+            const token = Buffer.concat([Buffer.from('3082300a', 'hex'), Buffer.alloc(0x300a)]);
+            const inner = Buffer.concat([Buffer.from('3003020100', 'hex'), token]);
+            const length = Buffer.alloc(2);
+            length.writeUInt16BE(inner.length);
+            return send(Buffer.concat([Buffer.from('3082', 'hex'), length, inner]));
+          }
+          case 'drip': {
+            const bytes = reply(query);
+            a.writeHead(200, { 'content-type': 'application/timestamp-reply', 'content-length': bytes.length });
+            a.write(bytes.subarray(0, 10));
+            const timer = setTimeout(() => a.end(bytes.subarray(10)), state.delay);
+            a.on('close', () => clearTimeout(timer));
+            return undefined;
+          }
+          case 'gzip':
+          case 'gzip-bomb': {
+            const bytes = gzipSync(state.mode === 'gzip' ? reply(query) : Buffer.alloc(100000));
+            return a.writeHead(200, { 'content-type': 'application/timestamp-reply', 'content-encoding': 'gzip', 'content-length': bytes.length }).end(bytes);
+          }
+          case 'answer':
+            return send(Buffer.from(state.answer));
           default:
             return a.writeHead(500).end();
         }

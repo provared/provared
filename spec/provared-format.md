@@ -1263,9 +1263,14 @@ the service's certificate asked for, since the time-stamp must carry it.
 The answer is kept only if the service granted it (status 0 or 1), the
 time-stamp passes rules 1 to 6 above for this seal, it carries the number
 used once that was sent, and the time it states is within 300 seconds of
-the sealer's clock, so that rule 7 here and rule 4 of section 21.1 will
-hold for whoever trusts the service. A time-stamp that is not given never
-holds up the seal: the seal goes into the book without one. The service
+the sealer's clock, no more than 300 seconds before the seal's own
+`when`, and no more than 300 seconds before the latest time that a
+time-stamp from a service gave a seal before it, where the sealer knows
+that time, so that rule 7 here, rule 4 of section 21.1 and section 21.3
+will hold for whoever trusts the service. (The reference sealer of many
+books knows only the seal just before; a recorder that holds the book
+takes every seal before.) A time-stamp that is not given never costs the
+seal: the seal goes into the book without one. The service
 learns the seal's fingerprint, the address it was asked from and when;
 nothing of the book.
 

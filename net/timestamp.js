@@ -82,7 +82,7 @@ export function stampRequest(fingerprintBytes, nonce) {
 
 /**
  * The address of a time-stamp service, read: an address on the web
- * (http: or https:) with no user name, password or fragment.
+ * (http: or https:) with no user name, password, query or fragment.
  * @param {string} address
  * @returns {string} the address, written in full
  */
@@ -95,7 +95,11 @@ export function stampAddress(address) {
   }
   if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new TypeError('The address of a time-stamp service must begin http:// or https://.');
   if (url.username !== '' || url.password !== '') throw new TypeError('The address of a time-stamp service must hold no user name or password.');
-  if (url.hash !== '') throw new TypeError('The address of a time-stamp service must hold no fragment (#).');
+  if (url.hash !== '' || url.href.includes('#')) throw new TypeError('The address of a time-stamp service must hold no fragment (#).');
+  // A key in the query would be shown wherever the address is: in the reasons a time-stamp was not given, the log and
+  // the status. So none is taken, as no user name or password is.
+  // An address that ends in "?" holds no query to the URL parser, and is refused all the same.
+  if (url.href.includes('?')) throw new TypeError('The address of a time-stamp service must hold no query (?).');
   return url.href;
 }
 
@@ -106,10 +110,14 @@ function readTimeout(timeout) {
   return timeout;
 }
 
-// Text a service wrote, made safe to show: no characters that steer a terminal, and not too long.
+/** The most characters of a service's own words that are shown, all its texts and reasons together. */
+export const MAX_SHOWN_CHARACTERS = 200;
+
+// Text a service wrote, made safe to show: no characters that steer a terminal or that cannot be seen (controls,
+// format characters such as those that turn text round, line and paragraph separators), and not too long.
 const shown = (text) => {
-  const plain = text.replace(/[\p{Cc}\p{Zl}\p{Zp}]/gu, ' ').trim();
-  return plain.length > 200 ? `${plain.slice(0, 200)}...` : plain;
+  const plain = text.replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, ' ').replace(/ {2,}/g, ' ').trim();
+  return plain.length > MAX_SHOWN_CHARACTERS ? `${plain.slice(0, MAX_SHOWN_CHARACTERS)}...` : plain;
 };
 
 // The answer of RFC 3161, section 2.4.2 ("TimeStampResp"): the status, and the time-stamp where it was granted.
@@ -124,11 +132,11 @@ function readResponse(bytes) {
   const reasons = [];
   for (const part of info.slice(1)) {
     if (part.tag === TAG.SEQUENCE) {
-      for (const text of children(bytes, part, 8)) if (text.tag === 0x0c) words.push(shown(new TextDecoder().decode(contentOf(bytes, text))));
+      for (const text of children(bytes, part, 8)) if (text.tag === 0x0c) words.push(new TextDecoder().decode(contentOf(bytes, text)));
     } else if (part.tag === TAG.BIT_STRING) {
       const b = contentOf(bytes, part);
       for (let bit = 0; bit < (b.length - 1) * 8; bit++) {
-        if (b[1 + (bit >> 3)] & (0x80 >> (bit & 7))) reasons.push(FAILURE[bit] ?? `reason ${bit}`);
+        if (b[1 + (bit >> 3)] & (0x80 >> (bit & 7)) && reasons.length < 8) reasons.push(FAILURE[bit] ?? `reason ${bit}`);
       }
     }
   }
@@ -136,7 +144,8 @@ function readResponse(bytes) {
     if (parts.length !== 2) throw notGiven('The time-stamp service says it granted a time-stamp, and its answer holds none.');
     return { token: new Uint8Array(wholeOf(bytes, expect(parts[1], TAG.SEQUENCE, 'the time-stamp'))) };
   }
-  const said = [words.length ? `"${words.join(' ')}"` : '', reasons.join('; ')].filter(Boolean).join(': ');
+  // Its words and its reasons, shown together, cut at MAX_SHOWN_CHARACTERS in all.
+  const said = shown([words.length ? `"${words.join(' ')}"` : '', reasons.join('; ')].filter(Boolean).join(': '));
   throw notGiven(`The time-stamp service gave no time-stamp: ${STATUS[status[0]]} (status ${status[0]})${said ? `, ${said}` : ''}.`);
 }
 
@@ -188,6 +197,8 @@ async function readBody(response, most) {
  * @param {string} o.address the service's address; none is named by this package
  * @param {number} [o.timeout] how long the whole request, the reading of the answer included, may take (10 seconds)
  * @param {() => number} [o.clock] this device's clock, in milliseconds
+ * @param {number} [o.when] the seal's own time, in milliseconds, as a checker reads it (whole seconds)
+ * @param {number|null} [o.after] the latest time that a time-stamp from a service gave a seal before this one, in milliseconds, where it is known
  * @returns {Promise<{stamp: string, when: string, time: number, authority: string}>}
  *   "stamp" is the item of "stamps" the format sets out (section 21.2): the
  *   time-stamp in base64url. "when" and "time" are the time it states, as
@@ -195,9 +206,16 @@ async function readBody(response, most) {
  *   that signed it, which a person checking names to trust the service.
  * @throws {Refusal} "stamp-not-given", or the code of checkStamp ("stamp-bad-data", "stamp-wrong-data", "stamp-invalid")
  */
-export async function askForStamp(fingerprintBytes, { address, timeout = STAMP_TIMEOUT_MS, clock = Date.now } = {}) {
+export async function askForStamp(fingerprintBytes, { address, timeout = STAMP_TIMEOUT_MS, clock = Date.now, when, after } = {}) {
   const where = stampAddress(address);
   const limit = readTimeout(timeout);
+  const time = (v, what) => {
+    if (v === undefined || v === null) return null;
+    if (typeof v !== 'number' || !Number.isFinite(v)) throw new TypeError(`"${what}" must be a time in milliseconds, or be left out.`);
+    return v;
+  };
+  const sealWhen = time(when, 'when');
+  const floor = time(after, 'after');
   const nonce = globalThis.crypto.getRandomValues(new Uint8Array(NONCE_BYTES));
   const request = stampRequest(fingerprintBytes, nonce);
   const asked = clock();
@@ -233,10 +251,19 @@ export async function askForStamp(fingerprintBytes, { address, timeout = STAMP_T
   if (carried === null || !equalBytes(carried, sent)) {
     throw new Refusal('stamp-wrong-data', carried === null ? 'The time-stamp service\'s time-stamp does not carry the number used once that was sent, so it may answer another request.' : 'The time-stamp service\'s time-stamp carries another number used once than the one sent: it answers another request.');
   }
-  // A time far from this device's clock would put the book at odds with itself under a checker who trusts the service:
-  // the seal dated more than 300 seconds after it, or a later seal more than 300 seconds before it (section 21.1, rule 4; section 21.2, rule 7).
+  // A time that would put the book at odds with itself under a checker who trusts the service is not kept: the seal
+  // dated more than 300 seconds after it (section 21.2, rule 7), a seal before it stamped more than 300 seconds later
+  // (section 21.3), or, for the next seal, a time more than 300 seconds ahead of this device's clock (section 21.1,
+  // rule 4). The seal's own time and the earlier stamp are compared where the caller gives them; the clock always.
+  const gap = STAMP_CLOCK_GAP_MS / 1000;
+  if (sealWhen !== null && sealWhen - checked.time > STAMP_CLOCK_GAP_MS) {
+    throw notGiven(`The time-stamp service states the time ${checked.when}, more than ${gap} seconds before the seal's own time, so a checker who trusts it would find the seal dated after its time-stamp; it was not kept.`);
+  }
+  if (floor !== null && floor - checked.time > STAMP_CLOCK_GAP_MS) {
+    throw notGiven(`The time-stamp service states the time ${checked.when}, more than ${gap} seconds before the time a service's time-stamp gave the seal before, so a checker who trusts both would find the times going backwards; it was not kept.`);
+  }
   if (checked.time < asked - STAMP_CLOCK_GAP_MS || checked.time > answered + STAMP_CLOCK_GAP_MS) {
-    throw notGiven(`The time-stamp service states the time ${checked.when}, more than ${STAMP_CLOCK_GAP_MS / 1000} seconds from this device's clock, so its time-stamp was not kept.`);
+    throw notGiven(`The time-stamp service states the time ${checked.when}, more than ${gap} seconds from this device's clock, so its time-stamp was not kept.`);
   }
   return { stamp: toBase64url(token), when: checked.when, time: checked.time, authority: checked.authority };
 }
@@ -244,12 +271,14 @@ export async function askForStamp(fingerprintBytes, { address, timeout = STAMP_T
 /**
  * The "stamp" of the library's openSealer, for one service: a function that
  * asks it for a time-stamp over a seal's fingerprint and gives the item of
- * "stamps". The address and the time limit are read here, once.
+ * "stamps". The address and the time limit are read here, once. What
+ * openSealer tells it of the seal ("when", "after") is held against the
+ * time the time-stamp states, as askForStamp does.
  * @param {{address: string, timeout?: number, clock?: () => number}} o
- * @returns {(fingerprintBytes: Uint8Array) => Promise<string>}
+ * @returns {(fingerprintBytes: Uint8Array, context?: {when?: number, after?: number|null}) => Promise<string>}
  */
 export function stampService({ address, timeout = STAMP_TIMEOUT_MS, clock = Date.now } = {}) {
   const where = stampAddress(address);
   const limit = readTimeout(timeout);
-  return async (fingerprintBytes) => (await askForStamp(fingerprintBytes, { address: where, timeout: limit, clock })).stamp;
+  return async (fingerprintBytes, context = {}) => (await askForStamp(fingerprintBytes, { address: where, timeout: limit, clock, when: context?.when, after: context?.after })).stamp;
 }
