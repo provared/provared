@@ -1,7 +1,8 @@
 # The build of the Dockerfile beside this file reads this folder, and needs
-# only these two files from it. Nothing else is sent to the builder: not the
-# data folders (the guard's keys, books and state; Caddy's certificates),
-# not .env, not a packed file.
+# only these three files from it. Nothing else is sent to the builder: not
+# the data folders (the guard's keys, books and state; Caddy's
+# certificates), not .env, not a packed file.
 *
 !package.json
+!package-lock.json
 !start.mjs

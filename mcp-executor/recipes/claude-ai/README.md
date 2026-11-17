@@ -49,10 +49,13 @@ certificate, or with claude.ai itself.
 
 What runs, from `compose/compose.yaml`:
 
-- **The guard**, in an image built on the server from npm, at the exact
-  versions `compose/package.json` names, on the official Node.js image
-  pinned by version and digest. No image is published anywhere.
-- **Caddy**, the official image, pinned by version and digest. It answers
+- **The guard**, in an image built on the server from npm. The guard and
+  its library are exact: the versions `compose/package-lock.json` gives,
+  each checked against its SHA-512 hash there (`npm ci`). It runs on the
+  official Node.js image, following the release line of Node.js 24
+  (`node:24-bookworm-slim`). No image is published anywhere.
+- **Caddy**, the official image, following Caddy's 2.11 release line
+  (`caddy:2.11-alpine`). It answers
   on ports 80 and 443, gets the certificate for the domain from a public
   certificate authority, renews it, and sends each request on to the
   guard. It writes no access log, and is given no email address.
@@ -69,12 +72,37 @@ address, and ports 80 and 443 open to the internet (443 for claude.ai and
 the owner; 80 for Caddy's certificate, and to send a browser on to
 https). Nothing else may be listening on 80 or 443.
 
+### Getting the recipe
+
+Take the recipe from the repository at a signed release tag, and check the
+tag's signature before using it. The repository's release tags are named
+`v` and the version of the Provared library, such as `v0.8.0`; the guard
+has no tags of its own. Use the newest release tag whose
+`mcp-executor/recipes/claude-ai/compose/package.json` names the guard's
+version you want (none does yet: 0.5.0 is not released). On the server,
+with git, for the tag `<tag>`:
+
+```
+git clone --depth 1 --branch <tag> https://github.com/provared/provared.git provared
+cd provared
+git -c gpg.ssh.allowedSignersFile=.github/release-signers tag -v <tag>
+```
+
+The last command must end with
+`Good "git" signature for sealwright with ED25519 key SHA256:64cQtHklVRtDUPmbUWpRls28kFcpUnDhFJtpqMHiLbU`.
+Anything else (no signature, another key, `BAD`) means: do not use it. The
+file `.github/release-signers` comes from the same repository, so the check
+shows that the tag was signed by the key the repository names; compare
+that fingerprint with one you have from elsewhere. The recipe is then the
+folder `mcp-executor/recipes/claude-ai/compose`.
+
 ### The steps
 
 1. **Point a domain at the server**: a DNS `A` record for a name such as
    `guard.example.com`, with the server's public IPv4 address.
-2. **Set the domain in one file.** Copy the folder `compose/` to the
-   server. In it, copy `example.env` to `.env`, and set
+2. **Set the domain in one file.** Copy the folder `compose/`, from the
+   checked tag, to where it will live on the server. In it, copy
+   `example.env` to `.env`, and set
    `PROVARED_DOMAIN=guard.example.com` there.
 3. **Run one command**, in that folder:
 
@@ -174,16 +202,25 @@ Updates are not automatic. They come only when this command runs, in the
 folder of `compose.yaml`:
 
 ```
-docker compose build --pull && docker compose up -d
+docker compose pull caddy && docker compose build --pull && docker compose up -d
 ```
 
-It builds the guard's image again and starts again what changed. The files
-pin every version: the guard and its library (`package.json`), Node.js
-(`Dockerfile`) and Caddy (`compose.yaml`). So the command brings a newer
-version only once those files name it: to move to one, put the newer
-recipe's `compose.yaml`, `Dockerfile`, `Dockerfile.dockerignore`,
-`package.json`, `start.mjs` and `Caddyfile` in place of these (keep `.env`
-and the three folders), then run the command.
+It fetches the newest Caddy 2.11 and Node.js 24 images, builds the
+guard's image again on Node.js, and starts again what changed. Node.js and
+Caddy follow their release lines, so that the command brings their
+security fixes. **So an update can bring a Node.js or Caddy patch that
+this recipe has not been tried with.** It was tried with Node.js 24.22.3
+and Caddy 2.11.9. To go back to one version, name it in the files and run
+the command again: in `Dockerfile`, `FROM node:24.22.3-bookworm-slim`; in
+`compose.yaml`, `image: caddy:2.11.9-alpine`. Each file gives the digest
+of the version tried, to pin that too.
+
+The guard and its library do not move: `package-lock.json` holds them, at
+exact versions, with their hashes. To move to a newer guard, take the
+newer recipe from its signed tag ("Getting the recipe"), put its
+`compose.yaml`, `Dockerfile`, `Dockerfile.dockerignore`, `package.json`,
+`package-lock.json`, `start.mjs` and `Caddyfile` in place of these (keep
+`.env` and the three folders), then run the command.
 
 A weekly timer that runs the same command is in `compose/weekly/`, off
 until the business switches it on. To switch it on:
@@ -194,8 +231,9 @@ until the business switches it on. To switch it on:
 3. `sudo systemctl daemon-reload && sudo systemctl enable --now provared-guard-update.timer`
 
 It runs on Monday between 04:00 and 05:00. To switch it off:
-`sudo systemctl disable --now provared-guard-update.timer`. The timer
-changes nothing that the files do not pin.
+`sudo systemctl disable --now provared-guard-update.timer`. Like the
+command, the timer can bring a Node.js or Caddy patch not yet tried with
+this recipe, and never a newer guard.
 
 ### A real upstream in place of the demonstration's tools
 
@@ -230,6 +268,16 @@ services:
     build: *packed
 ```
 
+With a packed copy the build runs `npm install` in place of `npm ci`: it
+writes the executor's entry in the image's lockfile afresh, for the packed
+file and its hash, and keeps the library's entry, whose hash is still
+checked. The lockfile beside `compose.yaml` is not changed. Its entry for
+the executor 0.5.0 was made from a pack of this tree, before 0.5.0 is on
+npm; it is to be made again from npm once 0.5.0 is published
+(`npm install --package-lock-only --ignore-scripts` in this folder), and
+its hash checked against the one the release shows. Until then, a hash that
+differs makes `npm ci` stop: it installs nothing it cannot check.
+
 ### How the containers are held in
 
 - No container runs as root but `folders`, which gets back only the two
@@ -254,8 +302,10 @@ services:
 
 The script `mcp-executor/test/recipe-compose/docker-check.sh`, outside
 `npm test`, was run on one Windows computer, in Docker's Linux engine
-(Docker 29.7.2, Compose 5.5.0). It builds the guard's image from a packed
-copy of this executor, starts the three containers with a test domain and
+(Docker 29.7.2, Compose 5.5.0), with the tags giving Node.js 24.22.3 and
+Caddy 2.11.9 on 17 November 2026. It builds the guard's image from a packed
+copy of this executor (the library's lockfile entry and hash kept, the
+executor's written for the packed file), starts the three containers with a test domain and
 Caddy's own certificate authority (`tls internal`) in place of a public
 one, and signs the permission with the library's development stand-in for
 a passkey. Then, through Caddy, with `curl --resolve`, it found: the 401
@@ -268,11 +318,13 @@ Caddy's 80 and 443 published, every file in `guard-data` the guard's
 user's with mode 600 (folders 700), Caddy's folders Caddy's user's,
 `owner` refused while the guard runs and `owner --reset` done with it
 stopped, `check` run through `docker compose run`, and the guard
-answering again 69 seconds after Caddy was restarted on its own. It
-passed 35 checks of 35.
+answering again within about a minute (69 and 56 seconds in two runs)
+after Caddy was restarted on its own. Its last run passed 37 checks of 37.
 
 Not tried: a real server, a publicly signed certificate, DNS, a firewall,
-a reboot of the server, the weekly timer, and claude.ai itself.
+a reboot of the server, the weekly timer, `npm ci` against 0.5.0 on npm
+(not yet published), a shallow clone of a tag (the `git tag -v` command
+was run on a full clone, against `v0.8.0`), and claude.ai itself.
 
 ## The limits
 
@@ -298,7 +350,7 @@ a reboot of the server, the weekly timer, and claude.ai itself.
   is left in the old one, where nothing reaches it. The start looks for
   Caddy's port every 15 seconds; after four misses it stops the guard,
   and Docker starts it again in Caddy's new network. Until then, about a
-  minute (69 seconds in the Docker check), claude.ai gets an error (502).
+  minute (69 and 56 seconds in the Docker check), claude.ai gets an error (502).
 - **Any passkey that verifies its user.** The guard asks nothing more of
   the passkey than a fingerprint, a face or a PIN at each use. The browser
   offers where to keep it: on this device, on a phone or on a security
@@ -348,7 +400,8 @@ a reboot of the server, the weekly timer, and claude.ai itself.
 ## The files
 
 - `compose/compose.yaml`, `compose/Dockerfile` (with
-  `Dockerfile.dockerignore`), `compose/package.json`, `compose/Caddyfile`,
+  `Dockerfile.dockerignore`), `compose/package.json` and
+  `compose/package-lock.json`, `compose/Caddyfile`,
   `compose/example.env`: the recipe, as above.
 - `compose/start.mjs`: the guard's first-start program, run in its
   container. It runs the guard's own commands and makes no request to

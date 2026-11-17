@@ -1,7 +1,8 @@
 # The recipe's update command, run by provared-guard-update.timer once a
 # week, where the business has switched the timer on (README.md, one folder
-# up from compose/, "Updates"). It applies what the recipe's files pin: a
-# newer version comes only once those files name it.
+# up from compose/, "Updates"). It brings the newest Node.js 24 and Caddy
+# 2.11 the official images hold, which this recipe may not have been tried
+# with; the guard and its npm packages stay at what package-lock.json gives.
 #
 # Put the folder of compose.yaml in WorkingDirectory before copying this
 # file to /etc/systemd/system/.
@@ -15,5 +16,6 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 WorkingDirectory=/opt/provared-guard
+ExecStart=/usr/bin/docker compose pull caddy
 ExecStart=/usr/bin/docker compose build --pull
 ExecStart=/usr/bin/docker compose up -d

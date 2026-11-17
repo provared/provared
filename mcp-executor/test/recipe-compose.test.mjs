@@ -355,24 +355,50 @@ test('compose.yaml: every container read-only, every capability dropped, no new 
   assert.match(read('start.mjs'), /GUARD_USER = '10001'/);
 });
 
-test('the images: Node.js and Caddy official, pinned by version and digest; the executor and library at exact versions', () => {
+test('the images: Node.js and Caddy official, each following its release line by tag (no patch, no digest); the guard and its npm tree exact', () => {
   const compose = read('compose.yaml');
   const images = [...compose.matchAll(/^\s+image: (.*)$/gm)].map((m) => m[1]);
   assert.deepEqual(images.length, 1, 'one image pulled: Caddy\'s; the guard\'s is built');
-  assert.match(images[0], /^caddy:\d+\.\d+\.\d+-alpine@sha256:[0-9a-f]{64}$/);
+  assert.equal(images[0], 'caddy:2.11-alpine', 'Caddy\'s 2.11 line');
   const dockerfile = read('Dockerfile');
   const from = [...dockerfile.matchAll(/^FROM (\S+)/gm)].map((m) => m[1]);
   assert.deepEqual(from[0], 'scratch');
-  assert.match(from[1], /^node:\d+\.\d+\.\d+-bookworm-slim@sha256:[0-9a-f]{64}$/);
-  assert.match(dockerfile, /npm install --omit=dev --ignore-scripts/);
+  assert.equal(from[1], 'node:24-bookworm-slim', 'the Node.js 24 line');
+  // Each file says which line it follows, and how to go back to one version.
+  assert.match(dockerfile, /following the\n# release line of Node\.js 24/);
+  assert.match(dockerfile, /To go back to one version, name it here/);
+  assert.match(compose, /following Caddy's 2\.11\n\s+# release line/);
+  assert.match(compose, /To go back to one version, name it here/);
+  // The guard's packages: from the lockfile, with their hashes; a packed copy only where one is named.
+  assert.match(dockerfile, /^ {6}npm ci --omit=dev --ignore-scripts --no-audit --no-fund; \\$/m);
+  assert.match(dockerfile, /if \[ -n "\$EXECUTOR" \]; then/);
+  assert.match(dockerfile, /^COPY package\.json package-lock\.json start\.mjs \.\/$/m);
   assert.match(dockerfile, /^USER 10001:10001$/m);
   const pkg = JSON.parse(read('package.json'));
   for (const [name, version] of Object.entries(pkg.dependencies)) assert.match(version, /^\d+\.\d+\.\d+$/, name);
   const executor = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
   assert.equal(pkg.dependencies['provared-mcp-executor'], executor.version, 'the recipe builds this version of the executor');
   assert.equal(pkg.dependencies.provared, executor.dependencies.provared);
-  // Only package.json and start.mjs reach the builder: never the data folders.
-  assert.deepEqual(read('Dockerfile.dockerignore').split('\n').filter((l) => l && !l.startsWith('#')), ['*', '!package.json', '!start.mjs']);
+  // Only package.json, the lockfile and start.mjs reach the builder: never the data folders.
+  assert.deepEqual(read('Dockerfile.dockerignore').split('\n').filter((l) => l && !l.startsWith('#')), ['*', '!package.json', '!package-lock.json', '!start.mjs']);
+});
+
+test('package-lock.json: version 3, the same dependencies as package.json, every package from npm at an exact version with a SHA-512 hash, and nothing else', () => {
+  const pkg = JSON.parse(read('package.json'));
+  const lock = JSON.parse(read('package-lock.json'));
+  assert.equal(lock.lockfileVersion, 3);
+  assert.equal(lock.name, pkg.name);
+  assert.deepEqual(lock.packages[''].dependencies, pkg.dependencies);
+  const entries = Object.entries(lock.packages).filter(([path]) => path !== '');
+  assert.deepEqual(entries.map(([path]) => path).sort(), Object.keys(pkg.dependencies).map((n) => `node_modules/${n}`).sort(), 'the whole tree: the two packages, which need nothing else');
+  for (const [path, e] of entries) {
+    const name = path.slice('node_modules/'.length);
+    assert.equal(e.version, pkg.dependencies[name], path);
+    assert.equal(e.resolved, `https://registry.npmjs.org/${name}/-/${name}-${e.version}.tgz`, path);
+    assert.match(e.integrity, /^sha512-[A-Za-z0-9+/]{86}==$/, path);
+    assert.equal(e.dev, undefined, path);
+    for (const [dep, range] of Object.entries(e.dependencies ?? {})) assert.equal(range, lock.packages[`node_modules/${dep}`]?.version, `${path} needs ${dep} at the exact version locked`);
+  }
 });
 
 test('the Caddyfile: the domain from the environment, the guard\'s local address, nothing changed on the way, no log, no administration endpoint', () => {
@@ -385,12 +411,23 @@ test('the Caddyfile: the domain from the environment, the guard\'s local address
   assert.match(read('example.env'), /^PROVARED_DOMAIN=$/m);
 });
 
+test('the README: the recipe from a signed release tag, checked with git tag -v against the repository\'s release signers; a patch not tried, and the way back', () => {
+  const readme = readFileSync(new URL('../recipes/claude-ai/README.md', import.meta.url), 'utf8');
+  assert.ok(readme.includes('git clone --depth 1 --branch <tag> https://github.com/provared/provared.git provared'));
+  assert.ok(readme.includes('git -c gpg.ssh.allowedSignersFile=.github/release-signers tag -v <tag>'));
+  const signers = readFileSync(new URL('../../.github/release-signers', import.meta.url), 'utf8');
+  const fingerprint = /Fingerprint: (SHA256:\S+)/.exec(signers)[1];
+  assert.ok(readme.includes(`Good "git" signature for sealwright with ED25519 key ${fingerprint}`), 'the README names the key the signers file names');
+  assert.match(readme, /an update can bring a Node\.js or Caddy patch that\s+this recipe has not been tried with/);
+  assert.ok(readme.includes('FROM node:24.22.3-bookworm-slim') && readme.includes('image: caddy:2.11.9-alpine'), 'how to go back to the versions tried');
+});
+
 test('the weekly timer: off until switched on, and it runs the README\'s update command', () => {
   const unit = read('weekly/provared-guard-update.service');
   const timer = read('weekly/provared-guard-update.timer');
-  assert.match(unit, /^ExecStart=\/usr\/bin\/docker compose build --pull$/m);
-  assert.match(unit, /^ExecStart=\/usr\/bin\/docker compose up -d$/m);
+  const steps = [...unit.matchAll(/^ExecStart=\/usr\/bin\/(.*)$/gm)].map((m) => m[1]);
+  assert.deepEqual(steps, ['docker compose pull caddy', 'docker compose build --pull', 'docker compose up -d']);
   assert.match(timer, /^OnCalendar=Mon \*-\*-\* 04:00:00$/m);
   const readme = readFileSync(new URL('../recipes/claude-ai/README.md', import.meta.url), 'utf8');
-  assert.ok(readme.includes('docker compose build --pull && docker compose up -d'), 'the README gives the same command');
+  assert.ok(readme.includes(steps.join(' && ')), 'the README gives the same command');
 });

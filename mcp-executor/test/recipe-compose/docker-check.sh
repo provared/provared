@@ -59,7 +59,7 @@ cleanup() {
 # --- the work folder: the recipe's files, the packed executor, the test's own settings ---
 rm -rf "$WORK/guard-data" "$WORK/caddy-data" "$WORK/caddy-config" "$WORK/pack"
 mkdir -p "$WORK/pack"
-for f in compose.yaml Dockerfile Dockerfile.dockerignore package.json start.mjs Caddyfile; do cp "$RECIPE/$f" "$WORK/$f"; done
+for f in compose.yaml Dockerfile Dockerfile.dockerignore package.json package-lock.json start.mjs Caddyfile; do cp "$RECIPE/$f" "$WORK/$f"; done
 cp "$TGZ" "$WORK/pack/$TGZ_NAME"
 cp "$HELPERS/sign-test-permission.mjs" "$WORK/sign-test-permission.mjs"
 printf 'PROVARED_DOMAIN=%s\n' "$DOMAIN" > "$WORK/test.env"
@@ -103,6 +103,23 @@ echo "-- building the guard's image from $TGZ_NAME"
 if dc build --quiet > "$WORK/build.txt" 2>&1; then ok "the guard's image was built from the packed executor"; else bad "build failed"; tail -n 30 "$WORK/build.txt"; cleanup; exit 1; fi
 installed=$(docker run --rm --name provared-37e-check-version --entrypoint node "$PROJECT-guard" -p "require('/guard/node_modules/provared-mcp-executor/package.json').version + ' ' + require('/guard/node_modules/provared/package.json').version")
 note "installed in the image: provared-mcp-executor and provared $installed"
+note "Node.js in the image: $(docker run --rm --name provared-37e-check-version --entrypoint node "$PROJECT-guard" --version)"
+# The lockfile. In the image, the library's entry is the shipped lockfile's, hash and all, and the
+# executor's has the packed file's hash; the shipped lockfile's executor hash is told, not counted.
+cat > "$WORK/locks.cjs" <<'EOF'
+const fs = require('node:fs'), c = require('node:crypto');
+const shipped = JSON.parse(fs.readFileSync('/tmp/shipped.json', 'utf8')).packages;
+const image = JSON.parse(fs.readFileSync('/guard/package-lock.json', 'utf8')).packages;
+const lib = 'node_modules/provared', ex = 'node_modules/provared-mcp-executor';
+const tgz = 'sha512-' + c.createHash('sha512').update(fs.readFileSync('/tmp/x.tgz')).digest('base64');
+const same = (a) => (a ? 'same' : 'differs');
+console.log(same(image[lib].integrity === shipped[lib].integrity && image[lib].resolved === shipped[lib].resolved), same(image[ex].integrity === tgz), same(shipped[ex].integrity === tgz));
+EOF
+docker run --rm --name provared-37e-check-version --entrypoint node -v "$WORK/locks.cjs:/tmp/locks.cjs:ro" -v "$WORK/pack/$TGZ_NAME:/tmp/x.tgz:ro" -v "$WORK/package-lock.json:/tmp/shipped.json:ro" "$PROJECT-guard" /tmp/locks.cjs > "$WORK/locks.txt" 2>&1
+read -r lib_kept image_ex shipped_ex < "$WORK/locks.txt"
+[ "$lib_kept" = "same" ] && ok "in the image, the library's lockfile entry and hash are the shipped lockfile's" || bad "the library's entry in the image: $(cat "$WORK/locks.txt")"
+[ "$image_ex" = "same" ] && ok "in the image, the executor's lockfile entry has the packed file's hash" || bad "the executor's entry in the image: $(cat "$WORK/locks.txt")"
+note "the shipped lockfile's hash for the executor and the packed file's: $shipped_ex"
 if ! dc up -d > "$WORK/up.txt" 2>&1; then bad "docker compose up failed"; cat "$WORK/up.txt"; cleanup; exit 1; fi
 ok "docker compose up -d started the pair"
 
@@ -129,6 +146,7 @@ CADDY=$(dc ps -q caddy)
 GUARD=$(dc ps -q guard)
 CADDY_IP=$(docker inspect -f "{{(index .NetworkSettings.Networks \"$NET\").IPAddress}}" "$CADDY")
 note "Caddy's address in the test network: $CADDY_IP"
+note "Caddy: $(docker exec "$CADDY" caddy version | cut -d' ' -f1)"
 
 # Caddy's internal root certificate, for curl to trust.
 i=0

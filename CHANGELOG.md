@@ -1298,11 +1298,19 @@
     changes, and the recipe is not in its files). The guard and Caddy, in
     two containers, started by `docker compose up -d --build`, with a
     third that runs once to give the data folders to their users. The
-    guard's image is built on the server from npm at the exact versions
-    the recipe names, on the official Node.js image pinned by version and
-    digest; a build argument takes a packed `.tgz` instead. Caddy's
-    official image is pinned the same way, and Caddy gets the certificate
-    for the domain set in `.env`. The guard keeps its rule and listens on
+    guard's image is built on the server with `npm ci`, from a lockfile
+    with SHA-512 hashes, on the official Node.js image, following the
+    Node.js 24 line (`node:24-bookworm-slim`); a build argument takes a
+    packed `.tgz` instead. Caddy's official image follows the 2.11 line
+    (`caddy:2.11-alpine`), and Caddy gets the certificate for the domain
+    set in `.env`. So the update command brings the security fixes of
+    Node.js and Caddy, and may bring a patch the recipe was not tried
+    with; the README says how to go back to the versions tried (Node.js
+    24.22.3, Caddy 2.11.9). The lockfile's entry for the executor 0.5.0
+    is that of a pack of this tree, to be made again from npm once 0.5.0
+    is published; with a packed copy, `npm install` keeps the library's
+    hash. The README takes the recipe from a signed release tag of the
+    repository, checked with `git tag -v` against `.github/release-signers`. The guard keeps its rule and listens on
     127.0.0.1 in Caddy's network, so its port is published nowhere; only
     80 and 443 are. Everything kept is in three plain folders beside the
     compose file. Each container runs as a user of its own, read-only,
@@ -1318,13 +1326,13 @@
     command, and a weekly timer that is off until switched on. The README
     of `recipes/claude-ai/` gives the steps, what to back up, and what has
     and has not been tried. Tests: `mcp-executor/test/recipe-compose.test.mjs`
-    (15), and `mcp-executor/test/recipe-compose/docker-check.sh`, outside
+    (17), and `mcp-executor/test/recipe-compose/docker-check.sh`, outside
     `npm test`, run in Docker on one computer with Caddy's own
-    certificate authority: 35 checks of 35 passed, after its first runs
+    certificate authority: every check passed, after its first runs
     had found the rules file left readable by others (644) and the guard
     cut off by a restart of Caddy alone, both now mended. Not tried on a
     real server, with a public certificate, or with claude.ai. Choices
-    X313 to X338, in `tmp/choices-3.7e.md`.
+    X313 to X343, in `tmp/choices-3.7e.md`.
 
 - **`provared-mcp-executor` 0.4.2 (15 November 2026): a security fix for
   two weaknesses. In front of a tool server whose JSON reader ignores

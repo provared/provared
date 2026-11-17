@@ -54,10 +54,12 @@ services:
 
   caddy:
     <<: *locked
-    # Caddy 2.11.9 on Alpine Linux: the official image, pinned by its version
-    # and by the digest of its multi-platform index, read from Docker Hub on
-    # 17 November 2026.
-    image: caddy:2.11.9-alpine@sha256:003a97808e781aa9f7e75cc2f43d34d461099031faf5e20faefb9f61126836f0
+    # Caddy on Alpine Linux: the official image, following Caddy's 2.11
+    # release line (the tag 2.11-alpine), so that the update command brings
+    # that line's security fixes. It was 2.11.9 when the recipe was tried, on
+    # 17 November 2026. To go back to one version, name it here, with its
+    # digest if wanted: caddy:2.11.9-alpine@sha256:003a97808e781aa9f7e75cc2f43d34d461099031faf5e20faefb9f61126836f0
+    image: caddy:2.11-alpine
     user: "10002:10002"
     depends_on:
       folders: { condition: service_completed_successfully }
