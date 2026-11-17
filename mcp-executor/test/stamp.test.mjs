@@ -6,7 +6,7 @@
 
 import './local-library.mjs'; // first: "provared" is this repository's own library
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
@@ -109,6 +109,28 @@ test('recorder.stamp: a service that cannot be reached costs no seal, and the re
     assert.ok(w.logs.some((e) => e.event === 'stamp-not-given' && /could not be reached/.test(e.reason)));
   } finally {
     await ex.close();
+  }
+});
+
+test('with a central sealer, a time-stamp the sealer was not given costs no seal, and the executor logs the sealer\'s reason', async () => {
+  const { centralWorld, closeAll } = await import('./sealer-world.mjs');
+  try {
+    const w = await centralWorld({ open: false });
+    // The sealer's own settings give a time-stamp service that nothing answers for.
+    await w.sealer.stop();
+    const settingsPath = join(w.sealer.folder, 'sealer.json');
+    writeFileSync(settingsPath, JSON.stringify({ ...JSON.parse(readFileSync(settingsPath, 'utf8')), stamp: { address: await nobodyThere(), timeout: 1000 } }));
+    await w.sealer.start();
+    await openWorld(w);
+    await w.client.call('echo', {});
+    await w.level();
+    const sealed = await w.executor.seal();
+    assert.equal(sealed.stampProblem.code, 'stamp-not-given');
+    assert.match(sealed.stampProblem.message, /could not be reached/);
+    assert.equal((await w.checked()).summary.problemFound, false);
+    assert.ok(w.logs.some((e) => e.event === 'stamp-not-given' && e.seal === sealed.fingerprint && /could not be reached/.test(e.reason)));
+  } finally {
+    await closeAll();
   }
 });
 
