@@ -1,0 +1,108 @@
+# The Provared guard as a claude.ai custom connector, with HTTPS, on a
+# business's own server: the guard and Caddy, started with one command
+# (README.md, one folder up):
+#
+#   docker compose up -d --build
+#
+# The guard listens on 127.0.0.1:8796 inside the network it shares with
+# Caddy ("network_mode: service:caddy"), so its port is reachable from Caddy
+# alone: it is published nowhere. Only Caddy's ports 80 and 443 are.
+#
+# Everything kept is in three plain folders beside this file, which are
+# what to back up: guard-data (the guard's keys, books, copies, state and
+# settings), caddy-data (Caddy's certificates and their keys) and
+# caddy-config (Caddy's own state). No Docker volume is used.
+#
+# One guard, one copy: a book has one writer. Run no second copy of the
+# guard on these folders, and no replicas.
+
+name: provared-guard
+
+x-locked: &locked
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "3" }
+
+x-guard-build: &guard-build
+  context: .
+  dockerfile: Dockerfile
+
+services:
+  # Once at each start, before the others: gives each data folder to the
+  # user that writes it, mode 700, and ends. Docker makes a folder that is
+  # not there as root's; this makes it the guard's or Caddy's. It changes
+  # the folders themselves, not what is in them.
+  folders:
+    <<: *locked
+    build: *guard-build
+    user: "0:0"
+    cap_add: [CHOWN, FOWNER]
+    network_mode: none
+    command:
+      - folders
+      - /folders/guard-data=10001:10001
+      - /folders/caddy-data=10002:10002
+      - /folders/caddy-config=10002:10002
+    volumes:
+      - ./guard-data:/folders/guard-data
+      - ./caddy-data:/folders/caddy-data
+      - ./caddy-config:/folders/caddy-config
+    restart: "no"
+
+  caddy:
+    <<: *locked
+    # Caddy 2.11.9 on Alpine Linux: the official image, pinned by its version
+    # and by the digest of its multi-platform index, read from Docker Hub on
+    # 17 November 2026.
+    image: caddy:2.11.9-alpine@sha256:003a97808e781aa9f7e75cc2f43d34d461099031faf5e20faefb9f61126836f0
+    user: "10002:10002"
+    depends_on:
+      folders: { condition: service_completed_successfully }
+    ports:
+      - "80:80"
+      - "443:443"
+    # An unprivileged user may listen on ports from 80 up, in this network
+    # only: Caddy needs no capability for 80 and 443.
+    sysctls:
+      net.ipv4.ip_unprivileged_port_start: "80"
+    environment:
+      PROVARED_DOMAIN: ${PROVARED_DOMAIN:?Set PROVARED_DOMAIN in the file .env beside compose.yaml (copy example.env)}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy-data:/data
+      - ./caddy-config:/config
+    tmpfs:
+      - /tmp:size=16m,mode=1777,noexec,nosuid,nodev
+    restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 128
+
+  guard:
+    <<: *locked
+    build: *guard-build
+    user: "10001:10001"
+    # Caddy's network, and so no address of its own: Caddy reaches the guard
+    # at 127.0.0.1:8796, and nothing else does. The guard's own rule (listen
+    # on the local address) is kept. The guard still reaches out, through
+    # that network, to fetch claude.ai's client document.
+    network_mode: service:caddy
+    depends_on:
+      folders: { condition: service_completed_successfully }
+      caddy: { condition: service_started }
+    environment:
+      PROVARED_DOMAIN: ${PROVARED_DOMAIN:?Set PROVARED_DOMAIN in the file .env beside compose.yaml (copy example.env)}
+    volumes:
+      - ./guard-data:/data
+    tmpfs:
+      - /tmp:size=16m,mode=1777,noexec,nosuid,nodev
+    init: true
+    restart: unless-stopped
+    # A stop settles each call in flight and writes its receipt first.
+    stop_grace_period: 30s
+    mem_limit: 768m
+    cpus: 1.0
+    pids_limit: 256

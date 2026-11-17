@@ -1,0 +1,22 @@
+# Caddy in front of the Provared guard (compose.yaml, beside this file).
+# Caddy gets and renews the certificate for the domain itself, and answers
+# on ports 80 and 443. The domain comes from PROVARED_DOMAIN, set in .env.
+{
+	# No administration endpoint: the guard shares Caddy's network, and
+	# nothing in it is to change Caddy's settings. A change to this file
+	# takes effect when Caddy is restarted.
+	admin off
+	# HTTP/1.1 and HTTP/2 only: no HTTP/3, whose port (443 over UDP) is not
+	# opened.
+	servers {
+		protocols h1 h2
+	}
+}
+
+{$PROVARED_DOMAIN} {
+	# The guard listens on 127.0.0.1:8796 in the network it shares with
+	# Caddy. The path, the query and the request's headers, Origin among
+	# them, go on unchanged; Caddy adds the X-Forwarded-* headers, which the
+	# guard does not send on.
+	reverse_proxy 127.0.0.1:8796
+}
