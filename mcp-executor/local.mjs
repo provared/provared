@@ -29,6 +29,14 @@ export const FLOOD_SECONDS = 5;
 export const DROPPED_LOG_EVERY = 1000;
 /** The longest line of a program's standard error that is written on: 64 KiB. A longer one is dropped. */
 export const STDERR_LINE = 64 * 1024;
+/**
+ * The most bytes of one program's standard error written on in each second
+ * of the clock (256 KiB), and the most that may wait to be written to the
+ * executor's own standard error, for every program together (1 MiB). Lines
+ * past either are dropped, and counted in the log once a second (X353).
+ */
+export const STDERR_PER_SECOND = 256 * 1024;
+export const STDERR_BACKLOG = 1024 * 1024;
 
 const LINE_FEED = Buffer.from('\n');
 
@@ -245,17 +253,35 @@ export function openLocalSessions({ settings, env, credentialNames, log, serverS
       return { refused: 'not-started' };
     }
     // 32 random bytes in base64url: visible ASCII, and not to be guessed.
-    const session = { id: randomBytes(32).toString('base64url'), agent, connection, child, gone: false, ended: null, busy: 0, last: Date.now(), waiting: new Map(), toStream: null, closeStream: null, release: null, idleTimer: null, killTimer: null, exited: null, starting: true, version: null, dropped: {}, dead: false, begun: Date.now(), second: 0, inSecond: 0, strikes: 0 };
+    const session = { id: randomBytes(32).toString('base64url'), agent, connection, child, gone: false, ended: null, busy: 0, last: Date.now(), waiting: new Map(), toStream: null, closeStream: null, release: null, idleTimer: null, killTimer: null, exited: null, starting: true, version: null, dropped: {}, dead: false, begun: Date.now(), second: 0, inSecond: 0, strikes: 0, stderrSecond: -1, stderrBytes: 0 };
     sessions.set(session.id, session);
     running.add(session);
     log({ event: 'server-started', agent, command: settings.server.resolved, credentials: credentialNames });
     // What the program says on its standard error goes where the settings' owner looks, as on stdio: whole lines, each with its line feed, so that a line of the program's never runs into a line of the executor's own. Written on, not piped: many programs write to the one place, and a pipe from each would hang its own listeners on it. Where it goes nowhere it is still read, so that a program that writes much is not held up.
     if (serverStderr) {
+      // Bounded, so that a program that writes without pause neither fills the executor's memory where the place is
+      // slow to take it (Linux), nor holds the executor in each write (Windows, where a write to a pipe waits): past
+      // STDERR_PER_SECOND bytes of this program's in a second of the clock, or STDERR_BACKLOG bytes waiting for every
+      // program together, its lines are dropped and counted (X353).
       readLines(child.stderr, {
         limit: STDERR_LINE,
-        onLine: (line) => serverStderr.write(Buffer.concat([line, LINE_FEED])),
+        onLine: (line) => {
+          const second = Math.floor(Date.now() / 1000);
+          if (session.stderrSecond !== second) {
+            session.stderrSecond = second;
+            session.stderrBytes = 0;
+          }
+          session.stderrBytes += line.length + 1;
+          if (session.stderrBytes > STDERR_PER_SECOND || (serverStderr.writableLength ?? 0) > STDERR_BACKLOG) return dropped(session, 'server-stderr-dropped');
+          serverStderr.write(Buffer.concat([line, LINE_FEED]));
+        },
         onTooLong: (length) => dropped(session, 'server-stderr-line-dropped', { length }),
         onEnd: () => {},
+      });
+      // One read at a time, with everything else that waits taken in between, as for its output.
+      child.stderr.on('data', () => {
+        child.stderr.pause();
+        setImmediate(() => child.stderr.resume());
       });
     } else {
       child.stderr.on('error', () => {});

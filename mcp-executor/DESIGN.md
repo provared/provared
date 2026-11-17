@@ -3588,6 +3588,22 @@ one with none, and as one whose reason was lost at a restart. Only seals
 from a central sealer say `stamped: false`, so a guard that signs its
 own seals with no `recorder.stamp` answers as before.
 
+**X353. A local program's standard error is bounded.** Of each program's
+standard error, at most `STDERR_PER_SECOND` (256 KiB) is written on to
+the executor's in each second of the clock, and nothing while more than
+`STDERR_BACKLOG` (1 MiB) already waits there (`writableLength`), for
+every program together; lines past either are dropped and counted, in
+`server-stderr-dropped` once a second (as X245 counts lines of its
+output). The reading hands back between chunks (`setImmediate`), as for
+its output. Why: before, every line was written on, and the answer of
+`write` was not looked at. On Linux, where a write to a pipe does not
+wait, a program that wrote 200 MiB made the executor hold up to 149 MiB
+of it; on Windows, where it waits, 30 MiB stopped the executor for 15
+seconds, for every agent. Dropping, not pausing the program, was chosen
+so that a program is never held in the middle of a tool by its own
+logging. The lines are not counted for the flood rule: a program that
+logs much is not ended for it.
+
 ## 14. The executor as an OAuth-protected connector
 
 Over HTTP an agent may also connect through OAuth, from 0.5.0, where the

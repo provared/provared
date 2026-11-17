@@ -518,7 +518,12 @@ What is different from an upstream HTTP server:
 
 What each program writes to its standard error goes to the executor's,
 among the executor's own log lines, in whole lines (a line of more than
-64 KiB is dropped).
+64 KiB is dropped). At most 256 KiB of each program's is written on in
+each second of the clock, and nothing while more than 1 MiB already
+waits to be written there; lines past either are dropped, and the log's
+`server-stderr-dropped` says how many, once a second. So a program that
+writes to it without pause neither fills the executor's memory nor holds
+up the other agents.
 
 What it does not do: the program's credentials are not looked for in what
 it answers (as on stdio; the replacing described above is for the

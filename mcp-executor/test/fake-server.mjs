@@ -171,6 +171,8 @@ function onMessage(given) {
     }
     // A line of 100 KiB on its standard error, then a short one.
     if (name === 'longerr') return process.stderr.write(`${'L'.repeat(100 * 1024)}\nafter the long line\n`, () => text('Long.'));
+    // A flood on its standard error: "mib" MiB in lines of 1 KiB, written at once, then the answer.
+    if (name === 'floodErr') return process.stderr.write(`${'E'.repeat(1023)}\n`.repeat(1024 * (args.mib ?? 4)), () => text('Flooded.'));
     // An answer to nothing the executor asked, then a notification, then the answer.
     if (name === 'stray') {
       send({ jsonrpc: '2.0', id: 'nobody', result: { content: [{ type: 'text', text: 'an answer to nothing' }] } });

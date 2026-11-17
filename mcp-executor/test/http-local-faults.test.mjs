@@ -21,7 +21,7 @@ import { fileURLToPath } from 'node:url';
 const { checkBook, identifierFingerprint } = await import('provared');
 const { KILL_WAIT, SERVER_ENDED, UNREADABLE_ANSWER } = await import('../executor.mjs');
 const { BACKLOG_LIMIT, LOCAL_VERSIONS } = await import('../http.mjs');
-const { CLOSE_MARGIN, FLOOD_PER_SECOND, FLOOD_SECONDS, STDERR_LINE, openLocalSessions } = await import('../local.mjs');
+const { CLOSE_MARGIN, FLOOD_PER_SECOND, FLOOD_SECONDS, STDERR_BACKLOG, STDERR_LINE, STDERR_PER_SECOND, openLocalSessions } = await import('../local.mjs');
 const { CODES } = await import('../jsonrpc.mjs');
 const { httpWorld, openHttpWorld, post, rawRequest, auth } = await import('./http-world.mjs');
 const { FAKE_SERVER, until, pause, world, openWorld } = await import('./world.mjs');
@@ -854,6 +854,39 @@ test('local.mjs: the second wait, before SIGKILL, is "shutdownWait" again and at
   assert.deepEqual(short.logs.filter((e) => e.event === 'server-killed').map((e) => e.signal), ['SIGTERM']);
   short.tick(1);
   assert.deepEqual(short.logs.filter((e) => e.event === 'server-killed').map((e) => e.signal), ['SIGTERM', 'SIGKILL'], '"shutdownWait" again, where it is shorter');
+});
+
+test('a program that floods its standard error has no more than 256 KiB of it written on in each second; the rest is dropped and counted (X353)', async () => {
+  let bytes = 0;
+  const stderr = new PassThrough();
+  stderr.on('data', (d) => (bytes += d.length));
+  const w = await localWorld({ config: { tools: { ...TOOLS, floodErr: { action: 'tool.run' } } }, more: { serverStderr: stderr } });
+  try {
+    const { session } = await begin(w, 'alpha');
+    const began = Date.now();
+    assert.equal((await callIn(w, 'alpha', session, 'floodErr', { mib: 4 })).json.result?.content[0].text, 'Flooded.');
+    await until(() => events(w, 'server-stderr-dropped').length > 0);
+    const seconds = Math.floor((Date.now() - began) / 1000) + 2;
+    assert.ok(bytes <= seconds * STDERR_PER_SECOND, `${bytes} bytes written on in about ${seconds} seconds' worth`);
+    assert.ok(bytes > 0, 'the first lines are written on');
+    assert.ok(events(w, 'server-stderr-dropped').every((e) => e.count > 0 && e.agent === 'alpha'));
+  } finally {
+    await w.close();
+  }
+});
+
+test('where more than 1 MiB already waits to be written to the executor\'s standard error, a program\'s lines are dropped, not held (X353)', async () => {
+  // A place that has taken nothing for a long while: what waits there is already over the bound.
+  const stuck = { writableLength: STDERR_BACKLOG + 1, written: 0, write() { this.written += 1; return false; } };
+  const w = await localWorld({ config: { tools: { ...TOOLS, longerr: { action: 'tool.run' } } }, more: { serverStderr: stuck } });
+  try {
+    const { session } = await begin(w, 'alpha');
+    assert.equal((await callIn(w, 'alpha', session, 'longerr', {})).json.result?.content[0].text, 'Long.');
+    await until(() => events(w, 'server-stderr-dropped').length > 0 || stuck.written > 0);
+    assert.equal(stuck.written, 0);
+  } finally {
+    await w.close();
+  }
 });
 
 test('a line of a program\'s standard error longer than 64 KiB is dropped, and the log says so; the lines after it are written on', async () => {
