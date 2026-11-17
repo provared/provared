@@ -45,7 +45,12 @@ PROVARED_GATEWAY_ADMIN_SECRET; "seal --offline", "acknowledge --offline" and "re
 of a stopped gateway, and need no secret.`;
 
 /** Text from an answer, on one line and with no character that steers a terminal. */
-const plainText = (v) => String(v).replace(/[\p{Cc}\p{Zl}\p{Zp}]/gu, ' ');
+// Control and format characters (\p{Cf}: those that turn text round or hide it) become spaces, and the text is cut
+// at 600 characters: a problem's words come from the sealer, which may be another program, and go to a terminal.
+const plainText = (v) => {
+  const text = String(v).replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, ' ');
+  return text.length > 600 ? `${text.slice(0, 600)}...` : text;
+};
 
 function option(args, name) {
   const at = args.indexOf(name);

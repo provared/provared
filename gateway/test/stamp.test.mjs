@@ -6,8 +6,10 @@
 
 import './local-library.mjs'; // first: "provared" is this repository's own library
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { readFileSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
+import { join } from 'node:path';
 import { test } from 'node:test';
 
 const { checkBook } = await import('provared');
@@ -74,10 +76,17 @@ test('recorder.stamp: given, it is an address on the web and a time limit in ran
   try {
     for (const [stamp, words] of [
       ['http://127.0.0.1/', /recorder\.stamp: must be an object/],
+      // Whatever it holds, where it is given (X308).
+      [null, /recorder\.stamp: must be an object/],
+      ['', /recorder\.stamp: must be an object/],
+      [false, /recorder\.stamp: must be an object/],
+      [0, /recorder\.stamp: must be an object/],
       [{}, /recorder\.stamp\.address/],
       [{ address: 'ftp://127.0.0.1/' }, /recorder\.stamp\.address/],
       [{ address: 'http://user:secret@127.0.0.1/' }, /recorder\.stamp\.address/],
       [{ address: 'http://127.0.0.1/#x' }, /recorder\.stamp\.address/],
+      [{ address: 'http://127.0.0.1/tsa?key=secret' }, /recorder\.stamp\.address: .*query/],
+      [{ address: 'http://127.0.0.1/tsa?' }, /recorder\.stamp\.address/],
       [{ address: 'http://127.0.0.1/', timeout: 99 }, /recorder\.stamp\.timeout/],
       [{ address: 'http://127.0.0.1/', timeout: 60001 }, /recorder\.stamp\.timeout/],
       [{ address: 'http://127.0.0.1/', policy: '1.2.3' }, /recorder\.stamp\.policy/],
@@ -87,6 +96,47 @@ test('recorder.stamp: given, it is an address on the web and a time limit in ran
       assert.ok((await checkConfig(config, { root: w.folder })).problems.some((p) => words.test(p)), JSON.stringify(stamp));
     }
     assert.ok(!(await checkConfig({ ...w.config, recorder: { ...w.config.recorder, stamp: { address: 'https://127.0.0.1:8443/tsa' } } }, { root: w.folder })).problems.some((p) => /stamp/.test(p)));
+  } finally {
+    await w.close();
+  }
+});
+
+test('recorder.stamp: a time more than 300 seconds before the seal\'s own time costs no seal; the time-stamp is not kept (X307)', { skip: findOpenssl() ? false : NO_OPENSSL }, async () => {
+  const tsa = await startTestTsa();
+  // The gateway's clock 320 seconds ahead of the service's: the seal would be dated after its time-stamp.
+  const w = await world({ recorder: { stamp: { address: tsa.address } }, more: { now: () => Date.now() + 320000 } });
+  try {
+    await w.call('GET', '/tickets/api/now/table/x');
+    const sealed = await w.gateway.seal('patching');
+    assert.equal(sealed.stamped, undefined);
+    assert.equal(sealed.stampProblem.code, 'stamp-not-given');
+    assert.match(sealed.stampProblem.message, /before the seal's own time/);
+    const c = await checkBook(readFileSync(w.bookPath, 'utf8'), { ...w.gateway.checkOptions('patching'), stampServices: [tsa.authority] });
+    assert.equal(c.summary.intact, true);
+  } finally {
+    await w.close();
+    await tsa.close();
+  }
+});
+
+test('check: a library without the time-stamp client (provared/net/timestamp) is said plainly where recorder.stamp is given (X309)', async () => {
+  const w = await world();
+  try {
+    const hide = new URL('../../test/helpers/no-net-timestamp.mjs', import.meta.url).href;
+    const gateway = new URL('../gateway.mjs', import.meta.url).href;
+    // checkConfig in a program of its own, so that the library can be hidden there; the settings hold keys, so they go by a file.
+    const config = { ...w.config, recorder: { ...w.config.recorder, stamp: { address: 'http://127.0.0.1:9/tsa' } } };
+    const file = join(w.folder, 'check-settings.json');
+    writeFileSync(file, JSON.stringify(config));
+    const code = `const { checkConfig } = await import(${JSON.stringify(gateway)}); const c = JSON.parse(require('node:fs').readFileSync(process.argv[1], 'utf8')); process.stdout.write(JSON.stringify((await checkConfig(c, { root: process.argv[2] })).problems));`;
+    const run = (more) => spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', '--input-type=commonjs', '-e', `(async () => { ${code} })()`, file, w.folder], { encoding: 'utf8', env: { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} ${more}`.trim() }, windowsHide: true });
+    // (Its other problems, if any, come of the signers in the test's settings, which a file cannot hold.)
+    const fine = run('');
+    const found = JSON.parse(fine.stdout || 'null');
+    assert.ok(Array.isArray(found) && !found.some((p) => /stamp/.test(p)), fine.stdout + fine.stderr);
+    const without = run(`--import=${hide}`);
+    const problems = JSON.parse(without.stdout || 'null');
+    assert.ok(problems?.some((p) => /recorder\.stamp: the library installed has no client for a time-stamp service \(provared\/net\/timestamp\)/.test(p)), without.stdout + without.stderr);
   } finally {
     await w.close();
   }

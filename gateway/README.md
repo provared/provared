@@ -450,15 +450,20 @@ write those files can do as much. There is no timer: to seal every day, run
 time-stamp service (RFC 3161), `{"address": ..., "timeout": ...}`, each
 seal's fingerprint is sent to it as the seal is made, and the time-stamp
 it gives goes beside the seal in the book, in `stamps`. `address` begins
-`http://` or `https://` and holds no user name, password or fragment;
-`timeout` is from 100 to 60,000 milliseconds, 10,000 if left out. No
-service is named by this package: the address is yours to choose. The
-request and the check are the library's (`provared/net/timestamp`): the
-answer is read up to 12,544 bytes and within the time limit, a redirect is
-not followed, and the time-stamp is kept only if the library's
-`checkStamp` passes it for this fingerprint, it carries the number used
-once that was sent, and the time it states is within 300 seconds of this
-computer's clock. Anything else costs no seal: the seal goes into the book
+`http://` or `https://` and holds no user name, password, query or
+fragment; `timeout` is from 100 to 60,000 milliseconds, 10,000 if left
+out. Given, it must be such an object: `null`, `""` or `false` is
+refused, as by `check`. No service is named by this package: the address
+is yours to choose. The request and the check are the library's
+(`provared/net/timestamp`, in `provared` 0.8.1 or later; with an earlier
+release `check` says so and the gateway does not start): the answer is
+read up to 12,544 bytes and within the time limit, a redirect is not
+followed, and the time-stamp is kept only if the library's `checkStamp`
+passes it for this fingerprint, it carries the number used once that was
+sent, and the time it states is within 300 seconds of this computer's
+clock, no more than 300 seconds before the seal's own `when`, and no more
+than 300 seconds before the latest time a service's time-stamp gave a
+seal before it in the book. Anything else costs no seal: the seal goes into the book
 without a time-stamp, the answer to `seal` gives `stampProblem` (its code
 and why), the command prints it, and the log has a `stamp-not-given`
 event. A seal that carries one answers `stamped: true`. The service sees
