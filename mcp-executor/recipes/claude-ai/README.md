@@ -65,7 +65,11 @@ What runs, from `compose/compose.yaml`:
 
 The guard listens on `127.0.0.1:8796`, its own rule, inside the network it
 shares with Caddy. So only Caddy reaches it: its port is published
-nowhere, and only Caddy's 80 and 443 are.
+nowhere, and only Caddy's 80 and 443 are. Caddy passes every path on
+except the guard's addresses for its administrator, `/provared` and
+everything under it (`status`, `seal`, `acknowledge`, `hello`): for those
+Caddy answers 404 itself, so they are reached only on the server, with
+`docker compose run --rm guard ...`.
 
 What the server needs: Linux, Docker with its Compose plugin, a public IPv4
 address, and ports 80 and 443 open to the internet (443 for claude.ai and
@@ -171,9 +175,18 @@ docker compose start guard
 ```
 
 `owner --reset` writes the new link to `guard-data/owner-link.txt`, prints
-where it is rather than the link, and the start keeps it. A command run
-while the guard is running is refused by the guard's lock, which the
-command's container sees because it shares Caddy's network too.
+where it is rather than the link, and the start keeps it.
+
+Run every command that writes the guard's files with the guard stopped,
+as above: `owner`, and any command with `--offline` (`seal --offline`,
+`acknowledge --offline`). Commands that only read (`check`, `status`,
+`keys --out` to a new file) may run beside it. While the guard runs, its
+start answers at `guard-data/guard-running.sock`, and a command that
+writes is refused (code 2) where something answers there. The guard's own
+lock refuses it too, but only where the command's container shares the
+guard's network, which is not so in the seconds after Caddy's container
+is restarted on its own, until the guard has stopped and started again;
+the socket file is seen from either network.
 
 ### What to back up, and what is secret
 
@@ -271,12 +284,25 @@ services:
 With a packed copy the build runs `npm install` in place of `npm ci`: it
 writes the executor's entry in the image's lockfile afresh, for the packed
 file and its hash, and keeps the library's entry, whose hash is still
-checked. The lockfile beside `compose.yaml` is not changed. Its entry for
-the executor 0.5.0 was made from a pack of this tree, before 0.5.0 is on
-npm; it is to be made again from npm once 0.5.0 is published
-(`npm install --package-lock-only --ignore-scripts` in this folder), and
-its hash checked against the one the release shows. Until then, a hash that
-differs makes `npm ci` stop: it installs nothing it cannot check.
+checked. The lockfile beside `compose.yaml` is not changed.
+
+**The lockfile's entry for the executor is provisional.** It was made from
+a pack of a working folder, before 0.5.0 is on npm, and its hash is known
+not to be npm's: a pack of a clean checkout gives another, since the file
+modes recorded in the pack differ. The file
+`package-lock.provisional.json` beside it says so. Until the lockfile is
+made again from npm, `npm ci` stops on it (`E404` now, `EINTEGRITY` once
+0.5.0 is published): it installs nothing it cannot check. The release
+rule, in this order:
+
+1. Publish `provared-mcp-executor` 0.5.0.
+2. In this folder, `npm install --package-lock-only --ignore-scripts`,
+   and take `package-lock.provisional.json` away; commit both.
+3. `node tools/release/check-recipe-lock.mjs --registry`, from the top of
+   the repository: it stops while the provisional file is there, or where
+   the lockfile's hash for the executor is not the one
+   `npm view provared-mcp-executor@0.5.0 dist.integrity` gives.
+4. Only then cut the release tag that "Getting the recipe" points at.
 
 ### How the containers are held in
 
@@ -348,9 +374,11 @@ was run on a full clone, against `v0.8.0`), and claude.ai itself.
   Caddy's container is started again without the guard (a failure, or
   `docker compose restart caddy`), Caddy has a new network and the guard
   is left in the old one, where nothing reaches it. The start looks for
-  Caddy's port every 15 seconds; after four misses it stops the guard,
-  and Docker starts it again in Caddy's new network. Until then, about a
-  minute (69 and 56 seconds in the Docker check), claude.ai gets an error (502).
+  Caddy's port every 5 seconds; after three misses it stops the guard,
+  and Docker starts it again in Caddy's new network. Until then, about
+  15 to 30 seconds, claude.ai gets an error (502). A command that writes
+  is refused in that time by the start's mark (above, "Commands, and the
+  owner's reset"), not by the guard's lock, which it cannot see.
 - **Any passkey that verifies its user.** The guard asks nothing more of
   the passkey than a fingerprint, a face or a PIN at each use. The browser
   offers where to keep it: on this device, on a phone or on a security
@@ -415,7 +443,27 @@ was run on a full clone, against `v0.8.0`), and claude.ai itself.
 
 To let a second claude.ai connection in, add a second agent marked
 `"oauth": true`. Each approved connection is one agent, with its own
-permission and book.
+permission and book. In this order the guard keeps running for the first
+agent until the second is ready:
+
+1. Add the agent in `guard-data/executor-http.json` (with its own `slip`,
+   `book` and `keys`, and `issuerKeys` written `<like this>`). The
+   running guard does not read the file again until it is started again.
+2. `docker compose run --rm guard keys --out permission-entries-2.json`:
+   it makes the new agent's key file, keeps the keys already there, and
+   writes what each agent's permission must hold to that new file. It
+   takes no lock, so it runs beside the guard. Read it with
+   `sudo cat guard-data/permission-entries-2.json`.
+3. Have the second permission signed, put it in place as for the first,
+   and put the thumbprint in the agent's `issuerKeys`.
+4. `docker compose restart guard`.
+
+Where the guard is started again before the second permission is in
+place, it waits for it, and the first agent's connection is down until
+then. Where the file of entries does not name an agent that waits, or
+its key file is not there, the start makes them, writes
+`permission-entries.json` again for every agent, and keeps the file
+before beside it as `permission-entries.before-<time>.json`.
 
 ## Trying the owner's passkey by hand
 

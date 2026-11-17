@@ -14,6 +14,13 @@
 }
 
 {$PROVARED_DOMAIN} {
+	# The guard's addresses for its administrator (/provared/status, /seal,
+	# /acknowledge, /hello) are not passed on: Caddy answers 404 for them.
+	# They are reached inside the guard's container, with "docker compose
+	# run --rm guard status", which asks 127.0.0.1:8796 directly.
+	@own path /provared /provared/*
+	respond @own 404
+
 	# The guard listens on 127.0.0.1:8796 in the network it shares with
 	# Caddy. The path, the query and the request's headers, Origin among
 	# them, go on unchanged; Caddy adds the X-Forwarded-* headers, which the

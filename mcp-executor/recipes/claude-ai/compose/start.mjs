@@ -18,10 +18,14 @@
 //
 // The guard's "owner" changes the state file that a running guard holds a
 // lock on. So the start writes the link before the guard runs, and the
-// commands are run with the guard stopped (docker compose run); a guard
-// that is running holds the lock, and the command is refused.
+// commands are run with the guard stopped (docker compose run). While the
+// guard runs, the start listens on guard-running.sock in the data folder,
+// and a command that writes (owner, http, stdio, anything with --offline)
+// is refused where something answers there, whichever network the guard
+// is in; the guard's own lock refuses it too where both share a network.
 
 import { spawn, spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { chmodSync, chownSync, existsSync, lstatSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
 import { dirname, join, resolve } from 'node:path';
@@ -45,6 +49,8 @@ export const GUARD_USER = '10001';
 const WAIT = Number(process.env.PROVARED_WAIT_MS ?? 10_000);
 /** A link with less than this left is not kept at a start, in ms. */
 const LINK_MARGIN = 120_000;
+/** The socket file the start listens on while the guard runs, in the data folder: what a command that writes looks for (X350). */
+export const RUNNING = 'guard-running.sock';
 
 const data = () => resolve(process.env.PROVARED_DATA ?? '/data');
 const bin = () => process.env.PROVARED_BIN ?? join(HERE, 'node_modules', 'provared-mcp-executor', 'bin.mjs');
@@ -110,6 +116,24 @@ export function waiting(settings, folder) {
     if (lacks.length) out.push({ name, slip, lacks });
   }
   return out;
+}
+
+/**
+ * The agents that wait for their permission and that the file of entries
+ * does not name, or whose key file is not there: an agent added to the
+ * settings after the first start (X351). Their entries are made again.
+ */
+export function unlisted(settings, folder, agents) {
+  let listed = {};
+  try {
+    listed = JSON.parse(readFileSync(join(folder, ENTRIES), 'utf8'));
+  } catch {
+    listed = {};
+  }
+  return agents.filter((a) => a.lacks.includes('slip')).map((a) => a.name).filter((name) => {
+    const keys = settings.agents?.[name]?.keys;
+    return !Object.hasOwn(listed ?? {}, name) || (typeof keys === 'string' && !existsSync(resolve(folder, keys)));
+  });
 }
 
 /** What the business does next, for the agents that wait. */
@@ -219,6 +243,19 @@ async function start() {
     const r = guard(['keys', '--config', SETTINGS, '--out', ENTRIES]);
     if (r.status !== 0) throw new Error(`"keys" failed: ${r.stderr.trim()}`);
     say(`Made the guard's keys and each agent's, in ${HOST_FOLDER}/keys/. What the permission must hold is in ${HOST_FOLDER}/${ENTRIES} (public keys only).`);
+  } else {
+    // An agent added after the first start: its key file and its entries are made, the file before kept beside (X351).
+    const missing = unlisted(readSettings(), folder, waiting(readSettings(), folder));
+    if (missing.length) {
+      const kept = ENTRIES.replace(/\.json$/, `.before-${new Date().toISOString().replace(/[:.]/g, '-')}.json`);
+      renameSync(join(folder, ENTRIES), join(folder, kept));
+      const r = guard(['keys', '--config', SETTINGS, '--out', ENTRIES]);
+      if (r.status !== 0) {
+        renameSync(join(folder, kept), join(folder, ENTRIES));
+        throw new Error(`"keys" failed: ${r.stderr.trim()}`);
+      }
+      say(`The agent${missing.length > 1 ? 's' : ''} ${missing.map((n) => `"${n}"`).join(', ')} had no entry in ${HOST_FOLDER}/${ENTRIES}: made the missing keys, in ${HOST_FOLDER}/keys/, and wrote the file again for every agent; the one before is ${HOST_FOLDER}/${kept}. The keys already there were kept.`);
+    }
   }
   mkdirSync(join(folder, 'slips'), { recursive: true, mode: 0o700 });
 
@@ -271,7 +308,10 @@ async function start() {
     say('Once the link\'s time has passed, "docker compose restart guard" writes a new one.');
   }
 
-  // The guard itself, until it is stopped.
+  // The guard itself, until it is stopped. While it runs, the start listens on a socket file in the data folder, which
+  // a command that writes looks for before it begins: the guard's own lock belongs to the network the guard is in, and
+  // a command started while the guard is still in Caddy's old network would not see it (X350).
+  await markRunning();
   say(`Starting the guard. claude.ai's custom connector is to be added with the address https://${domain}${readSettings().path ?? '/mcp'}.`);
   const child = spawn(process.execPath, [bin(), 'http', '--config', SETTINGS], { cwd: folder, stdio: 'inherit' });
   let lost = false;
@@ -287,6 +327,58 @@ async function start() {
 }
 
 /**
+ * Listen on the socket file RUNNING in the data folder, for as long as this
+ * program runs. A file left by a guard that ended is replaced: nothing
+ * answers at it. The operating system closes the listener however the
+ * program ends.
+ */
+export async function markRunning() {
+  const path = runningPath();
+  if (process.platform !== 'win32') rmSync(path, { force: true });
+  const server = net.createServer((socket) => socket.destroy());
+  await new Promise((done, fail) => {
+    server.once('error', fail);
+    server.listen(path, done);
+  });
+  if (process.platform !== 'win32') chmodSync(path, 0o600);
+  server.unref();
+  return server;
+}
+
+/** Where the mark is: the socket file in the data folder; on Windows, where the recipe's tests run, a named pipe named after it. */
+function runningPath() {
+  const path = join(data(), RUNNING);
+  return process.platform === 'win32' ? `\\\\.\\pipe\\provared-guard-${createHash('sha256').update(path.toLowerCase()).digest('hex')}` : path;
+}
+
+/**
+ * Whether a guard is running on this data folder, by the socket file
+ * RUNNING, whichever network it is in: true where something answers there,
+ * or does not say within 2 seconds that nothing does; false where there is
+ * no such file, or nothing listens at it.
+ */
+export function guardRunning() {
+  const path = runningPath();
+  if (process.platform !== 'win32' && !existsSync(path)) return Promise.resolve(false);
+  return new Promise((done) => {
+    const socket = net.connect(path);
+    const end = (running) => {
+      socket.destroy();
+      done(running);
+    };
+    socket.setTimeout(2000, () => end(true));
+    socket.once('connect', () => end(true));
+    socket.once('error', (e) => end(!['ENOENT', 'ECONNREFUSED'].includes(e.code)));
+  });
+}
+
+/** Whether a command opens the books or the state file to write them, which only one program may do at a time. */
+export const writes = (command, rest) => ['owner', 'http', 'stdio'].includes(command) || rest.includes('--offline');
+
+/** What a command that writes is told where the guard is running. */
+export const RUNNING_WORDS = `The guard is running on these files (its start answers at ${HOST_FOLDER}/${RUNNING}), and this command writes them, which only one program may do at a time. Stop the guard first (docker compose stop guard), run the command, then start it again (docker compose start guard).`;
+
+/**
  * The guard shares Caddy's network. Where Caddy's container is restarted on
  * its own, Caddy has a new network and the guard is left in the old one,
  * where nothing reaches it. So the start looks for Caddy's port in the
@@ -295,7 +387,7 @@ async function start() {
  * call in flight settled and receipted, as at any stop) and ends with code
  * 1: Docker then starts the guard again, in Caddy's network as it now is.
  */
-export function watchPeer(onLost, { peer = process.env.PROVARED_PEER ?? '127.0.0.1:443', every = Number(process.env.PROVARED_PEER_EVERY_MS ?? 15_000), tries = 4 } = {}) {
+export function watchPeer(onLost, { peer = process.env.PROVARED_PEER ?? '127.0.0.1:443', every = Number(process.env.PROVARED_PEER_EVERY_MS ?? 5_000), tries = 3 } = {}) {
   if (!peer) return null;
   const at = peer.lastIndexOf(':');
   const host = peer.slice(0, at);
@@ -324,6 +416,12 @@ async function main(args) {
   const [command, ...rest] = args;
   if (command === undefined) return start();
   if (command === 'folders') return giveFolders(rest);
+  // A command that writes is refused while the guard runs, in whichever network it is (X350).
+  if (writes(command, rest) && (await guardRunning())) {
+    process.stderr.write(`provared-guard: ${RUNNING_WORDS}\n`);
+    process.exitCode = 2;
+    return;
+  }
   if (command === 'owner') {
     const extra = rest.filter((a) => a === '--reset');
     if (extra.length !== rest.length) throw new Error('owner takes only --reset here: the settings are always executor-http.json.');

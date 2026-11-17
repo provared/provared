@@ -20,7 +20,7 @@ const START = join(RECIPE, 'start.mjs');
 const BIN = fileURLToPath(new URL('../bin.mjs', import.meta.url));
 const SIGN = fileURLToPath(new URL('./recipe-compose/sign-test-permission.mjs', import.meta.url));
 const read = (name) => readFileSync(join(RECIPE, name), 'utf8');
-const { checkDomain, fillSettings, waiting, nextSteps, ownerState, watchPeer, CLIENT } = await import('../recipes/claude-ai/compose/start.mjs');
+const { checkDomain, fillSettings, waiting, nextSteps, ownerState, watchPeer, guardRunning, markRunning, writes, CLIENT } = await import('../recipes/claude-ai/compose/start.mjs');
 const POSIX = process.platform !== 'win32';
 
 function folder() {
@@ -241,6 +241,40 @@ test('the start, from an empty folder to the guard answering: init, the issuer, 
   }
 });
 
+test('an agent added after the first start gets its key file and its entries, the file of entries before kept beside (X351)', { timeout: 120_000 }, async () => {
+  const data = folder();
+  let run;
+  try {
+    run = startProgram(data, { PROVARED_DOMAIN: 'guard.example.test' });
+    await run.until('waits for the permission');
+    await run.stop();
+    const before = readFileSync(join(data, 'permission-entries.json'), 'utf8');
+    const key1 = readFileSync(join(data, 'keys', 'connection-1.jwk'), 'utf8');
+    const settings = JSON.parse(readFileSync(join(data, 'executor-http.json'), 'utf8'));
+    const two = 'connection-2';
+    settings.agents[two] = { oauth: true, slip: `slips/${two}.json`, book: `books/${two}.jsonl`, keys: `keys/${two}.jwk`, issuerKeys: ["<thumbprint of the person's passkey>"] };
+    writeFileSync(join(data, 'executor-http.json'), `${JSON.stringify(settings, null, 2)}\n`);
+    run = startProgram(data, { PROVARED_DOMAIN: 'guard.example.test' });
+    await run.until('waits for the permission');
+    const entries = JSON.parse(readFileSync(join(data, 'permission-entries.json'), 'utf8'));
+    assert.deepEqual(Object.keys(entries).sort(), ['connection-1', 'connection-2'], 'the file names the new agent');
+    assert.ok(existsSync(join(data, 'keys', `${two}.jwk`)), 'its key file is made');
+    assert.equal(readFileSync(join(data, 'keys', 'connection-1.jwk'), 'utf8'), key1, 'the first agent\'s keys are kept');
+    assert.match(run.out(), /The agent "connection-2" had no entry in guard-data\/permission-entries\.json: .*the one before is guard-data\/permission-entries\.before-/);
+    const kept = run.out().match(/the one before is guard-data\/(permission-entries\.before-[^ ]+\.json)/)[1];
+    assert.equal(readFileSync(join(data, kept), 'utf8'), before);
+    assert.match(run.out(), /holding the entries of "connection-2" in that file/);
+    await run.stop();
+    // Nothing missing: a third start writes nothing again.
+    run = startProgram(data, { PROVARED_DOMAIN: 'guard.example.test' });
+    await run.until('waits for the permission');
+    assert.doesNotMatch(run.out(), /had no entry/);
+  } finally {
+    if (run && run.child.exitCode === null) await run.stop();
+    rmSync(data, { recursive: true, force: true });
+  }
+});
+
 test('watchPeer: nothing while Caddy\'s port answers; once it has not answered so many times in a row, the guard is stopped', async () => {
   const server = net.createServer((s) => s.destroy());
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
@@ -276,9 +310,54 @@ test('the start ends with code 1 once Caddy\'s port is gone from its network, so
     // Again, now looking for a port where nothing listens.
     run = startProgram(data, { PROVARED_DOMAIN: 'guard.example.test', PROVARED_PEER: `127.0.0.1:${closed}`, PROVARED_PEER_EVERY_MS: '100' });
     assert.equal(await run.ended, 1, run.out());
-    assert.match(run.out(), /has not answered in this network 4 times in a row/);
+    assert.match(run.out(), /has not answered in this network 3 times in a row/);
   } finally {
     if (run && run.child.exitCode === null) await run.stop();
+    rmSync(data, { recursive: true, force: true });
+  }
+});
+
+test('a command that writes is refused while the start\'s mark answers, with no guard\'s lock to see (Caddy restarted alone); others are not; the mark gone, none is (X350)', async () => {
+  const data = folder();
+  const before = process.env.PROVARED_DATA;
+  process.env.PROVARED_DATA = data;
+  // Not spawnSync: the mark is served by this process, which must go on running while the command asks it.
+  const command = (...args) =>
+    new Promise((done) => {
+      const child = spawn(process.execPath, [START, ...args], { cwd: data, env: { ...process.env, PROVARED_DATA: data, PROVARED_BIN: BIN }, stdio: ['ignore', 'pipe', 'pipe'] });
+      let stdout = '';
+      let stderr = '';
+      child.stdout.on('data', (d) => (stdout += d));
+      child.stderr.on('data', (d) => (stderr += d));
+      child.on('close', (status) => done({ status, stdout, stderr }));
+    });
+  let mark = null;
+  try {
+    assert.equal(writes('owner', []), true);
+    assert.equal(writes('seal', ['--offline']), true);
+    assert.equal(writes('acknowledge', ['--offline', '--all']), true);
+    assert.equal(writes('http', []), true);
+    assert.equal(writes('status', []), false);
+    assert.equal(writes('keys', ['--out', 'x.json']), false);
+    assert.equal(await guardRunning(), false, 'no mark: no guard');
+    // The mark alone, as a guard left in Caddy's old network has it: no executor runs here, so no lock of the guard's is held.
+    mark = await markRunning();
+    assert.equal(await guardRunning(), true);
+    for (const args of [['owner', '--reset'], ['owner'], ['seal', '--offline'], ['acknowledge', '--offline']]) {
+      const r = await command(...args);
+      assert.equal(r.status, 2, `${args.join(' ')}: ${r.stdout}${r.stderr}`);
+      assert.match(r.stderr, /The guard is running on these files .*Stop the guard first \(docker compose stop guard\)/);
+    }
+    assert.doesNotMatch((await command('check')).stderr, /The guard is running on these files/, 'check writes nothing');
+    await new Promise((r) => mark.close(r));
+    mark = null;
+    // The guard ended: a file left behind, at which nothing answers, refuses nothing.
+    assert.equal(await guardRunning(), false);
+    assert.doesNotMatch((await command('owner')).stderr, /The guard is running on these files/);
+  } finally {
+    if (mark) await new Promise((r) => mark.close(r));
+    if (before === undefined) delete process.env.PROVARED_DATA;
+    else process.env.PROVARED_DATA = before;
     rmSync(data, { recursive: true, force: true });
   }
 });
@@ -409,6 +488,43 @@ test('the Caddyfile: the domain from the environment, the guard\'s local address
   assert.doesNotMatch(caddyfile, /header_up|header_down|rewrite|uri |strip_prefix|handle_path|\blog\b|email|tls /);
   assert.match(read('compose.yaml'), /PROVARED_DOMAIN: \$\{PROVARED_DOMAIN:\?/);
   assert.match(read('example.env'), /^PROVARED_DOMAIN=$/m);
+});
+
+test('package-lock.json: the executor\'s provisional entry is marked, and the release check stops on the mark until the lockfile is made from npm (X352)', () => {
+  const CHECK = fileURLToPath(new URL('../../tools/release/check-recipe-lock.mjs', import.meta.url));
+  const lock = JSON.parse(read('package-lock.json')).packages['node_modules/provared-mcp-executor'];
+  const mark = JSON.parse(read('package-lock.provisional.json'));
+  // The mark names the entry as it stands: an entry made again from npm with the mark left in place is caught here.
+  assert.deepEqual([mark.package, mark.version, mark.integrity], ['provared-mcp-executor', lock.version, lock.integrity]);
+  const run = (...args) => spawnSync(process.execPath, [CHECK, ...args], { encoding: 'utf8' });
+  const shipped = run();
+  assert.equal(shipped.status, 1, shipped.stdout + shipped.stderr);
+  assert.match(shipped.stderr, /Stopped: the recipe's lockfile is provisional: its entry for provared-mcp-executor 0\.5\.0 was made from a pack/);
+  // A copy with the mark taken away passes the check of the files; one whose versions differ does not.
+  const copy = folder();
+  try {
+    for (const f of ['package.json', 'package-lock.json']) writeFileSync(join(copy, f), read(f));
+    const unmarked = run('--recipe', copy);
+    assert.equal(unmarked.status, 0, unmarked.stdout + unmarked.stderr);
+    assert.match(unmarked.stdout, /from npm \(its hash not compared with npm: --registry does that\)/);
+    const other = JSON.parse(read('package.json'));
+    other.dependencies['provared-mcp-executor'] = '0.5.1';
+    writeFileSync(join(copy, 'package.json'), JSON.stringify(other));
+    const differs = run('--recipe', copy);
+    assert.equal(differs.status, 1);
+    assert.match(differs.stderr, /gives provared-mcp-executor 0\.5\.0, and package\.json 0\.5\.1/);
+    assert.equal(run('--recipe', copy, '--wrong').status, 1);
+  } finally {
+    rmSync(copy, { recursive: true, force: true });
+  }
+});
+
+test('the Caddyfile: the guard\'s administrator\'s addresses (/provared and under it) are Caddy\'s 404, not passed on (X349)', () => {
+  const caddyfile = read('Caddyfile').replace(/#.*$/gm, '');
+  assert.match(caddyfile, /^\t@own path \/provared \/provared\/\*$/m);
+  assert.match(caddyfile, /^\trespond @own 404$/m);
+  // The guard's own name for those addresses is still /provared.
+  assert.match(readFileSync(new URL('../http.mjs', import.meta.url), 'utf8'), /export const ADMIN_PATH = '\/provared';/);
 });
 
 test('the README: the recipe from a signed release tag, checked with git tag -v against the repository\'s release signers; a patch not tried, and the way back', () => {

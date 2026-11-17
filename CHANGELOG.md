@@ -1361,6 +1361,40 @@
       central sealer answers `stamped: true` with `stampedBy` where it
       carries a time-stamp, and `stamped: false` (printed "with no
       time-stamp") where it carries none; before, both looked the same.
+    - **The recipe: the guard's own addresses stay on the server (X349).**
+      Caddy answers 404 itself for `/provared` and everything under it;
+      before, `status`, `seal`, `acknowledge` and `hello` answered from
+      the internet once the settings named an administrator's secret.
+    - **The recipe: a command that writes is refused beside the guard in
+      any network (X350).** While the guard runs, its start listens on
+      `guard-data/guard-running.sock`, and `owner`, `http`, `stdio` and any
+      command with `--offline` are refused (code 2) where something
+      answers there. Before, for up to a minute after Caddy's container
+      was restarted alone, such a command did not see the guard's lock and
+      ran beside it. The start now looks for Caddy's port every 5 seconds
+      and stops the guard after three misses (was 15 seconds and four).
+      The README says to run every command that writes with the guard
+      stopped.
+    - **The recipe: an agent added later (X351).** Where an agent that
+      waits for its permission has no entry in `permission-entries.json`,
+      or no key file, the start makes them and writes the file again,
+      keeping the one before beside it. The README gives the order that
+      keeps the guard running for the first agent meanwhile.
+    - **The recipe: the provisional lockfile is marked (X352).**
+      `compose/package-lock.provisional.json` says that the lockfile's
+      entry for the executor 0.5.0 was not made from npm (its hash is
+      known not to be npm's), and `tools/release/check-recipe-lock.mjs`
+      stops while that file is there, or, with `--registry`, where the
+      hash is not the one npm gives. The README's release rule: publish,
+      make the lockfile again from npm, take the mark away, run the check,
+      and only then cut the tag. The release workflows are not changed:
+      the check is run by hand.
+    - **A local program's standard error is bounded (X353).** At most 256
+      KiB of each program's is written on in each second, and nothing while
+      more than 1 MiB already waits; the rest is dropped and counted in the
+      log (`server-stderr-dropped`). Before, a program writing without pause
+      made the executor hold it all in memory on Linux, and stopped it for
+      every agent on Windows.
 
 - **`provared-mcp-executor` 0.4.2 (15 November 2026): a security fix for
   two weaknesses. In front of a tool server whose JSON reader ignores

@@ -196,6 +196,16 @@ c4=$(curlc -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/
 r80=$(curlc -o /dev/null -w '%{http_code} %{redirect_url}' "http://$DOMAIN/mcp")
 note "port 80: $r80"
 echo "$r80" | grep -q "^30[18] https://$DOMAIN/mcp" && ok "port 80 sends the browser on to https, path unchanged" || bad "port 80: $r80"
+# The guard's administrator's addresses are Caddy's 404, with an empty body: the guard's own 404 is JSON (X349).
+own_codes=""
+for p in /provared /provared/hello /provared/status /provared/seal /PROVARED/hello; do
+  m=GET; case "$p" in */hello|*/seal) m=POST ;; esac
+  got=$(curlc -o "$WORK/own.body" -w '%{http_code}' -X "$m" "https://$DOMAIN$p")
+  own_codes="$own_codes $m $p $got $(wc -c < "$WORK/own.body" | tr -d ' ')b"
+  if [ "$got" != "404" ] || [ -s "$WORK/own.body" ]; then own_bad=1; fi
+done
+note "the guard's own addresses through Caddy:$own_codes"
+[ -z "$own_bad" ] && ok "Caddy answers 404 itself for /provared and /provared/*: nothing reaches the guard's administrator's addresses from outside" || bad "the guard's own addresses through Caddy:$own_codes"
 
 # --- the guard's port: from Caddy alone ---
 p=$(docker port "$CADDY" | sort | tr '\n' ' ')
@@ -261,6 +271,12 @@ code=$(curlc -o /dev/null -w '%{http_code}' -X POST "https://$DOMAIN/mcp")
 began=$(date +%s)
 dc restart caddy >/dev/null 2>&1
 sleep 3
+# In that window the guard is in Caddy's old network, where a command's container does not see its lock: the start's
+# mark in guard-data refuses a command that writes all the same (X350).
+if [ "$(docker inspect -f '{{.State.Running}}' "$GUARD")" = "true" ]; then
+  wr=$(dc run --rm --no-deps -T guard owner --reset 2>&1); wc=$?
+  if [ "$wc" -eq 2 ] && echo "$wr" | grep -q 'The guard is running on these files'; then ok "owner --reset just after Caddy was restarted alone, the guard still in the old network: refused by the start's mark (code 2)"; else bad "owner --reset just after Caddy was restarted alone: code $wc: $(echo "$wr" | tail -n 2)"; fi
+else note "the guard had already stopped when the command was tried; the window was not met"; fi
 CADDY_IP=$(docker inspect -f "{{(index .NetworkSettings.Networks \"$NET\").IPAddress}}" "$(dc ps -q caddy)")
 code=$(curlc -o /dev/null -w '%{http_code}' -X POST "https://$DOMAIN/mcp" 2>/dev/null)
 note "just after 'docker compose restart caddy' alone, POST /mcp through Caddy answered: $code"
