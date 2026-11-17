@@ -21,7 +21,7 @@
     fingerprint, a random 64-bit number used once (X290), and the
     service's certificate asked for, which the format needs the
     time-stamp to carry. `http:` and `https:` addresses are both taken,
-    with no user name, password or fragment (X291). A redirect is not
+    with no user name, password, query or fragment (X291, X311). A redirect is not
     followed, as the sealer's client follows none (X288); the answer is
     read up to 12,544 bytes, a time-stamp of the largest size the format
     allows and 256 bytes for the status beside it, and the whole request
@@ -73,7 +73,7 @@
     so. The ranges are to be raised when 0.8.1 is published.
   - **The format description** (section 21.2) says how the reference
     software asks for a time-stamp, what the service learns, and that a
-    time-stamp not given never holds up a seal; section 21.3 says what a
+    time-stamp not given never costs a seal; section 21.3 says what a
     time-stamp fixes and what it does not. `docs/guide.md` describes
     `provared/net/timestamp`, and no longer says that only
     `provared-headers` connects to anything.
@@ -104,10 +104,58 @@
     address) was taken out in turn: a test then failed every time. So did
     the executor's log of a time-stamp not given, its refusal beside a
     central sealer, and its keeping of the seal when the service fails.
-  - **Not tested:** a library without `provared/net/timestamp` installed
-    beside a program whose settings give `stamp`; a seal the book does
-    not take with its time-stamp, since the time-stamp is checked before
-    it is offered.
+  - **After the review of step 3.3** (X304 to X312):
+    - The central sealer's `stamp.timeout` is 4 seconds unless its
+      settings say otherwise, and at most 20 (it was 10 and 60): the
+      sealer answers one question at a time, so the wait holds up every
+      recorder, whose questions time out after 5 seconds unless their
+      settings say otherwise. `startSealer` refuses a `stamp.timeout` that
+      is not less than its `signWithin` (X304). In the library, a `stamp`
+      hook that gives no answer within `signWithin`, or throws something
+      other than a `Refusal`, is now `stamp-not-given`, not
+      `check-failed` (X305). The sealer keeps, in memory, why each book's
+      latest seal has no time-stamp, and answers it with the latest seal
+      (`/latest`), so that an executor that takes the seal back after its
+      answer was lost still logs the reason (X306).
+    - The time a time-stamp states is also held against the seal's own
+      `when` and the latest time that a service's time-stamp gave a seal
+      before it: more than 300 seconds before either, it is not kept
+      (`stamp-not-given`). `askForStamp` takes `when` and `after`;
+      `openSealer` gives its hook a second argument, `{when, after}`,
+      the seal before being the one it holds; the executor and the
+      gateway take every seal of the book before (X307). `src/` still
+      makes no request: the times are read with `checkStamp`.
+    - The gateway checks `recorder.stamp` whenever it is there, so `null`,
+      `""`, `false` and `0` are refused at the start as by `check` (X308).
+    - `check`, for the executor and the gateway, loads the time-stamp
+      client where `recorder.stamp` is given, and says plainly when the
+      library installed has none. The READMEs name the library release
+      needed (X309).
+    - What a service writes is shown with no format characters (`\p{Cf}`,
+      such as those that turn text round) as well as no control
+      characters, cut at 200 characters in all; the executor's and the
+      gateway's commands cut a problem's words at 600 (X310).
+    - An address with a query (`?`) is refused, as one with a user name
+      or password is (X311).
+    - Wording: a time-stamp not given never "costs" the seal, rather than
+      never "holds it up" (X312).
+    - Tests: in `test/stamp-request.test.mjs` (20 now), bytes left over
+      after the answer, a time-stamp larger than the format allows inside
+      an answer that is not, status 1, a body sent slowly after its
+      headers, a compressed answer and one that opens far larger, a
+      signing method the device cannot check, format characters and long
+      text, the seal's own time and the earlier time-stamp, and the clock
+      test at 320 seconds either side (it was 301). `test/sealer.test.mjs`:
+      what the hook is told, and a hook that never answers. The sealer:
+      the time limits, the query, and the reason kept with `/latest` and
+      lost at a start. The executor: the seal's own time, `stampContext`,
+      a seal taken back with the reason, and `check` with the client
+      hidden (`test/helpers/no-net-timestamp.mjs`). The gateway: `null`,
+      `""`, `false`, `0`, the query, the seal's own time and `check` with
+      the client hidden. Each new check was taken out in turn, and a test
+      then failed.
+  - **Not tested:** a seal the book does not take with its time-stamp,
+    since the time-stamp is checked before it is offered.
 
 - **`provared-mcp-executor` 0.5.0 (not yet released).** Five pieces of
   work on the executor, each below with its own choices: the fixes of
