@@ -763,7 +763,8 @@ bounded.** Before a message is written to a program, the bytes already
 waiting for it are counted (`child.stdin.writableLength`). Where they are
 more than 16 MiB (`BACKLOG_LIMIT`, the bound X113 gives for an agent that
 is not reading), nothing is written, the session is ended and its program
-is ended by force at once, and the agent is answered 503: a request, a
+is ended as at every other end, given `shutdownWait` first (X363; it was
+ended by force at once), and the agent is answered 503: a request, a
 notification and a response alike. A tool call that could not be written
 is receipted as one that could not be sent. So the executor holds at most
 the bound and one message more for each session. Why: as built, a
@@ -3212,7 +3213,13 @@ that gives no answer within 2 seconds counts as live: the start had
 waited for ever. A folder left by a program stopped in that moment is
 not taken away by itself, since that would let two programs in again;
 the refusal names it, to be taken away by hand. Such a folder now also
-refuses a lock whose place is empty. Not run on a Mac: the
+refuses a lock whose place is empty, and every first try makes it, so
+any program ended by force in its first try (about 2 milliseconds of a
+start or a command, where nobody holds the lock) can leave it, not only
+one that found a file to clear; a later start is then refused until it
+is taken away. A program that finds the folder looks again for 100
+milliseconds, a command too, and says the folder was left only where it
+is more than 5 seconds old (X361). Not run on a Mac: the
 tests of this branch run on Linux, where a socket file works the same
 way when it is asked for.
 
@@ -3603,6 +3610,37 @@ seconds, for every agent. Dropping, not pausing the program, was chosen
 so that a program is never held in the middle of a tool by its own
 logging. The lines are not counted for the flood rule: a program that
 logs much is not ended for it.
+
+**X361. The folder of another program's clearing is looked at again.**
+Where a try for a socket file's lock finds the folder of X163 at the end
+of its asking, it looks again every 10 milliseconds for 100 more (a
+command, which asks once, too), and is refused only where the folder is
+still there. The refusal says a program was stopped and left the folder
+only where the folder is more than 5 seconds old (`CLEARING_LEFT_MS`; a
+program holds it for at most about the 2 seconds a socket file is given
+to answer); otherwise it says another program was taking the lock at
+that moment. Why: two programs that asked at one moment were told that
+a folder was left, which was gone when looked for. A folder left behind
+is still not taken away by itself (X163).
+
+**X362. A socket file that no program holds, and that this user may not
+take away, has a refusal of its own.** It says the lock cannot be
+taken, that nothing answers at the file so no program holds it, and the
+code of the refusal to take it away; "it belongs to another user, or is
+a link that leads nowhere" only for `EPERM` and `EACCES`. Why: the
+refusal had begun "An executor is running", which the lock knew was not
+so.
+
+**X363. A program past the bound of X244 is given `shutdownWait`.** Its
+session ends as before, and its input is closed; it is sent SIGTERM only
+once `shutdownWait` has passed, as at every other end of a session. Why:
+a program that does one thing at a time reads nothing during a long
+call, and was ended part-way through it once 16 MiB waited for it; now
+the call it was busy with may still be answered. Not taken: refusing the
+message and keeping the session, which would need an outcome of its own
+for a tool call refused that way; and tying the bound to `bodyLimit`,
+which would let each session hold up to 1 GiB. The README says that a
+program must keep reading while it works.
 
 ## 14. The executor as an OAuth-protected connector
 

@@ -258,7 +258,7 @@ test('stdio: a program that takes no notice of SIGTERM is sent SIGKILL after a s
 
 for (const kind of ['request', 'notification']) {
   test(`a program that is not reading: what waits to be written to it is bounded, and a ${kind} past the bound is refused, not held`, async () => {
-    const w = await localWorld({ env: { FAKE_INIT: 'deaf' }, config: { timeout: 3000 } });
+    const w = await localWorld({ env: { FAKE_INIT: 'deaf' }, config: { timeout: 3000, shutdownWait: 500 } });
     try {
       const { session } = await begin(w, 'alpha');
       // One mebibyte at a time to just under the bound, and then half as much again: more than the bound now waits, whatever little the program's pipe took.
@@ -282,6 +282,30 @@ for (const kind of ['request', 'notification']) {
     }
   });
 }
+
+test('a program busy with a call when the bound is passed is given shutdownWait: the session ends, and the call it was working on is still answered (X363)', async () => {
+  const w = await localWorld({ config: { timeout: 15000, shutdownWait: 8000, tools: { ...TOOLS, work: { action: 'tool.run' } } } });
+  try {
+    const { session } = await begin(w, 'alpha');
+    // The program works for 4 seconds and reads nothing meanwhile.
+    const working = callIn(w, 'alpha', session, 'work', { ms: 4000 });
+    await until(() => seenByProgram(w).some((m) => m.seen?.params?.name === 'work'));
+    const mebibyte = 1024 * 1024;
+    const fill = BACKLOG_LIMIT / mebibyte - 1;
+    for (let i = 0; i <= fill; i++) {
+      const sent = await ask(w, 'alpha', session, { jsonrpc: '2.0', method: 'notifications/progress', params: { progressToken: 'p', progress: i, message: 'x'.repeat(i < fill ? mebibyte : 1.5 * mebibyte) } });
+      assert.equal(sent.status, 202, `notification ${i}: ${sent.body}`);
+    }
+    const refused = await ping(w, 'alpha', session);
+    assert.equal(refused.status, 503, refused.body);
+    assert.equal(events(w, 'session-ended').at(-1).why, 'not-reading');
+    assert.equal(events(w, 'server-killed').length, 0, 'not ended by force at once');
+    const answer = await working;
+    assert.equal(answer.json.result?.content[0].text, 'Worked.', answer.body);
+  } finally {
+    await w.close();
+  }
+});
 
 test('a program that writes without pause: another agent is served meanwhile, what is dropped is logged at most once a second, and the session is ended', async () => {
   const w = await localWorld({ config: { timeout: 30000 } });
@@ -764,6 +788,16 @@ async function clocked(t, settings = {}) {
   };
   return { child, logs, local, session, write, tick: (ms) => t.mock.timers.tick(ms) };
 }
+
+test('local.mjs: once the stop has begun (noMore), before the sessions are closed, a new session starts no program (X246; review 3.7f re-check, N3)', async () => {
+  let spawned = 0;
+  const local = openLocalSessions({ settings: { server: { resolved: 'x', args: [] }, sessions: { max: 2, idle: 3600000 }, shutdownWait: 100, timeout: 1000 }, env: {}, credentialNames: [], log: () => {}, serverStderr: null, spawnProgram: () => (spawned++, standIn()) });
+  // The time in which the stop waits for calls in flight: "close" has not run yet.
+  local.noMore();
+  assert.deepEqual(await local.begin('alpha', null), { refused: 'stopping' });
+  assert.equal(spawned, 0, 'no program was started');
+  await local.close();
+});
 
 test('local.mjs, the flood rule by the clock: more than 1,000 messages in each of 5 seconds running ends the session; an honest program below that, evenly or in bursts, is not ended (X245)', async (t) => {
   // 1,001 in each of five seconds running.

@@ -225,6 +225,11 @@ async function start() {
   for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => process.exit(0));
   const domain = checkDomain(process.env.PROVARED_DOMAIN);
   const folder = data();
+  // From here until the start ends, it listens on a socket file in the data folder, which a command that writes looks
+  // for before it begins: the guard's own lock belongs to the network the guard is in, and a command started while the
+  // guard is still in Caddy's old network would not see it (X350). It is made before anything is written, so that a
+  // command is refused while a start that Docker has just begun again is still at its first steps, too (X364).
+  await markRunning();
   if (!existsSync(join(folder, SETTINGS))) {
     say(`First start: writing the settings for the demonstration's tools ("init --http --demo") in ${HOST_FOLDER}/.`);
     const r = guard(['init', '--http', '--demo']);
@@ -305,10 +310,7 @@ async function start() {
     say('Once the link\'s time has passed, "docker compose restart guard" writes a new one.');
   }
 
-  // The guard itself, until it is stopped. While it runs, the start listens on a socket file in the data folder, which
-  // a command that writes looks for before it begins: the guard's own lock belongs to the network the guard is in, and
-  // a command started while the guard is still in Caddy's old network would not see it (X350).
-  await markRunning();
+  // The guard itself, until it is stopped.
   say(`Starting the guard. claude.ai's custom connector is to be added with the address https://${domain}${readSettings().path ?? '/mcp'}.`);
   const child = spawn(process.execPath, [bin(), 'http', '--config', SETTINGS], { cwd: folder, stdio: 'inherit' });
   let lost = false;

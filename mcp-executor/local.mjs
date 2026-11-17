@@ -75,13 +75,15 @@ export function openLocalSessions({ settings, env, credentialNames, log, serverS
    * ended or the program has gone. Where more than "backlog" bytes already
    * wait for a program that is not reading, nothing is written and the
    * session is ended: the message is refused, not held in memory (X244).
+   * The program is given "shutdownWait", as at every other end, so that one
+   * busy with a call may still answer it (X363).
    */
   function write(session, text) {
     if (session.gone || session.ended) return false;
     const held = session.child.stdin.writableLength;
     if (held > backlog) {
       log({ event: 'server-not-reading', agent: session.agent, held });
-      end(session, 'not-reading', true);
+      end(session, 'not-reading');
       return false;
     }
     try {
@@ -121,8 +123,8 @@ export function openLocalSessions({ settings, env, credentialNames, log, serverS
    * its id is answered as an unknown session; its stream is closed; and its
    * program's input is closed, as the stdio executor closes it, and the
    * program is ended by force where it has not ended within "shutdownWait"
-   * ("force"). With "now" the program is ended by force at once: it is not
-   * reading, or is flooding. A call still with the program is settled when
+   * ("force"). With "now" the program is ended by force at once: it is
+   * flooding. A call still with the program is settled when
    * the program ends.
    */
   function end(session, why, now = false) {

@@ -47,7 +47,7 @@
 // starting on those files, and gains nothing else.
 
 import { createHash } from 'node:crypto';
-import { mkdirSync, realpathSync, rmdirSync, unlinkSync } from 'node:fs';
+import { mkdirSync, realpathSync, rmdirSync, statSync, unlinkSync } from 'node:fs';
 import net from 'node:net';
 import { basename, dirname, resolve } from 'node:path';
 
@@ -77,6 +77,13 @@ function realpathNative(path) {
 export const LOCK_WAIT_MS = 10000;
 /** How long a socket file is given to answer before it is taken to be live (milliseconds). */
 const ALIVE_WAIT_MS = 2000;
+/**
+ * The folder beside a socket file is held while a program clears the place, for a few milliseconds and at most about
+ * ALIVE_WAIT_MS: a program that finds it looks again for this long, a command too, before it is refused (milliseconds).
+ */
+const CLEARING_LOOK_MS = 100;
+/** A folder older than this was left by a program stopped as it took the lock; a younger one is another's at work (ms). */
+const CLEARING_LEFT_MS = 5000;
 
 /** Where the lock's listener is, on this kind of computer. */
 function lockAddress(name) {
@@ -201,6 +208,8 @@ export function lockFiles(bookPath, { wait = 0 } = {}) {
     held: (left) => `An executor is running on the book ${bookPath} and its copy, or a command is at work on them. One program writes them at a time: stop the executor first, or wait for the command to end.${left} Nothing was read or written.`,
     failed: (why) => `The lock for the book ${bookPath} could not be taken (${why}), so the executor does not open it.`,
     what: 'these files',
+    name: `the book ${bookPath} and its copy`,
+    untouched: 'Nothing was read or written.',
     wait,
   });
 }
@@ -224,6 +233,8 @@ export function lockState(statePath, { wait = 0 } = {}) {
     held: (left) => `An executor is running on the state file ${statePath} (oauth.state), or the command "owner" is at work on it. One program holds a state file at a time: stop the other first, or wait for the command to end. Two executors need a state file each: name another in this one's settings ("oauth", "state").${left} Neither the state file nor any agent's files were read or written.`,
     failed: (why) => `The lock for the state file ${statePath} (oauth.state) could not be taken (${why}), so the executor does not open it.`,
     what: 'this state file',
+    name: `the state file ${statePath} (oauth.state)`,
+    untouched: 'Neither the state file nor any agent\'s files were read or written.',
     wait,
   });
 }
@@ -232,11 +243,14 @@ export function lockState(statePath, { wait = 0 } = {}) {
  * Take the lock named after a path, through lockAt, so that a book's lock and a state file's are taken in one way: the
  * name as lockName resolves it, a socket file left behind cleared by one program at a time, and a refusal that names
  * what is in the way. "held" gives what is said where another program holds it (with "left", what more there is to
- * say, or nothing), "failed" where it could not be taken for another reason; "what" names the files in those words.
+ * say, or nothing), "failed" where it could not be taken for another reason; "what" names the files in those words,
+ * "name" names them for a refusal where no program holds the lock, and "untouched" says that nothing was read or written.
  */
-async function lock(path, { held, failed, what, wait }) {
+async function lock(path, { held, failed, what, name, untouched, wait }) {
   const address = lockAddress(lockName(path));
   const end = Date.now() + wait;
+  // Where the folder of another program's clearing is found at the end, a few more looks (X361).
+  let lookUntil = 0;
   let server;
   for (;;) {
     try {
@@ -245,17 +259,31 @@ async function lock(path, { held, failed, what, wait }) {
     } catch (e) {
       if (e.code === 'CANNOT') throw new Error(failed(e.message));
       if (e.code !== LOCKED) throw e;
-      if (Date.now() >= end) {
-        const left = e.clearing
-          ? ` Or a program was stopped as it took the lock, and left the folder ${e.clearing}: where no executor and no command is at work on ${what}, take that folder away.`
-          : e.notAsked
-            ? ` The lock's socket file, ${e.notAsked}, belongs to another user: this user may not ask whether a program still holds it (${e.why}), and cannot take it away. Where no executor and no command of that user's is at work on ${what}, the file was left behind by one that has ended, and that user or an administrator takes it away.`
-            : e.notCleared
-              ? ` The lock's socket file, ${e.notCleared}, is not held by any program: nothing answers at it. But this user may not take it away (${e.why}): it belongs to another user, or is a link that leads nowhere. That user or an administrator takes it away.`
-              : '';
+      const now = Date.now();
+      if (now >= end && e.clearing && !lookUntil) lookUntil = now + CLEARING_LOOK_MS;
+      if (now >= end && !(e.clearing && now < lookUntil)) {
+        // Nothing answers at the socket file and this user may not take it away: no program holds the lock (X362).
+        if (e.notCleared) {
+          const whose = e.why === 'EPERM' || e.why === 'EACCES' ? ': it belongs to another user, or is a link that leads nowhere' : '';
+          throw Object.assign(new Error(`The lock for ${name} cannot be taken: nothing answers at its socket file, ${e.notCleared}, so no program holds it, and this user may not take the file away (${e.why})${whose}. That user or an administrator takes it away. ${untouched}`), { code: LOCKED });
+        }
+        let left = '';
+        if (e.clearing) {
+          let age = null;
+          try {
+            age = Date.now() - statSync(e.clearing).mtimeMs;
+          } catch {
+            // Gone since: another program's, at work.
+          }
+          left = age !== null && age >= CLEARING_LEFT_MS
+            ? ` Or a program was stopped as it took the lock, and left the folder ${e.clearing}, made ${Math.round(age / 1000)} seconds ago: where no executor and no command is at work on ${what}, take that folder away.`
+            : ` Another program was taking the lock at that moment (it holds the folder ${e.clearing} while it does): ask again once it has its answer.`;
+        } else if (e.notAsked) {
+          left = ` The lock's socket file, ${e.notAsked}, belongs to another user: this user may not ask whether a program still holds it (${e.why}), and cannot take it away. Where no executor and no command of that user's is at work on ${what}, the file was left behind by one that has ended, and that user or an administrator takes it away.`;
+        }
         throw Object.assign(new Error(held(left)), { code: LOCKED });
       }
-      await new Promise((done) => setTimeout(done, Math.min(250, end - Date.now())));
+      await new Promise((done) => setTimeout(done, now >= end ? 10 : Math.min(250, end - now)));
     }
   }
   let released = false;

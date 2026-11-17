@@ -103,6 +103,10 @@ if [ ! -s "$WORK/named-volumes.txt" ]; then ok "the shipped compose.yaml names n
 # --- build and start ---
 echo "-- building the guard's image from $TGZ_NAME"
 if dc build --quiet > "$WORK/build.txt" 2>&1; then ok "the guard's image was built from the packed executor"; else bad "build failed"; tail -n 30 "$WORK/build.txt"; cleanup; exit 1; fi
+# The image's own files, readable by the guard's user although the copy's were not (X360); the copy's mode as before.
+modes=$(docker run --rm --name provared-37e-check-modes --entrypoint stat "$PROJECT-guard" -c '%a %n' /guard/package.json /guard/package-lock.json /guard/start.mjs 2>&1 | tr '\n' ' ')
+[ "$modes" = "644 /guard/package.json 644 /guard/package-lock.json 644 /guard/start.mjs " ] && ok "the image's package.json, package-lock.json and start.mjs are 644, from copies of mode 600" || bad "the image's files: $modes"
+chmod 644 "$WORK/package.json" "$WORK/package-lock.json" "$WORK/start.mjs"
 installed=$(docker run --rm --name provared-37e-check-version --entrypoint node "$PROJECT-guard" -p "require('/guard/node_modules/provared-mcp-executor/package.json').version + ' ' + require('/guard/node_modules/provared/package.json').version")
 note "installed in the image: provared-mcp-executor and provared $installed"
 note "Node.js in the image: $(docker run --rm --name provared-37e-check-version --entrypoint node "$PROJECT-guard" --version)"

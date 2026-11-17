@@ -1443,6 +1443,32 @@
       Docker and user-namespace remapping were not tried; and that two
       copies of the folder on one server are one Compose project. The
       reason given for X332 is corrected to match.
+    - **The lock's refusals, where the lock is a socket file (X361,
+      X362).** Not Windows or Linux. A program that finds the folder of
+      another's clearing looks again for 100 milliseconds, a command too,
+      and says the folder was left only where it is more than 5 seconds
+      old; before, two programs that asked at one moment were told that a
+      folder was left, which was gone. A socket file that nothing answers
+      at and that this user may not take away now has a refusal of its
+      own, which no longer begins "An executor is running", and guesses
+      whose the file is only for `EPERM` and `EACCES`. The README and X163
+      now say that any program ended by force in its first try for the
+      lock can leave the folder, which then refuses every later start
+      until it is taken away; that is unchanged.
+    - **A busy program past the bound is given its time (X363).** Where
+      more than 16 MiB wait for a local program, the session still ends
+      and the message is refused with 503, but the program is given
+      `shutdownWait` before it is signalled, as at every other end; before,
+      a program busy with a long call was ended at once, part-way through
+      it. A test now holds that a session begun once the stop has begun
+      starts no program, before the sessions are closed (`noMore`).
+    - **The recipe's mark from the start's first step (X364).** The start
+      listens on `guard-data/guard-running.sock` from its first step, not
+      only once the guard runs. The Docker check found an `owner --reset`
+      taken while a start that Docker had begun again was still at its
+      first steps, in Caddy's new network; such a command is now refused
+      too. The Docker check also holds that the image's three files are
+      644 when the copy's were 600.
 
 - **`provared-mcp-executor` 0.4.2 (15 November 2026): a security fix for
   two weaknesses. In front of a tool server whose JSON reader ignores

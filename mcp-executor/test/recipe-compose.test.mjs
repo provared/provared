@@ -275,6 +275,29 @@ test('an agent added after the first start gets its key file and its entries, th
   }
 });
 
+test('a command that writes is refused while a start is at its first steps, before the guard runs (X364)', { timeout: 120_000 }, async () => {
+  const data = folder();
+  let run;
+  try {
+    run = startProgram(data, { PROVARED_DOMAIN: 'guard.example.test' });
+    await run.until('waits for the permission');
+    const reset = () => spawnSync(process.execPath, [START, 'owner', '--reset'], {
+      cwd: data,
+      env: { ...process.env, PROVARED_DATA: data, PROVARED_BIN: BIN, PROVARED_PEER: '' },
+      encoding: 'utf8',
+    });
+    const r = reset();
+    assert.equal(r.status, 2, r.stderr);
+    assert.match(r.stderr, /The guard is running on these files/);
+    await run.stop();
+    // The start gone, the mark goes with it.
+    assert.doesNotMatch(reset().stderr, /The guard is running on these files/);
+  } finally {
+    if (run && run.child.exitCode === null) await run.stop();
+    rmSync(data, { recursive: true, force: true });
+  }
+});
+
 test('a command run through the start writes its files for the guard\'s user alone, as the start does (X359)', { skip: POSIX ? false : 'file modes are POSIX', timeout: 120_000 }, async () => {
   const data = folder();
   let run;

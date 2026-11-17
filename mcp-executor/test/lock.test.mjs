@@ -4,7 +4,7 @@
 
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs';
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -153,7 +153,13 @@ test('a program that holds the folder of a socket file is the only one that may 
     // Both locks are taken through lockAt.
     for (const [how, at, address] of [['lockFiles', book, addresses[0]], ['lockState', state, addresses[1]]]) {
       mkdirSync(`${address}.clearing`);
-      assert.match(askAsSocketFile(how, at), new RegExp(`^LOCKED: .*left the folder ${address.replaceAll('.', '\\.')}\\.clearing`), how);
+      // A folder just made is another program's at work; one older than 5 seconds was left (X361).
+      const young = askAsSocketFile(how, at);
+      assert.match(young, new RegExp(`^LOCKED: .*Another program was taking the lock at that moment \\(it holds the folder ${address.replaceAll('.', '\\.')}\\.clearing while it does\\)`), how);
+      assert.doesNotMatch(young, /left the folder/, how);
+      const old = new Date(Date.now() - 60_000);
+      utimesSync(`${address}.clearing`, old, old);
+      assert.match(askAsSocketFile(how, at), new RegExp(`^LOCKED: .*left the folder ${address.replaceAll('.', '\\.')}\\.clearing, made 6\\d seconds ago`), how);
       assert.ok(!existsSync(address), `${how}: nobody listens while the folder is held`);
       rmSync(`${address}.clearing`, { recursive: true });
       assert.equal(askAsSocketFile(how, at), 'held', `${how}: taken once the folder is gone`);
@@ -164,17 +170,41 @@ test('a program that holds the folder of a socket file is the only one that may 
   }
 });
 
+test('a command that finds the folder of another program\'s clearing looks again, and takes the lock once the folder is gone within 100 ms (X361)', { skip: socketFiles }, () => {
+  const dir = folder();
+  const book = join(dir, 'alpha.book.jsonl');
+  const address = `/tmp/provared-mcp-executor-${lockName(book)}.sock`;
+  try {
+    const asks = `${process.platform === 'linux' ? "Object.defineProperty(process, 'platform', { value: 'darwin' });" : ''}
+      const fs = await import('node:fs');
+      const lock = await import(${JSON.stringify(new URL('../lock.mjs', import.meta.url).href)});
+      fs.mkdirSync(${JSON.stringify(`${address}.clearing`)});
+      // The other program ends its clearing 40 ms later.
+      setTimeout(() => fs.rmdirSync(${JSON.stringify(`${address}.clearing`)}), 40);
+      try {
+        await (await lock.lockFiles(${JSON.stringify(book)})).release();
+        console.log('held');
+      } catch (e) {
+        console.log(e.code + ': ' + e.message);
+      }`;
+    assert.equal(spawnSync(process.execPath, ['--input-type=module', '-e', asks], { encoding: 'utf8' }).stdout.trim(), 'held');
+  } finally {
+    rmSync(`${address}.clearing`, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('a socket file that nothing answers at and this user may not take away, as another user\'s in /tmp that may be connected to, or a link that leads nowhere, refuses the lock and is named in the refusal (review 3.2 re-check, finding 3)', { skip: socketFiles }, async () => {
   const dir = folder();
   const book = join(dir, 'alpha.book.jsonl');
   const address = `/tmp/provared-mcp-executor-${lockName(book)}.sock`;
   // In /tmp only a file's owner may take it away. The tests have one user, so taking a file away is refused as it is
   // there (EPERM) in a program of its own, for the lock's own file alone; everything else is as it is.
-  const asks = (how, path) => `${process.platform === 'linux' ? "Object.defineProperty(process, 'platform', { value: 'darwin' });" : ''}
+  const asks = (how, path, code = 'EPERM') => `${process.platform === 'linux' ? "Object.defineProperty(process, 'platform', { value: 'darwin' });" : ''}
     const fs = (await import('node:fs')).default;
     const unlink = fs.unlinkSync;
     fs.unlinkSync = (p) => {
-      if (p === ${JSON.stringify(address)}) throw Object.assign(new Error('operation not permitted'), { code: 'EPERM' });
+      if (p === ${JSON.stringify(address)}) throw Object.assign(new Error('operation not permitted'), { code: ${JSON.stringify(code)} });
       return unlink(p);
     };
     (await import('node:module')).syncBuiltinESMExports();
@@ -185,13 +215,18 @@ test('a socket file that nothing answers at and this user may not take away, as 
     } catch (e) {
       console.log(e.code + ': ' + e.message);
     }`;
-  const said = (how, path) => spawnSync(process.execPath, ['--input-type=module', '-e', asks(how, path)], { encoding: 'utf8' }).stdout.trim();
-  const words = new RegExp(`^LOCKED: An executor is running on the book .* The lock's socket file, ${address.replaceAll('.', '\\.')}, is not held by any program: nothing answers at it\\. But this user may not take it away \\(EPERM\\): it belongs to another user, or is a link that leads nowhere\\. .* Nothing was read or written\\.$`);
+  const said = (how, path, code) => spawnSync(process.execPath, ['--input-type=module', '-e', asks(how, path, code)], { encoding: 'utf8' }).stdout.trim();
+  // A refusal of its own, which does not say that an executor is running (X362).
+  const words = new RegExp(`^LOCKED: The lock for the book ${book.replaceAll('.', '\\.')} and its copy cannot be taken: nothing answers at its socket file, ${address.replaceAll('.', '\\.')}, so no program holds it, and this user may not take the file away \\(EPERM\\): it belongs to another user, or is a link that leads nowhere\\. That user or an administrator takes it away\\. Nothing was read or written\\.$`);
   try {
     // A socket file left behind that anyone may connect to.
     await leftBehind(address);
     chmodSync(address, 0o777);
     assert.match(said('lockFiles', book), words, 'a socket file');
+    // Another refusal to take it away: no guess at whose it is.
+    const other = said('lockFiles', book, 'EISDIR');
+    assert.match(other, /this user may not take the file away \(EISDIR\)\. That user or an administrator takes it away\./);
+    assert.doesNotMatch(other, /An executor is running|belongs to another user/);
     assert.ok(existsSync(address), 'the socket file is not cleared away');
     assert.ok(!existsSync(`${address}.clearing`), 'the folder is taken away');
     rmSync(address, { force: true });

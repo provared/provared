@@ -478,7 +478,13 @@ What is different from an upstream HTTP server:
   new one.
 - **A program that misbehaves.** Where more than 16 MiB already wait to
   be written to a program that is not reading, the next message for it is
-  refused with 503 and not held, and the session is ended. A program that
+  refused with 503 and not held, and the session is ended. Its program is
+  given `shutdownWait`, as at every end of a session, so a call it was
+  busy with may still be answered; then it is ended by force. A program
+  that does one thing at a time reads nothing while it works, so the
+  bound counts what an agent sends meanwhile: 16 MiB in all, however
+  large `bodyLimit` is. A program that is to take large messages during
+  long calls must go on reading while it works. A program that
   writes more than 1,000 messages that answer nothing in flight in each
   of 5 seconds running has its session ended: seconds by the clock,
   counted from the session's start, so that one second with 1,000 or
@@ -1546,6 +1552,15 @@ agents ("An executor is running on the state file …"). As for a book,
 `http` asks again for it for 10 seconds before it is refused, and `owner`
 asks once. "What it does not do"
 says where the lock does not reach.
+
+Where the lock is a socket file (not Windows or Linux), a program ended
+by force in the first milliseconds of its try for the lock can leave the
+folder `<socket file>.clearing` beside it, and every later start and
+command on that book is then refused until someone takes the folder away.
+The refusal names the folder, and says it was left only where it is more
+than 5 seconds old; a younger one is another program's, at work for a
+moment, and a program that finds it looks again for 100 milliseconds
+first.
 
 A command with `--offline` is not a start. It writes no receipt by itself
 for a call the copy shows as sent and unfinished (a start does, as above);
