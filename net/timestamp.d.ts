@@ -31,7 +31,12 @@ export interface StampOptions {
   when?: number;
   /** The latest time a service's time-stamp gave a seal before this one, in milliseconds: one more than 300 seconds before it is not kept. */
   after?: number | null;
+  /** The fingerprint (SHA-256 of the certificate, base64url) the time-stamp must be signed by, or a list of them; where none is named, any certificate is taken. */
+  authority?: string | string[];
 }
+
+/** The certificates a time-stamp must be signed by, read: one fingerprint or a list of 1 to 16; null where none is named. */
+export declare function stampAuthority(authority: string | string[] | null | undefined): string[] | null;
 
 /** Ask a service for a time-stamp over a seal's fingerprint, and check it. Throws a Refusal ("stamp-not-given", or a code of checkStamp). */
 export declare function askForStamp(fingerprintBytes: Uint8Array, options: StampOptions): Promise<{ stamp: string; when: string; time: number; authority: string }>;

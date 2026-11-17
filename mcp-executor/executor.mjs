@@ -34,7 +34,7 @@ import { CODES, MAX_LINE_BYTES, foldName, idKey, isId, misspelt, notificationLin
 import { LOCK_WAIT_MS, lockFiles } from './lock.mjs';
 import { RULES_DOCUMENT, RULE_DOCUMENT, RULES_ENTRY_PREFIX, TOOL_NAME, lookUp, readPointer, readRules, rulesFingerprint, statesContentRules, testCall } from './rules.mjs';
 import { RECORDER_NAME } from './sealer-client.mjs';
-import { SEALER_BEHIND, SEALER_MAX_UNSENT, SEALER_MAX_UNSENT_MAX, SEALER_TIMEOUT, SEALER_TIMEOUT_MAX, SEALER_TIMEOUT_MIN, centralSealer, loadRecorder, localSealer, readRecorderKeyFile, readStampSettings, stampContext, stampFor, stampHook } from './sealing.mjs';
+import { HTTP_STAMP_WARNING, SEALER_BEHIND, SEALER_MAX_UNSENT, SEALER_MAX_UNSENT_MAX, SEALER_TIMEOUT, SEALER_TIMEOUT_MAX, SEALER_TIMEOUT_MIN, centralSealer, loadRecorder, localSealer, readRecorderKeyFile, readStampSettings, stampContext, stampFor, stampHook, stampWithoutAuthority } from './sealing.mjs';
 
 /** The document, in each stub and denial, whose fingerprint is that of the executor's own identifier for the call (a label, not a reserved name). */
 export const CALL_DOCUMENT = 'executor.call';
@@ -293,6 +293,7 @@ export function readRecorderSettings(config, s, at, root, warnings) {
     // With a central sealer, the sealer asks for the time-stamps, under its own settings: the seal comes to the book whole.
     if (r.sealer !== undefined) at('recorder.stamp', 'must not be named together with recorder.sealer: a central sealer asks for its seals\' time-stamps itself (the "stamp" of its own settings).');
     else out.stamp = readStampSettings(r.stamp, 'recorder.stamp', at);
+    if (stampWithoutAuthority(out.stamp)) warnings.push(HTTP_STAMP_WARNING);
   }
   if (r.sealer !== undefined) {
     // The recorder's keys are in one place: with a central sealer, or in a key file here, never both (X147).
@@ -786,7 +787,8 @@ export function describeRecorder(settings, sealer) {
   // A central sealer: the key set it signs with as the settings name it, its address, and the name it knows this recorder by. Its seals give its own name.
   if (sealer.central) return { fingerprint: sealer.fingerprint, sealEvery: settings.recorder.sealEvery, sealer: { address: sealer.address, recorder: sealer.name, maxUnsent: settings.recorder.sealer.maxUnsent } };
   // The time-stamp service each seal is sent to, where the settings give one.
-  const stamp = settings.recorder.stamp ? { stamp: { address: settings.recorder.stamp.address, timeout: settings.recorder.stamp.timeout } } : {};
+  const s = settings.recorder.stamp;
+  const stamp = s ? { stamp: { address: s.address, timeout: s.timeout, ...(s.authority ? { authority: s.authority } : {}) } } : {};
   return { name: sealer.name, fingerprint: sealer.fingerprint, sealEvery: settings.recorder.sealEvery, ...stamp };
 }
 
@@ -1029,8 +1031,9 @@ export async function openAgent(prepared, { settings, executorKeys, now, log, na
         line = null; // not a line of a book: "add" refuses it below
       }
       if (line !== null && book.includes(`\n${line}\n`)) {
-        const held = heldSeal(book, (await writer.check()).entries, line, named);
-        if (held) return { entry: held.index, fingerprint: held.fingerprint, ...(stampProblem ? { stampProblem } : {}) };
+        const checkedEntries = (await writer.check()).entries;
+        const held = heldSeal(book, checkedEntries, line, named);
+        if (held) return { entry: held.index, fingerprint: held.fingerprint, ...stampedOf(checkedEntries[held.index]), ...(stampProblem ? { stampProblem } : {}) };
       }
     }
     try {
@@ -1042,11 +1045,13 @@ export async function openAgent(prepared, { settings, executorKeys, now, log, na
     if (!save()) throw new Error(`The seal is in the executor's memory, and the book file could not be written: ${stopped}`);
     const added = (await writer.check()).entries.at(-1);
     link.sealed(added.index, added.fingerprint);
-    agentLog({ event: 'sealed', entry: added.index, seal: added.fingerprint, by: 'central-sealer' });
+    // Whether the sealer's seal carries a time-stamp, and whose, read from the entry as the book's check reads it (X348).
+    const stampedFields = stampedOf(added);
+    agentLog({ event: 'sealed', entry: added.index, seal: added.fingerprint, by: 'central-sealer', ...stampedFields });
     // Why the sealer gave it out without a time-stamp, whether it came as the answer to the question for a seal or was
     // taken back later (the sealer's "latest").
     if (stampProblem) agentLog({ event: 'stamp-not-given', entry: added.index, seal: added.fingerprint, code: stampProblem.code, reason: stampProblem.message });
-    return { entry: added.index, fingerprint: added.fingerprint, ...(stampProblem ? { stampProblem } : {}) };
+    return { entry: added.index, fingerprint: added.fingerprint, ...stampedFields, ...(stampProblem ? { stampProblem } : {}) };
   }
 
   let started = false;
@@ -1163,7 +1168,7 @@ export async function openAgent(prepared, { settings, executorKeys, now, log, na
       // An outside time-stamp, where the settings give a service. A seal is never lost for want of one: where the service
       // gives none, or the book does not take the seal with it, the seal goes in without it and the reason is said.
       // The time-stamp is held against the seal's own time and the latest one a seal before it holds (stampContext).
-      let { stamps, stampProblem } = sealer.stamp ? await stampFor(sealer.stamp, sealed.fingerprintBytes, stampContext(result.entries, when)) : {};
+      let { stamps, stampProblem, stampedBy } = sealer.stamp ? await stampFor(sealer.stamp, sealed.fingerprintBytes, stampContext(result.entries, when)) : {};
       if (stamps) {
         try {
           await writer.add({ seal: sealed.record, stamps });
@@ -1174,9 +1179,11 @@ export async function openAgent(prepared, { settings, executorKeys, now, log, na
       }
       if (!stamps) await writer.add({ seal: sealed.record });
       if (!save()) throw new Error(`The seal is in the executor's memory, and the book file could not be written: ${stopped}`);
-      agentLog({ event: 'sealed', entry: result.size, seal: sealed.fingerprint, ...(stamps ? { stamped: true } : {}) });
+      // The certificate that signed the time-stamp, so that the operator can tell readers which service to trust (X344).
+      const stampedFields = stamps ? { stamped: true, ...(stampedBy ? { stampedBy } : {}) } : {};
+      agentLog({ event: 'sealed', entry: result.size, seal: sealed.fingerprint, ...stampedFields });
       if (stampProblem) agentLog({ event: 'stamp-not-given', entry: result.size, seal: sealed.fingerprint, code: stampProblem.code, reason: stampProblem.message });
-      return { sealed: true, entry: result.size, fingerprint: sealed.fingerprint, ...(stamps ? { stamped: true } : {}), ...(stampProblem ? { stampProblem } : {}) };
+      return { sealed: true, entry: result.size, fingerprint: sealed.fingerprint, ...stampedFields, ...(stampProblem ? { stampProblem } : {}) };
     });
   }
 
@@ -1370,10 +1377,27 @@ function stubsByCall(checked) {
   return held;
 }
 
-/** What a whole check of a book shows of it, for the status: its entries, its last seal, and whether it passes. */
+/**
+ * Whether a central sealer's seal, as the book's check reads it, carries a
+ * time-stamp from a service, and the fingerprints of the certificates that
+ * signed it: {stamped: true, stampedBy} or {stamped: false}. A seal made
+ * here or by the sealer carries one time-stamp at most; where it carries
+ * more, the first is named.
+ */
+function stampedOf(entry) {
+  const by = stampSigners(entry);
+  return by.length ? { stamped: true, stampedBy: by[0] } : { stamped: false };
+}
+
+/** The fingerprints of the certificates that signed a seal's sound time-stamps from a service, as the book's check reads them. */
+const stampSigners = (entry) => [...new Set((entry?.stamps ?? []).filter((s) => s.kind === 'service' && typeof s.authority === 'string' && (s.state === 'valid' || s.state === 'untrusted')).map((s) => s.authority))];
+
+/** What a whole check of a book shows of it, for the status: its entries, its last seal (and who signed its time-stamp, where it has one), and whether it passes. */
 function bookSummary(result) {
   const last = result.entries.filter((e) => e.kind === 'seal' && e.problems.length === 0).at(-1);
-  return { entries: result.size, lastSeal: last ? { entry: last.index, fingerprint: last.fingerprint, when: last.content.when } : null, sound: !result.summary.problemFound, withinSlips: result.summary.withinSlips };
+  const by = last ? stampSigners(last) : [];
+  const lastSeal = last ? { entry: last.index, fingerprint: last.fingerprint, when: last.content.when, ...(by.length ? { stampedBy: by[0] } : {}) } : null;
+  return { entries: result.size, lastSeal, sound: !result.summary.problemFound, withinSlips: result.summary.withinSlips };
 }
 
 /**
@@ -2238,8 +2262,8 @@ export async function openExecutor(config, more = {}) {
     attach,
     /** Seal the book now, with the recorder's keys: {entry, fingerprint}, with "stamped" or "stampProblem" where a time-stamp was asked for. */
     async seal() {
-      const { entry, fingerprint: seal, stamped, stampProblem } = await agent.seal();
-      return { entry, fingerprint: seal, ...(stamped ? { stamped } : {}), ...(stampProblem ? { stampProblem } : {}) };
+      const { entry, fingerprint: seal, stamped, stampedBy, stampProblem } = await agent.seal();
+      return { entry, fingerprint: seal, ...(stamped !== undefined ? { stamped } : {}), ...(stampedBy ? { stampedBy } : {}), ...(stampProblem ? { stampProblem } : {}) };
     },
     /** The administrator acknowledges the calls sent under a permission no longer in force, and may set some aside: {written, setAside, remaining}. */
     acknowledge: (o) => agent.acknowledge(o),

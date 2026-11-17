@@ -227,6 +227,95 @@ test('stampContext: the seal\'s time in whole seconds, and the latest time a sou
   assert.deepEqual(stampContext([], 999), { when: 0, after: null });
 });
 
+test('recorder.stamp.authority: a time-stamp signed by a certificate other than the one named is not kept; the one named is, and its signer is shown in the answer, the log and the status (X344)', { skip }, async () => {
+  tsa.mode = 'good';
+  // A stranger answering at the service's address: a key and a certificate of its own.
+  const stranger = await startTestTsa();
+  try {
+    const w = await stampedWorld({ address: stranger.address, authority: tsa.authority });
+    const ex = await offline(w);
+    try {
+      const refused = await ex.seal();
+      assert.equal(refused.stamped, undefined);
+      assert.equal(refused.stampProblem.code, 'stamp-not-given');
+      assert.match(refused.stampProblem.message, new RegExp(`signed by the certificate whose fingerprint is ${stranger.authority}`));
+      assert.ok(!w.logs.some((e) => e.event === 'sealed' && e.stamped === true));
+    } finally {
+      await ex.close();
+    }
+    const c = await checkBook(bookText(w), { issuerKeys: w.settings.agent.issuerKeys, sealKeys: w.sealKeys });
+    assert.equal(c.summary.problemFound, false);
+    assert.deepEqual(c.entries.filter((e) => e.kind === 'seal').map((e) => e.stamps.length), [0]);
+    // The service named: kept, and the certificate that signed it is shown.
+    w.settings.recorder.stamp = { address: tsa.address, timeout: 10000, authority: [tsa.authority] };
+    const again = await offline(w);
+    try {
+      const sealed = await again.seal();
+      assert.equal(sealed.stamped, true);
+      assert.equal(sealed.stampedBy, tsa.authority);
+      assert.ok(w.logs.some((e) => e.event === 'sealed' && e.stamped === true && e.stampedBy === tsa.authority));
+      const report = await again.report();
+      assert.equal(report.agent.lastSeal.stampedBy, tsa.authority);
+      assert.deepEqual(report.recorder.stamp.authority, [tsa.authority]);
+    } finally {
+      await again.close();
+    }
+  } finally {
+    await stranger.close();
+  }
+});
+
+test('recorder.stamp.authority: one fingerprint or a list; "check" warns where the service is asked over http: with none named (X344)', async () => {
+  const w = await world({ open: false });
+  const base = { keys: 'r.jwk' };
+  const read = (stamp) => readSettings({ ...w.settings, recorder: { ...base, stamp } }, w.folder);
+  const fp = 'A'.repeat(43);
+  assert.deepEqual(read({ address: 'http://127.0.0.1/', authority: fp }).settings.recorder.stamp, { address: 'http://127.0.0.1/', timeout: 10000, authority: [fp] });
+  assert.deepEqual(read({ address: 'http://127.0.0.1/', authority: [fp, 'b'.repeat(43)] }).problems, []);
+  for (const bad of ['', 'A'.repeat(42), [], [fp, 7], Array(17).fill(fp), {}, null]) {
+    assert.ok(read({ address: 'http://127.0.0.1/', authority: bad }).problems.some((p) => /recorder\.stamp\.authority: must be the fingerprint/.test(p)), JSON.stringify(bad));
+  }
+  const warned = (stamp) => read(stamp).warnings.some((x) => /plain http: and no "authority" is named/.test(x));
+  assert.equal(warned({ address: 'http://127.0.0.1/' }), true);
+  assert.equal(warned({ address: 'http://127.0.0.1/', authority: fp }), false);
+  assert.equal(warned({ address: 'https://127.0.0.1/' }), false);
+  assert.equal(readSettings({ ...w.settings, recorder: base }, w.folder).warnings.some((x) => /authority/.test(x)), false);
+});
+
+test('with a central sealer, a seal the sealer time-stamped is said to be, with its signer; one with none is said to have none (X348)', { skip }, async () => {
+  tsa.mode = 'good';
+  const { centralWorld, closeAll } = await import('./sealer-world.mjs');
+  try {
+    const w = await centralWorld({ open: false });
+    await w.sealer.stop();
+    const settingsPath = join(w.sealer.folder, 'sealer.json');
+    const plain = JSON.parse(readFileSync(settingsPath, 'utf8'));
+    writeFileSync(settingsPath, JSON.stringify({ ...plain, stamp: { address: tsa.address, timeout: 4000 } }));
+    await w.sealer.start();
+    await openWorld(w);
+    await w.client.call('echo', {});
+    await w.level();
+    const sealed = await w.executor.seal();
+    assert.equal(sealed.stamped, true);
+    assert.equal(sealed.stampedBy, tsa.authority);
+    assert.ok(w.logs.some((e) => e.event === 'sealed' && e.seal === sealed.fingerprint && e.stamped === true && e.stampedBy === tsa.authority));
+    // The sealer with no time-stamp service: the seal is said to carry none.
+    await w.close();
+    await w.sealer.stop();
+    writeFileSync(settingsPath, JSON.stringify(plain));
+    await w.sealer.start();
+    await openWorld(w);
+    await w.client.call('echo', {});
+    await w.level();
+    const bare = await w.executor.seal();
+    assert.equal(bare.stamped, false);
+    assert.equal(bare.stampedBy, undefined);
+    assert.ok(w.logs.some((e) => e.event === 'sealed' && e.seal === bare.fingerprint && e.stamped === false));
+  } finally {
+    await closeAll();
+  }
+});
+
 test('check: a library without the time-stamp client (provared/net/timestamp) is said plainly where recorder.stamp is given (X309)', async () => {
   const w = await stampedWorld({ address: 'http://127.0.0.1:9/tsa' });
   const bin = fileURLToPath(new URL('../bin.mjs', import.meta.url));

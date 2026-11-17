@@ -1326,14 +1326,33 @@ seal before it in the book. Anything else costs no seal: the seal goes into the
 book without a time-stamp, `seal` answers `stampProblem` (its code and
 why) and the command prints it, and the log has a `stamp-not-given` event
 with the code and the reason. A seal that carries one answers `stamped:
-true`, and its `sealed` event says `stamped: true`. The service sees the
+true` and `stampedBy`, the fingerprint of the certificate that signed the
+time-stamp; its `sealed` event says the same, the command prints it, and
+`status` shows it with the last seal. The service sees the
 seal's fingerprint, this computer's address and when it asked; nothing of
 the book. While it is asked, the agent's calls wait, as for the seal's own
 signatures. `stamp` is not taken beside `sealer`: a central sealer asks
 for its seals' time-stamps under its own settings (its `stamp`), and
 where it was not given one, the executor logs `stamp-not-given` with the
 reason the sealer gave, also for a seal it takes back after the answer
-was lost, while the sealer has not stopped since.
+was lost, while the sealer has not stopped since. A seal from a central
+sealer answers `stamped: true` with `stampedBy` where it carries a
+time-stamp, and `stamped: false` where it carries none.
+
+**Which service signed: `authority`.** The check of the answer shows that
+the time-stamp was made for this seal, not who made it. Over plain
+`http:`, anyone between this computer and the service can answer in its
+place with a key of their own, and without `authority` such a time-stamp
+is kept and reported as one, while a person who checks the book and names
+the real service does not count it. `"authority"` names the certificate
+the service signs with: its fingerprint, or a list of up to 16, in the
+form a checker names a trusted service (`stampServices`, or the
+checker's `--stamp-service`): the SHA-256 of the certificate in base64url,
+43 characters. A time-stamp signed by any other is not kept
+(`stamp-not-given`, naming the fingerprint that signed it). To learn the
+fingerprint, seal once and read `stampedBy`, then compare it with what
+the service publishes. `check` warns where the address begins `http:`
+and no `authority` is named. Left out, any signer is taken, as before.
 
 Without `recorder` the executor seals nothing, and `check` says so. Where
 the settings name a recorder, the executor expects every seal in a book to

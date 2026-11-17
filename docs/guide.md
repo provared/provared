@@ -1184,7 +1184,13 @@ sent, and its time is within 300 seconds of your clock and no more than
 300 seconds before `when` (the seal's own time) and `after` (the latest
 time a service's time-stamp gave a seal before it), where you give them;
 otherwise it throws a `Refusal` (`stamp-not-given`, or a code of
-`checkStamp`). `stampService({address, timeout})` gives the same as the
+`checkStamp`). Those checks show the answer was made for this request,
+not who made it: give `authority`, the fingerprint of the service's
+certificate or a list of them (as in `stampServices`), and a time-stamp
+signed by any other certificate is refused (`stamp-not-given`); left out,
+any signer is taken. Either way it also gives `authority`, the
+fingerprint of the certificate that signed. `stampService({address,
+timeout, authority})` gives the same as the
 `stamp` that `openSealer` takes; `openSealer` gives its `stamp` a second
 argument, `{when, after}`, from the seal and the seal it holds before
 it. A `stamp` that gives no answer within `signWithin` costs no seal: the

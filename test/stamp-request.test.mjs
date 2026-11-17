@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { after, before, test } from 'node:test';
-import { MAX_REPLY_BYTES, MAX_SHOWN_CHARACTERS, NONCE_BYTES, askForStamp, stampAddress, stampRequest, stampService } from '../net/timestamp.js';
+import { MAX_REPLY_BYTES, MAX_SHOWN_CHARACTERS, NONCE_BYTES, askForStamp, stampAddress, stampAuthority, stampRequest, stampService } from '../net/timestamp.js';
 import { decodeStamps } from '../src/seal.js';
 import { fromBase64url } from '../src/encoding.js';
 import { checkStamp } from '../src/timestamp.js';
@@ -67,6 +67,34 @@ test('a time-stamp with another number used once, or none, is not kept: it may a
   await assert.rejects(askForStamp(fingerprint(), { address: tsa.address }), refusedWith('stamp-wrong-data', /another number used once/));
   tsa.mode = 'no-nonce';
   await assert.rejects(askForStamp(fingerprint(), { address: tsa.address }), refusedWith('stamp-wrong-data', /does not carry the number used once/));
+});
+
+test('with "authority" named, a time-stamp signed by any other certificate is not kept; the one named is (X344)', { skip }, async () => {
+  tsa.mode = 'good';
+  // A second service, with a key and a certificate of its own: a stranger answering in the service's place.
+  const stranger = await startTestTsa();
+  try {
+    const fp = fingerprint();
+    await assert.rejects(askForStamp(fp, { address: stranger.address, authority: tsa.authority }), refusedWith('stamp-not-given', new RegExp(`signed by the certificate whose fingerprint is ${stranger.authority}, which is not one named`)));
+    await assert.rejects(stampService({ address: stranger.address, authority: [tsa.authority] })(fp), refusedWith('stamp-not-given', /not one named as the service's/));
+    // The one named, alone or in a list, is kept; with none named, any signer is, as before.
+    assert.equal((await askForStamp(fp, { address: tsa.address, authority: tsa.authority })).authority, tsa.authority);
+    assert.equal(typeof (await stampService({ address: tsa.address, authority: [stranger.authority, tsa.authority] })(fp)), 'string');
+    assert.equal((await askForStamp(fp, { address: stranger.address })).authority, stranger.authority);
+  } finally {
+    await stranger.close();
+  }
+});
+
+test('"authority" is one fingerprint of 43 base64url characters, or a list of 1 to 16 (X344)', () => {
+  const good = 'A'.repeat(43);
+  assert.deepEqual(stampAuthority(good), [good]);
+  assert.deepEqual(stampAuthority([good, 'b'.repeat(43)]), [good, 'b'.repeat(43)]);
+  assert.equal(stampAuthority(undefined), null);
+  for (const bad of ['', 'A'.repeat(42), 'A'.repeat(44), `${'A'.repeat(42)}=`, [], [good, 3], Array(17).fill(good), 7, {}]) {
+    assert.throws(() => stampAuthority(bad), TypeError, JSON.stringify(bad));
+    assert.throws(() => stampService({ address: 'http://127.0.0.1/', authority: bad }), TypeError);
+  }
 });
 
 test('a time-stamp made for another fingerprint is not kept', { skip }, async () => {

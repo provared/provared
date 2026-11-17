@@ -80,7 +80,7 @@ otherwise.
 | `name` | The name the seals give (`by.name`): a label, 1 to 200 characters |
 | `port` | The port on 127.0.0.1; 8797 by default |
 | `signers` | Optional. For any of `Ed25519`, `ML-DSA-87` and `SLH-DSA-SHA2-256s`, the path of a module (from the folder) whose default export is an async function that gives a signer for that method: an object with `key`, the public key, and `sign(data)`, which gives the signature bytes. It takes the place of the key file's key for that method |
-| `stamp` | Optional. `{"address": ..., "timeout": ...}`: a time-stamp service (RFC 3161) that each seal is sent to, below. `address` begins `http://` or `https://` and holds no user name, password, query or fragment; `timeout` is how long the request may take, from 100 to 20,000 milliseconds, 4,000 if left out, and less than the time `startSealer` gives each signature (`signWithin`, 30,000 unless given). No service is named by this package: the address is yours to choose. Needs `provared` 0.8.1 or later, the first release with `provared/net/timestamp` |
+| `stamp` | Optional. `{"address": ..., "timeout": ..., "authority": ...}`: a time-stamp service (RFC 3161) that each seal is sent to, below. `authority`, optional, is the fingerprint of the certificate the service signs with, or a list of up to 16 (the SHA-256 of the certificate in base64url, 43 characters, as a checker's `stampServices` names it). `address` begins `http://` or `https://` and holds no user name, password, query or fragment; `timeout` is how long the request may take, from 100 to 20,000 milliseconds, 4,000 if left out, and less than the time `startSealer` gives each signature (`signWithin`, 30,000 unless given). No service is named by this package: the address is yours to choose. Needs `provared` 0.8.1 or later, the first release with `provared/net/timestamp` |
 
 **An outside time-stamp on each seal.** With `stamp`, the sealer sends
 each seal's fingerprint to that service as it signs it, in the request
@@ -105,6 +105,15 @@ The service sees the seal's fingerprint, this computer's address and
 when it asked; nothing of the book. A settings' `stamp` needs `provared`
 0.8.1 or later; with an earlier one the sealer does not start, and says
 why.
+
+The check of the answer shows that the time-stamp was made for this seal,
+not who made it: over plain `http:`, anyone between the sealer and the
+service can answer in its place with a key of their own. With
+`authority`, a time-stamp signed by any other certificate is not kept
+(`stamp-not-given`, naming the fingerprint that signed it). Whether or
+not it is given, the answer to `/seal` names the certificate that signed
+a time-stamp it carries, in `stampedBy`. Where the address begins `http:`
+and no `authority` is named, `start` warns on its standard error.
 
 While the service is asked, the sealer answers no other question, as
 with every seal, and that holds up every recorder. A recorder's question

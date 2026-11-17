@@ -52,6 +52,13 @@ const plainText = (v) => {
   return text.length > 600 ? `${text.slice(0, 600)}...` : text;
 };
 
+/** What "Sealed: ..." adds where the seal carries a time-stamp, with the fingerprint of the certificate that signed it (X344). */
+const stampWords = (sealed) => {
+  if (sealed?.stamped !== true) return '';
+  const by = typeof sealed.stampedBy === 'string' && /^[A-Za-z0-9_-]{43}$/.test(sealed.stampedBy) ? ` signed by the certificate ${sealed.stampedBy}` : '';
+  return `, with a time-stamp${by}`;
+};
+
 function option(args, name) {
   const at = args.indexOf(name);
   if (at === -1) return undefined;
@@ -238,7 +245,7 @@ async function main(args) {
       const gateway = await openGateway(config, { root });
       const sealed = await gateway.seal(agent);
       await gateway.close();
-      console.log(`Sealed (the book was opened here; no gateway may be running on it): entry ${sealed.entry} of ${agent}'s book is the seal ${sealed.fingerprint}${sealed.stamped === true ? ', with a time-stamp' : ''}.`);
+      console.log(`Sealed (the book was opened here; no gateway may be running on it): entry ${sealed.entry} of ${agent}'s book is the seal ${sealed.fingerprint}${stampWords(sealed)}.`);
       if (sealed.stampProblem) console.error(`The seal has no time-stamp: ${plainText(sealed.stampProblem.message)} (${plainText(sealed.stampProblem.code)})`);
       return 0;
     }
@@ -253,7 +260,7 @@ async function main(args) {
       console.error(`The book was not sealed: ${answer.value.message ?? answer.status}`);
       return 1;
     }
-    console.log(`Sealed: entry ${answer.value.entry} of ${agent}'s book is the seal ${answer.value.fingerprint}${answer.value.stamped === true ? ', with a time-stamp' : ''}.`);
+    console.log(`Sealed: entry ${answer.value.entry} of ${agent}'s book is the seal ${answer.value.fingerprint}${stampWords(answer.value)}.`);
     if (answer.value.stampProblem) console.error(`The seal has no time-stamp: ${plainText(answer.value.stampProblem.message)} (${plainText(answer.value.stampProblem.code)})`);
     return 0;
   }

@@ -212,7 +212,11 @@ export const STAMP_TIMEOUT_MAX = 20000;
  */
 function readStampSettings(c) {
   if (c === null || typeof c !== 'object' || Array.isArray(c)) throw new Error('The settings\' "stamp" must be an object: the address of a time-stamp service and, where wanted, a time limit.');
-  for (const k of Object.keys(c)) if (!['address', 'timeout'].includes(k)) throw new Error(`The settings' "stamp" holds "${k}", which is not a setting of a time-stamp service: it takes "address" and "timeout".`);
+  for (const k of Object.keys(c)) if (!['address', 'timeout', 'authority'].includes(k)) throw new Error(`The settings' "stamp" holds "${k}", which is not a setting of a time-stamp service: it takes "address", "timeout" and "authority".`);
+  // The certificate the service signs with, as a checker names the service: a time-stamp signed by another is not kept (X344).
+  const list = typeof c.authority === 'string' ? [c.authority] : c.authority;
+  const authority = c.authority === undefined ? null : Array.isArray(list) && list.length > 0 && list.length <= 16 && list.every((x) => typeof x === 'string' && /^[A-Za-z0-9_-]{43}$/.test(x)) ? [...list] : undefined;
+  if (authority === undefined) throw new Error('The settings\' "stamp.authority" must be the fingerprint of the certificate the service signs its time-stamps with, as a checker names the service ("stampServices": the SHA-256 of the certificate in base64url, 43 characters), or a list of 1 to 16 of them.');
   let url = null;
   try {
     url = typeof c.address === 'string' ? new URL(c.address) : null;
@@ -224,18 +228,38 @@ function readStampSettings(c) {
   }
   const timeout = c.timeout ?? STAMP_TIMEOUT;
   if (!Number.isInteger(timeout) || timeout < STAMP_TIMEOUT_MIN || timeout > STAMP_TIMEOUT_MAX) throw new Error(`The settings' "stamp.timeout" must be a whole number of milliseconds from ${STAMP_TIMEOUT_MIN} to ${STAMP_TIMEOUT_MAX}: how long the request for a time-stamp may take.`);
-  return { address: c.address, timeout };
+  return { address: c.address, timeout, ...(authority ? { authority } : {}) };
 }
 
-/** The function that asks the service the settings give for a time-stamp over a seal's fingerprint (the library's stampService). */
-async function stampHook({ address, timeout }) {
+/** What the sealer says at its start where a time-stamp service is asked over plain http: and no certificate is named. */
+export const HTTP_STAMP_WARNING = 'The settings\' "stamp": the service is asked over plain http: and no "authority" is named, so a time-stamp signed by anyone who answers in its place is kept. Name the fingerprint of the service\'s certificate in "stamp.authority" (the "stampedBy" of a seal shows it).';
+
+/**
+ * The function that asks the service the settings give for a time-stamp
+ * over a seal's fingerprint (the library's askForStamp), and the
+ * fingerprints of the certificates that signed the time-stamps it gave,
+ * by time-stamp ("signers"), for the answer to "/seal". Where "authority"
+ * is given, a time-stamp signed by another is not kept.
+ */
+async function stampHook({ address, timeout, authority }) {
   let net;
   try {
     net = await import('provared/net/timestamp');
   } catch (e) {
     throw new Error(`The settings give a time-stamp service ("stamp"), and the library installed has no client for one (provared/net/timestamp): ${e.code ?? e.message}`);
   }
-  return net.stampService({ address, timeout });
+  // A library from before "authority" would take a time-stamp from any signer: where one is named, it is refused.
+  if (authority && typeof net.stampAuthority !== 'function') throw new Error('The settings\' "stamp.authority": the library installed does not hold a time-stamp to the certificate named, so no time-stamp could be trusted to be the service\'s. Install a library that does, or leave "authority" out.');
+  net.stampService({ address, timeout, ...(authority ? { authority } : {}) }); // the address, the time limit and "authority", read once
+  const signers = new Map();
+  const hook = async (fingerprintBytes, context = {}) => {
+    const got = await net.askForStamp(fingerprintBytes, { address, timeout, when: context?.when, after: context?.after, ...(authority ? { authority } : {}) });
+    signers.set(got.stamp, got.authority);
+    // Only the last few are needed: the answer to "/seal" is made just after its time-stamp.
+    if (signers.size > 64) signers.delete(signers.keys().next().value);
+    return got.stamp;
+  };
+  return { hook, signers };
 }
 
 // --- keys ---
@@ -495,7 +519,9 @@ export async function startSealer({ folder, port, fresh = false, stamp, clock = 
   if (stamp !== undefined && settings.stamp) throw new Error('The settings give a time-stamp service ("stamp"), and a "stamp" function was given too: give one of the two.');
   // The request's own limit comes first, so that a slow service is said as a time-stamp not given, in its own words.
   if (settings.stamp && signWithin !== undefined && settings.stamp.timeout >= signWithin) throw new Error(`The settings' "stamp.timeout" (${settings.stamp.timeout} ms) must be less than the time the sealer gives each signature and the time-stamp ("signWithin", ${signWithin} ms).`);
-  if (settings.stamp) stamp = await stampHook(settings.stamp);
+  // The fingerprint of the certificate that signed each time-stamp the service gave, for the answer to "/seal" (X344).
+  let stampSigners = null;
+  if (settings.stamp) ({ hook: stamp, signers: stampSigners } = await stampHook(settings.stamp));
   const { by, signers, fingerprint } = await loadSigners(folder);
   const recorders = readRecorders(folder);
   takeLock(files.lock);
@@ -614,6 +640,8 @@ export async function startSealer({ folder, port, fresh = false, stamp, clock = 
       save(got.state);
       const given = { entry: got.entry, line: got.line, fingerprint: got.fingerprint };
       if (got.stampProblem) given.stampProblem = got.stampProblem;
+      const signedBy = typeof got.entry?.stamps?.[0] === 'string' ? stampSigners?.get(got.entry.stamps[0]) : undefined;
+      if (signedBy) given.stampedBy = signedBy;
       // Why the book's latest seal has no time-stamp, kept in memory, so that a recorder that never had this answer
       // and asks for the latest seal is told it too.
       keepStampProblem(bookKey(name, body.book), got.stampProblem ? { fingerprint: got.fingerprint, stampProblem: got.stampProblem } : null);
@@ -747,6 +775,8 @@ export async function startSealer({ folder, port, fresh = false, stamp, clock = 
       port: actual,
       fingerprint,
       by,
+      /** What the start says of the settings that is not a problem: a time-stamp service asked over http: with no certificate named (X344). */
+      warnings: settings.stamp && !settings.stamp.authority && /^http:/i.test(settings.stamp.address) ? [HTTP_STAMP_WARNING] : [],
       async close() {
         await new Promise((ok) => server.close(() => ok()));
         server.closeAllConnections?.();

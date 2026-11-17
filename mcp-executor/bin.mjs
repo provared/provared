@@ -191,8 +191,17 @@ const plainText = (v) => {
   const text = String(v).replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, ' ');
   return text.length > 600 ? `${text.slice(0, 600)}...` : text;
 };
-/** What "Sealed: ..." adds where the seal carries a time-stamp. */
-const stampWords = (sealed) => (sealed?.stamped === true ? ', with a time-stamp' : '');
+/**
+ * What "Sealed: ..." adds where the seal carries a time-stamp, with the
+ * fingerprint of the certificate that signed it (X344); and, for a central
+ * sealer's seal that carries none, that it carries none (X348).
+ */
+const stampWords = (sealed) => {
+  if (sealed?.stamped === false) return ', with no time-stamp';
+  if (sealed?.stamped !== true) return '';
+  const by = typeof sealed.stampedBy === 'string' && /^[A-Za-z0-9_-]{43}$/.test(sealed.stampedBy) ? ` signed by the certificate ${sealed.stampedBy}` : '';
+  return `, with a time-stamp${by}`;
+};
 
 /** Whether the settings are the HTTP executor's (several agents, one upstream) rather than the stdio executor's. */
 const isHttp = (config) => config !== null && typeof config === 'object' && !Array.isArray(config) && Object.hasOwn(config, 'agents');

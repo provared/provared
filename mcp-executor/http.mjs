@@ -1028,8 +1028,8 @@ export async function openHttpExecutor(config, more = {}) {
   async function seal(name) {
     const agent = agents.get(name);
     if (!agent) throw new Error(`The executor has no agent named "${name}".`);
-    const { entry, fingerprint, stamped, stampProblem } = await agent.seal();
-    return { agent: name, entry, fingerprint, ...(stamped ? { stamped } : {}), ...(stampProblem ? { stampProblem } : {}) };
+    const { entry, fingerprint, stamped, stampedBy, stampProblem } = await agent.seal();
+    return { agent: name, entry, fingerprint, ...(stamped !== undefined ? { stamped } : {}), ...(stampedBy ? { stampedBy } : {}), ...(stampProblem ? { stampProblem } : {}) };
   }
 
   /** The administrator acknowledges an agent's calls sent under a permission no longer in force, and may set some aside (openAgent's "acknowledge"): {agent, written, setAside, remaining}. */

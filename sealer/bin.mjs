@@ -112,6 +112,7 @@ async function main(argv) {
     }
     const running = await startSealer({ folder: o.folder, port, fresh: o.fresh });
     console.log(`The central sealer listens at ${running.address}, with the key set ${running.fingerprint}.`);
+    for (const w of running.warnings ?? []) console.error(`Warning: ${w}`);
     const stop = async () => {
       await running.close();
       process.exit(0);

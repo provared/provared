@@ -1251,6 +1251,63 @@ test('the settings\' "stamp": each seal carries the time-stamp the service gave,
   }
 });
 
+test('the settings\' "stamp.authority": a time-stamp signed by another certificate is not kept; the one named is, and "/seal" names its signer (X344)', { skip: findOpenssl() ? false : NO_OPENSSL }, async () => {
+  const tsa = await startTestTsa();
+  const stranger = await startTestTsa();
+  const opened = [];
+  try {
+    // A stranger answering at the service's address: the seal is given without its time-stamp, and the reason says whose it was.
+    const one = await sealerFolder({ stamp: { address: stranger.address, authority: tsa.authority } });
+    const running = await startSealer({ folder: one.folder });
+    opened.push(running);
+    assert.deepEqual(running.warnings, []);
+    let client = connectSealer({ address: running.address, recorder: 'agent-one', token: one.tokens['agent-one'] });
+    let b = await smallBook();
+    await client.extend(b.first, 0, b.leaves, { line: b.line });
+    const refused = await client.seal(b.first, { previous: null });
+    assert.equal(refused.entry.stamps, undefined);
+    assert.equal(refused.stampedBy, undefined);
+    assert.equal(refused.stampProblem.code, 'stamp-not-given');
+    assert.match(refused.stampProblem.message, new RegExp(`signed by the certificate whose fingerprint is ${stranger.authority}`));
+    // The service named: kept, and its signer named in the answer.
+    const two = await sealerFolder({ stamp: { address: tsa.address, authority: [tsa.authority] } });
+    const good = await startSealer({ folder: two.folder });
+    opened.push(good);
+    client = connectSealer({ address: good.address, recorder: 'agent-one', token: two.tokens['agent-one'] });
+    b = await smallBook();
+    await client.extend(b.first, 0, b.leaves, { line: b.line });
+    const s = await client.seal(b.first, { previous: null });
+    assert.equal(s.entry.stamps.length, 1);
+    assert.equal(s.stampedBy, tsa.authority);
+    // With none named, the signer is still named, and the start warns of plain http:.
+    const three = await sealerFolder({ stamp: { address: tsa.address } });
+    const plain = await startSealer({ folder: three.folder });
+    opened.push(plain);
+    assert.match(plain.warnings.join(' '), /plain http: and no "authority" is named/);
+    client = connectSealer({ address: plain.address, recorder: 'agent-one', token: three.tokens['agent-one'] });
+    b = await smallBook();
+    await client.extend(b.first, 0, b.leaves, { line: b.line });
+    assert.equal((await client.seal(b.first, { previous: null })).stampedBy, tsa.authority);
+  } finally {
+    for (const r of opened) await r.close();
+    await tsa.close();
+    await stranger.close();
+  }
+});
+
+test('the settings\' "stamp.authority": one fingerprint or a list of 1 to 16 (X344)', async () => {
+  const fp = 'A'.repeat(43);
+  for (const bad of ['', 'A'.repeat(42), [], [fp, 7], Array(17).fill(fp), {}, null]) {
+    const { folder } = await sealerFolder({}, []);
+    writeFileSync(join(folder, 'sealer.json'), JSON.stringify({ name: 'Example central sealer (invented)', port: 0, stamp: { address: 'http://127.0.0.1/', authority: bad } }));
+    await refusedStart({ folder }, /"stamp\.authority" must be the fingerprint/);
+  }
+  const { folder } = await sealerFolder({ stamp: { address: 'http://127.0.0.1/', authority: [fp, 'b'.repeat(43)] } }, []);
+  const running = await startSealer({ folder });
+  assert.deepEqual(running.warnings, []);
+  await running.close();
+});
+
 test('the settings\' "stamp": a service that cannot be reached costs no seal, and the reason is given with it', async () => {
   const { folder, tokens } = await sealerFolder({ stamp: { address: await nobodyThere(), timeout: 2000 } });
   const running = await startSealer({ folder });

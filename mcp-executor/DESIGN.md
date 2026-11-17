@@ -3492,9 +3492,14 @@ or fragment; `timeout` is a whole number of milliseconds from 100 to
 60,000, 10,000 if left out. Any other member is refused, not set aside,
 since a member mistyped would leave a person thinking seals were
 time-stamped. No service is named, in the code, the examples or the
-documents. Plain `http:` is taken because the time-stamp is checked by
-its signature, its fingerprint and its number used once, not by the
-connection, and services in use answer on it; nothing secret is sent.
+documents. Plain `http:` is taken because services in use answer on it
+and nothing secret is sent. Its signature, its fingerprint and its
+number used once show only that the answer was made for this request,
+not who made it: over `http:` anyone between the executor and the
+service can answer in its place with a key of their own. Only
+`authority` (X344) holds the time-stamp to the service's certificate;
+without it, a time-stamp from a stranger is kept and shown as one, and a
+checker who names the real service does not count it.
 
 **X299. Not beside `recorder.sealer`.** A central sealer signs the seal
 and gives its entry whole; it asks for the time-stamp itself, under its
@@ -3553,6 +3558,35 @@ characters (`\p{Cf}`) as spaces, and cut at 600 characters.
 password is: a query can carry a key to the service, and the address is
 shown in `check`, `status` and the log, so it is refused rather than
 hidden there.
+
+**X344. `recorder.stamp.authority`: the certificate that must sign.**
+Optional: the fingerprint of the service's certificate, or a list of 1 to
+16, in the form a checker names the services it trusts (`stampServices`:
+the SHA-256 of the certificate in base64url, 43 characters). Where it is
+given, the library's `askForStamp` passes it to `checkStamp` as
+`trusted`, and a time-stamp whose state is not `valid` is not kept
+(`stamp-not-given`, naming the fingerprint that signed it); the seal goes
+in without one, as X300 says. Where it is left out, any certificate is
+taken, as before. Whether or not it is given, a seal that carries a
+time-stamp answers `stampedBy` (the fingerprint of the certificate that
+signed it), its `sealed` event has it, the `seal` command prints it, and
+`status` shows it with the last seal. `check` warns where the address
+begins `http:` and no `authority` is named. Why: the check of the answer
+shows that it was made for this request, not who made it (X298), so
+without a certificate named, anyone who can answer in the service's place
+has a time-stamp kept and reported as one, and the moment for a real one
+is gone. A library without `stampAuthority` is refused where `authority`
+is given, so that it is never set aside unheard.
+
+**X348. A central sealer's time-stamp is said.** The `seal` answer and
+the `sealed` event of a seal from a central sealer say `stamped: true`,
+with `stampedBy`, where the entry the sealer gave carries a sound
+time-stamp from a service, as the book's own check reads it, and
+`stamped: false` where it carries none; the command prints "with no
+time-stamp". Why: before, a seal the sealer time-stamped was reported as
+one with none, and as one whose reason was lost at a restart. Only seals
+from a central sealer say `stamped: false`, so a guard that signs its
+own seals with no `recorder.stamp` answers as before.
 
 ## 14. The executor as an OAuth-protected connector
 

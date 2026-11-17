@@ -103,20 +103,51 @@ export function readStampSettings(c, where, at) {
   }
   if (!url || !['http:', 'https:'].includes(url.protocol) || url.username !== '' || url.password !== '' || url.hash !== '' || /[?#]/.test(url.href)) no('address', 'must be the whole address of a time-stamp service (RFC 3161), beginning http:// or https://, with no user name, password, query or fragment.');
   if (!Number.isInteger(out.timeout) || out.timeout < STAMP_TIMEOUT_MIN || out.timeout > STAMP_TIMEOUT_MAX) no('timeout', `must be a whole number of milliseconds from ${STAMP_TIMEOUT_MIN} to ${STAMP_TIMEOUT_MAX}: how long the request for a time-stamp may take.`);
-  for (const k of Object.keys(c)) if (!['address', 'timeout'].includes(k)) no(k, 'is not a setting of a time-stamp service: it takes "address" and "timeout".');
+  if (c.authority !== undefined) {
+    const authority = readAuthority(c.authority);
+    if (authority) out.authority = authority;
+    else no('authority', AUTHORITY_WORDS);
+  }
+  for (const k of Object.keys(c)) if (!['address', 'timeout', 'authority'].includes(k)) no(k, 'is not a setting of a time-stamp service: it takes "address", "timeout" and "authority".');
   return sound ? out : null;
 }
 
-/** The function that asks the service the settings give for a time-stamp over a seal's fingerprint (the library's stampService). */
-export async function stampHook({ address, timeout }) {
+/** What "recorder.stamp.authority" must be. */
+export const AUTHORITY_WORDS = 'must be the fingerprint of the certificate the service signs its time-stamps with, as a checker names the service ("stampServices": the SHA-256 of the certificate in base64url, 43 characters), or a list of 1 to 16 of them.';
+
+/** "authority", read as the library reads it (stampAuthority): a list of 1 to 16 fingerprints, or null where it is not one. */
+export function readAuthority(a) {
+  const list = typeof a === 'string' ? [a] : a;
+  return Array.isArray(list) && list.length > 0 && list.length <= 16 && list.every((x) => typeof x === 'string' && /^[A-Za-z0-9_-]{43}$/.test(x)) ? [...list] : null;
+}
+
+/** What "check" warns of where a time-stamp service is asked over plain http: and no certificate is named. */
+export const HTTP_STAMP_WARNING = 'recorder.stamp: the service is asked over plain http: and no "authority" is named, so a time-stamp signed by anyone who answers in its place is kept and reported as a time-stamp. Name the fingerprint of the service\'s certificate in "authority" (the "stampedBy" of a seal shows it).';
+
+/**
+ * The function that asks the service the settings give for a time-stamp
+ * over a seal's fingerprint (the library's askForStamp): it gives the item
+ * of "stamps" and the fingerprint of the certificate that signed it. Where
+ * "authority" is given, a time-stamp signed by another is not kept.
+ */
+export async function stampHook({ address, timeout, authority }) {
   let net;
   try {
     net = await import('provared/net/timestamp');
   } catch (e) {
     throw new Error(`recorder.stamp: the library installed has no client for a time-stamp service (provared/net/timestamp), so no time-stamp can be asked for (${e.code ?? e.message}).`);
   }
-  return net.stampService({ address, timeout });
+  // A library from before "authority" would take a time-stamp from any signer: where one is named, it is refused.
+  if (authority && typeof net.stampAuthority !== 'function') throw new Error('recorder.stamp.authority: the library installed does not hold a time-stamp to the certificate named, so no time-stamp could be trusted to be the service\'s. Install a library that does, or leave "authority" out.');
+  net.stampService({ address, timeout, ...(authority ? { authority } : {}) }); // the address, the time limit and "authority", read once
+  return async (fingerprintBytes, context = {}) => {
+    const got = await net.askForStamp(fingerprintBytes, { address, timeout, when: context?.when, after: context?.after, ...(authority ? { authority } : {}) });
+    return { stamp: got.stamp, authority: got.authority };
+  };
 }
+
+/** Whether "check" is to warn that the service is asked over http: with no certificate named (HTTP_STAMP_WARNING). */
+export const stampWithoutAuthority = (stamp) => Boolean(stamp && !stamp.authority && /^http:/i.test(stamp.address));
 
 /**
  * What a time-stamp over a new seal is held against: the seal's own time as
@@ -138,13 +169,17 @@ export function stampContext(entries, when) {
 
 /**
  * Ask for a time-stamp over a seal's fingerprint. Never throws: gives
- * {stamps: [item]} or {stampProblem: {code, message}}.
+ * {stamps: [item], stampedBy} or {stampProblem: {code, message}};
+ * "stampedBy" is the fingerprint of the certificate that signed it, where
+ * the hook gives it.
  */
 export async function stampFor(stamp, fingerprintBytes, context = {}) {
   try {
     // "context": the seal's own time and the latest time a service's time-stamp gave a seal before it, which the
     // time-stamp is held against (the library's askForStamp).
-    return { stamps: [await stamp(fingerprintBytes.slice(), context)] };
+    const got = await stamp(fingerprintBytes.slice(), context);
+    if (isObject(got) && typeof got.stamp === 'string') return { stamps: [got.stamp], ...(typeof got.authority === 'string' ? { stampedBy: got.authority } : {}) };
+    return { stamps: [got] };
   } catch (e) {
     const message = typeof e?.message === 'string' && e.message !== '' ? e.message : 'The time-stamp service gave no time-stamp.';
     return { stampProblem: { code: typeof e?.code === 'string' && e.code.startsWith('stamp-') ? e.code : 'stamp-not-given', message } };

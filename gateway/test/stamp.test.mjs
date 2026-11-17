@@ -119,6 +119,51 @@ test('recorder.stamp: a time more than 300 seconds before the seal\'s own time c
   }
 });
 
+test('recorder.stamp.authority: a time-stamp signed by another certificate is not kept; the one named is, and its signer is shown in the answer and the status (X344)', { skip: findOpenssl() ? false : NO_OPENSSL }, async () => {
+  const tsa = await startTestTsa();
+  const stranger = await startTestTsa();
+  let w = await world({ recorder: { stamp: { address: stranger.address, authority: tsa.authority } } });
+  try {
+    await w.call('GET', '/tickets/api/now/table/x');
+    const refused = await w.gateway.seal('patching');
+    assert.equal(refused.stamped, undefined);
+    assert.equal(refused.stampProblem.code, 'stamp-not-given');
+    assert.match(refused.stampProblem.message, new RegExp(`signed by the certificate whose fingerprint is ${stranger.authority}`));
+    await w.close();
+    w = await world({ recorder: { stamp: { address: tsa.address, authority: [tsa.authority] } } });
+    await w.call('GET', '/tickets/api/now/table/x');
+    const sealed = await call(w.port, 'POST', '/provared/seal', { secret: ADMIN_SECRET, headers: { 'content-type': 'application/json' }, body: { agent: 'patching' } });
+    assert.equal(sealed.status, 200, sealed.text);
+    assert.equal(sealed.json.stamped, true);
+    assert.equal(sealed.json.stampedBy, tsa.authority);
+    const status = await call(w.port, 'GET', '/provared/status', { secret: ADMIN_SECRET });
+    assert.equal(status.json.agents.patching.lastSeal.stampedBy, tsa.authority, status.text);
+  } finally {
+    await w.close();
+    await tsa.close();
+    await stranger.close();
+  }
+});
+
+test('recorder.stamp.authority: one fingerprint or a list; "check" warns where the service is asked over http: with none named (X344)', async () => {
+  const w = await world();
+  try {
+    const fp = 'A'.repeat(43);
+    const checked = (stamp) => checkConfig({ ...w.config, recorder: { ...w.config.recorder, stamp } }, { root: w.folder });
+    for (const bad of ['', 'A'.repeat(42), [], [fp, 7], Array(17).fill(fp), {}, null]) {
+      assert.ok((await checked({ address: 'http://127.0.0.1/', authority: bad })).problems.some((p) => /recorder\.stamp\.authority: must be the fingerprint/.test(p)), JSON.stringify(bad));
+    }
+    const warned = async (stamp) => (await checked(stamp)).warnings.some((x) => /plain http: and no "authority" is named/.test(x));
+    assert.equal(await warned({ address: 'http://127.0.0.1/' }), true);
+    assert.equal(await warned({ address: 'http://127.0.0.1/', authority: fp }), false);
+    assert.equal(await warned({ address: 'http://127.0.0.1/', authority: [fp, 'b'.repeat(43)] }), false);
+    assert.equal(await warned({ address: 'https://127.0.0.1/' }), false);
+    assert.equal((await checked({ address: 'http://127.0.0.1/', authority: fp })).problems.some((p) => /stamp/.test(p)), false);
+  } finally {
+    await w.close();
+  }
+});
+
 test('check: a library without the time-stamp client (provared/net/timestamp) is said plainly where recorder.stamp is given (X309)', async () => {
   const w = await world();
   try {

@@ -1333,6 +1333,34 @@
     cut off by a restart of Caddy alone, both now mended. Not tried on a
     real server, with a public certificate, or with claude.ai. Choices
     X313 to X343, in `tmp/choices-3.7e.md`.
+  - **After four reviews: time-stamps, the recipe, the lock and the local
+    program** (choices from X344, in `tmp/choices-fixes-2026-11-17.md`).
+    - **Which service signed a time-stamp (X344 to X347).** The check of a
+      service's answer shows it was made for this seal, not who made it:
+      over plain `http:`, anyone in between could answer with a key of
+      their own and have the time-stamp kept and reported. A new optional
+      setting, `authority` in `recorder.stamp` (executor, gateway) and in
+      the sealer's `stamp`, names the service's certificate by its
+      fingerprint, or a list of up to 16, as a checker's `stampServices`
+      does; a time-stamp signed by any other is not kept
+      (`stamp-not-given`, naming who signed it), and the seal goes in
+      without it. The library's `askForStamp` and `stampService`
+      (`provared/net/timestamp`, part of `provared` 0.8.1, not yet
+      released) take `authority` and pass it to `checkStamp` as `trusted`;
+      `stampAuthority` reads it. Whether or not it is given, a seal that
+      carries a time-stamp answers `stampedBy`, the fingerprint of the
+      certificate that signed it, in the `seal` answer (executor,
+      gateway, the sealer's `/seal`), the executor's `sealed` event, the
+      commands' "Sealed:" line and `status` (with the last seal). `check`
+      (and the sealer's start) warns where the address begins `http:` and
+      no `authority` is named. Left out, everything is as before. The
+      reason given for taking `http:` (X291, DESIGN X298) said the
+      time-stamp was checked "not by the connection"; it now says what
+      the checks do and do not show.
+    - **A central sealer's time-stamp is said (X348).** A seal from a
+      central sealer answers `stamped: true` with `stampedBy` where it
+      carries a time-stamp, and `stamped: false` (printed "with no
+      time-stamp") where it carries none; before, both looked the same.
 
 - **`provared-mcp-executor` 0.4.2 (15 November 2026): a security fix for
   two weaknesses. In front of a tool server whose JSON reader ignores

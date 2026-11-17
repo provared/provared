@@ -466,11 +466,23 @@ than 300 seconds before the latest time a service's time-stamp gave a
 seal before it in the book. Anything else costs no seal: the seal goes into the book
 without a time-stamp, the answer to `seal` gives `stampProblem` (its code
 and why), the command prints it, and the log has a `stamp-not-given`
-event. A seal that carries one answers `stamped: true`. The service sees
+event. A seal that carries one answers `stamped: true` and `stampedBy`,
+the fingerprint of the certificate that signed the time-stamp; the
+command prints it, and `status` shows it with the last seal. The service sees
 the seal's fingerprint, this computer's address and when it asked; nothing
 of the book. While it is asked, the agent's calls wait, as for the seal's
 own signatures. Without `recorder.stamp`, nothing is asked and nothing
 changes.
+
+The check of the answer shows that the time-stamp was made for this seal,
+not who made it: over plain `http:`, anyone between this computer and the
+service can answer in its place with a key of their own. `"authority"`
+in `recorder.stamp` names the certificate the service signs with: its
+fingerprint, or a list of up to 16, in the form a checker names a trusted
+service (`stampServices`): the SHA-256 of the certificate in base64url,
+43 characters. A time-stamp signed by any other is then not kept
+(`stamp-not-given`, naming the fingerprint that signed it). Left out, any
+signer is taken, and `check` warns where the address begins `http:`.
 
 ## Embedding it
 

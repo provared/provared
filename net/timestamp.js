@@ -103,6 +103,23 @@ export function stampAddress(address) {
   return url.href;
 }
 
+/**
+ * The certificates a time-stamp must be signed by, read: one fingerprint or a
+ * list of them, each the SHA-256 of a certificate in base64url (43
+ * characters), as a checker names the services it trusts ("stampServices").
+ * Null where none is named.
+ * @param {string|string[]|undefined|null} authority
+ * @returns {string[]|null}
+ */
+export function stampAuthority(authority) {
+  if (authority === undefined || authority === null) return null;
+  const list = typeof authority === 'string' ? [authority] : authority;
+  if (!Array.isArray(list) || list.length === 0 || list.length > 16 || !list.every((a) => typeof a === 'string' && /^[A-Za-z0-9_-]{43}$/.test(a))) {
+    throw new TypeError('The certificate a time-stamp must be signed by ("authority") must be named by its fingerprint, the SHA-256 of the certificate in base64url (43 characters), or by a list of 1 to 16 of them.');
+  }
+  return [...list];
+}
+
 function readTimeout(timeout) {
   if (!Number.isInteger(timeout) || timeout < STAMP_TIMEOUT_MIN_MS || timeout > STAMP_TIMEOUT_MAX_MS) {
     throw new TypeError(`The time limit of a request for a time-stamp must be a whole number of milliseconds from ${STAMP_TIMEOUT_MIN_MS} to ${STAMP_TIMEOUT_MAX_MS}.`);
@@ -199,6 +216,7 @@ async function readBody(response, most) {
  * @param {() => number} [o.clock] this device's clock, in milliseconds
  * @param {number} [o.when] the seal's own time, in milliseconds, as a checker reads it (whole seconds)
  * @param {number|null} [o.after] the latest time that a time-stamp from a service gave a seal before this one, in milliseconds, where it is known
+ * @param {string|string[]} [o.authority] the fingerprint of the certificate the time-stamp must be signed by, or a list of them (stampAuthority); where none is named, any certificate is taken
  * @returns {Promise<{stamp: string, when: string, time: number, authority: string}>}
  *   "stamp" is the item of "stamps" the format sets out (section 21.2): the
  *   time-stamp in base64url. "when" and "time" are the time it states, as
@@ -206,9 +224,10 @@ async function readBody(response, most) {
  *   that signed it, which a person checking names to trust the service.
  * @throws {Refusal} "stamp-not-given", or the code of checkStamp ("stamp-bad-data", "stamp-wrong-data", "stamp-invalid")
  */
-export async function askForStamp(fingerprintBytes, { address, timeout = STAMP_TIMEOUT_MS, clock = Date.now, when, after } = {}) {
+export async function askForStamp(fingerprintBytes, { address, timeout = STAMP_TIMEOUT_MS, clock = Date.now, when, after, authority } = {}) {
   const where = stampAddress(address);
   const limit = readTimeout(timeout);
+  const named = stampAuthority(authority);
   const time = (v, what) => {
     if (v === undefined || v === null) return null;
     if (typeof v !== 'number' || !Number.isFinite(v)) throw new TypeError(`"${what}" must be a time in milliseconds, or be left out.`);
@@ -243,9 +262,14 @@ export async function askForStamp(fingerprintBytes, { address, timeout = STAMP_T
   const answered = clock();
   const { token } = readResponse(bytes);
   if (token.length > MAX_STAMP_BYTES) throw notGiven(`The time-stamp service gave a time-stamp of ${token.length} bytes, more than the ${MAX_STAMP_BYTES} the format allows.`);
-  // Laid out as RFC 3161 and RFC 5652 set out, made for this fingerprint, and signed with the key of the certificate it carries.
-  const checked = await checkStamp(token, fingerprintBytes);
+  // Laid out as RFC 3161 and RFC 5652 set out, made for this fingerprint, and signed with the key of the certificate it
+  // carries. That shows the answer was made for this request, not who made it: where the caller names the certificate
+  // that must sign, a time-stamp signed by any other is not kept, as a checker who names that service would not count it.
+  const checked = await checkStamp(token, fingerprintBytes, named ? { trusted: named } : undefined);
   if (checked.state === 'unavailable') throw notGiven('The time-stamp service signs with a method this device cannot check, so its time-stamp was not kept.');
+  if (named && checked.state !== 'valid') {
+    throw notGiven(`The time-stamp is signed by the certificate whose fingerprint is ${checked.authority}, which is not one named as the service's ("authority"), so it was not kept.`);
+  }
   const sent = positiveInteger(nonce);
   const carried = nonceOf(token);
   if (carried === null || !equalBytes(carried, sent)) {
@@ -273,12 +297,14 @@ export async function askForStamp(fingerprintBytes, { address, timeout = STAMP_T
  * asks it for a time-stamp over a seal's fingerprint and gives the item of
  * "stamps". The address and the time limit are read here, once. What
  * openSealer tells it of the seal ("when", "after") is held against the
- * time the time-stamp states, as askForStamp does.
- * @param {{address: string, timeout?: number, clock?: () => number}} o
+ * time the time-stamp states, as askForStamp does. Where "authority" is
+ * given, a time-stamp signed by another certificate is not kept.
+ * @param {{address: string, timeout?: number, clock?: () => number, authority?: string|string[]}} o
  * @returns {(fingerprintBytes: Uint8Array, context?: {when?: number, after?: number|null}) => Promise<string>}
  */
-export function stampService({ address, timeout = STAMP_TIMEOUT_MS, clock = Date.now } = {}) {
+export function stampService({ address, timeout = STAMP_TIMEOUT_MS, clock = Date.now, authority } = {}) {
   const where = stampAddress(address);
   const limit = readTimeout(timeout);
-  return async (fingerprintBytes, context = {}) => (await askForStamp(fingerprintBytes, { address: where, timeout: limit, clock, when: context?.when, after: context?.after })).stamp;
+  const named = stampAuthority(authority);
+  return async (fingerprintBytes, context = {}) => (await askForStamp(fingerprintBytes, { address: where, timeout: limit, clock, when: context?.when, after: context?.after, ...(named ? { authority: named } : {}) })).stamp;
 }
