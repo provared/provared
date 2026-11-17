@@ -76,6 +76,15 @@ address, and ports 80 and 443 open to the internet (443 for claude.ai and
 the owner; 80 for Caddy's certificate, and to send a browser on to
 https). Nothing else may be listening on 80 or 443.
 
+The recipe was tried with Docker 29.7.2 and Compose 5.5.0 alone. Its
+files need BuildKit, the builder of every current Docker
+(`Dockerfile.dockerignore`, `COPY --chmod`); no older Docker or Compose
+is known to work. The guard and Caddy run as the users 10001 and 10002,
+by number, and the README's commands give files to those numbers
+(`sudo install -o 10001`). Rootless Docker and user-namespace remapping
+map the numbers in a container to others on the server, so those
+commands and the folders' owners do not hold there; neither was tried.
+
 ### Getting the recipe
 
 Take the recipe from the repository at a signed release tag, and check the
@@ -94,10 +103,16 @@ git -c gpg.ssh.allowedSignersFile=.github/release-signers tag -v <tag>
 
 The last command must end with
 `Good "git" signature for sealwright with ED25519 key SHA256:64cQtHklVRtDUPmbUWpRls28kFcpUnDhFJtpqMHiLbU`.
-Anything else (no signature, another key, `BAD`) means: do not use it. The
+Anything else (no signature, another key, `BAD`) means: do not use it. Its
+output's line `tag <tag>` must name the tag you asked for: git checks the
+signature, not the name, so an older signed release handed out under a
+newer name passes too. The
 file `.github/release-signers` comes from the same repository, so the check
 shows that the tag was signed by the key the repository names; compare
-that fingerprint with one you have from elsewhere. The recipe is then the
+that fingerprint with one you have from elsewhere. No second place
+publishes it yet: in the repository it is in `.github/release-signers`,
+`tools/release/verify-tag.mjs` and this README alone, so the comparison
+needs a copy you were given by another road. The recipe is then the
 folder `mcp-executor/recipes/claude-ai/compose`.
 
 ### The steps
@@ -107,7 +122,10 @@ folder `mcp-executor/recipes/claude-ai/compose`.
 2. **Set the domain in one file.** Copy the folder `compose/`, from the
    checked tag, to where it will live on the server. In it, copy
    `example.env` to `.env`, and set
-   `PROVARED_DOMAIN=guard.example.com` there.
+   `PROVARED_DOMAIN=guard.example.com` there. Caddy reads the `Caddyfile`
+   as a user of its own: where the copy was made under a strict umask
+   (027 or 077), run `chmod 644 Caddyfile`. The guard's image makes its
+   own files readable whatever their mode.
 3. **Run one command**, in that folder:
 
    ```
@@ -137,11 +155,14 @@ folder `mcp-executor/recipes/claude-ai/compose`.
      `sudo install -o 10001 -g 10001 -m 600 connection-1.json guard-data/slips/connection-1.json`;
    - in `guard-data/executor-http.json`, under
      `agents."connection-1".issuerKeys`, put the thumbprint of the passkey
-     that signed it, in place of the value written `<like this>`.
+     that signed it, in place of the value written `<like this>`. The
+     signing page shows it once the permission is signed, as "The
+     thumbprint of your passkey".
 
    The guard looks again every 10 seconds. Once both are in place it runs
-   `check`; where `check` finds a problem, the log lists it, and the guard
-   looks again once the settings or the permission have changed.
+   `check`; where `check` finds a problem, the log lists it once, and the
+   guard runs `check` again every 10 seconds, whichever file was mended
+   (`docker compose restart guard` runs it at once).
 5. **Read the owner's link.** Once `check` finds no problem, and while the
    guard is not yet running, the start makes the owner's link and writes it
    to `guard-data/owner-link.txt`, readable by the guard's user alone. It
@@ -207,7 +228,10 @@ off the server. The key files in `guard-data/keys/` are secret too.
 
 The guard is single-copy: each book has one writer. Run one guard on these
 folders, with no replicas and no second copy on another server sharing
-them.
+them. `compose.yaml` fixes the project's name (`provared-guard`), so two
+copies of the folder on one server are one project: `docker compose up -d`
+in the second replaces the first's containers with ones on the second's
+folders.
 
 ### Updates
 
@@ -227,6 +251,21 @@ and Caddy 2.11.9. To go back to one version, name it in the files and run
 the command again: in `Dockerfile`, `FROM node:24.22.3-bookworm-slim`; in
 `compose.yaml`, `image: caddy:2.11.9-alpine`. Each file gives the digest
 of the version tried, to pin that too.
+
+The tag `caddy:2.11-alpine` brings Caddy's fixes while 2.11 is its newest
+line. Once Caddy has a newer minor line, its fixes may go there alone, and
+the tag stops moving while the command still succeeds: the recipe must
+then move to the newer line, with a newer recipe, or with the name changed
+in `compose.yaml` and tried.
+
+The command's last step, `docker compose up -d`, starts every container
+of the recipe, a guard stopped on purpose too. While the guard is to stay
+stopped, do not run the command, and switch the weekly timer below off.
+Each update that brings a newer Node.js or Caddy leaves the image before
+it on the disk, with no name; nothing in the recipe takes those away.
+`docker image prune` does, for every image on the server with no name and
+no container: run it now and then where nothing else on the server needs
+such images.
 
 The guard and its library do not move: `package-lock.json` holds them, at
 exact versions, with their hashes. To move to a newer guard, take the
@@ -279,6 +318,9 @@ the upstream's token file in `guard-data` too, mode 600, owned by 10001:
 paths are read from the settings' folder. The start's steps then name your
 agents and your tools' actions. The upstream is reached from inside the
 container: an upstream on the same server is not at `127.0.0.1` there.
+An upstream in a container on the recipe's network (a service added to
+`compose.yaml`) would be reached by its service's name, as
+`http://<name>:<port>/mcp`; this was not tried.
 A local program in place of the upstream must be one the image can run.
 
 ### Trying a packed copy
@@ -341,8 +383,9 @@ rule, in this order:
 - Limits for a server with 2 GB of memory: the guard 768 MB, one processor
   and 256 processes; Caddy 256 MB, half a processor and 128 processes.
   Each log is kept to three files of 10 MB.
-- Both restart unless stopped. The guard is given 30 seconds to stop, so
-  that each call in flight is settled and receipted.
+- Both restart unless stopped (the update command's `docker compose up -d`
+  starts them all the same, above, "Updates"). The guard is given 30
+  seconds to stop, so that each call in flight is settled and receipted.
 
 ## What has been tried
 

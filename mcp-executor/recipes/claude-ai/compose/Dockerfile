@@ -29,7 +29,9 @@ FROM scratch AS executor-file
 FROM node:24-bookworm-slim
 
 WORKDIR /guard
-COPY package.json package-lock.json start.mjs ./
+# Readable by the guard's user whatever the files' modes on the server (a
+# copy made under a strict umask, 027 or 077, is readable by its owner alone).
+COPY --chmod=0644 package.json package-lock.json start.mjs ./
 
 # The library and the executor from npm, exactly as package-lock.json gives
 # them, each checked against its integrity hash there; no install scripts

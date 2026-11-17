@@ -1,14 +1,14 @@
 // The Docker Compose recipe for claude.ai (recipes/claude-ai/compose): its
 // first-start program, run here against this repository's executor, and
-// what its files must hold (no published port of the guard's, images pinned
-// by version and digest, plain folders and no Docker volume, the containers
-// locked down). The recipe in Docker itself is checked by
+// what its files must hold (no published port of the guard's, images that
+// follow their release lines by tag with the npm tree exact, plain folders
+// and no Docker volume, the containers locked down). The recipe in Docker itself is checked by
 // test/recipe-compose/docker-check.sh, outside "npm test".
 
 import './local-library.mjs'; // first: "provared" is this repository's own library
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -275,6 +275,53 @@ test('an agent added after the first start gets its key file and its entries, th
   }
 });
 
+test('a command run through the start writes its files for the guard\'s user alone, as the start does (X359)', { skip: POSIX ? false : 'file modes are POSIX', timeout: 120_000 }, async () => {
+  const data = folder();
+  let run;
+  try {
+    run = startProgram(data, { PROVARED_DOMAIN: 'guard.example.test' });
+    await run.until('waits for the permission');
+    await run.stop();
+    const r = spawnSync(process.execPath, [START, 'keys', '--out', 'entries-again.json'], {
+      cwd: data,
+      env: { ...process.env, PROVARED_DATA: data, PROVARED_BIN: BIN, PROVARED_PEER: '' },
+      encoding: 'utf8',
+    });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(statSync(join(data, 'entries-again.json')).mode & 0o077, 0, 'entries-again.json is its owner\'s alone');
+  } finally {
+    if (run && run.child.exitCode === null) await run.stop();
+    rmSync(data, { recursive: true, force: true });
+  }
+});
+
+test('after "check" finds a problem, mending a file other than the settings and the permission starts the guard; the problems are said once (X358)', { timeout: 120_000 }, async () => {
+  const data = folder();
+  let run;
+  try {
+    run = startProgram(data, { PROVARED_DOMAIN: 'guard.example.test' });
+    await run.until('waits for the permission');
+    const settings = JSON.parse(readFileSync(join(data, 'executor-http.json'), 'utf8'));
+    writeFileSync(join(data, 'executor-http.json'), `${JSON.stringify({ ...settings, listen: { host: '127.0.0.1', port: await freePort() } }, null, 2)}\n`);
+    // The demonstration's credential file taken away: "check" finds that it cannot be read.
+    renameSync(join(data, 'demo-token'), join(data, 'demo-token.away'));
+    const signed = spawnSync(process.execPath, [SIGN], { env: { ...process.env, PROVARED_DATA: data }, encoding: 'utf8' });
+    assert.equal(signed.status, 0, signed.stderr);
+    await run.until('"check" found problems', 60_000);
+    assert.match(run.out(), /DEMO_TOKEN/);
+    const looked = Date.now();
+    // Several looks (one every 200 ms here), each running "check" again.
+    while (Date.now() - looked < 3000) await new Promise((r) => setTimeout(r, 100));
+    assert.equal(run.out().split('"check" found problems').length - 1, 1, 'the same problems are said once');
+    renameSync(join(data, 'demo-token.away'), join(data, 'demo-token'));
+    await run.until('Starting the guard', 60_000);
+    assert.match(run.out(), /"check": no problem/);
+  } finally {
+    if (run && run.child.exitCode === null) await run.stop();
+    rmSync(data, { recursive: true, force: true });
+  }
+});
+
 test('watchPeer: nothing while Caddy\'s port answers; once it has not answered so many times in a row, the guard is stopped', async () => {
   const server = net.createServer((s) => s.destroy());
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
@@ -451,7 +498,7 @@ test('the images: Node.js and Caddy official, each following its release line by
   // The guard's packages: from the lockfile, with their hashes; a packed copy only where one is named.
   assert.match(dockerfile, /^ {6}npm ci --omit=dev --ignore-scripts --no-audit --no-fund; \\$/m);
   assert.match(dockerfile, /if \[ -n "\$EXECUTOR" \]; then/);
-  assert.match(dockerfile, /^COPY package\.json package-lock\.json start\.mjs \.\/$/m);
+  assert.match(dockerfile, /^COPY --chmod=0644 package\.json package-lock\.json start\.mjs \.\/$/m);
   assert.match(dockerfile, /^USER 10001:10001$/m);
   const pkg = JSON.parse(read('package.json'));
   for (const [name, version] of Object.entries(pkg.dependencies)) assert.match(version, /^\d+\.\d+\.\d+$/, name);
@@ -546,6 +593,14 @@ test('the weekly timer: off until switched on, and it runs the README\'s update 
   assert.match(timer, /^OnCalendar=Mon \*-\*-\* 04:00:00$/m);
   const readme = readFileSync(new URL('../recipes/claude-ai/README.md', import.meta.url), 'utf8');
   assert.ok(readme.includes(steps.join(' && ')), 'the README gives the same command');
+});
+
+test('a copy made under a strict umask: the image makes the guard\'s files readable, and the README says to make the Caddyfile so (X360)', () => {
+  assert.match(read('Dockerfile'), /^COPY --chmod=0644 package\.json package-lock\.json start\.mjs \.\/$/m);
+  const readme = readFileSync(new URL('../recipes/claude-ai/README.md', import.meta.url), 'utf8');
+  assert.ok(readme.includes('`chmod 644 Caddyfile`'), 'the README gives the command for the Caddyfile');
+  const check = readFileSync(new URL('./recipe-compose/docker-check.sh', import.meta.url), 'utf8');
+  assert.ok(check.includes('chmod 600 "$WORK/package.json" "$WORK/package-lock.json" "$WORK/start.mjs"'), 'the Docker check builds from files of mode 600');
 });
 
 test('the boot unit: after a restart of the server, it starts whichever container is stopped, building and fetching nothing, once Docker has started (X357)', () => {

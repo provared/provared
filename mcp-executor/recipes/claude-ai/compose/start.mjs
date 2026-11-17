@@ -222,7 +222,6 @@ function marks(settings) {
 }
 
 async function start() {
-  process.umask(0o077);
   for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => process.exit(0));
   const domain = checkDomain(process.env.PROVARED_DOMAIN);
   const folder = data();
@@ -271,10 +270,7 @@ async function start() {
       await sleep(WAIT);
       continue;
     }
-    if (shown === `checked ${mark}`) {
-      await sleep(WAIT);
-      continue;
-    }
+    // "check" again at every look, whichever file was mended (it reads local files only); its problems said once (X358).
     const r = guard(['check', '--config', SETTINGS]);
     if (r.status === 0) {
       say('"check": no problem in the settings, the keys, the permission and the credentials.');
@@ -286,8 +282,9 @@ async function start() {
     } catch {
       problems = [r.stderr.trim() || r.stdout.trim()];
     }
-    say(`"check" found problems, so the guard does not start yet. Change ${HOST_FOLDER}/${SETTINGS} or the permission; the guard looks again once either has changed:\n- ${problems.join('\n- ')}`);
-    shown = `checked ${mark}`;
+    const listed = problems.join('\n- ');
+    if (shown !== `checked ${listed}`) say(`"check" found problems, so the guard does not start yet. Mend what is listed, in ${HOST_FOLDER}/: the guard runs "check" again every ${Math.round(WAIT / 1000)} seconds and starts once it finds none (docker compose restart guard runs it at once):\n- ${listed}`);
+    shown = `checked ${listed}`;
     await sleep(WAIT);
   }
 
@@ -413,6 +410,8 @@ export function watchPeer(onLost, { peer = process.env.PROVARED_PEER ?? '127.0.0
 }
 
 async function main(args) {
+  // Every file the start or a command writes is the writer's alone, as the start's own always were.
+  process.umask(0o077);
   const [command, ...rest] = args;
   if (command === undefined) return start();
   if (command === 'folders') return giveFolders(rest);

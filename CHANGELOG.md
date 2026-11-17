@@ -1422,6 +1422,27 @@
       started, which starts Caddy and then the guard; the README says how
       to switch it on, and to run `docker compose up -d` after a restart
       without it.
+    - **The recipe: smaller things the review found (X358 to X360).** After
+      `check` finds a problem, the start runs it again at every look (every
+      10 seconds), whichever file was mended, and says the same problems
+      once; before, it looked again only once the settings or a permission
+      changed, and mending a token file left it waiting silently. A command
+      run through the start (`keys --out`, for one) writes its files for
+      the guard's user alone, as the start does (the umask is set for
+      every command). The image makes `package.json`, `package-lock.json`
+      and `start.mjs` readable whatever their modes on the server (`COPY
+      --chmod=0644`): a copy made under umask 027 or 077 stopped the guard
+      at once. The README says to run `chmod 644 Caddyfile` there; that
+      the update command starts a guard stopped on purpose, and leaves the
+      images it replaces on the disk; that `caddy:2.11-alpine` stops
+      bringing fixes once Caddy has a newer line; that the line `tag <tag>`
+      of `git tag -v` must name the tag asked for, and that no second place
+      publishes the release key's fingerprint yet; where the passkey's
+      thumbprint is shown; how an upstream in a container of its own
+      would be reached; the Docker tried, BuildKit, and that rootless
+      Docker and user-namespace remapping were not tried; and that two
+      copies of the folder on one server are one Compose project. The
+      reason given for X332 is corrected to match.
 
 - **`provared-mcp-executor` 0.4.2 (15 November 2026): a security fix for
   two weaknesses. In front of a tool server whose JSON reader ignores

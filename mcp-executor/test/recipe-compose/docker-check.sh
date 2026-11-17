@@ -60,6 +60,8 @@ cleanup() {
 rm -rf "$WORK/guard-data" "$WORK/caddy-data" "$WORK/caddy-config" "$WORK/pack"
 mkdir -p "$WORK/pack"
 for f in compose.yaml Dockerfile Dockerfile.dockerignore package.json package-lock.json start.mjs Caddyfile; do cp "$RECIPE/$f" "$WORK/$f"; done
+# As a copy made under a strict umask (077) gives them: the Dockerfile's COPY --chmod=0644 makes them readable in the image.
+chmod 600 "$WORK/package.json" "$WORK/package-lock.json" "$WORK/start.mjs"
 cp "$TGZ" "$WORK/pack/$TGZ_NAME"
 cp "$HELPERS/sign-test-permission.mjs" "$WORK/sign-test-permission.mjs"
 printf 'PROVARED_DOMAIN=%s\n' "$DOMAIN" > "$WORK/test.env"
