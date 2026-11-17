@@ -195,13 +195,15 @@ export function readSettings(folder) {
 /**
  * How long the request for a time-stamp may take, unless the settings say
  * otherwise, and the least and the most they may say: milliseconds. The
- * sealer answers one question at a time, so the wait holds up every
- * recorder: 4 seconds by default, below the 5 seconds a recorder's
- * question may take unless its settings say otherwise; at most 20
- * seconds, well below the 30 seconds the library gives the hook
- * ("signWithin") and a recorder gives the question for a seal.
+ * sealer answers one question at a time, and the seal is signed before the
+ * service is asked, so a seal holds up every recorder for its signing (a
+ * second or two) and then this wait: 2.5 seconds by default, so that the
+ * two together stay below the 5 seconds a recorder's question may take
+ * unless its settings say otherwise (X354); at most 20 seconds, well below
+ * the 30 seconds the library gives the hook ("signWithin") and a recorder
+ * gives the question for a seal.
  */
-export const STAMP_TIMEOUT = 4000;
+export const STAMP_TIMEOUT = 2500;
 export const STAMP_TIMEOUT_MIN = 100;
 export const STAMP_TIMEOUT_MAX = 20000;
 

@@ -91,7 +91,7 @@ import { checkConfig, loadRules, loadSigningKeys, openExecutor, readSettings, so
 import { makeKeyFile, readIfThere } from './files.mjs';
 import { PUBLIC_KEYS_ABOUT, checkIdentity, plainAddress, readPublicKeys } from './identity.mjs';
 import { lockState } from './lock.mjs';
-import { makeRecorderKeyFile, readRecorderKeyFile } from './sealing.mjs';
+import { makeRecorderKeyFile, plainText, readRecorderKeyFile } from './sealing.mjs';
 
 // http.mjs and oauth.mjs are loaded here, and not in the lines above: loading them holds the library's passkey checks against what the executor uses (owner.mjs, X281). Where the library lacks them, no command runs, as before; what is new is that the command then prints the executor's own message, and nothing round it, and ends with 1 (see the last lines). Any other error in loading them is thrown on as it is.
 let libraryProblem = null;
@@ -184,13 +184,6 @@ function samePath(a, b) {
   return process.platform === 'win32' ? x.toLowerCase() === y.toLowerCase() : x === y;
 }
 
-/** Text from an answer, on one line and with no character that steers a terminal. */
-// Control and format characters (\p{Cf}: those that turn text round or hide it) become spaces, and the text is cut
-// at 600 characters: a problem's words come from the sealer, which may be another program, and go to a terminal.
-const plainText = (v) => {
-  const text = String(v).replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, ' ');
-  return text.length > 600 ? `${text.slice(0, 600)}...` : text;
-};
 /**
  * What "Sealed: ..." adds where the seal carries a time-stamp, with the
  * fingerprint of the certificate that signed it (X344); and, for a central

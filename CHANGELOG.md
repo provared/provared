@@ -1395,6 +1395,33 @@
       log (`server-stderr-dropped`). Before, a program writing without pause
       made the executor hold it all in memory on Linux, and stopped it for
       every agent on Windows.
+    - **The sealer's wait for a time-stamp is shorter (X354).** Its
+      `stamp.timeout` is 2.5 seconds unless set (was 10). While the seal is
+      signed and the service is asked, the sealer answers no other
+      recorder, and a recorder's question times out after 5 seconds: with
+      a service that never answered, another recorder's question was
+      answered after about 4.1 seconds here, where with 10 it timed out.
+    - **The executor's and the gateway's wait for a time-stamp (X355).**
+      `recorder.stamp.timeout` is 5 seconds unless set (was 10), and at
+      most 20 (was 60). The executor's `check` warns above 8 seconds: a
+      seal holds the book's files that long, and an executor started on
+      the same files meanwhile waits 10 seconds for them and is refused.
+    - **A service's words, shown plainly (X356).** What a time-stamp
+      service or a sealer says is shown with padding characters (no-break
+      and wide spaces, the blank Hangul and braille characters) as plain
+      spaces, no more than one accent on a letter, its own quotation marks
+      changed so that they cannot end the quoted part, and cut at a whole
+      character. The commands' printing of a sealer's words follows the
+      same rule (`plainText`, now in `sealing.mjs` and `gateway.mjs`).
+    - **The recipe after a restart of the server (X357).** The Docker check
+      stopped both containers and started them again in each order: Caddy
+      first, both came back; the guard first, it could not join Caddy's
+      network and stayed stopped, as Docker does not try a failed start
+      again. A unit in `compose/boot/`, off until switched on, runs
+      `docker compose up -d --no-build --pull never` once Docker has
+      started, which starts Caddy and then the guard; the README says how
+      to switch it on, and to run `docker compose up -d` after a restart
+      without it.
 
 - **`provared-mcp-executor` 0.4.2 (15 November 2026): a security fix for
   two weaknesses. In front of a tool server whose JSON reader ignores

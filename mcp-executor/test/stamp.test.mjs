@@ -59,7 +59,7 @@ test('recorder.stamp: each seal signed here carries the time-stamp the service g
     const sealed = await ex.seal();
     assert.equal(sealed.stamped, true);
     assert.equal(sealed.stampProblem, undefined);
-    assert.deepEqual(ex.recorder.stamp, { address: tsa.address, timeout: 10000 });
+    assert.deepEqual(ex.recorder.stamp, { address: tsa.address, timeout: 5000 });
     const c = await checkBook(bookText(w), { issuerKeys: w.settings.agent.issuerKeys, sealKeys: w.sealKeys, stampServices: [tsa.authority] });
     assert.equal(c.summary.problemFound, false);
     const seal = c.entries[sealed.entry];
@@ -177,7 +177,7 @@ test('recorder.stamp: left out, nothing is asked; given, it must be an address o
   const given = readSettings({ ...w.settings, recorder: { ...base, stamp: { address: 'https://127.0.0.1:8443/tsa', timeout: 5000 } } }, w.folder);
   assert.deepEqual(given.problems, []);
   assert.deepEqual(given.settings.recorder.stamp, { address: 'https://127.0.0.1:8443/tsa', timeout: 5000 });
-  assert.equal(readSettings({ ...w.settings, recorder: { ...base, stamp: { address: 'http://127.0.0.1/' } } }, w.folder).settings.recorder.stamp.timeout, 10000);
+  assert.equal(readSettings({ ...w.settings, recorder: { ...base, stamp: { address: 'http://127.0.0.1/' } } }, w.folder).settings.recorder.stamp.timeout, 5000);
   for (const [stamp, words] of [
     ['http://127.0.0.1/', /recorder\.stamp: must be an object/],
     [{}, /recorder\.stamp\.address/],
@@ -187,7 +187,7 @@ test('recorder.stamp: left out, nothing is asked; given, it must be an address o
     [{ address: 'http://127.0.0.1/tsa?key=secret' }, /recorder\.stamp\.address: .*query/],
     [{ address: 'http://127.0.0.1/tsa?' }, /recorder\.stamp\.address/],
     [{ address: 'http://127.0.0.1/', timeout: 99 }, /recorder\.stamp\.timeout/],
-    [{ address: 'http://127.0.0.1/', timeout: 60001 }, /recorder\.stamp\.timeout/],
+    [{ address: 'http://127.0.0.1/', timeout: 20001 }, /recorder\.stamp\.timeout: must be a whole number of milliseconds from 100 to 20000/],
     [{ address: 'http://127.0.0.1/', policy: '1.2.3' }, /recorder\.stamp\.policy/],
   ]) {
     const { problems } = readSettings({ ...w.settings, recorder: { ...base, stamp } }, w.folder);
@@ -270,7 +270,7 @@ test('recorder.stamp.authority: one fingerprint or a list; "check" warns where t
   const base = { keys: 'r.jwk' };
   const read = (stamp) => readSettings({ ...w.settings, recorder: { ...base, stamp } }, w.folder);
   const fp = 'A'.repeat(43);
-  assert.deepEqual(read({ address: 'http://127.0.0.1/', authority: fp }).settings.recorder.stamp, { address: 'http://127.0.0.1/', timeout: 10000, authority: [fp] });
+  assert.deepEqual(read({ address: 'http://127.0.0.1/', authority: fp }).settings.recorder.stamp, { address: 'http://127.0.0.1/', timeout: 5000, authority: [fp] });
   assert.deepEqual(read({ address: 'http://127.0.0.1/', authority: [fp, 'b'.repeat(43)] }).problems, []);
   for (const bad of ['', 'A'.repeat(42), [], [fp, 7], Array(17).fill(fp), {}, null]) {
     assert.ok(read({ address: 'http://127.0.0.1/', authority: bad }).problems.some((p) => /recorder\.stamp\.authority: must be the fingerprint/.test(p)), JSON.stringify(bad));
@@ -280,6 +280,26 @@ test('recorder.stamp.authority: one fingerprint or a list; "check" warns where t
   assert.equal(warned({ address: 'http://127.0.0.1/', authority: fp }), false);
   assert.equal(warned({ address: 'https://127.0.0.1/' }), false);
   assert.equal(readSettings({ ...w.settings, recorder: base }, w.folder).warnings.some((x) => /authority/.test(x)), false);
+});
+
+test('plainText: what the commands print of a sealer\'s words has no hidden or padding characters, one accent at most, and is cut at whole characters (X356)', async () => {
+  const { plainText } = await import('../sealing.mjs');
+  assert.equal(plainText('ok\u3164\u115f\u2800\u00a0\u2003x\u0301\u0301\u0301\ufe0f\u202eend'), 'ok     x\u0301  end');
+  const long = plainText('\u{1f600}'.repeat(700));
+  assert.equal(long.isWellFormed(), true);
+  assert.equal([...long.slice(0, -3)].length, 600);
+});
+
+test('recorder.stamp.timeout: 5 seconds unless given, 20 at most, and "check" warns above 8, where a seal would hold the files longer than a start waits for them (X355)', async () => {
+  const w = await world({ open: false });
+  const read = (stamp) => readSettings({ ...w.settings, recorder: { keys: 'r.jwk', stamp } }, w.folder);
+  assert.equal(read({ address: 'https://127.0.0.1/' }).settings.recorder.stamp.timeout, 5000);
+  assert.deepEqual(read({ address: 'https://127.0.0.1/', timeout: 20000 }).problems, []);
+  assert.ok(read({ address: 'https://127.0.0.1/', timeout: 20001 }).problems.some((p) => /recorder\.stamp\.timeout/.test(p)));
+  const long = (timeout) => read({ address: 'https://127.0.0.1/', timeout }).warnings.some((x) => /^recorder\.stamp\.timeout: .*is then refused/.test(x));
+  assert.equal(long(8000), false);
+  assert.equal(long(8001), true);
+  assert.equal(long(undefined), false);
 });
 
 test('with a central sealer, a seal the sealer time-stamped is said to be, with its signer; one with none is said to have none (X348)', { skip }, async () => {

@@ -80,7 +80,7 @@ otherwise.
 | `name` | The name the seals give (`by.name`): a label, 1 to 200 characters |
 | `port` | The port on 127.0.0.1; 8797 by default |
 | `signers` | Optional. For any of `Ed25519`, `ML-DSA-87` and `SLH-DSA-SHA2-256s`, the path of a module (from the folder) whose default export is an async function that gives a signer for that method: an object with `key`, the public key, and `sign(data)`, which gives the signature bytes. It takes the place of the key file's key for that method |
-| `stamp` | Optional. `{"address": ..., "timeout": ..., "authority": ...}`: a time-stamp service (RFC 3161) that each seal is sent to, below. `authority`, optional, is the fingerprint of the certificate the service signs with, or a list of up to 16 (the SHA-256 of the certificate in base64url, 43 characters, as a checker's `stampServices` names it). `address` begins `http://` or `https://` and holds no user name, password, query or fragment; `timeout` is how long the request may take, from 100 to 20,000 milliseconds, 4,000 if left out, and less than the time `startSealer` gives each signature (`signWithin`, 30,000 unless given). No service is named by this package: the address is yours to choose. Needs `provared` 0.8.1 or later, the first release with `provared/net/timestamp` |
+| `stamp` | Optional. `{"address": ..., "timeout": ..., "authority": ...}`: a time-stamp service (RFC 3161) that each seal is sent to, below. `authority`, optional, is the fingerprint of the certificate the service signs with, or a list of up to 16 (the SHA-256 of the certificate in base64url, 43 characters, as a checker's `stampServices` names it). `address` begins `http://` or `https://` and holds no user name, password, query or fragment; `timeout` is how long the request may take, from 100 to 20,000 milliseconds, 2,500 if left out, and less than the time `startSealer` gives each signature (`signWithin`, 30,000 unless given). No service is named by this package: the address is yours to choose. Needs `provared` 0.8.1 or later, the first release with `provared/net/timestamp` |
 
 **An outside time-stamp on each seal.** With `stamp`, the sealer sends
 each seal's fingerprint to that service as it signs it, in the request
@@ -115,11 +115,18 @@ not it is given, the answer to `/seal` names the certificate that signed
 a time-stamp it carries, in `stampedBy`. Where the address begins `http:`
 and no `authority` is named, `start` warns on its standard error.
 
-While the service is asked, the sealer answers no other question, as
-with every seal, and that holds up every recorder. A recorder's question
+While the seal is signed and then the service is asked, the sealer
+answers no other question, and that holds up every recorder: the signing
+(about 1.5 seconds with the key file here, longer with signers held
+elsewhere) and the wait for the service add up. A recorder's question
 to the sealer times out after 5 seconds unless its settings say
 otherwise (the executor's `recorder.sealer.timeout`), which is why the
-time limit is 4 seconds unless set. Set it longer, or a service answer
+time limit is 2.5 seconds unless set: with a service that never answers,
+a seal then took about 4.3 seconds in all here, and another recorder's
+question asked meanwhile was answered after about 4.1 seconds; with the
+earlier 10 seconds, that question timed out. Signers that take longer
+than 2.5 seconds need a shorter limit, or recorders that wait longer.
+Set it longer, or a service answer
 slowly, and other recorders' questions asked meanwhile time out: their
 lines stay unsent and are sent again, every 2 seconds, and a seal they
 asked for is taken back from `/latest` once the sealer answers; calls are

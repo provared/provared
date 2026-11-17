@@ -131,11 +131,20 @@ function readTimeout(timeout) {
 export const MAX_SHOWN_CHARACTERS = 200;
 
 // Text a service wrote, made safe to show: no characters that steer a terminal or that cannot be seen (controls,
-// format characters such as those that turn text round, line and paragraph separators), and not too long.
+// format characters such as those that turn text round, line and paragraph separators, and every character Unicode
+// says is ignored where it is not understood, such as the Hangul fillers), every kind of blank as one plain space (the
+// blank braille pattern among them), no more than one accent on a letter, and not too long, cut at a whole character.
 const shown = (text) => {
-  const plain = text.replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, ' ').replace(/ {2,}/g, ' ').trim();
-  return plain.length > MAX_SHOWN_CHARACTERS ? `${plain.slice(0, MAX_SHOWN_CHARACTERS)}...` : plain;
+  const plain = text
+    .replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}\p{Zs}\u2800]/gu, ' ')
+    .replace(/(\p{M})\p{M}+/gu, '$1')
+    .replace(/ {2,}/g, ' ')
+    .trim();
+  const characters = [...plain];
+  return characters.length > MAX_SHOWN_CHARACTERS ? `${characters.slice(0, MAX_SHOWN_CHARACTERS).join('')}...` : plain;
 };
+// A service's own words, shown between the program's quotation marks: a quotation mark of its own could end them early.
+const unquoted = (text) => text.replace(/["\u201c\u201d\u201e\u201f\u2033\uff02]/g, "'");
 
 // The answer of RFC 3161, section 2.4.2 ("TimeStampResp"): the status, and the time-stamp where it was granted.
 function readResponse(bytes) {
@@ -162,7 +171,7 @@ function readResponse(bytes) {
     return { token: new Uint8Array(wholeOf(bytes, expect(parts[1], TAG.SEQUENCE, 'the time-stamp'))) };
   }
   // Its words and its reasons, shown together, cut at MAX_SHOWN_CHARACTERS in all.
-  const said = shown([words.length ? `"${words.join(' ')}"` : '', reasons.join('; ')].filter(Boolean).join(': '));
+  const said = shown([words.length ? `"${unquoted(words.join(' '))}"` : '', reasons.join('; ')].filter(Boolean).join(': '));
   throw notGiven(`The time-stamp service gave no time-stamp: ${STATUS[status[0]]} (status ${status[0]})${said ? `, ${said}` : ''}.`);
 }
 

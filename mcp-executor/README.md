@@ -1316,7 +1316,7 @@ it. The settings name the recorder:
 fingerprint, to that time-stamp service (RFC 3161), and the time-stamp it
 gives goes beside the seal in the book, in `stamps`. `address` begins
 `http://` or `https://` and holds no user name, password, query or
-fragment; `timeout` is from 100 to 60,000 milliseconds, 10,000 if left
+fragment; `timeout` is from 100 to 20,000 milliseconds, 5,000 if left
 out. No service is named by this package: the address is yours to
 choose. The request and the check are the library's
 (`provared/net/timestamp`, in `provared` 0.8.1 or later; with an earlier
@@ -1336,7 +1336,12 @@ time-stamp; its `sealed` event says the same, the command prints it, and
 `status` shows it with the last seal. The service sees the
 seal's fingerprint, this computer's address and when it asked; nothing of
 the book. While it is asked, the agent's calls wait, as for the seal's own
-signatures. `stamp` is not taken beside `sealer`: a central sealer asks
+signatures, and the book's files stay held: an executor started on them
+in that time waits for them (10 seconds, or `shutdownWait` and 5 seconds
+more where that is longer) and is refused after it. So the signing and
+`timeout` together are best kept below that, which the default of 5
+seconds does; `check` warns where `timeout` is more than 8 seconds.
+`stamp` is not taken beside `sealer`: a central sealer asks
 for its seals' time-stamps under its own settings (its `stamp`), and
 where it was not given one, the executor logs `stamp-not-given` with the
 reason the sealer gave, also for a seal it takes back after the answer

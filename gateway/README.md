@@ -451,7 +451,7 @@ time-stamp service (RFC 3161), `{"address": ..., "timeout": ...}`, each
 seal's fingerprint is sent to it as the seal is made, and the time-stamp
 it gives goes beside the seal in the book, in `stamps`. `address` begins
 `http://` or `https://` and holds no user name, password, query or
-fragment; `timeout` is from 100 to 60,000 milliseconds, 10,000 if left
+fragment; `timeout` is from 100 to 20,000 milliseconds, 5,000 if left
 out. Given, it must be such an object: `null`, `""` or `false` is
 refused, as by `check`. No service is named by this package: the address
 is yours to choose. The request and the check are the library's

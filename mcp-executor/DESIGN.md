@@ -3489,7 +3489,7 @@ none.
 **X298. `recorder.stamp`: `{address, timeout}`.** `address` is a whole
 address beginning `http://` or `https://`, with no user name, password
 or fragment; `timeout` is a whole number of milliseconds from 100 to
-60,000, 10,000 if left out. Any other member is refused, not set aside,
+20,000, 5,000 if left out (X355; before, 60,000 and 10,000). Any other member is refused, not set aside,
 since a member mistyped would leave a person thinking seals were
 time-stamped. No service is named, in the code, the examples or the
 documents. Plain `http:` is taken because services in use answer on it

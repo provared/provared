@@ -75,9 +75,11 @@ export async function loadRecorder(recorder) {
 // seal: the seal goes into the book without one, and the reason is said.
 
 /** How long the request for a time-stamp may take, unless the settings say otherwise, and the least and the most they may say: milliseconds. */
-export const STAMP_TIMEOUT = 10000;
+export const STAMP_TIMEOUT = 5000;
 export const STAMP_TIMEOUT_MIN = 100;
-export const STAMP_TIMEOUT_MAX = 60000;
+export const STAMP_TIMEOUT_MAX = 20000;
+/** A time limit above which "check" warns: with the signing, a seal would hold the book's files longer than a start waits for them (X355). */
+export const STAMP_LONG = 8000;
 
 /**
  * "recorder.stamp", read: {address, timeout}; null where it has a problem.
@@ -111,6 +113,21 @@ export function readStampSettings(c, where, at) {
   for (const k of Object.keys(c)) if (!['address', 'timeout', 'authority'].includes(k)) no(k, 'is not a setting of a time-stamp service: it takes "address", "timeout" and "authority".');
   return sound ? out : null;
 }
+
+/**
+ * Text from an answer, on one line and with no character that steers a
+ * terminal or cannot be seen, for the commands to print. Control and format
+ * characters (those that turn text round or hide it), the characters
+ * Unicode says are ignored where not understood, and every kind of blank
+ * (the blank braille pattern among them) become spaces; a letter keeps one
+ * accent at most; the text is cut at 600 whole characters (X356). A
+ * problem's words come from the sealer, which may be another program.
+ */
+export const plainText = (v) => {
+  const text = String(v).replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}\p{Zs}\u2800]/gu, ' ').replace(/(\p{M})\p{M}+/gu, '$1');
+  const characters = [...text];
+  return characters.length > 600 ? `${characters.slice(0, 600).join('')}...` : text;
+};
 
 /** What "recorder.stamp.authority" must be. */
 export const AUTHORITY_WORDS = 'must be the fingerprint of the certificate the service signs its time-stamps with, as a checker names the service ("stampServices": the SHA-256 of the certificate in base64url, 43 characters), or a list of 1 to 16 of them.';

@@ -10,7 +10,7 @@ import { MAX_REPLY_BYTES, MAX_SHOWN_CHARACTERS, NONCE_BYTES, askForStamp, stampA
 import { decodeStamps } from '../src/seal.js';
 import { fromBase64url } from '../src/encoding.js';
 import { checkStamp } from '../src/timestamp.js';
-import { makeStampService, sequence } from './helpers/stamp.mjs';
+import { der, makeStampService, sequence } from './helpers/stamp.mjs';
 import { NO_OPENSSL, findOpenssl, startTestTsa } from './helpers/tsa.mjs';
 
 const skip = findOpenssl() ? false : NO_OPENSSL;
@@ -243,4 +243,24 @@ test('what a service writes is shown with no control or format characters, and c
   assert.match(e.message, /"ok evil x \[31mA+\.\.\.\.$/);
   const said = e.message.slice(e.message.indexOf('(status 2), ') + '(status 2), '.length);
   assert.equal(said.length, MAX_SHOWN_CHARACTERS + '....'.length);
+});
+
+test('a service\'s words cannot pad themselves with blanks, stack accents, end the quoted part with a quotation mark of their own, or be cut inside a character (X356)', { skip }, async () => {
+  const refusal = async (text) => {
+    const words = new TextEncoder().encode(text);
+    tsa.mode = 'answer';
+    tsa.answer = sequence(sequence(Uint8Array.of(0x02, 0x01, 0x02), sequence(der(0x0c, words))));
+    const e = await askForStamp(fingerprint(), { address: tsa.address }).catch((x) => x);
+    assert.equal(e.code, 'stamp-not-given', e.message);
+    return e.message.slice(e.message.indexOf('(status 2), ') + '(status 2), '.length);
+  };
+  // The reviewer's case: Hangul fillers, a blank braille pattern, other blanks, five accents and a variation selector, then words that read as the program's own.
+  const said = await refusal('ok\u3164\u3164\u115f\u2800\u00a0\u2003x\u0301\u0301\u0301\u0301\u0301\ufe0f". The seal carries a time-stamp (status 0');
+  assert.doesNotMatch(said, /[\u3164\u115f\u2800\u00a0\u2003\ufe0f]/u);
+  assert.equal(said, '"ok x\u0301 \'. The seal carries a time-stamp (status 0".');
+  // A cut at 200 falls between characters, not inside a pair.
+  const long = await refusal(`a${'\u{1f600}'.repeat(300)}`);
+  assert.ok(long.endsWith('....'));
+  assert.equal([...long.slice(0, -4)].length, MAX_SHOWN_CHARACTERS);
+  assert.equal(long.isWellFormed(), true, 'no half of a pair');
 });

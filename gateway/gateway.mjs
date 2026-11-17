@@ -149,9 +149,9 @@ async function readRecorder(config, root) {
 // book without one, and the reason is said.
 
 /** How long the request for a time-stamp may take, unless the settings say otherwise, and the least and the most they may say: milliseconds. */
-export const STAMP_TIMEOUT = 10000;
+export const STAMP_TIMEOUT = 5000;
 export const STAMP_TIMEOUT_MIN = 100;
-export const STAMP_TIMEOUT_MAX = 60000;
+export const STAMP_TIMEOUT_MAX = 20000;
 
 /** "recorder.stamp", as given: {address, timeout}, the time limit filled in where it is left out. Not checked: stampProblems does that. */
 function readStampSettings(c) {
@@ -189,6 +189,20 @@ function stampContext(entries, when) {
   }
   return { when: Math.floor(when / 1000) * 1000, after };
 }
+
+/**
+ * Text from an answer, on one line and with no character that steers a
+ * terminal or cannot be seen, for the commands to print. Control and format
+ * characters (those that turn text round or hide it), the characters
+ * Unicode says are ignored where not understood, and every kind of blank
+ * (the blank braille pattern among them) become spaces; a letter keeps one
+ * accent at most; the text is cut at 600 whole characters (X356).
+ */
+export const plainText = (v) => {
+  const text = String(v).replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}\p{Zs}\u2800]/gu, ' ').replace(/(\p{M})\p{M}+/gu, '$1');
+  const characters = [...text];
+  return characters.length > 600 ? `${characters.slice(0, 600).join('')}...` : text;
+};
 
 /** "authority", read as the library reads it (stampAuthority): a list of 1 to 16 certificate fingerprints, or null where it is not one. */
 function readAuthority(a) {

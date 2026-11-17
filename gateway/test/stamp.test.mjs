@@ -88,7 +88,7 @@ test('recorder.stamp: given, it is an address on the web and a time limit in ran
       [{ address: 'http://127.0.0.1/tsa?key=secret' }, /recorder\.stamp\.address: .*query/],
       [{ address: 'http://127.0.0.1/tsa?' }, /recorder\.stamp\.address/],
       [{ address: 'http://127.0.0.1/', timeout: 99 }, /recorder\.stamp\.timeout/],
-      [{ address: 'http://127.0.0.1/', timeout: 60001 }, /recorder\.stamp\.timeout/],
+      [{ address: 'http://127.0.0.1/', timeout: 20001 }, /recorder\.stamp\.timeout: must be a whole number of milliseconds from 100 to 20000/],
       [{ address: 'http://127.0.0.1/', policy: '1.2.3' }, /recorder\.stamp\.policy/],
     ]) {
       const config = { ...w.config, recorder: { ...w.config.recorder, stamp } };
@@ -162,6 +162,14 @@ test('recorder.stamp.authority: one fingerprint or a list; "check" warns where t
   } finally {
     await w.close();
   }
+});
+
+test('plainText: what the commands print of a sealer\'s words has no hidden or padding characters, one accent at most, and is cut at whole characters (X356)', async () => {
+  const { plainText } = await import('../gateway.mjs');
+  assert.equal(plainText('ok\u3164\u115f\u2800\u00a0\u2003x\u0301\u0301\u0301\ufe0f\u202eend'), 'ok     x\u0301  end');
+  const long = plainText('\u{1f600}'.repeat(700));
+  assert.equal(long.isWellFormed(), true);
+  assert.equal([...long.slice(0, -3)].length, 600);
 });
 
 test('check: a library without the time-stamp client (provared/net/timestamp) is said plainly where recorder.stamp is given (X309)', async () => {

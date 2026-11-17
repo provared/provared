@@ -26,7 +26,7 @@ import { appendFileSync, readFileSync, truncateSync, writeFileSync } from 'node:
 import http from 'node:http';
 import { dirname, isAbsolute, resolve } from 'node:path';
 import { toBase64url } from 'provared';
-import { checkConfig, journalKeyPath, loadJournalKey, openGateway, secretHash } from './gateway.mjs';
+import { checkConfig, journalKeyPath, loadJournalKey, openGateway, plainText, secretHash } from './gateway.mjs';
 import { makeKeyFile } from './files.mjs';
 
 const USAGE = `provared-gateway: a reverse proxy that writes a Provared receipt for each call an agent makes through it.
@@ -43,14 +43,6 @@ const USAGE = `provared-gateway: a reverse proxy that writes a Provared receipt 
 "seal", "acknowledge" and "status" ask the running gateway, with the administrator's secret in
 PROVARED_GATEWAY_ADMIN_SECRET; "seal --offline", "acknowledge --offline" and "repair" work on the files
 of a stopped gateway, and need no secret.`;
-
-/** Text from an answer, on one line and with no character that steers a terminal. */
-// Control and format characters (\p{Cf}: those that turn text round or hide it) become spaces, and the text is cut
-// at 600 characters: a problem's words come from the sealer, which may be another program, and go to a terminal.
-const plainText = (v) => {
-  const text = String(v).replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, ' ');
-  return text.length > 600 ? `${text.slice(0, 600)}...` : text;
-};
 
 /** What "Sealed: ..." adds where the seal carries a time-stamp, with the fingerprint of the certificate that signed it (X344). */
 const stampWords = (sealed) => {

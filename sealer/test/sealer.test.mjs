@@ -1344,9 +1344,11 @@ test('the settings\' "stamp": a service that cannot be reached costs no seal, an
   }
 });
 
-test('the settings\' "stamp": 4 seconds by default, below a recorder\'s 5; at most 20; and less than the time each signature is given (X304)', async () => {
+test('the settings\' "stamp": 2.5 seconds by default, so that the signing and the wait stay below a recorder\'s 5; at most 20; and less than the time each signature is given (X304, X354)', async () => {
   const { folder } = await sealerFolder({ stamp: { address: 'http://127.0.0.1/' } }, []);
-  await refusedStart({ folder, signWithin: 4000 }, /"stamp\.timeout" \(4000 ms\) must be less than/);
+  await refusedStart({ folder, signWithin: 2500 }, /"stamp\.timeout" \(2500 ms\) must be less than/);
+  const fine = await startSealer({ folder, signWithin: 2501 });
+  await fine.close();
   const { folder: short } = await sealerFolder({ stamp: { address: 'http://127.0.0.1/', timeout: 2000 } }, []);
   const running = await startSealer({ folder: short, signWithin: 4000 });
   await running.close();

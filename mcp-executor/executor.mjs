@@ -34,7 +34,7 @@ import { CODES, MAX_LINE_BYTES, foldName, idKey, isId, misspelt, notificationLin
 import { LOCK_WAIT_MS, lockFiles } from './lock.mjs';
 import { RULES_DOCUMENT, RULE_DOCUMENT, RULES_ENTRY_PREFIX, TOOL_NAME, lookUp, readPointer, readRules, rulesFingerprint, statesContentRules, testCall } from './rules.mjs';
 import { RECORDER_NAME } from './sealer-client.mjs';
-import { HTTP_STAMP_WARNING, SEALER_BEHIND, SEALER_MAX_UNSENT, SEALER_MAX_UNSENT_MAX, SEALER_TIMEOUT, SEALER_TIMEOUT_MAX, SEALER_TIMEOUT_MIN, centralSealer, loadRecorder, localSealer, readRecorderKeyFile, readStampSettings, stampContext, stampFor, stampHook, stampWithoutAuthority } from './sealing.mjs';
+import { HTTP_STAMP_WARNING, STAMP_LONG, SEALER_BEHIND, SEALER_MAX_UNSENT, SEALER_MAX_UNSENT_MAX, SEALER_TIMEOUT, SEALER_TIMEOUT_MAX, SEALER_TIMEOUT_MIN, centralSealer, loadRecorder, localSealer, readRecorderKeyFile, readStampSettings, stampContext, stampFor, stampHook, stampWithoutAuthority } from './sealing.mjs';
 
 /** The document, in each stub and denial, whose fingerprint is that of the executor's own identifier for the call (a label, not a reserved name). */
 export const CALL_DOCUMENT = 'executor.call';
@@ -294,6 +294,7 @@ export function readRecorderSettings(config, s, at, root, warnings) {
     if (r.sealer !== undefined) at('recorder.stamp', 'must not be named together with recorder.sealer: a central sealer asks for its seals\' time-stamps itself (the "stamp" of its own settings).');
     else out.stamp = readStampSettings(r.stamp, 'recorder.stamp', at);
     if (stampWithoutAuthority(out.stamp)) warnings.push(HTTP_STAMP_WARNING);
+    if (out.stamp && out.stamp.timeout > STAMP_LONG) warnings.push(`recorder.stamp.timeout: ${out.stamp.timeout} ms. A seal holds the agent's calls and the book's files for its signing and up to this time; an executor started on the same files meanwhile waits 10 seconds for them (or shutdownWait and 5 seconds more) and is then refused. ${STAMP_LONG} ms or less keeps the two below that.`);
   }
   if (r.sealer !== undefined) {
     // The recorder's keys are in one place: with a central sealer, or in a key file here, never both (X147).
