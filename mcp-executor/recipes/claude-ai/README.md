@@ -9,9 +9,15 @@ tool call against the permission, sends on what it allows, with the
 upstream's token or to the program it started with its credential, and
 writes a receipt for each in the connection's book.
 
+The folder `compose/` runs the guard with Docker Compose, beside Caddy,
+which gives it HTTPS (secure HTTP) with a certificate it gets itself. One
+command starts both.
+
 It describes only what is built, in version 0.5.0 (not yet released). It
-has been tried only by the package's own tests, on one computer, with a
-stand-in client. It has not been tried with claude.ai itself.
+has been tried by the package's own tests, on one computer, with a
+stand-in client, and by the Docker check described under "What has been
+tried". It has not been tried on a real server, with a publicly signed
+certificate, or with claude.ai itself.
 
 ## What claude.ai needs, and what the guard gives
 
@@ -34,26 +40,265 @@ stand-in client. It has not been tried with claude.ai itself.
   PKCE with S256, codes used once, access tokens for one hour, refresh
   tokens rotated at each use.
 - **Time.** claude.ai gives a tool call up to 240 seconds, but a sign-in
-  request and a refresh far less: 10 and 30 seconds. The example sets
-  `timeout` to 230,000 ms, so that the guard answers a slow call, with its
-  receipt, first. The guard's token endpoint and its metadata make no
-  request to anyone, and answer at once.
+  request and a refresh far less: 10 and 30 seconds. The guard's
+  `timeout` is 230,000 ms where the settings name `oauth`, so that the
+  guard answers a slow call, with its receipt, first. The guard's token
+  endpoint and its metadata make no request to anyone, and answer at once.
+
+## Setting it up with Docker Compose
+
+What runs, from `compose/compose.yaml`:
+
+- **The guard**, in an image built on the server from npm, at the exact
+  versions `compose/package.json` names, on the official Node.js image
+  pinned by version and digest. No image is published anywhere.
+- **Caddy**, the official image, pinned by version and digest. It answers
+  on ports 80 and 443, gets the certificate for the domain from a public
+  certificate authority, renews it, and sends each request on to the
+  guard. It writes no access log, and is given no email address.
+- **`folders`**, which runs once at each start, before the other two: it
+  gives each data folder to the user that writes it, with mode 700, and
+  ends.
+
+The guard listens on `127.0.0.1:8796`, its own rule, inside the network it
+shares with Caddy. So only Caddy reaches it: its port is published
+nowhere, and only Caddy's 80 and 443 are.
+
+What the server needs: Linux, Docker with its Compose plugin, a public IPv4
+address, and ports 80 and 443 open to the internet (443 for claude.ai and
+the owner; 80 for Caddy's certificate, and to send a browser on to
+https). Nothing else may be listening on 80 or 443.
+
+### The steps
+
+1. **Point a domain at the server**: a DNS `A` record for a name such as
+   `guard.example.com`, with the server's public IPv4 address.
+2. **Set the domain in one file.** Copy the folder `compose/` to the
+   server. In it, copy `example.env` to `.env`, and set
+   `PROVARED_DOMAIN=guard.example.com` there.
+3. **Run one command**, in that folder:
+
+   ```
+   docker compose up -d --build
+   ```
+
+   Until 0.5.0 is on npm, the build cannot fetch it: see "Trying a packed
+   copy", below.
+
+4. **Read what to do next**, in the guard's log:
+
+   ```
+   docker compose logs -f guard
+   ```
+
+   On the first start the guard writes the settings for the
+   demonstration's tools (`init --http --demo`), sets `oauth.issuer` to
+   `https://<domain>` and `oauth.clients` to claude.ai's document, makes
+   its keys, and then says what is wanted and waits:
+   - read what the permission must hold:
+     `sudo cat guard-data/permission-entries.json` (public keys only);
+   - the person who answers for the guard signs a permission with their
+     passkey, at https://sign.prova.red, for the agent `connection-1` and
+     the actions `demo.echo` and `demo.add`, holding those entries;
+   - put it on the server as `guard-data/slips/connection-1.json`, owned
+     by the guard's user:
+     `sudo install -o 10001 -g 10001 -m 600 connection-1.json guard-data/slips/connection-1.json`;
+   - in `guard-data/executor-http.json`, under
+     `agents."connection-1".issuerKeys`, put the thumbprint of the passkey
+     that signed it, in place of the value written `<like this>`.
+
+   The guard looks again every 10 seconds. Once both are in place it runs
+   `check`; where `check` finds a problem, the log lists it, and the guard
+   looks again once the settings or the permission have changed.
+5. **Read the owner's link.** Once `check` finds no problem, and while the
+   guard is not yet running, the start makes the owner's link and writes it
+   to `guard-data/owner-link.txt`, readable by the guard's user alone. It
+   is not written to the log. Read it with
+   `sudo cat guard-data/owner-link.txt`. It works once, within 15 minutes.
+   Then the guard starts. A later start keeps a link that still has more
+   than two minutes to run; `docker compose restart guard` after that
+   makes a new one, and the one before stops working. Once there is an
+   owner, the start takes the file away.
+6. **Make the owner and the connector**: go on from step 4 of "Trying the
+   owner's passkey by hand", below. The connector's address is
+   `https://<domain>/mcp`.
+
+Every value is the guard's own: the guard's README, "Signing in through
+OAuth" and "Set it up", says what each is.
+
+### Commands, and the owner's reset
+
+The guard's other commands run in a container of their own, with the
+guard's settings, as `docker compose run --rm guard <command>`; for
+example `docker compose run --rm guard check`.
+
+`owner` changes the state file that the running guard holds a lock on, so
+it is run with the guard stopped. To replace the owner (every connection
+then ends, with its tokens):
+
+```
+docker compose stop guard
+docker compose run --rm guard owner --reset
+docker compose start guard
+```
+
+`owner --reset` writes the new link to `guard-data/owner-link.txt`, prints
+where it is rather than the link, and the start keeps it. A command run
+while the guard is running is refused by the guard's lock, which the
+command's container sees because it shares Caddy's network too.
+
+### What to back up, and what is secret
+
+Everything kept is in three plain folders beside `compose.yaml`, never in
+a Docker volume. They are what to back up, with `.env`:
+
+- `guard-data`: the guard's keys, the books, the copies, the state file,
+  the settings and the permissions. Owned by user 10001, mode 700.
+- `caddy-data`: Caddy's certificates and their private keys. Owned by user
+  10002, mode 700.
+- `caddy-config`: Caddy's own state. Owned by user 10002, mode 700.
+
+The owner's link and the recovery code are secrets: whoever has the link
+first becomes the owner, and the code approves a connection. Keep the code
+off the server. The key files in `guard-data/keys/` are secret too.
+
+### One copy only
+
+The guard is single-copy: each book has one writer. Run one guard on these
+folders, with no replicas and no second copy on another server sharing
+them.
+
+### Updates
+
+Updates are not automatic. They come only when this command runs, in the
+folder of `compose.yaml`:
+
+```
+docker compose build --pull && docker compose up -d
+```
+
+It builds the guard's image again and starts again what changed. The files
+pin every version: the guard and its library (`package.json`), Node.js
+(`Dockerfile`) and Caddy (`compose.yaml`). So the command brings a newer
+version only once those files name it: to move to one, put the newer
+recipe's `compose.yaml`, `Dockerfile`, `Dockerfile.dockerignore`,
+`package.json`, `start.mjs` and `Caddyfile` in place of these (keep `.env`
+and the three folders), then run the command.
+
+A weekly timer that runs the same command is in `compose/weekly/`, off
+until the business switches it on. To switch it on:
+
+1. In `provared-guard-update.service`, set `WorkingDirectory` to the
+   folder of `compose.yaml`.
+2. `sudo cp provared-guard-update.service provared-guard-update.timer /etc/systemd/system/`
+3. `sudo systemctl daemon-reload && sudo systemctl enable --now provared-guard-update.timer`
+
+It runs on Monday between 04:00 and 05:00. To switch it off:
+`sudo systemctl disable --now provared-guard-update.timer`. The timer
+changes nothing that the files do not pin.
+
+### A real upstream in place of the demonstration's tools
+
+Before the first start, put settings of your own in
+`guard-data/executor-http.json` (make the folder, owned by 10001, mode
+700), starting from `executor-oauth.example.json`, and leave
+`oauth.issuer` and `oauth.clients` written `<like this>`: the start fills
+them in. The start then does not write the demonstration's settings. Put
+the upstream's token file in `guard-data` too, mode 600, owned by 10001:
+paths are read from the settings' folder. The start's steps then name your
+agents and your tools' actions. The upstream is reached from inside the
+container: an upstream on the same server is not at `127.0.0.1` there.
+A local program in place of the upstream must be one the image can run.
+
+### Trying a packed copy
+
+Before 0.5.0 is on npm, the build can take a packed copy of the executor
+(`npm pack` in `mcp-executor/`). Beside `compose.yaml`, put the `.tgz` file
+in a folder `pack/`, and write a file `compose.override.yaml`, which
+`docker compose` reads with `compose.yaml`:
+
+```yaml
+x-packed: &packed
+  additional_contexts:
+    executor-file: ./pack
+  args:
+    EXECUTOR: file:/tmp/executor/provared-mcp-executor-0.5.0.tgz
+services:
+  folders:
+    build: *packed
+  guard:
+    build: *packed
+```
+
+### How the containers are held in
+
+- No container runs as root but `folders`, which gets back only the two
+  capabilities it needs to give the folders their owners and modes
+  (`CHOWN`, `FOWNER`), has no network, and ends.
+- The guard runs as user 10001, Caddy as user 10002. Each has every
+  capability dropped, cannot gain privileges (`no-new-privileges`), and a
+  read-only file system but for its own folders and a small `/tmp`. Caddy
+  listens on 80 and 443 with no capability: its network lets an
+  unprivileged user listen on ports from 80 up.
+- Caddy's administration endpoint is off, so nothing in the shared network
+  can change its settings; a change to the `Caddyfile` takes effect when
+  Caddy is restarted. HTTP/3 is off, since its port (443 over UDP) is not
+  opened.
+- Limits for a server with 2 GB of memory: the guard 768 MB, one processor
+  and 256 processes; Caddy 256 MB, half a processor and 128 processes.
+  Each log is kept to three files of 10 MB.
+- Both restart unless stopped. The guard is given 30 seconds to stop, so
+  that each call in flight is settled and receipted.
+
+## What has been tried
+
+The script `mcp-executor/test/recipe-compose/docker-check.sh`, outside
+`npm test`, was run on one Windows computer, in Docker's Linux engine
+(Docker 29.7.2, Compose 5.5.0). It builds the guard's image from a packed
+copy of this executor, starts the three containers with a test domain and
+Caddy's own certificate authority (`tls internal`) in place of a public
+one, and signs the permission with the library's development stand-in for
+a passkey. Then, through Caddy, with `curl --resolve`, it found: the 401
+that names the metadata; the metadata; the owner's page's
+`content-security-policy` and `referrer-policy`; the `Origin` reaching the
+guard unchanged (its own passes, another, or the same with `:443`, is
+refused); port 80 sending a browser on to https. It found the guard's port
+answering neither from the Docker network nor on the Docker host, only
+Caddy's 80 and 443 published, every file in `guard-data` the guard's
+user's with mode 600 (folders 700), Caddy's folders Caddy's user's,
+`owner` refused while the guard runs and `owner --reset` done with it
+stopped, `check` run through `docker compose run`, and the guard
+answering again 69 seconds after Caddy was restarted on its own. It
+passed 35 checks of 35.
+
+Not tried: a real server, a publicly signed certificate, DNS, a firewall,
+a reboot of the server, the weekly timer, and claude.ai itself.
 
 ## The limits
 
 - **Port 443 only.** claude.ai reaches a connector on port 443.
-- **HTTPS from a reverse proxy.** The guard speaks plain HTTP on
-  127.0.0.1. A reverse proxy on the same server must give it HTTPS on port
-  443 at the address in `oauth.issuer`, with a certificate that a public
-  authority signed, and pass the path and the `Origin` header on unchanged.
+- **HTTPS from Caddy.** The guard speaks plain HTTP on 127.0.0.1. Caddy
+  gives it HTTPS on port 443 at the address in `oauth.issuer`, with a
+  certificate that a public authority signed, and passes the path and the
+  `Origin` header on unchanged. Caddy needs port 80 open as well to get
+  that certificate.
 - **A public IPv4 address.** claude.ai connects from its own servers, over
-  the internet, so the proxy must be reachable at a public IPv4 address.
+  the internet, so Caddy must be reachable at a public IPv4 address.
 - **The owner's passkey belongs to the public address.** The guard's page
   asks for the owner's passkey before a connection is approved (the
   guard's DESIGN.md, section 14.1). The passkey is tied to the host in
   `oauth.issuer`. If that address changes, the passkey no longer works
   there; the recovery code still approves a connection, and
-  `owner --reset` makes a new owner at the new address.
+  `owner --reset` makes a new owner at the new address. Where `.env`
+  names another domain than the settings' `oauth.issuer`, the guard does
+  not start, and its log says how to move.
+- **Caddy restarted on its own.** The guard shares Caddy's network. Where
+  Caddy's container is started again without the guard (a failure, or
+  `docker compose restart caddy`), Caddy has a new network and the guard
+  is left in the old one, where nothing reaches it. The start looks for
+  Caddy's port every 15 seconds; after four misses it stops the guard,
+  and Docker starts it again in Caddy's new network. Until then, about a
+  minute (69 seconds in the Docker check), claude.ai gets an error (502).
 - **Any passkey that verifies its user.** The guard asks nothing more of
   the passkey than a fingerprint, a face or a PIN at each use. The browser
   offers where to keep it: on this device, on a phone or on a security
@@ -97,61 +342,43 @@ stand-in client. It has not been tried with claude.ai itself.
   on the session's GET stream. Where the client has none open it is
   dropped, and a call that waits for an answer to such a question ends at
   the guard's `timeout`.
-- **No one-command setup yet.** The keys, the permission and the proxy are
-  set up by hand, as for any agent over HTTP.
+- **The permission is a person's.** The recipe never signs a permission
+  and never fills in a thumbprint: both come from the person, by hand.
 
 ## The files
 
-- `executor-oauth.example.json`: the settings, with one agent kept for the
-  connection (`claude-1`, `"oauth": true`). Put in the upstream's address
-  and token file, the proxy's public address and the passkey's thumbprint.
-  Make the keys with `provared-mcp-executor keys --config …`, and have the
-  permission signed for that agent, as the guard's README says.
+- `compose/compose.yaml`, `compose/Dockerfile` (with
+  `Dockerfile.dockerignore`), `compose/package.json`, `compose/Caddyfile`,
+  `compose/example.env`: the recipe, as above.
+- `compose/start.mjs`: the guard's first-start program, run in its
+  container. It runs the guard's own commands and makes no request to
+  anyone.
+- `compose/weekly/`: the weekly timer, off until switched on.
+- `executor-oauth.example.json`: settings for an upstream HTTP server of
+  your own, with one agent kept for the connection (`claude-1`,
+  `"oauth": true`). Put in the upstream's address and token file and,
+  once the permission is signed, the passkey's thumbprint; the start
+  fills in the issuer and claude.ai's document.
 
 To let a second claude.ai connection in, add a second agent marked
 `"oauth": true`. Each approved connection is one agent, with its own
 permission and book.
 
-## Trying it with the demonstration's server
-
-To try the connector with no tool server of your own, run
-`provared-mcp-executor init --http --demo` in a new folder. It writes
-`executor-http.json`, `content-rules.json` and `demo-token`. The settings
-run the demonstration's made-up server as a local program behind the
-guard: two tools, `echo` and `add`, which reach no network. One agent,
-`connection-1`, is kept for the connection. Then:
-
-1. In `executor-http.json`, set `oauth.issuer` to the proxy's public
-   address and `oauth.clients` to
-   `["https://claude.ai/oauth/mcp-oauth-client-metadata"]`.
-2. Make the keys with `provared-mcp-executor keys --config executor-http.json`.
-   Have the permission signed for the agent `connection-1`, for the
-   actions `demo.echo` and `demo.add`; save it as
-   `slips/connection-1.json`, and put the passkey's thumbprint in the
-   agent's `issuerKeys`.
-3. Go on from step 1 of "Trying the owner's passkey by hand", below, with
-   `executor-http.json` as the settings.
-
-In claude.ai the connector then shows the two tools. `echo` with a text
-that holds the lower-case word "password" is refused by the
-demonstration's rule on content, and a denial is written; any other call
-to either tool gets a receipt in `books/connection-1.jsonl`. This has been
-tried only by the package's own tests, with a stand-in client.
-
 ## Trying the owner's passkey by hand
 
 A passkey cannot be made at `http://127.0.0.1`: WebAuthn takes no IP
-address as a passkey's site. So try it at the proxy's https address. Below,
-`https://guard.example.com` stands for that address, and
-`executor-oauth.json` for the settings.
+address as a passkey's site. So try it at Caddy's https address. Below,
+`https://guard.example.com` stands for that address. The demonstration's
+tools then show in claude.ai: `echo` with a text that holds the
+lower-case word "password" is refused by the demonstration's rule on
+content, and a denial is written; any other call to either tool gets a
+receipt in `guard-data/books/connection-1.jsonl`.
 
-1. Set up the settings, the keys and the permission as above, and start
-   the proxy. `provared-mcp-executor check --config executor-oauth.json`
-   lists no problem.
-2. With the guard stopped, run
-   `provared-mcp-executor owner --config executor-oauth.json`. It prints a
-   link, `https://guard.example.com/oauth/owner#…`. Copy it.
-3. Start the guard: `provared-mcp-executor http --config executor-oauth.json`.
+1. Follow "The steps" above, to step 5: `check` lists no problem.
+2. The start writes the owner's link,
+   `https://guard.example.com/oauth/owner#…`, to
+   `guard-data/owner-link.txt`, with the guard not yet running.
+3. The start then starts the guard.
 4. Within 15 minutes, open the link in the browser you use claude.ai in.
    The page says what can be done next. Press nothing there, and leave it.
 5. In claude.ai, in the same browser, add a custom connector with the
@@ -163,9 +390,9 @@ address as a passkey's site. So try it at the proxy's https address. Below,
    a recovery code: write it down, then press Continue. The browser goes
    back to claude.ai, which shows the connector as connected. The guard's
    log shows `"event":"owner-set"` and `"event":"oauth-approved"` with
-   `"by":"setup"`, and the state file (`oauth-state.json`) has an `owner`.
-   A tool call then gets a receipt in that agent's book. Note which
-   browser and which place for the passkey worked.
+   `"by":"setup"`, and the state file (`guard-data/oauth-state.json`) has
+   an `owner`. A tool call then gets a receipt in that agent's book. Note
+   which browser and which place for the passkey worked.
 
    If claude.ai's page was opened before the link, it says that the guard
    has no owner yet. Press "Keep this connection for the setup link" on
@@ -185,9 +412,10 @@ address as a passkey's site. So try it at the proxy's https address. Below,
      must reach the guard with the `Origin` header of the guard's own
      address. The pages are sent with `Referrer-Policy: same-origin` so
      that a browser gives it; the tests read that header, and headless
-     Chromium 153 gave it at the local address, but no other browser and
-     no proxy has been tried. Look at the request's `Origin` in the browser's
-     network view, and check that the proxy passes it on unchanged.
+     Chromium 153 gave it at the local address, but no other browser has
+     been tried. Caddy was seen to pass `Origin` on unchanged in the
+     Docker check. Look at the request's `Origin` in the browser's network
+     view.
    - **The page seems stuck after Approve**, though the log shows
      `oauth-approved`. The page's policy lets its form go only to the
      guard and to the origin of claude.ai's redirect address
@@ -214,7 +442,6 @@ address as a passkey's site. So try it at the proxy's https address. Below,
    connect-src 'self'; form-action 'self'; frame-ancestors 'none';
    base-uri 'none'` and `referrer-policy: same-origin`. The browser's
    console on either page shows no blocked script.
-9. To start again: stop the guard and run
-   `provared-mcp-executor owner --config executor-oauth.json --reset`. It
-   says the owner was removed and how many connections ended. claude.ai
-   must then connect again, with a new owner.
+9. To start again: reset the owner as "Commands, and the owner's reset"
+   says. `owner --reset` says the owner was removed and how many
+   connections ended. claude.ai must then connect again, with a new owner.

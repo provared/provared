@@ -157,13 +157,15 @@
   - **Not tested:** a seal the book does not take with its time-stamp,
     since the time-stamp is checked before it is offered.
 
-- **`provared-mcp-executor` 0.5.0 (not yet released).** Five pieces of
+- **`provared-mcp-executor` 0.5.0 (not yet released).** Six pieces of
   work on the executor, each below with its own choices: the fixes of
   0.4.2 carried over to every transport, with a re-check of the local
   program; the findings of an independent review of the local program;
   over HTTP, a local program as the tool server; signing
-  in through OAuth; and `seal`, `acknowledge` and `status`, with a
-  central sealer. 0.4.2, the entry after this one, is released.
+  in through OAuth; `seal`, `acknowledge` and `status`, with a
+  central sealer; and a recipe that runs the executor as a claude.ai
+  connector with Docker Compose. 0.4.2, the entry after this one, is
+  released.
   - **The fixes of 0.4.2 carried over, and the findings of a re-check of
     the local program.**
     What changes, in `mcp-executor/` (`DESIGN.md`, section 10.2, X249 to
@@ -1291,6 +1293,38 @@
       seal may have been signed) wait for the founder's review. Those of
       the second review are X160 to X166, those of the third X167 to
       X171, and those of the re-check of its fixes X288 and X289.
+  - **A one-command recipe for claude.ai, with Docker Compose**
+    (`mcp-executor/recipes/claude-ai/compose/`; nothing in the package
+    changes, and the recipe is not in its files). The guard and Caddy, in
+    two containers, started by `docker compose up -d --build`, with a
+    third that runs once to give the data folders to their users. The
+    guard's image is built on the server from npm at the exact versions
+    the recipe names, on the official Node.js image pinned by version and
+    digest; a build argument takes a packed `.tgz` instead. Caddy's
+    official image is pinned the same way, and Caddy gets the certificate
+    for the domain set in `.env`. The guard keeps its rule and listens on
+    127.0.0.1 in Caddy's network, so its port is published nowhere; only
+    80 and 443 are. Everything kept is in three plain folders beside the
+    compose file. Each container runs as a user of its own, read-only,
+    with every capability dropped and no new privileges. The first-start
+    program (`start.mjs`) runs the guard's own commands: it writes the
+    demonstration's settings, sets the issuer and claude.ai's document,
+    makes the keys, says in the log what the person must sign and where
+    the file and the thumbprint go, and waits; it never fills in either.
+    Once `check` passes it writes the owner's link to a file only the
+    guard's user can read, before the guard runs, and then starts it.
+    Where Caddy's container is restarted on its own, the guard stops after
+    a minute so that Docker starts it in Caddy's new network. One update
+    command, and a weekly timer that is off until switched on. The README
+    of `recipes/claude-ai/` gives the steps, what to back up, and what has
+    and has not been tried. Tests: `mcp-executor/test/recipe-compose.test.mjs`
+    (15), and `mcp-executor/test/recipe-compose/docker-check.sh`, outside
+    `npm test`, run in Docker on one computer with Caddy's own
+    certificate authority: 35 checks of 35 passed, after its first runs
+    had found the rules file left readable by others (644) and the guard
+    cut off by a restart of Caddy alone, both now mended. Not tried on a
+    real server, with a public certificate, or with claude.ai. Choices
+    X313 to X338, in `tmp/choices-3.7e.md`.
 
 - **`provared-mcp-executor` 0.4.2 (15 November 2026): a security fix for
   two weaknesses. In front of a tool server whose JSON reader ignores
