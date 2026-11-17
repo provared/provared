@@ -198,6 +198,7 @@ note "port 80: $r80"
 echo "$r80" | grep -q "^30[18] https://$DOMAIN/mcp" && ok "port 80 sends the browser on to https, path unchanged" || bad "port 80: $r80"
 # The guard's administrator's addresses are Caddy's 404, with an empty body: the guard's own 404 is JSON (X349).
 own_codes=""
+own_bad=""
 for p in /provared /provared/hello /provared/status /provared/seal /PROVARED/hello; do
   m=GET; case "$p" in */hello|*/seal) m=POST ;; esac
   got=$(curlc -o "$WORK/own.body" -w '%{http_code}' -X "$m" "https://$DOMAIN$p")
@@ -237,8 +238,8 @@ echo "-- guard-data, as the server sees it (owner, mode, name):"
 listed=$(cd "$WORK" && find guard-data -exec stat -c '%u:%g %a %F %n' {} +)
 wrong=$(echo "$listed" | awk '$1 != "10001:10001"')
 [ -z "$wrong" ] && ok "every file in guard-data is the guard's user's (10001:10001)" || bad "not the guard's: $wrong"
-open=$(echo "$listed" | awk '!(($3 == "regular" && $2 == "600") || ($3 == "directory" && $2 == "700"))')
-[ -z "$open" ] && ok "nothing in guard-data can be read by anyone but the guard's user (files 600, folders 700)" || bad "readable by others, or not a file or folder: $open"
+open=$(echo "$listed" | awk '!(($3 == "regular" && $2 == "600") || ($3 == "directory" && $2 == "700") || ($3 == "socket" && $2 == "600" && $4 == "guard-data/guard-running.sock"))')
+[ -z "$open" ] && ok "nothing in guard-data can be read by anyone but the guard's user (files 600, folders 700, the start's mark a socket 600)" || bad "readable by others, or not a file or folder: $open"
 for f in executor-http.json permission-entries.json owner-link.txt oauth-state.json keys/executor.jwk keys/connection-1.jwk slips/connection-1.json demo-token; do
   [ -f "$WORK/guard-data/$f" ] || bad "guard-data/$f is not there"
 done
@@ -288,6 +289,41 @@ done
 [ "$code" = "401" ] && ok "after Caddy was restarted on its own, the guard answered through it again, $(($(date +%s) - began)) seconds after the restart began" || bad "after Caddy was restarted on its own, POST /mcp answered $code for 180 seconds"
 note "the guard's restarts: $(docker inspect -f '{{.RestartCount}}' "$GUARD")"
 dc logs --no-log-prefix guard 2>/dev/null | grep -F "has not answered in this network" | tail -n 1 | sed 's/^/   | /'
+
+# --- a reboot, as far as it can be had without restarting Docker: both containers stopped, then started by
+# "docker start" (as Docker starts them again at its own start), in each order ---
+answers() { # answers <seconds>: whether POST /mcp through Caddy answers the guard's 401 within that time
+  i=0
+  while [ "$i" -lt "$1" ]; do
+    CADDY_IP=$(docker inspect -f "{{(index .NetworkSettings.Networks \"$NET\").IPAddress}}" "$(dc ps -q caddy)" 2>/dev/null)
+    [ -n "$CADDY_IP" ] && [ "$(curlc -o /dev/null -w '%{http_code}' -X POST "https://$DOMAIN/mcp" 2>/dev/null)" = "401" ] && return 0
+    sleep 2; i=$((i + 2))
+  done
+  return 1
+}
+CADDY=$(dc ps -aq caddy)
+GUARD=$(dc ps -aq guard)
+for order in "caddy guard" "guard caddy"; do
+  docker stop "$GUARD" "$CADDY" >/dev/null 2>&1
+  for which in $order; do
+    if [ "$which" = caddy ]; then id=$CADDY; else id=$GUARD; fi
+    out=$(docker start "$id" 2>&1) && note "docker start $which: started" || note "docker start $which: $(echo "$out" | tail -n 1)"
+  done
+  if [ "$order" = "caddy guard" ]; then
+    if answers 120; then ok "started in the order $order, both came back and the guard answers through Caddy"
+    else bad "started in the order $order, the guard did not answer through Caddy within 120 seconds (guard: $(docker inspect -f '{{.State.Status}} {{.State.Error}}' "$GUARD"))"; fi
+  else
+    # Started before Caddy, the guard cannot join Caddy's network, and Docker does not try again: the boot unit's
+    # command (compose/boot/provared-guard-boot.service) starts it.
+    if answers 30; then note "started in the order $order, the guard came back by itself"
+    else note "started in the order $order, the guard stayed stopped for 30 seconds ($(docker inspect -f '{{.State.Status}}: {{.State.Error}}' "$GUARD"))"; fi
+    boot=$(sed -n 's|^ExecStart=/usr/bin/docker compose ||p' "$RECIPE/boot/provared-guard-boot.service")
+    # shellcheck disable=SC2086 # the unit's words, split as systemd splits them
+    out=$(dc $boot 2>&1) && note "the boot unit's command (docker compose $boot): done" || note "the boot unit's command (docker compose $boot): $(echo "$out" | tail -n 1)"
+    if answers 120; then ok "started in the order $order, then the boot unit's command: the guard answers through Caddy"
+    else bad "started in the order $order, then the boot unit's command: the guard did not answer through Caddy within 120 seconds (guard: $(docker inspect -f '{{.State.Status}} {{.State.Error}}' "$GUARD"))"; fi
+  fi
+done
 
 echo "-- the guard's last log lines:"
 dc logs --no-log-prefix --tail 8 guard 2>/dev/null | sed 's/^/   | /'

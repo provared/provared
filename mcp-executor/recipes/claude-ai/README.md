@@ -248,6 +248,26 @@ It runs on Monday between 04:00 and 05:00. To switch it off:
 command, the timer can bring a Node.js or Caddy patch not yet tried with
 this recipe, and never a newer guard.
 
+### After a restart of the server
+
+Docker starts both containers again itself, in an order of its own. The
+guard joins Caddy's network, so it can start only once Caddy runs: started
+first, it stops with "cannot join network namespace of a non running
+container", and Docker does not try it again. The check below found this
+with `docker start` (the guard first, then Caddy): the guard stayed
+stopped. A unit in `compose/boot/` starts whichever is stopped, Caddy
+first, once Docker has started; it builds nothing and fetches nothing. To
+switch it on:
+
+1. In `provared-guard-boot.service`, set `WorkingDirectory` to the
+   folder of `compose.yaml`.
+2. `sudo cp provared-guard-boot.service /etc/systemd/system/`
+3. `sudo systemctl daemon-reload && sudo systemctl enable provared-guard-boot.service`
+
+Without it, run `docker compose up -d` in the folder of `compose.yaml`
+after each restart of the server. Which order Docker itself uses when the
+server starts was not found out here: Docker was not restarted.
+
 ### A real upstream in place of the demonstration's tools
 
 Before the first start, put settings of your own in
@@ -435,6 +455,8 @@ was run on a full clone, against `v0.8.0`), and claude.ai itself.
   container. It runs the guard's own commands and makes no request to
   anyone.
 - `compose/weekly/`: the weekly timer, off until switched on.
+- `compose/boot/`: the unit that starts the guard after a restart of the
+  server, off until switched on.
 - `executor-oauth.example.json`: settings for an upstream HTTP server of
   your own, with one agent kept for the connection (`claude-1`,
   `"oauth": true`). Put in the upstream's address and token file and,

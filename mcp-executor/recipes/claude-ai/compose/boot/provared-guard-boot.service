@@ -1,0 +1,24 @@
+# Starts whichever of the guard and Caddy is stopped, once Docker has
+# started, at each start of the server, where the business has switched it
+# on (README.md, one folder up from compose/, "After a restart of the
+# server"). Docker starts both containers again itself, in an order of its
+# own; started before Caddy, the guard cannot join Caddy's network, and
+# Docker does not try again. "docker compose up -d" starts Caddy first, then
+# the guard. It builds nothing and fetches nothing: an image that is not
+# there is an error.
+#
+# Put the folder of compose.yaml in WorkingDirectory before copying this
+# file to /etc/systemd/system/.
+
+[Unit]
+Description=Start the Provared guard and Caddy after a start of the server
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/provared-guard
+ExecStart=/usr/bin/docker compose up -d --no-build --pull never
+
+[Install]
+WantedBy=multi-user.target

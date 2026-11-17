@@ -547,3 +547,20 @@ test('the weekly timer: off until switched on, and it runs the README\'s update 
   const readme = readFileSync(new URL('../recipes/claude-ai/README.md', import.meta.url), 'utf8');
   assert.ok(readme.includes(steps.join(' && ')), 'the README gives the same command');
 });
+
+test('the boot unit: after a restart of the server, it starts whichever container is stopped, building and fetching nothing, once Docker has started (X357)', () => {
+  const unit = read('boot/provared-guard-boot.service');
+  const steps = [...unit.matchAll(/^ExecStart=(.*)$/gm)].map((m) => m[1]);
+  assert.deepEqual(steps, ['/usr/bin/docker compose up -d --no-build --pull never']);
+  assert.match(unit, /^Type=oneshot$/m);
+  assert.match(unit, /^Requires=docker\.service$/m);
+  assert.match(unit, /^After=docker\.service$/m);
+  assert.match(unit, /^WantedBy=multi-user\.target$/m);
+  assert.match(unit, /^WorkingDirectory=\/opt\/provared-guard$/m);
+  const compose = read('compose.yaml');
+  assert.match(compose, /network_mode: service:caddy/, 'the guard joins Caddy\'s network, which is why the order matters');
+  const readme = readFileSync(new URL('../recipes/claude-ai/README.md', import.meta.url), 'utf8');
+  assert.ok(readme.includes('### After a restart of the server') && readme.includes('sudo systemctl enable provared-guard-boot.service'), 'the README says how to switch it on');
+  const check = readFileSync(new URL('./recipe-compose/docker-check.sh', import.meta.url), 'utf8');
+  assert.ok(check.includes('boot/provared-guard-boot.service'), 'the Docker check runs the unit\'s own command');
+});
