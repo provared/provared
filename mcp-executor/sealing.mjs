@@ -81,7 +81,7 @@ export const STAMP_TIMEOUT_MAX = 60000;
 
 /**
  * "recorder.stamp", read: {address, timeout}; null where it has a problem.
- * The address is an address on the web (http: or https:) with no user name,
+ * The address is an address on the web (http: or https:) with no user name, query,
  * password or fragment. No service is named here.
  */
 export function readStampSettings(c, where, at) {
@@ -101,7 +101,7 @@ export function readStampSettings(c, where, at) {
   } catch {
     url = null;
   }
-  if (!url || !['http:', 'https:'].includes(url.protocol) || url.username !== '' || url.password !== '' || url.hash !== '') no('address', 'must be the whole address of a time-stamp service (RFC 3161), beginning http:// or https://, with no user name, password or fragment.');
+  if (!url || !['http:', 'https:'].includes(url.protocol) || url.username !== '' || url.password !== '' || url.hash !== '' || /[?#]/.test(url.href)) no('address', 'must be the whole address of a time-stamp service (RFC 3161), beginning http:// or https://, with no user name, password, query or fragment.');
   if (!Number.isInteger(out.timeout) || out.timeout < STAMP_TIMEOUT_MIN || out.timeout > STAMP_TIMEOUT_MAX) no('timeout', `must be a whole number of milliseconds from ${STAMP_TIMEOUT_MIN} to ${STAMP_TIMEOUT_MAX}: how long the request for a time-stamp may take.`);
   for (const k of Object.keys(c)) if (!['address', 'timeout'].includes(k)) no(k, 'is not a setting of a time-stamp service: it takes "address" and "timeout".');
   return sound ? out : null;
@@ -119,12 +119,32 @@ export async function stampHook({ address, timeout }) {
 }
 
 /**
+ * What a time-stamp over a new seal is held against: the seal's own time as
+ * a checker reads it (whole seconds), and the latest time that a sound
+ * time-stamp from a service gave a seal before it in the book, or null.
+ * @param {object[]} entries the entries of the book's check, as the library gives them
+ * @param {number} when the new seal's time, in milliseconds
+ */
+export function stampContext(entries, when) {
+  let after = null;
+  for (const e of entries) {
+    if (e.kind !== 'seal' || e.problems.length > 0) continue;
+    for (const s of e.stamps ?? []) {
+      if (s.kind === 'service' && (s.state === 'valid' || s.state === 'untrusted') && Number.isFinite(s.time) && (after === null || s.time > after)) after = s.time;
+    }
+  }
+  return { when: Math.floor(when / 1000) * 1000, after };
+}
+
+/**
  * Ask for a time-stamp over a seal's fingerprint. Never throws: gives
  * {stamps: [item]} or {stampProblem: {code, message}}.
  */
-export async function stampFor(stamp, fingerprintBytes) {
+export async function stampFor(stamp, fingerprintBytes, context = {}) {
   try {
-    return { stamps: [await stamp(fingerprintBytes.slice())] };
+    // "context": the seal's own time and the latest time a service's time-stamp gave a seal before it, which the
+    // time-stamp is held against (the library's askForStamp).
+    return { stamps: [await stamp(fingerprintBytes.slice(), context)] };
   } catch (e) {
     const message = typeof e?.message === 'string' && e.message !== '' ? e.message : 'The time-stamp service gave no time-stamp.';
     return { stampProblem: { code: typeof e?.code === 'string' && e.code.startsWith('stamp-') ? e.code : 'stamp-not-given', message } };
@@ -194,6 +214,8 @@ const lineFeeds = (text, from) => {
   for (let i = text.indexOf('\n', from); i >= 0; i = text.indexOf('\n', i + 1)) n += 1;
   return n;
 };
+/** Why the sealer gave a seal out without a time-stamp, from its answer ("stampProblem"), or null. */
+const stampProblemOf = (answer) => (isObject(answer?.stampProblem) && typeof answer.stampProblem.message === 'string' ? { code: String(answer.stampProblem.code), message: answer.stampProblem.message } : null);
 /** A question that was not taken, or an answer that cannot be used: the lines stay unsent, and are sent again later. */
 const notTaken = (message) => Object.assign(new Error(message), { notTaken: true });
 /** The book and what the sealer holds of it do not agree: the agent is stopped. */
@@ -338,7 +360,7 @@ export function centralSealer(s) {
           doubt = 'the central sealer signed a seal that the book does not hold yet; it is added before any other line.';
           const latest = await ask((c) => c.latest(ref));
           if (!isObject(latest) || latest.fingerprint !== held.latest || !isObject(latest.entry)) throw notTaken('The sealer\'s answer with its latest seal is not in the form its protocol gives.');
-          return { takeBack: latest.entry, named: held.latest };
+          return { takeBack: latest.entry, named: held.latest, stampProblem: stampProblemOf(latest) };
         }
         confirmed = held.size;
       }
@@ -397,7 +419,7 @@ export function centralSealer(s) {
                   if (handed !== got.named) {
                     const mine = got.named;
                     handed = mine;
-                    Promise.resolve(takeBack(got.takeBack, mine))
+                    Promise.resolve(takeBack(got.takeBack, mine, got.stampProblem))
                       .catch(() => {})
                       .finally(() => {
                         if (handed === mine) handed = null;
@@ -405,7 +427,7 @@ export function centralSealer(s) {
                   }
                   throw notTaken(doubt);
                 }
-                await takeBack(got.takeBack, got.named);
+                await takeBack(got.takeBack, got.named, got.stampProblem);
                 await absorb();
                 continue;
               }
@@ -531,7 +553,7 @@ export function centralSealer(s) {
         agreed = false;
         const got = await attempt(true);
         if (broken) throw new Error(`The agent is stopped: ${broken}`);
-        if (got.takeBack) return { entry: got.takeBack, named: got.named };
+        if (got.takeBack) return { entry: got.takeBack, named: got.named, ...(got.stampProblem ? { stampProblem: got.stampProblem } : {}) };
         if (!agreed || confirmed !== lines) throw new Error(`No seal was asked for: the central sealer does not hold every line of the book (${lines - confirmed} not sent). ${problem ?? ''}`.trim());
         let answer;
         try {
@@ -551,7 +573,7 @@ export function centralSealer(s) {
           throw new Error(`The central sealer signed no seal: ${answer.refused.message} (${answer.refused.code})`);
         }
         // A time-stamp the sealer asked for and was not given: the seal is signed all the same, and the reason is handed on.
-        const stampProblem = isObject(answer.stampProblem) && typeof answer.stampProblem.message === 'string' ? { code: String(answer.stampProblem.code), message: answer.stampProblem.message } : null;
+        const stampProblem = stampProblemOf(answer);
         return { entry: answer.entry, ...(stampProblem ? { stampProblem } : {}) };
       },
       /** What the status shows of the link: how many lines are unsent and since when, when the sealer last answered, and what is wrong. */

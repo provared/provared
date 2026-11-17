@@ -34,7 +34,7 @@ import { CODES, MAX_LINE_BYTES, foldName, idKey, isId, misspelt, notificationLin
 import { LOCK_WAIT_MS, lockFiles } from './lock.mjs';
 import { RULES_DOCUMENT, RULE_DOCUMENT, RULES_ENTRY_PREFIX, TOOL_NAME, lookUp, readPointer, readRules, rulesFingerprint, statesContentRules, testCall } from './rules.mjs';
 import { RECORDER_NAME } from './sealer-client.mjs';
-import { SEALER_BEHIND, SEALER_MAX_UNSENT, SEALER_MAX_UNSENT_MAX, SEALER_TIMEOUT, SEALER_TIMEOUT_MAX, SEALER_TIMEOUT_MIN, centralSealer, loadRecorder, localSealer, readRecorderKeyFile, readStampSettings, stampFor, stampHook } from './sealing.mjs';
+import { SEALER_BEHIND, SEALER_MAX_UNSENT, SEALER_MAX_UNSENT_MAX, SEALER_TIMEOUT, SEALER_TIMEOUT_MAX, SEALER_TIMEOUT_MIN, centralSealer, loadRecorder, localSealer, readRecorderKeyFile, readStampSettings, stampContext, stampFor, stampHook } from './sealing.mjs';
 
 /** The document, in each stub and denial, whose fingerprint is that of the executor's own identifier for the call (a label, not a reserved name). */
 export const CALL_DOCUMENT = 'executor.call';
@@ -1017,7 +1017,7 @@ export async function openAgent(prepared, { settings, executorKeys, now, log, na
    * sealer named (heldSeal). A seal that differs in anything goes to "add"
    * as before.
    */
-  async function addCentralSeal(entry, named) {
+  async function addCentralSeal(entry, named, stampProblem = null) {
     // At a start, a permission new to the book is in the writer and not yet in the file: the seal covers the file, and would come after it.
     if (!started && !file.holds(writer.book())) throw Object.assign(new Error('The central sealer signed a seal over the book as its file stands, which the book never took, and the permission in force is new to the book: its line would come before the seal. Start the executor once with the permission the book last held, so that the seal is added; then with the new one.'), { notTaken: true });
     if (typeof named === 'string') {
@@ -1030,7 +1030,7 @@ export async function openAgent(prepared, { settings, executorKeys, now, log, na
       }
       if (line !== null && book.includes(`\n${line}\n`)) {
         const held = heldSeal(book, (await writer.check()).entries, line, named);
-        if (held) return { entry: held.index, fingerprint: held.fingerprint };
+        if (held) return { entry: held.index, fingerprint: held.fingerprint, ...(stampProblem ? { stampProblem } : {}) };
       }
     }
     try {
@@ -1043,7 +1043,10 @@ export async function openAgent(prepared, { settings, executorKeys, now, log, na
     const added = (await writer.check()).entries.at(-1);
     link.sealed(added.index, added.fingerprint);
     agentLog({ event: 'sealed', entry: added.index, seal: added.fingerprint, by: 'central-sealer' });
-    return { entry: added.index, fingerprint: added.fingerprint };
+    // Why the sealer gave it out without a time-stamp, whether it came as the answer to the question for a seal or was
+    // taken back later (the sealer's "latest").
+    if (stampProblem) agentLog({ event: 'stamp-not-given', entry: added.index, seal: added.fingerprint, code: stampProblem.code, reason: stampProblem.message });
+    return { entry: added.index, fingerprint: added.fingerprint, ...(stampProblem ? { stampProblem } : {}) };
   }
 
   let started = false;
@@ -1056,7 +1059,7 @@ export async function openAgent(prepared, { settings, executorKeys, now, log, na
       log: agentLog,
       disagree: (why) => stop(why, 'sealer-disagrees'),
       // A seal the sealer signed and the book never took: at a start it is added at once; later, in the agent's turn.
-      takeBack: (entry, named) => (started ? inTurn(() => addCentralSeal(entry, named)) : addCentralSeal(entry, named)),
+      takeBack: (entry, named, stampProblem) => (started ? inTurn(() => addCentralSeal(entry, named, stampProblem)) : addCentralSeal(entry, named, stampProblem)),
     });
     // Before anything is written: the sealer must answer, and what it holds must agree with the book file.
     await link.start(prepared.onDisk);
@@ -1153,14 +1156,14 @@ export async function openAgent(prepared, { settings, executorKeys, now, log, na
       if (link) {
         // The central sealer signs over the lines it was sent, and only once it holds every one; its seal's entry is added as it is.
         const { entry, named, stampProblem } = await link.seal(last?.fingerprint, now());
-        const added = await addCentralSeal(entry, named);
-        if (stampProblem) agentLog({ event: 'stamp-not-given', entry: added.entry, seal: added.fingerprint, code: stampProblem.code, reason: stampProblem.message });
-        return { sealed: true, ...added, ...(stampProblem ? { stampProblem } : {}) };
+        return { sealed: true, ...(await addCentralSeal(entry, named, stampProblem)) };
       }
-      const sealed = await sealer.seal(writer.book(), { previous: last?.fingerprint, when: now() });
+      const when = now();
+      const sealed = await sealer.seal(writer.book(), { previous: last?.fingerprint, when });
       // An outside time-stamp, where the settings give a service. A seal is never lost for want of one: where the service
       // gives none, or the book does not take the seal with it, the seal goes in without it and the reason is said.
-      let { stamps, stampProblem } = sealer.stamp ? await stampFor(sealer.stamp, sealed.fingerprintBytes) : {};
+      // The time-stamp is held against the seal's own time and the latest one a seal before it holds (stampContext).
+      let { stamps, stampProblem } = sealer.stamp ? await stampFor(sealer.stamp, sealed.fingerprintBytes, stampContext(result.entries, when)) : {};
       if (stamps) {
         try {
           await writer.add({ seal: sealed.record, stamps });

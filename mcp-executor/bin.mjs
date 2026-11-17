@@ -185,7 +185,12 @@ function samePath(a, b) {
 }
 
 /** Text from an answer, on one line and with no character that steers a terminal. */
-const plainText = (v) => String(v).replace(/[\p{Cc}\p{Zl}\p{Zp}]/gu, ' ');
+// Control and format characters (\p{Cf}: those that turn text round or hide it) become spaces, and the text is cut
+// at 600 characters: a problem's words come from the sealer, which may be another program, and go to a terminal.
+const plainText = (v) => {
+  const text = String(v).replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, ' ');
+  return text.length > 600 ? `${text.slice(0, 600)}...` : text;
+};
 /** What "Sealed: ..." adds where the seal carries a time-stamp. */
 const stampWords = (sealed) => (sealed?.stamped === true ? ', with a time-stamp' : '');
 

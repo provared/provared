@@ -3517,7 +3517,42 @@ the seal's own signatures, for at most `timeout`.
 `provared/net/timestamp` is imported when `recorder.stamp` is read, not
 at the start of every executor, so that one without the setting runs as
 before on a library that does not have it; with the setting, such a
-library is refused at the start, in words that say so.
+library is refused at the start, in words that say so, and `check` says
+the same (X309).
+
+After the review of step 3.3:
+
+**X306. A seal taken back keeps the sealer's reason.** The central
+sealer answers `stampProblem` beside its latest seal (`/latest`) as well
+as beside the seal it signs, while that seal is the book's latest and the
+sealer has not stopped. The executor's link hands it on with a seal it
+takes back, so the log has the same `stamp-not-given` event as when the
+answer came.
+
+**X307. The time-stamp is held against the seal and the book.** Beside
+this computer's clock, the time a time-stamp states must be no more than
+300 seconds before the seal's own `when` (in whole seconds, as a checker
+reads it) and before the latest time that a service's time-stamp
+(`valid` or `untrusted`: a checker may trust it) gave a seal of the book
+that passed its check (`stampContext`). Further off, a checker who trusts
+the service would find the seal dated after its time-stamp, or the times
+going backwards (format description, sections 21.2 and 21.3), so it is
+not kept, and the seal goes in without it (X300).
+
+**X309. `check` loads the client.** Where `recorder.stamp` is given,
+`check` loads `provared/net/timestamp` as a start does, and says plainly
+where the library installed has none. The README names the release that
+has it: `provared` 0.8.1. The dependency ranges are raised when it is
+published.
+
+**X310. A sealer's words are cut and made plain.** A problem's words
+that came from a central sealer are printed with control and format
+characters (`\p{Cf}`) as spaces, and cut at 600 characters.
+
+**X311. An address with a query is refused.** As a user name or a
+password is: a query can carry a key to the service, and the address is
+shown in `check`, `status` and the log, so it is refused rather than
+hidden there.
 
 ## 14. The executor as an OAuth-protected connector
 
