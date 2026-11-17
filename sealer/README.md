@@ -80,7 +80,7 @@ otherwise.
 | `name` | The name the seals give (`by.name`): a label, 1 to 200 characters |
 | `port` | The port on 127.0.0.1; 8797 by default |
 | `signers` | Optional. For any of `Ed25519`, `ML-DSA-87` and `SLH-DSA-SHA2-256s`, the path of a module (from the folder) whose default export is an async function that gives a signer for that method: an object with `key`, the public key, and `sign(data)`, which gives the signature bytes. It takes the place of the key file's key for that method |
-| `stamp` | Optional. `{"address": ..., "timeout": ...}`: a time-stamp service (RFC 3161) that each seal is sent to, below. `address` begins `http://` or `https://` and holds no user name, password or fragment; `timeout` is how long the request may take, from 100 to 60,000 milliseconds, 10,000 if left out. No service is named by this package: the address is yours to choose |
+| `stamp` | Optional. `{"address": ..., "timeout": ...}`: a time-stamp service (RFC 3161) that each seal is sent to, below. `address` begins `http://` or `https://` and holds no user name, password, query or fragment; `timeout` is how long the request may take, from 100 to 20,000 milliseconds, 4,000 if left out, and less than the time `startSealer` gives each signature (`signWithin`, 30,000 unless given). No service is named by this package: the address is yours to choose. Needs `provared` 0.8.1 or later, the first release with `provared/net/timestamp` |
 
 **An outside time-stamp on each seal.** With `stamp`, the sealer sends
 each seal's fingerprint to that service as it signs it, in the request
@@ -91,12 +91,30 @@ seal, in `stamps`. The request and the check are the library's
 within the time limit, a redirect is not followed, and the time-stamp is
 kept only if the library's `checkStamp` passes it for this fingerprint,
 it carries the number used once that was sent, and the time it states is
-within 300 seconds of the sealer's clock. Anything else costs no seal:
+within 300 seconds of the sealer's clock, no more than 300 seconds before
+the seal's own `when`, and no more than 300 seconds before the time a
+service's time-stamp gave the seal just before it (the only earlier seal
+the sealer holds). Anything else costs no seal:
 the seal is signed and given out without a time-stamp, and the answer to
 `/seal` says why in `stampProblem` (`stamp-not-given`, or the code of
-`checkStamp`). The service sees the seal's fingerprint, this computer's
-address and when it asked; nothing of the book. While the service is
-asked, the sealer answers no other question, as with every seal. The
+`checkStamp`). Until the book's next seal, and until the sealer stops,
+`/latest` gives the same `stampProblem` beside the seal, so that a
+recorder whose question timed out, and which takes the seal back, is
+told why too; it is kept in memory only, for the latest 10,000 books.
+The service sees the seal's fingerprint, this computer's address and
+when it asked; nothing of the book. A settings' `stamp` needs `provared`
+0.8.1 or later; with an earlier one the sealer does not start, and says
+why.
+
+While the service is asked, the sealer answers no other question, as
+with every seal, and that holds up every recorder. A recorder's question
+to the sealer times out after 5 seconds unless its settings say
+otherwise (the executor's `recorder.sealer.timeout`), which is why the
+time limit is 4 seconds unless set. Set it longer, or a service answer
+slowly, and other recorders' questions asked meanwhile time out: their
+lines stay unsent and are sent again, every 2 seconds, and a seal they
+asked for is taken back from `/latest` once the sealer answers; calls are
+refused only once a recorder's unsent lines pass its `maxUnsent`. The
 settings' `stamp` and a `stamp` function given to `startSealer` are not
 taken together.
 
@@ -256,7 +274,7 @@ id itself. A `when` given as a `Date` is sent as its milliseconds.
 | `/extend` | `{book, at, leaves, follows?, line?}` | `{size}`, or `{refused, size}` where `at` is not the number of lines the sealer holds |
 | `/seal` | `{book, previous, when?}` | `{entry, line, fingerprint}`; `stampProblem` where a time-stamp was asked for and failed |
 | `/update` | `{book, entry, leaves, line?}` | `{size}` |
-| `/latest` | `{book}` | `{latest}`: the latest seal it holds of the book, or null |
+| `/latest` | `{book}` | `{latest}`: the latest seal it holds of the book, or null; with `stampProblem` where that seal was given out without its time-stamp since the sealer started |
 | `/held` | `{book}` | `{held}`: how many lines, the latest seal's fingerprint, whether the book is closed, or null |
 
 `book` is the leaf fingerprint of the book's first line, in base64url, or

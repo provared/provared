@@ -1254,6 +1254,7 @@ test('the settings\' "stamp": each seal carries the time-stamp the service gave,
 test('the settings\' "stamp": a service that cannot be reached costs no seal, and the reason is given with it', async () => {
   const { folder, tokens } = await sealerFolder({ stamp: { address: await nobodyThere(), timeout: 2000 } });
   const running = await startSealer({ folder });
+  let sealed = null;
   try {
     const client = connectSealer({ address: running.address, recorder: 'agent-one', token: tokens['agent-one'] });
     const b = await smallBook();
@@ -1265,9 +1266,33 @@ test('the settings\' "stamp": a service that cannot be reached costs no seal, an
     assert.match(s.stampProblem.message, /could not be reached/);
     assert.deepEqual((await checkBook(lineOf([...b.lines, s.line]), { sealKeys: [running.fingerprint] })).problems, []);
     assert.equal(onDisk(folder).books[0].latest.entry.seal.payload, s.entry.seal.payload);
+    // A recorder that never had the answer (its question timed out) and asks for the latest seal is told the reason too (X306).
+    const latest = await client.latest(b.first);
+    assert.equal(latest.fingerprint, s.fingerprint);
+    assert.deepEqual(latest.stampProblem, s.stampProblem);
+    assert.deepEqual((await client.latest({ first: b.first, number: 1 })).stampProblem, s.stampProblem);
+    sealed = { first: b.first, fingerprint: s.fingerprint };
   } finally {
     await running.close();
   }
+  // Kept in memory only: after a start, the latest seal is given without it.
+  const again = await startSealer({ folder });
+  try {
+    const client = connectSealer({ address: again.address, recorder: 'agent-one', token: tokens['agent-one'] });
+    const latest = await client.latest(sealed.first);
+    assert.equal(latest.fingerprint, sealed.fingerprint);
+    assert.equal(latest.stampProblem, undefined);
+  } finally {
+    await again.close();
+  }
+});
+
+test('the settings\' "stamp": 4 seconds by default, below a recorder\'s 5; at most 20; and less than the time each signature is given (X304)', async () => {
+  const { folder } = await sealerFolder({ stamp: { address: 'http://127.0.0.1/' } }, []);
+  await refusedStart({ folder, signWithin: 4000 }, /"stamp\.timeout" \(4000 ms\) must be less than/);
+  const { folder: short } = await sealerFolder({ stamp: { address: 'http://127.0.0.1/', timeout: 2000 } }, []);
+  const running = await startSealer({ folder: short, signWithin: 4000 });
+  await running.close();
 });
 
 test('the settings\' "stamp": left out, nothing is asked; given, it is an address on the web and a time limit in range, and not beside a "stamp" function', async () => {
@@ -1277,8 +1302,10 @@ test('the settings\' "stamp": left out, nothing is asked; given, it is an addres
     [{ address: 'ftp://127.0.0.1/' }, /"stamp\.address"/],
     [{ address: 'http://user:secret@127.0.0.1/' }, /"stamp\.address"/],
     [{ address: 'http://127.0.0.1/#x' }, /"stamp\.address"/],
+    [{ address: 'http://127.0.0.1/tsa?key=secret' }, /"stamp\.address"/],
+    [{ address: 'http://127.0.0.1/tsa?' }, /"stamp\.address"/],
     [{ address: 'http://127.0.0.1/', timeout: 99 }, /"stamp\.timeout"/],
-    [{ address: 'http://127.0.0.1/', timeout: 60001 }, /"stamp\.timeout"/],
+    [{ address: 'http://127.0.0.1/', timeout: 20001 }, /"stamp\.timeout" must be a whole number of milliseconds from 100 to 20000/],
     [{ address: 'http://127.0.0.1/', policy: '1.2.3' }, /holds "policy"/],
   ]) {
     const { folder } = await sealerFolder({}, []);

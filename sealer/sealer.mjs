@@ -192,15 +192,23 @@ export function readSettings(folder) {
 
 // --- an outside time-stamp on each seal (format description, section 21.2) ---
 
-/** How long the request for a time-stamp may take, unless the settings say otherwise, and the least and the most they may say: milliseconds. */
-export const STAMP_TIMEOUT = 10000;
+/**
+ * How long the request for a time-stamp may take, unless the settings say
+ * otherwise, and the least and the most they may say: milliseconds. The
+ * sealer answers one question at a time, so the wait holds up every
+ * recorder: 4 seconds by default, below the 5 seconds a recorder's
+ * question may take unless its settings say otherwise; at most 20
+ * seconds, well below the 30 seconds the library gives the hook
+ * ("signWithin") and a recorder gives the question for a seal.
+ */
+export const STAMP_TIMEOUT = 4000;
 export const STAMP_TIMEOUT_MIN = 100;
-export const STAMP_TIMEOUT_MAX = 60000;
+export const STAMP_TIMEOUT_MAX = 20000;
 
 /**
  * The settings' "stamp", read: {address, timeout}. The address is that of
  * a time-stamp service (RFC 3161) on the web, http: or https:, with no user
- * name, password or fragment. No service is named here.
+ * name, password, query or fragment. No service is named here.
  */
 function readStampSettings(c) {
   if (c === null || typeof c !== 'object' || Array.isArray(c)) throw new Error('The settings\' "stamp" must be an object: the address of a time-stamp service and, where wanted, a time limit.');
@@ -211,8 +219,8 @@ function readStampSettings(c) {
   } catch {
     url = null;
   }
-  if (!url || !['http:', 'https:'].includes(url.protocol) || url.username !== '' || url.password !== '' || url.hash !== '') {
-    throw new Error('The settings\' "stamp.address" must be the whole address of a time-stamp service (RFC 3161), beginning http:// or https://, with no user name, password or fragment.');
+  if (!url || !['http:', 'https:'].includes(url.protocol) || url.username !== '' || url.password !== '' || url.hash !== '' || /[?#]/.test(url.href)) {
+    throw new Error('The settings\' "stamp.address" must be the whole address of a time-stamp service (RFC 3161), beginning http:// or https://, with no user name, password, query or fragment.');
   }
   const timeout = c.timeout ?? STAMP_TIMEOUT;
   if (!Number.isInteger(timeout) || timeout < STAMP_TIMEOUT_MIN || timeout > STAMP_TIMEOUT_MAX) throw new Error(`The settings' "stamp.timeout" must be a whole number of milliseconds from ${STAMP_TIMEOUT_MIN} to ${STAMP_TIMEOUT_MAX}: how long the request for a time-stamp may take.`);
@@ -485,6 +493,8 @@ export async function startSealer({ folder, port, fresh = false, stamp, clock = 
   const settings = readSettings(folder);
   // A time-stamp service the settings give, or a "stamp" function a program that embeds the sealer gives: not both.
   if (stamp !== undefined && settings.stamp) throw new Error('The settings give a time-stamp service ("stamp"), and a "stamp" function was given too: give one of the two.');
+  // The request's own limit comes first, so that a slow service is said as a time-stamp not given, in its own words.
+  if (settings.stamp && signWithin !== undefined && settings.stamp.timeout >= signWithin) throw new Error(`The settings' "stamp.timeout" (${settings.stamp.timeout} ms) must be less than the time the sealer gives each signature and the time-stamp ("signWithin", ${signWithin} ms).`);
   if (settings.stamp) stamp = await stampHook(settings.stamp);
   const { by, signers, fingerprint } = await loadSigners(folder);
   const recorders = readRecorders(folder);
@@ -549,6 +559,17 @@ export async function startSealer({ folder, port, fresh = false, stamp, clock = 
       return out;
     };
 
+    // For each book, the reason its latest seal was given out without a time-stamp, while that seal is its latest: in
+    // memory only, so not known after a start, and for the latest 10,000 books at most.
+    const stampProblems = new Map();
+    // A book is named by its first line's leaf fingerprint alone (book 1) or with its number ({first, number}).
+    const bookKey = (name, book) => JSON.stringify([name, typeof book === 'string' ? book : book?.first, typeof book === 'string' ? 1 : book?.number]);
+    const keepStampProblem = (key, kept) => {
+      stampProblems.delete(key);
+      if (kept) stampProblems.set(key, kept);
+      if (stampProblems.size > 10000) stampProblems.delete(stampProblems.keys().next().value);
+    };
+
     // One question, for one recorder, in its turn: the library's answer, with the state saved first where a change must last.
     async function answer(name, path, body) {
       const { view } = served.get(name);
@@ -559,7 +580,11 @@ export async function startSealer({ folder, port, fresh = false, stamp, clock = 
         return refusal('bad-field', `body: holds a member that a question to ${path} does not take. It takes ${known.length === 0 ? 'none' : known.join(', ')}.`);
       }
       if (path === '/about') return { name: by.name, keys: by.keys, sealer: fingerprint };
-      if (path === '/latest') return { latest: view.latest(body.book) };
+      if (path === '/latest') {
+        const latest = view.latest(body.book);
+        const kept = latest ? stampProblems.get(bookKey(name, body.book)) : undefined;
+        return { latest: kept && kept.fingerprint === latest.fingerprint ? { ...latest, stampProblem: kept.stampProblem } : latest };
+      }
       if (path === '/held') return { held: view.held(body.book) };
       if (path === '/extend') {
         const leaves = leavesOf(body.leaves);
@@ -589,6 +614,9 @@ export async function startSealer({ folder, port, fresh = false, stamp, clock = 
       save(got.state);
       const given = { entry: got.entry, line: got.line, fingerprint: got.fingerprint };
       if (got.stampProblem) given.stampProblem = got.stampProblem;
+      // Why the book's latest seal has no time-stamp, kept in memory, so that a recorder that never had this answer
+      // and asks for the latest seal is told it too.
+      keepStampProblem(bookKey(name, body.book), got.stampProblem ? { fingerprint: got.fingerprint, stampProblem: got.stampProblem } : null);
       return given;
     }
 
