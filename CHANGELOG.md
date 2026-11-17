@@ -2,6 +2,113 @@
 
 ## Not yet released
 
+- **An outside time-stamp on each seal, asked for over the network.** A
+  program that seals can now send each seal's fingerprint to a time-stamp
+  service (RFC 3161) whose address its settings give, and put the
+  time-stamp it gets back beside the seal, in `stamps` (format
+  description, section 21.2). No service is named anywhere in the code,
+  the examples, the documents or the tests. Left out of the settings,
+  nothing is asked and nothing changes. No signed byte, label or field's
+  meaning changes; a checker answers as before.
+  - **The library: `provared/net/timestamp`** (`net/timestamp.js`, with
+    `net/timestamp.d.ts`; part of `provared` 0.8.1, not yet released). A
+    new entry of the package, kept apart from the library as `net/`
+    is: `src/` still makes no network request, and none of the library's
+    other entries loads it. `askForStamp(fingerprintBytes, {address,
+    timeout, clock})` sends the request of RFC 3161, section 2.4.1, by
+    HTTP POST (`application/timestamp-query`): version 1, SHA-256 written
+    with no parameters (RFC 5754, section 2), the 32 bytes of the seal's
+    fingerprint, a random 64-bit number used once (X290), and the
+    service's certificate asked for, which the format needs the
+    time-stamp to carry. `http:` and `https:` addresses are both taken,
+    with no user name, password or fragment (X291). A redirect is not
+    followed, as the sealer's client follows none (X288); the answer is
+    read up to 12,544 bytes, a time-stamp of the largest size the format
+    allows and 256 bytes for the status beside it, and the whole request
+    is given up after its time limit, 10 seconds unless given, from 100
+    milliseconds to 60 seconds (X292). A status of 0 or 1 gives the
+    time-stamp; any other is said with the service's own text and
+    reasons (X293). The time-stamp is kept only if the library's
+    `checkStamp` passes it for this fingerprint, the device can check
+    its signing method, and it carries the number used once that was
+    sent (X294), and only if the time it states is within 300 seconds of
+    this device's clock, since a book holding one further off would fail
+    rule 7 of section 21.2 or rule 4 of section 21.1 under a checker who
+    trusts the service (X295). Every failure is a `Refusal`:
+    `stamp-not-given` for the request itself, or the code `checkStamp`
+    gave (X296). `stampService({address, timeout, clock})` gives the
+    `stamp` that `openSealer` takes. The package's exports gain
+    `./net/timestamp` (X297).
+  - **The executor** (`mcp-executor/`, part of 0.5.0, not yet released):
+    `recorder.stamp`, `{address, timeout}`, with the same rules, any
+    other member refused (X298). Each seal the executor signs is sent to
+    it. Not beside `recorder.sealer`: a central sealer asks for its own
+    seals' time-stamps; where it was not given one, the executor logs
+    its reason and hands it on (X299). A time-stamp never costs a seal:
+    where the service gives none that passes, or the book does not take
+    the seal with it, the seal goes in without one; the log has a
+    `stamp-not-given` event, `seal` answers `stampProblem` and the
+    command prints it, and a seal that carries one answers `stamped:
+    true` (X300). The client is loaded only where the setting is given,
+    so an executor without it runs as before on a library that lacks it
+    (X301). `check` and `status` show the service. `DESIGN.md` holds
+    X298 to X301; the README says what is sent, what a time-stamp shows
+    and what it does not.
+  - **The central sealer** (`sealer/`; `provared-sealer` stays 0.1.0,
+    not published): its settings take `stamp`, `{address, timeout}`, with
+    the same rules, and each seal is sent to that service through
+    `stampService`. A failure is answered as `stampProblem` beside the
+    seal, as before. The settings' `stamp` and a `stamp` function given
+    to `startSealer` are not taken together (X302).
+  - **The gateway** (`gateway/`; `gateway/package.json` stays 0.1.0):
+    `recorder.stamp`, with the same rules, checked by `openGateway` and
+    by `check`; each seal is sent to it, and a failure leaves the seal in
+    the book without one, logged as `stamp-not-given` and answered as
+    `stampProblem` (X303).
+  - **Versions.** The sealer and the gateway ask for `provared`
+    `>=0.6.0 <0.8.0`, and the executor for `0.7.0`, none of which has
+    `provared/net/timestamp`: their tests run against this repository's
+    library. Installed with one of those versions, a program whose
+    settings give `stamp` is refused at its start, in words that say
+    so. The ranges are to be raised when 0.8.1 is published.
+  - **The format description** (section 21.2) says how the reference
+    software asks for a time-stamp, what the service learns, and that a
+    time-stamp not given never holds up a seal; section 21.3 says what a
+    time-stamp fixes and what it does not. `docs/guide.md` describes
+    `provared/net/timestamp`, and no longer says that only
+    `provared-headers` connects to anything.
+  - **Tests.** All run against a time-stamp service on this computer that
+    the OpenSSL program answers for (`test/helpers/tsa.mjs`: an HTTP
+    server on 127.0.0.1 that hands each request to `openssl ts -reply`,
+    under a key and certificate the test makes), and are skipped, saying
+    why, where there is no OpenSSL program (`PROVARED_OPENSSL` may name
+    it). None reaches beyond this computer. `test/stamp-request.test.mjs`
+    (12): the request's bytes; a good answer, which checks; a refusal; a
+    time-stamp with another number used once, and with none; one for
+    another fingerprint; an answer too large with its length given and
+    without; a redirect, which reaches no other address; a slow service;
+    a status of 500 and bytes that are not an answer; a time 301 seconds
+    either side of the clock; a service that cannot be reached; and the
+    address and time limit refused. `mcp-executor/test/stamp.test.mjs`
+    (5), three new tests at the end of `sealer/test/sealer.test.mjs`, and
+    `gateway/test/stamp.test.mjs` (3): a seal that carries the
+    time-stamp, counted for a reader who trusts the service and shown as
+    not counted to one who does not; a refusal, a wrong number used once,
+    a wrong fingerprint and a service that cannot be reached, each
+    leaving the seal in the book without one and the reason said; and
+    the settings refused. `test/package.test.mjs` now holds that `net/`
+    has the two files, that neither names an address, and that only the
+    entry `./net/timestamp` loads `net/`. Each check in
+    `net/timestamp.js` (the number used once, the redirect, both limits
+    on the size, the time limit, the clock, `checkStamp`, the status, the
+    address) was taken out in turn: a test then failed every time. So did
+    the executor's log of a time-stamp not given, its refusal beside a
+    central sealer, and its keeping of the seal when the service fails.
+  - **Not tested:** a library without `provared/net/timestamp` installed
+    beside a program whose settings give `stamp`; a seal the book does
+    not take with its time-stamp, since the time-stamp is checked before
+    it is offered.
+
 - **`provared-mcp-executor` 0.5.0 (not yet released).** Five pieces of
   work on the executor, each below with its own choices: the fixes of
   0.4.2 carried over to every transport, with a re-check of the local

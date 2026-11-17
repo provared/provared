@@ -333,7 +333,10 @@ itself has a problem.
   settings can name the program by its path and the folders to look in.
 - The clocks: times in receipts are the executor's; a countersignature
   and a seal are by the same clock. No outside time-stamp is put beside a
-  seal (X135).
+  seal (X135) unless the settings give a time-stamp service
+  (`recorder.stamp`, X298 to X301); then a seal the service stamped shows,
+  to a reader who trusts the service, a time that does not rest on the
+  executor's clock.
 - The recorder's sealing keys are in a file on the executor, beside the
   agent's keys and the executor's own. Whoever can read the executor's
   files can seal a book of their own making; a central sealer, seals held
@@ -1420,8 +1423,8 @@ command checks that with the executor's public keys alone (X166).
 
 Still to build:
 
-- An outside time-stamp beside a seal; seals held elsewhere and witnesses
-  (library 0.6.0).
+- Seals held elsewhere and witnesses (library 0.6.0). (An outside
+  time-stamp beside a seal is built: `recorder.stamp`, X298 to X301.)
 - With a central sealer (X158): bringing a sealer up to date after its
   record was lost or put back; a second book under one permission; a
   sealer on another computer, which the sealer's program does not yet
@@ -2803,7 +2806,8 @@ was built; X147 to X159 are what was built, in those two places.
 
 **X135. No outside time-stamp is written.** A seal's time is the
 recorder's own word. The README says so under its limits, as the
-gateway's does.
+gateway's does. (Since X298, one is written where the settings give a
+time-stamp service, `recorder.stamp`; without it, this holds as it was.)
 
 **X136. The example settings name no recorder and no administrator.**
 `init`, `keys` and `check` on the examples do what they did in 0.4.1;
@@ -3142,7 +3146,8 @@ first books only, and a new book file under a permission whose first
 book the sealer holds is not started on. Going on, under a central
 sealer, with a book already sealed with a key file (X122 refuses it).
 Witnesses for the seals, and seals held elsewhere. A time-stamp that a
-sealer puts beside its seal is added with the entry, and was not tried.
+sealer puts beside its seal is added with the entry; since X299 the
+reason a sealer gives for one it was not given is logged.
 
 **X159. A limit that is the sealer's protocol's.** The question for a
 seal names the seal before, and not the number of lines the seal should
@@ -3472,6 +3477,47 @@ the refusal to the book. A command with `--offline` still takes no lock
 for the state file. A test holds that a start waits and then starts once
 the executor before has closed, and that it is refused once its time is
 up.
+
+The four that follow put an outside time-stamp (format description,
+section 21.2) beside each seal the executor signs. The request, the
+reading of the answer and its check are the library's
+(`provared/net/timestamp`, X290 to X297 in its CHANGELOG entry);
+`test/stamp.test.mjs` holds them, against a time-stamp service on this
+computer that the OpenSSL program answers for, skipped where there is
+none.
+
+**X298. `recorder.stamp`: `{address, timeout}`.** `address` is a whole
+address beginning `http://` or `https://`, with no user name, password
+or fragment; `timeout` is a whole number of milliseconds from 100 to
+60,000, 10,000 if left out. Any other member is refused, not set aside,
+since a member mistyped would leave a person thinking seals were
+time-stamped. No service is named, in the code, the examples or the
+documents. Plain `http:` is taken because the time-stamp is checked by
+its signature, its fingerprint and its number used once, not by the
+connection, and services in use answer on it; nothing secret is sent.
+
+**X299. Not beside `recorder.sealer`.** A central sealer signs the seal
+and gives its entry whole; it asks for the time-stamp itself, under its
+own settings' `stamp`. The executor adding a second one to an entry the
+sealer keeps would make the two hold different lines. Where the sealer
+says it was not given one (`stampProblem`), the executor logs
+`stamp-not-given` with the sealer's code and reason and hands it on in
+`seal`'s answer.
+
+**X300. A time-stamp never costs a seal.** The seal is signed first. The
+service is then asked; where it gives no time-stamp that passes, or the
+book does not take the seal with it, the seal goes in without one. The
+log has `stamp-not-given` (the entry, the seal, the code, the reason),
+`seal` answers `stampProblem`, and the command prints it on its standard
+error. A seal that carries one answers `stamped: true` and its `sealed`
+event says so. While the service is asked the agent's calls wait, as for
+the seal's own signatures, for at most `timeout`.
+
+**X301. The client is loaded only where the setting is given.**
+`provared/net/timestamp` is imported when `recorder.stamp` is read, not
+at the start of every executor, so that one without the setting runs as
+before on a library that does not have it; with the setting, such a
+library is refused at the start, in words that say so.
 
 ## 14. The executor as an OAuth-protected connector
 

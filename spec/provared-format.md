@@ -1252,6 +1252,23 @@ A checker follows no chain of certificates and asks no outside party. It
 does not read what a certificate says its key may be used for: the person
 checking decides that by naming the certificate.
 
+**Asking for a time-stamp.** This part says how the reference software
+asks for one; a checker does not need it, and a recorder may ask in any
+way that gives a time-stamp that passes the rules above. Whoever seals
+sends the service the request of RFC 3161, section 2.4.1, by HTTP POST as
+section 3.4 sets out: what is to be stamped is the seal's fingerprint
+(SHA-256, written with no parameters, as RFC 5754, section 2, asks of a
+writer, and the 32 bytes), with a random number used once of 64 bits and
+the service's certificate asked for, since the time-stamp must carry it.
+The answer is kept only if the service granted it (status 0 or 1), the
+time-stamp passes rules 1 to 6 above for this seal, it carries the number
+used once that was sent, and the time it states is within 300 seconds of
+the sealer's clock, so that rule 7 here and rule 4 of section 21.1 will
+hold for whoever trusts the service. A time-stamp that is not given never
+holds up the seal: the seal goes into the book without one. The service
+learns the seal's fingerprint, the address it was asked from and when;
+nothing of the book.
+
 ### 21.3 What a time-stamp fixes
 
 Every counted time-stamp of a seal is taken, of either kind, and the
@@ -1341,6 +1358,13 @@ everything after it, can be removed, and what is left still checks. Only
 a copy of that seal, or of its top fingerprint and number of entries,
 held by someone else shows it (section 21.5). And a time-stamp service
 signs with a method of today's kind.
+
+A time-stamp fixes only that the seal's content existed by the time the
+service states, for a person who trusts that service. It does not show
+that any entry is true, that the times the entries state are right
+(only that none is later than the time-stamp, within 300 seconds), who
+asked for it, or anything about the entries after the seal. It is the
+service's word: its clock, and the safety of its key.
 
 ### 21.4 A block time-stamp
 

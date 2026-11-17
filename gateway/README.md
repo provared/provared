@@ -444,8 +444,28 @@ last one, with `checkedNow: false` and its time in `checkedAt`. `seal`,
 administrator's secret; `seal --offline`, `acknowledge --offline` and
 `repair` work on the files of a stopped gateway, and need none: whoever can
 write those files can do as much. There is no timer: to seal every day, run
-`seal` from the system's own scheduler. No outside time-stamp is put beside
-a seal.
+`seal` from the system's own scheduler.
+
+**An outside time-stamp on each seal.** Where `recorder.stamp` gives a
+time-stamp service (RFC 3161), `{"address": ..., "timeout": ...}`, each
+seal's fingerprint is sent to it as the seal is made, and the time-stamp
+it gives goes beside the seal in the book, in `stamps`. `address` begins
+`http://` or `https://` and holds no user name, password or fragment;
+`timeout` is from 100 to 60,000 milliseconds, 10,000 if left out. No
+service is named by this package: the address is yours to choose. The
+request and the check are the library's (`provared/net/timestamp`): the
+answer is read up to 12,544 bytes and within the time limit, a redirect is
+not followed, and the time-stamp is kept only if the library's
+`checkStamp` passes it for this fingerprint, it carries the number used
+once that was sent, and the time it states is within 300 seconds of this
+computer's clock. Anything else costs no seal: the seal goes into the book
+without a time-stamp, the answer to `seal` gives `stampProblem` (its code
+and why), the command prints it, and the log has a `stamp-not-given`
+event. A seal that carries one answers `stamped: true`. The service sees
+the seal's fingerprint, this computer's address and when it asked; nothing
+of the book. While it is asked, the agent's calls wait, as for the seal's
+own signatures. Without `recorder.stamp`, nothing is asked and nothing
+changes.
 
 ## Embedding it
 

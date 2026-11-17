@@ -80,6 +80,25 @@ otherwise.
 | `name` | The name the seals give (`by.name`): a label, 1 to 200 characters |
 | `port` | The port on 127.0.0.1; 8797 by default |
 | `signers` | Optional. For any of `Ed25519`, `ML-DSA-87` and `SLH-DSA-SHA2-256s`, the path of a module (from the folder) whose default export is an async function that gives a signer for that method: an object with `key`, the public key, and `sign(data)`, which gives the signature bytes. It takes the place of the key file's key for that method |
+| `stamp` | Optional. `{"address": ..., "timeout": ...}`: a time-stamp service (RFC 3161) that each seal is sent to, below. `address` begins `http://` or `https://` and holds no user name, password or fragment; `timeout` is how long the request may take, from 100 to 60,000 milliseconds, 10,000 if left out. No service is named by this package: the address is yours to choose |
+
+**An outside time-stamp on each seal.** With `stamp`, the sealer sends
+each seal's fingerprint to that service as it signs it, in the request
+of RFC 3161 (SHA-256, a random 64-bit number used once, the service's
+certificate asked for), and puts the time-stamp it gets back beside the
+seal, in `stamps`. The request and the check are the library's
+(`provared/net/timestamp`): the answer is read up to 12,544 bytes and
+within the time limit, a redirect is not followed, and the time-stamp is
+kept only if the library's `checkStamp` passes it for this fingerprint,
+it carries the number used once that was sent, and the time it states is
+within 300 seconds of the sealer's clock. Anything else costs no seal:
+the seal is signed and given out without a time-stamp, and the answer to
+`/seal` says why in `stampProblem` (`stamp-not-given`, or the code of
+`checkStamp`). The service sees the seal's fingerprint, this computer's
+address and when it asked; nothing of the book. While the service is
+asked, the sealer answers no other question, as with every seal. The
+settings' `stamp` and a `stamp` function given to `startSealer` are not
+taken together.
 
 A signer is how a key held in a key service or a hardware module is
 reached (the library's guide, "Keys held elsewhere: signers"). Every
@@ -375,8 +394,11 @@ for another recorder's agent.
   kept in memory only. After a start, a question sent in the minute
   before it could be taken once more; every call is guarded by its place
   or its seal, so this changes nothing the second time.
-- It names no time-stamp service: a program that embeds it may give the
-  library's `stamp` function to `startSealer`. It asks no witness yet.
+- It names no time-stamp service: one is asked only where the settings'
+  `stamp` gives its address, or a program that embeds the sealer gives a
+  `stamp` function to `startSealer`. It asks no witness yet. It does not
+  check that a service's certificate is one anybody trusts: whoever
+  checks a book decides that, by the fingerprint of the certificate.
 - A state put back from an older copy, with a recorder that hides the
   seals made since, can be made to sign a second history of the lines
   after the latest seal that state holds. A later book brought in with

@@ -840,8 +840,9 @@ holds the settings for particular clients.
 - `recorder`: optional; the recorder that seals the book: `keys`, its key
   file; `name`, a label on each seal (the executor's `name` unless
   given); and `sealEvery`, how often the book is sealed while the executor
-  runs, in milliseconds (no timer unless given). Or, in place of `keys`
-  and `name`, `sealer`: a central sealer that holds the recorder's keys
+  runs, in milliseconds (no timer unless given); and `stamp`, a
+  time-stamp service each seal is sent to (none unless given). Or, in
+  place of `keys`, `name` and `stamp`, `sealer`: a central sealer that holds the recorder's keys
   (`address`, `name`, `token`, `keySet`, and, where wanted, `timeout`
   and `maxUnsent`). The example settings name none. See "Sealing,
   acknowledging, and what the executor says about itself".
@@ -1302,6 +1303,32 @@ it. The settings name the recorder:
   executor's key file or an agent's.
 - `name`: a label on each seal; the executor's `name` unless given.
 - `sealEvery`: see "On a timer". Left out, there is no timer.
+- `stamp`: see "An outside time-stamp on each seal". Left out, no
+  time-stamp is asked for.
+
+**An outside time-stamp on each seal.** With `"stamp": {"address": ...,
+"timeout": ...}`, each seal the executor signs is sent, as its
+fingerprint, to that time-stamp service (RFC 3161), and the time-stamp it
+gives goes beside the seal in the book, in `stamps`. `address` begins
+`http://` or `https://` and holds no user name, password or fragment;
+`timeout` is from 100 to 60,000 milliseconds, 10,000 if left out. No
+service is named by this package: the address is yours to choose. The
+request and the check are the library's (`provared/net/timestamp`): the
+answer is read up to 12,544 bytes and within the time limit, a redirect
+is not followed, and the time-stamp is kept only if the library's
+`checkStamp` passes it for this fingerprint, it carries the number used
+once that was sent, and the time it states is within 300 seconds of this
+computer's clock. Anything else costs no seal: the seal goes into the
+book without a time-stamp, `seal` answers `stampProblem` (its code and
+why) and the command prints it, and the log has a `stamp-not-given` event
+with the code and the reason. A seal that carries one answers `stamped:
+true`, and its `sealed` event says `stamped: true`. The service sees the
+seal's fingerprint, this computer's address and when it asked; nothing of
+the book. While it is asked, the agent's calls wait, as for the seal's own
+signatures. `stamp` is not taken beside `sealer`: a central sealer asks
+for its seals' time-stamps under its own settings (its `stamp`), and
+where it was not given one, the executor logs `stamp-not-given` with the
+reason the sealer gave.
 
 Without `recorder` the executor seals nothing, and `check` says so. Where
 the settings name a recorder, the executor expects every seal in a book to
@@ -1760,9 +1787,18 @@ again once no call waits.
   call that asked for more input (`resultType: "input_required"`), and
   each counts against totals and counts.
 - **Time.** Times are the executor's clock: a receipt's, a
-  countersignature's and a seal's. No outside time-stamp is put beside a
-  seal in this version, so a seal's time is the recorder's own word, and
-  nothing outside the executor shows when a book was sealed.
+  countersignature's and a seal's. Without `recorder.stamp` (or a central
+  sealer's `stamp`), no outside time-stamp is put beside a seal, so a
+  seal's time is the recorder's own word, and nothing outside the
+  executor shows when a book was sealed. With one, a seal that carries
+  a time-stamp shows, to a reader who trusts that service by the
+  fingerprint of its certificate, that the seal's content, and so every
+  entry before it, existed by the time the service states. It does not
+  show that any entry is true, that the times the entries state are
+  right, when an entry after the last time-stamped seal was written, or
+  that the book was not cut back to an earlier seal; and it rests on the
+  service's own clock and key. A seal the service gave no time-stamp for
+  has none, and is shown so.
 - **What a seal shows.** That the recorder's keys signed the book as it
   stood, so a later change to an entry before the seal no longer passes
   the check. Where the recorder's sealing keys are in a file on the
@@ -1780,7 +1816,9 @@ again once no call waits.
   under a permission whose first book the sealer holds is not started
   on. Going on, under a central sealer, with a book already sealed with
   a key file. A sealer on another computer: the sealer listens on
-  127.0.0.1 only. A time-stamp beside the sealer's seal was not tried.
+  127.0.0.1 only. A time-stamp beside the sealer's seal is the sealer's
+  to ask for (its settings' `stamp`): the sealer's tests cover a
+  time-stamp given and one not given; the executor's, one not given.
   Between the sealer's answer about what it holds and the question for a
   seal, a sealer that is started again signs over the lines it then
   holds: for a book with no seal yet, that is a seal the book refuses,

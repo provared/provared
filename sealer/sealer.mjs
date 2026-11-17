@@ -27,8 +27,9 @@
 // the state cannot be saved, every question taken up after that is
 // answered "sealer-stopped" until the program is started again.
 //
-// What it does not do: it names no time-stamp service (a program that
-// embeds it may give a "stamp" function); it asks no witness; it does not
+// What it does not do: it names no time-stamp service (the settings'
+// "stamp" may give one's address, or a program that embeds it a "stamp"
+// function); it asks no witness; it does not
 // check that a recorder sends the fingerprints of real lines (the book's
 // own check does that, when the seal is added to it).
 
