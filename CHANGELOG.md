@@ -1396,11 +1396,11 @@
       made the executor hold it all in memory on Linux, and stopped it for
       every agent on Windows.
     - **The sealer's wait for a time-stamp is shorter (X354).** Its
-      `stamp.timeout` is 2.5 seconds unless set (was 10). While the seal is
+      `stamp.timeout` is 2.5 seconds unless set (was 4). While the seal is
       signed and the service is asked, the sealer answers no other
       recorder, and a recorder's question times out after 5 seconds: with
       a service that never answered, another recorder's question was
-      answered after about 4.1 seconds here, where with 10 it timed out.
+      answered after 4.1 to 4.5 seconds here, where with 4 it timed out.
     - **The executor's and the gateway's wait for a time-stamp (X355).**
       `recorder.stamp.timeout` is 5 seconds unless set (was 10), and at
       most 20 (was 60). The executor's `check` warns above 8 seconds: a

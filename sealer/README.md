@@ -122,9 +122,9 @@ elsewhere) and the wait for the service add up. A recorder's question
 to the sealer times out after 5 seconds unless its settings say
 otherwise (the executor's `recorder.sealer.timeout`), which is why the
 time limit is 2.5 seconds unless set: with a service that never answers,
-a seal then took about 4.3 seconds in all here, and another recorder's
-question asked meanwhile was answered after about 4.1 seconds; with the
-earlier 10 seconds, that question timed out. Signers that take longer
+a seal then took 4.3 to 4.4 seconds in all here, and another recorder's
+question asked meanwhile was answered after 4.1 to 4.5 seconds (four
+runs); with the earlier 4 seconds, that question timed out. Signers that take longer
 than 2.5 seconds need a shorter limit, or recorders that wait longer.
 Set it longer, or a service answer
 slowly, and other recorders' questions asked meanwhile time out: their
