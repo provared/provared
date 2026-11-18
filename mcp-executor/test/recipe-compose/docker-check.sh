@@ -207,9 +207,13 @@ own_codes=""
 own_bad=""
 for p in /provared /provared/hello /provared/status /provared/seal /PROVARED/hello; do
   m=GET; case "$p" in */hello|*/seal) m=POST ;; esac
-  got=$(curlc -o "$WORK/own.body" -w '%{http_code}' -X "$m" "https://$DOMAIN$p")
-  own_codes="$own_codes $m $p $got $(wc -c < "$WORK/own.body" | tr -d ' ')b"
-  if [ "$got" != "404" ] || [ -s "$WORK/own.body" ]; then own_bad=1; fi
+  # The body on standard output, then the code on a line of its own: curl runs in a container of its own, whose files
+  # this script does not see.
+  out=$(curlc -w '\n%{http_code}' -X "$m" "https://$DOMAIN$p")
+  got=$(printf '%s' "$out" | tail -n 1)
+  body=$(printf '%s' "$out" | sed '$d')
+  own_codes="$own_codes $m $p $got ${#body}b"
+  if [ "$got" != "404" ] || [ -n "$body" ]; then own_bad=1; fi
 done
 note "the guard's own addresses through Caddy:$own_codes"
 [ -z "$own_bad" ] && ok "Caddy answers 404 itself for /provared and /provared/*: nothing reaches the guard's administrator's addresses from outside" || bad "the guard's own addresses through Caddy:$own_codes"

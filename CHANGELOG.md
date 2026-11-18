@@ -1365,6 +1365,10 @@
       Caddy answers 404 itself for `/provared` and everything under it;
       before, `status`, `seal`, `acknowledge` and `hello` answered from
       the internet once the settings named an administrator's secret.
+      The Docker check holds that Caddy's 404 has an empty body, read
+      from curl's own output (it had first looked for a file that curl's
+      container wrote, which the check does not see, and so passed
+      whatever the body).
     - **The recipe: a command that writes is refused beside the guard in
       any network (X350).** While the guard runs, its start listens on
       `guard-data/guard-running.sock`, and `owner`, `http`, `stdio` and any
