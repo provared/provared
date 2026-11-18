@@ -201,8 +201,9 @@ where it is rather than the link, and the start keeps it.
 Run every command that writes the guard's files with the guard stopped,
 as above: `owner`, and any command with `--offline` (`seal --offline`,
 `acknowledge --offline`). Commands that only read (`check`, `status`,
-`keys --out` to a new file) may run beside it. While the guard runs, its
-start answers at `guard-data/guard-running.sock`, and a command that
+`keys --out` to a new file) may run beside it. From the start's first
+step, while it waits for the permission too, and for as long as the guard
+runs, the start answers at `guard-data/guard-running.sock`, and a command that
 writes is refused (code 2) where something answers there. The guard's own
 lock refuses it too, but only where the command's container shares the
 guard's network, which is not so in the seconds after Caddy's container
@@ -404,14 +405,21 @@ guard unchanged (its own passes, another, or the same with `:443`, is
 refused); port 80 sending a browser on to https. It found the guard's port
 answering neither from the Docker network nor on the Docker host, only
 Caddy's 80 and 443 published, every file in `guard-data` the guard's
-user's with mode 600 (folders 700), Caddy's folders Caddy's user's,
-`owner` refused while the guard runs and `owner --reset` done with it
-stopped, `check` run through `docker compose run`, and the guard
-answering again within about a minute (69 and 56 seconds in two runs)
-after Caddy was restarted on its own. Its last run passed 37 checks of 37.
+user's with mode 600 (folders 700; the start's mark a socket, 600),
+Caddy's folders Caddy's user's, the image's own files 644 from copies of
+mode 600, Caddy's 404 for `/provared` and under it, `owner` refused while
+the guard runs and `owner --reset` done with it stopped, `check` run
+through `docker compose run`, and the guard answering again 20 to 37
+seconds after Caddy was restarted on its own (three runs), with
+`owner --reset` refused by the start's mark in that time. It stopped both
+containers and started them with `docker start`: Caddy first, both came
+back; the guard first, the guard stayed stopped until the boot unit's
+command ran, and then answered. Its last run passed 42 checks of 42.
 
 Not tried: a real server, a publicly signed certificate, DNS, a firewall,
-a reboot of the server, the weekly timer, `npm ci` against 0.5.0 on npm
+a reboot of the server or a restart of Docker itself (and so the order in
+which Docker starts the two then), the boot unit under systemd, the
+weekly timer, `npm ci` against 0.5.0 on npm
 (not yet published), a shallow clone of a tag (the `git tag -v` command
 was run on a full clone, against `v0.8.0`), and claude.ai itself.
 
@@ -439,7 +447,8 @@ was run on a full clone, against `v0.8.0`), and claude.ai itself.
   is left in the old one, where nothing reaches it. The start looks for
   Caddy's port every 5 seconds; after three misses it stops the guard,
   and Docker starts it again in Caddy's new network. Until then, about
-  15 to 30 seconds, claude.ai gets an error (502). A command that writes
+  15 to 40 seconds (20 to 37 in the check's runs), claude.ai gets an
+  error (502). A command that writes
   is refused in that time by the start's mark (above, "Commands, and the
   owner's reset"), not by the guard's lock, which it cannot see.
 - **Any passkey that verifies its user.** The guard asks nothing more of
