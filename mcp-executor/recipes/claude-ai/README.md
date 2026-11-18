@@ -410,7 +410,7 @@ Caddy's folders Caddy's user's, the image's own files 644 from copies of
 mode 600, Caddy's 404 for `/provared` and under it, `owner` refused while
 the guard runs and `owner --reset` done with it stopped, `check` run
 through `docker compose run`, and the guard answering again 20 to 37
-seconds after Caddy was restarted on its own (three runs), with
+seconds after Caddy was restarted on its own (four runs), with
 `owner --reset` refused by the start's mark in that time. It stopped both
 containers and started them with `docker start`: Caddy first, both came
 back; the guard first, the guard stayed stopped until the boot unit's
