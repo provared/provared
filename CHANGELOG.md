@@ -1479,6 +1479,22 @@
       first steps, in Caddy's new network; such a command is now refused
       too. The Docker check also holds that the image's three files are
       644 when the copy's were 600.
+    - **A second start is refused (X365).** `docker compose run --rm guard`
+      with no command, while the guard runs, now ends with code 2 before it
+      makes a mark of its own; before, it took the running guard's mark
+      away, and a command that writes was then refused only by the guard's
+      lock.
+    - **The boot unit's limits said (X366).** The recipe's README says that
+      the unit runs once at each start of the server, not after a restart
+      of Docker alone, and that it starts a guard stopped on purpose.
+    - **The release check refuses a mistyped option (X367).**
+      `tools/release/check-recipe-lock.mjs` took its first word as allowed
+      where `--recipe` was not given, so `--registy` ended with code 0; it
+      now stops on any word that is not an option, and on `--recipe` with
+      no folder.
+    - **Caddy away for longer (X368).** The recipe's README says that where
+      Caddy is not running when Docker starts the guard again, the guard
+      stays stopped until `docker compose up -d`; the Docker check tries it.
 
 - **`provared-mcp-executor` 0.4.2 (15 November 2026): a security fix for
   two weaknesses. In front of a tool server whose JSON reader ignores

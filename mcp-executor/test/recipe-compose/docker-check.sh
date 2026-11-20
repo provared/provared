@@ -278,6 +278,12 @@ if wait_log 'still works' 60 && [ "$(cat "$WORK/guard-data/owner-link.txt")" = "
 code=$(curlc -o /dev/null -w '%{http_code}' -X POST "https://$DOMAIN/mcp")
 [ "$code" = "401" ] && ok "after the restart, the guard answers through Caddy" || bad "after the restart: $code"
 
+# --- a second start beside the running guard (no command given): refused, the running guard's mark left answering (X365) ---
+sr=$(dc run --rm --no-deps -T guard 2>&1); sc=$?
+if [ "$sc" -eq 2 ] && echo "$sr" | grep -q 'The guard is running on these files already'; then ok "a second start beside the running guard: refused (code 2)"; else bad "a second start beside the running guard: code $sc: $(echo "$sr" | tail -n 2)"; fi
+wr=$(dc run --rm --no-deps -T guard owner --reset 2>&1); wc=$?
+if [ "$wc" -eq 2 ] && echo "$wr" | grep -q 'The guard is running on these files'; then ok "after the second start, owner --reset is still refused by the running guard's mark (code 2)"; else bad "after the second start, owner --reset: code $wc: $(echo "$wr" | tail -n 2)"; fi
+
 # --- Caddy restarted on its own: the guard, left in Caddy's old network, stops, and Docker starts it again in the new one ---
 began=$(date +%s)
 dc restart caddy >/dev/null 2>&1
@@ -334,6 +340,21 @@ for order in "caddy guard" "guard caddy"; do
     else bad "started in the order $order, then the boot unit's command: the guard did not answer through Caddy within 120 seconds (guard: $(docker inspect -f '{{.State.Status}} {{.State.Error}}' "$GUARD"))"; fi
   fi
 done
+
+# --- Caddy away for longer than the guard's watch (README, "Caddy away for longer"): what Docker does with the guard,
+# noted; then "docker compose up -d" brings it back (X368) ---
+CADDY=$(dc ps -aq caddy)
+GUARD=$(dc ps -aq guard)
+restarts=$(docker inspect -f '{{.RestartCount}}' "$GUARD")
+docker stop "$CADDY" >/dev/null 2>&1
+sleep 45
+note "Caddy stopped for 45 seconds: the guard $(docker inspect -f '{{.State.Status}} (restarts {{.RestartCount}}, {{.State.ExitCode}}) {{.State.Error}}' "$GUARD"); its restarts before: $restarts"
+docker start "$CADDY" >/dev/null 2>&1
+if answers 60; then note "Caddy started again: the guard came back by itself within 60 seconds"
+else note "Caddy started again: the guard stayed stopped for 60 seconds ($(docker inspect -f '{{.State.Status}}: {{.State.Error}}' "$GUARD"))"; fi
+out=$(dc up -d --no-build --pull never 2>&1) || note "docker compose up -d: $(echo "$out" | tail -n 1)"
+if answers 120; then ok "Caddy away for 45 seconds, then docker compose up -d: the guard answers through Caddy"
+else bad "Caddy away for 45 seconds, then docker compose up -d: the guard did not answer through Caddy within 120 seconds (guard: $(docker inspect -f '{{.State.Status}} {{.State.Error}}' "$GUARD"))"; fi
 
 echo "-- the guard's last log lines:"
 dc logs --no-log-prefix --tail 8 guard 2>/dev/null | sed 's/^/   | /'

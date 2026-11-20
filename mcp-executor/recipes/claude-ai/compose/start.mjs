@@ -223,6 +223,13 @@ function marks(settings) {
 }
 
 async function start() {
+  // A second start on these files (a bare "docker compose run --rm guard") is refused before it touches the running
+  // guard's mark: making its own would take that one's away, and a command that writes would no longer be refused by it.
+  if (await guardRunning()) {
+    process.stderr.write(`provared-guard: ${START_WORDS}\n`);
+    process.exitCode = 2;
+    return;
+  }
   for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => process.exit(0));
   const domain = checkDomain(process.env.PROVARED_DOMAIN);
   const folder = data();
@@ -377,6 +384,9 @@ export const writes = (command, rest) => ['owner', 'http', 'stdio'].includes(com
 
 /** What a command that writes is told where the guard is running. */
 export const RUNNING_WORDS = `The guard is running on these files (its start answers at ${HOST_FOLDER}/${RUNNING}), and this command writes them, which only one program may do at a time. Stop the guard first (docker compose stop guard), run the command, then start it again (docker compose start guard).`;
+
+/** What a second start is told where the guard is running. */
+export const START_WORDS = `The guard is running on these files already (its start answers at ${HOST_FOLDER}/${RUNNING}), and one guard at a time may run on them, so this start does not begin. A command is given after the service's name (docker compose run --rm guard <command>); with none, it is a start.`;
 
 /**
  * The guard shares Caddy's network. Where Caddy's container is restarted on

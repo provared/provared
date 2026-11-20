@@ -433,6 +433,40 @@ test('a command that writes is refused while the start\'s mark answers, with no 
   }
 });
 
+test('a second start, with no command, is refused while the start\'s mark answers, and leaves that mark answering (X365)', async () => {
+  const data = folder();
+  const before = process.env.PROVARED_DATA;
+  process.env.PROVARED_DATA = data;
+  let mark = null;
+  let child = null;
+  try {
+    mark = await markRunning();
+    assert.equal(await guardRunning(), true);
+    // A guard program that is not there: a start that went on past the mark would end at its first step.
+    const r = await new Promise((done) => {
+      child = spawn(process.execPath, [START], { cwd: data, env: { ...process.env, PROVARED_DATA: data, PROVARED_BIN: join(data, 'no-guard.mjs'), PROVARED_DOMAIN: 'guard.example.test', PROVARED_PEER: '' }, stdio: ['ignore', 'pipe', 'pipe'] });
+      let out = '';
+      child.stdout.on('data', (d) => (out += d));
+      child.stderr.on('data', (d) => (out += d));
+      const timer = setTimeout(() => child.kill(), 20_000);
+      child.on('close', (status) => {
+        clearTimeout(timer);
+        done({ status, out });
+      });
+    });
+    assert.equal(r.status, 2, r.out);
+    assert.match(r.out, /The guard is running on these files already .*this start does not begin/);
+    assert.equal(await guardRunning(), true, 'the running start\'s mark still answers');
+    assert.equal(existsSync(join(data, 'executor-http.json')), false, 'the second start wrote nothing');
+  } finally {
+    if (child && child.exitCode === null) child.kill();
+    if (mark) await new Promise((r) => mark.close(r));
+    if (before === undefined) delete process.env.PROVARED_DATA;
+    else process.env.PROVARED_DATA = before;
+    rmSync(data, { recursive: true, force: true });
+  }
+});
+
 // --- what the recipe's files must hold ---
 
 /** The lines of one service of compose.yaml, by its name. */
@@ -588,6 +622,17 @@ test('package-lock.json: the executor\'s provisional entry is marked, and the re
     assert.equal(differs.status, 1);
     assert.match(differs.stderr, /gives provared-mcp-executor 0\.5\.0, and package\.json 0\.5\.1/);
     assert.equal(run('--recipe', copy, '--wrong').status, 1);
+    // A mistyped option is refused as one, with --recipe or without it, before any file is looked at (X367).
+    for (const args of [['--registy'], ['--registy', '--recipe', copy], ['--recipe', copy, '--registy']]) {
+      const wrong = run(...args);
+      assert.equal(wrong.status, 1, args.join(' '));
+      assert.match(wrong.stderr, /Stopped: "--registy" is not an option: give --registry, --recipe <folder>, or nothing\./, args.join(' '));
+    }
+    for (const args of [['--recipe'], ['--recipe', '--registry']]) {
+      const bare = run(...args);
+      assert.equal(bare.status, 1, args.join(' '));
+      assert.match(bare.stderr, /Stopped: --recipe needs a folder after it\./, args.join(' '));
+    }
   } finally {
     rmSync(copy, { recursive: true, force: true });
   }

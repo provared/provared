@@ -21,9 +21,12 @@ import { ROOT, fail } from './lib.mjs';
 const PACKAGE = 'provared-mcp-executor';
 const args = process.argv.slice(2);
 const at = args.indexOf('--recipe');
-const folder = at >= 0 ? resolve(args[at + 1] ?? '') : join(ROOT, 'mcp-executor', 'recipes', 'claude-ai', 'compose');
+// Only the word after --recipe is its folder: without --recipe, every word must be an option (X367).
+const allowed = ['--registry', ...(at >= 0 ? ['--recipe', args[at + 1]] : [])];
+for (const a of args) if (!allowed.includes(a)) fail(`"${a}" is not an option: give --registry, --recipe <folder>, or nothing.`);
+if (at >= 0 && (args[at + 1] === undefined || args[at + 1].startsWith('--'))) fail('--recipe needs a folder after it.');
+const folder = at >= 0 ? resolve(args[at + 1]) : join(ROOT, 'mcp-executor', 'recipes', 'claude-ai', 'compose');
 const registry = args.includes('--registry');
-for (const a of args) if (!['--registry', '--recipe', args[at + 1]].includes(a)) fail(`"${a}" is not an option: give --registry, --recipe <folder>, or nothing.`);
 
 const json = (name) => {
   try {

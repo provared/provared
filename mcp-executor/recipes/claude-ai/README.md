@@ -208,7 +208,9 @@ writes is refused (code 2) where something answers there. The guard's own
 lock refuses it too, but only where the command's container shares the
 guard's network, which is not so in the seconds after Caddy's container
 is restarted on its own, until the guard has stopped and started again;
-the socket file is seen from either network.
+the socket file is seen from either network. `docker compose run --rm guard`
+with no command is a second start, not a help text: it is refused the same
+way (code 2), and leaves the running guard's socket file as it was.
 
 ### What to back up, and what is secret
 
@@ -307,6 +309,17 @@ switch it on:
 Without it, run `docker compose up -d` in the folder of `compose.yaml`
 after each restart of the server. Which order Docker itself uses when the
 server starts was not found out here: Docker was not restarted.
+
+The unit runs once, at each start of the server, and not again until the
+next. Where Docker alone is restarted (`systemctl restart docker`, or an
+update of Docker's packages), Docker starts the two containers again in an
+order of its own and the unit does not run: the guard can stay stopped.
+After such a restart, run `docker compose up -d` in the folder of
+`compose.yaml`. The unit also starts a guard that was stopped on purpose
+(`docker compose stop guard`), as `docker compose up -d` starts every
+container: a guard that must stay stopped across a restart of the server
+needs the unit switched off first
+(`sudo systemctl disable provared-guard-boot.service`).
 
 ### A real upstream in place of the demonstration's tools
 
@@ -451,6 +464,12 @@ was run on a full clone, against `v0.8.0`), and claude.ai itself.
   error (502). A command that writes
   is refused in that time by the start's mark (above, "Commands, and the
   owner's reset"), not by the guard's lock, which it cannot see.
+- **Caddy away for longer.** Where Caddy is not running when Docker starts
+  the guard again (Caddy stopped for more than about 15 seconds, or ending
+  again and again on a mistake in its Caddyfile), the guard cannot join
+  Caddy's network, and Docker does not try again: the guard stays stopped
+  after Caddy is back. Run `docker compose up -d` in the folder of
+  `compose.yaml` once Caddy runs.
 - **Any passkey that verifies its user.** The guard asks nothing more of
   the passkey than a fingerprint, a face or a PIN at each use. The browser
   offers where to keep it: on this device, on a phone or on a security
