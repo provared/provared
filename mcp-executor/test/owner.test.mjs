@@ -30,6 +30,7 @@ const { ownerWorld, softPasskey, setUpOwner, prove, sender, refusal, waiting, st
 
 const BIN = fileURLToPath(new URL('../bin.mjs', import.meta.url));
 /** A recovery code as it is shown: 32 characters of base32, in eight groups of four. */
+// eslint-disable-next-line security/detect-unsafe-regex -- each repeated group ends in a hyphen the group's letters cannot match, so matching takes time in proportion to the input.
 const RECOVERY_SHOWN = /^([A-Z2-7]{4}-){7}[A-Z2-7]{4}$/;
 const FOUR = [FIELD_CHALLENGE, FIELD_AUTHENTICATOR_DATA, FIELD_CLIENT_DATA, FIELD_SIGNATURE];
 /** The check's four fields of an answer, without the request that came with them. */
@@ -675,6 +676,7 @@ async function typeRecovery(w, typed) {
 /** Text as a page shows it: the executor writes these five characters as numbers. */
 const shown = (text) => text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 /** Anything written as a recovery code is: eight groups of four, or 32 characters in a row. */
+// eslint-disable-next-line security/detect-unsafe-regex -- each repeated group ends in a hyphen the group's letters cannot match, so matching takes time in proportion to the input.
 const ANY_CODE = /\b([A-Z2-7]{4}-){7}[A-Z2-7]{4}\b|\b[A-Z2-7]{32}\b/;
 /** How many of the log's lines are of one event. */
 const count = (w, event) => w.logs.filter((e) => e.event === event).length;

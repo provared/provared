@@ -71,6 +71,7 @@ export function checkDomain(text) {
   const ok =
     d.length <= 253 &&
     labels.length >= 2 &&
+    // eslint-disable-next-line security/detect-unsafe-regex -- one optional part holding one bounded run, on a label with no full stop: no text can match two ways, so matching takes time in proportion to the input.
     labels.every((l) => /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(l)) &&
     !/^[0-9]+$/.test(labels[labels.length - 1]);
   if (!ok) throw new Error(`PROVARED_DOMAIN is "${text}", which is not a domain name such as guard.example.com: no "https://", no port, no path, and not an IP address (a browser makes no passkey for an IP address).`);

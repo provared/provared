@@ -283,6 +283,7 @@ export function readSealerToken(from, env = process.env) {
   let token;
   if (from.env !== undefined) {
     token = env[from.env];
+    // eslint-disable-next-line security/detect-possible-timing-attacks -- checks only whether the variable is set; no secret is compared with another.
     if (token === undefined) throw new Error(`recorder.sealer.token: the variable ${from.env} is not set in the executor's environment.`);
   } else {
     try {

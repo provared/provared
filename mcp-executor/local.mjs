@@ -369,6 +369,7 @@ export function openLocalSessions({ settings, env, credentialNames, log, serverS
      */
     async begin(agent, connection) {
       const deadline = Date.now() + settings.shutdownWait + killWait + CLOSE_MARGIN;
+      // eslint-disable-next-line no-unmodified-loop-condition -- closed is set by close(), which may run while the loop waits.
       while (!closed && programsOf(agent).length >= settings.sessions.max) {
         let ending = programsOf(agent).filter((s) => s.ended);
         if (ending.length === 0) {

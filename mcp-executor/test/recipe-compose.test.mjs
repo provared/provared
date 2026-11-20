@@ -355,6 +355,7 @@ test('watchPeer: nothing while Caddy\'s port answers; once it has not answered s
   assert.equal(lost, 0, 'Caddy answers: the guard runs on');
   await new Promise((r) => server.close(r));
   const end = Date.now() + 5000;
+  // eslint-disable-next-line no-unmodified-loop-condition -- lost is counted by watchPeer's callback, which runs while the loop waits.
   while (lost === 0 && Date.now() < end) await new Promise((r) => setTimeout(r, 30));
   assert.equal(lost, 1, 'Caddy gone from this network: the guard is stopped, once');
   await new Promise((r) => setTimeout(r, 200));
@@ -456,6 +457,7 @@ test('compose.yaml: the guard publishes no port, shares Caddy\'s network, and on
   assert.match(guard, /^ {4}network_mode: service:caddy$/m);
   assert.match(folders, /^ {4}network_mode: none$/m);
   assert.doesNotMatch(folders, /ports:/);
+  // eslint-disable-next-line security/detect-unsafe-regex -- each repeated line ends in a line break the line cannot match, so matching takes time in proportion to the input.
   const published = /ports:\n((?: {6}- .*\n)+)/.exec(`${caddy}\n`);
   assert.deepEqual(published[1].trim().split('\n').map((l) => l.trim()), ['- "80:80"', '- "443:443"']);
   assert.equal(compose.match(/^\s+ports:/gm).length, 1, 'one list of ports in the file');
@@ -468,6 +470,7 @@ test('compose.yaml: the guard publishes no port, shares Caddy\'s network, and on
 test('compose.yaml: plain folders beside it, bind-mounted; no Docker volume', () => {
   const compose = read('compose.yaml');
   assert.doesNotMatch(compose, /^volumes:/m, 'no named volume is declared');
+  // eslint-disable-next-line security/detect-unsafe-regex -- each repeated line ends in a line break the line cannot match, so matching takes time in proportion to the input.
   const mounts = [...compose.matchAll(/^ {4}volumes:\n((?: {6}- .*\n)+)/gm)].flatMap((m) => m[1].trim().split('\n').map((l) => l.trim().slice(2)));
   assert.ok(mounts.length >= 6);
   for (const m of mounts) assert.match(m, /^\.\/(guard-data|caddy-data|caddy-config|Caddyfile):\//, m);
@@ -480,6 +483,7 @@ test('compose.yaml: plain folders beside it, bind-mounted; no Docker volume', ()
 
 test('compose.yaml: every container read-only, every capability dropped, no new privileges, a non-root user; Caddy gets none back', () => {
   const compose = read('compose.yaml');
+  // eslint-disable-next-line security/detect-unsafe-regex -- each repeated line ends in a line break the line cannot match, so matching takes time in proportion to the input.
   const locked = /^x-locked: &locked\n((?: {2}.*\n)+)/m.exec(compose)[1];
   assert.match(locked, /read_only: true/);
   assert.match(locked, /cap_drop: \[ALL\]/);

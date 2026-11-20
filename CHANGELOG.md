@@ -2,6 +2,12 @@
 
 ## Not yet released
 
+- **Static analysis passes again on the executor.** Nine warnings in
+  `mcp-executor` were checked and found to be false alarms: two loops whose
+  condition changes in a callback, six patterns that cannot match the same
+  text two ways, and one test of whether a variable is set, which compares
+  no secret. Each now carries a comment that says why. No behaviour changes.
+
 - **An outside time-stamp on each seal, asked for over the network.** A
   program that seals can now send each seal's fingerprint to a time-stamp
   service (RFC 3161) whose address its settings give, and put the
