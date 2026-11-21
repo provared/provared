@@ -118,7 +118,9 @@ These change what the entries above describe.
 - **Documents** (L4, M4). The README states the exact bytes of the copy's
   tag, gives the checker's command as `npx --package=provared@0.9.0
   provared-check …` (the checker is the library's command), and says no
-  more of the countersignature than the checker shows.
+  more of the countersignature than the checker shows. It says that a
+  gateway without keys of its own keeps no copy, countersigns nothing, and
+  lets the journal decide at a start, as before.
 - **Tests** (`test/review4.test.mjs`, 20; `test/countersign.test.mjs`
   changed to the gateway's own entry, and its test of a call noted
   `withdrawn` replaced): the copy deciding at a start, with the journal's

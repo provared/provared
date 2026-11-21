@@ -495,6 +495,9 @@ One for a call the copy does not hold is listed, never given a stub, and
 can only be set aside (`journal-line-not-in-copy`); one that names a call
 of the copy and says otherwise is not acted on (`journal-line-differs`). So
 a journal line from before the gateway kept a copy can only be set aside.
+A gateway without keys of its own (no `gateway` in the settings) keeps no
+copy and countersigns nothing: at a start the journal decides, as described
+above, as it did before the gateway had keys of its own.
 
 **A book cut part-way through a line.** A stop while a line of the book is
 written can leave the file ending part-way through it; the gateway then does
