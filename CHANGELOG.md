@@ -221,129 +221,6 @@
   - **Versions.** 0.4.2 in `mcp-executor/package.json` and
     `mcp-executor/server.json` (both fields).
 
-- **`provared` 0.8.1 (not yet released; `package.json` and
-  `python/pyproject.toml` still say 0.8.0): a time-stamp's time in the
-  years 0000 to 0099 is read, where it was refused; and two checks on
-  the signing page that rest on the clock of the device a person signs
-  on.** No signed byte, label or field's meaning changes. **The first
-  change alters what a checker answers:** a checker of an earlier
-  version, in JavaScript or Python, answers differently on the records
-  named below.
-  - **A time in a time-stamp or in its service's certificates, written
-    in the long form (GeneralizedTime) with a year from 0000 to 0099, is
-    now read as the year written** (`timeOf` in `src/der.js`, `time_of`
-    in `python/src/provared/der.py`). Before, both libraries refused it
-    (`stamp-bad-data`, "a time names a moment that does not exist"): in
-    JavaScript because `Date.UTC` reads a year from 0 to 99 as 1900 to
-    1999, so that the date did not come back as it went in, and in
-    Python to match. The format description never stated that refusal,
-    and a checker written from it alone reads such a year; the
-    description is unchanged, and the libraries and the shared test
-    files now agree with it. JavaScript sets the date with
-    `setUTCFullYear`, which takes every year as given; Python no longer
-    refuses a year below 100. A date that does not exist in those years
-    (29 February 0099, a thirteenth month, hour 24) is refused as in any
-    other year. The short form (UTCTime) names 1950 to 2049, as before.
-  - **What a checker now answers.** Such a time goes on to the rules
-    that follow the reading of it (format description, section 21.2). A
-    time-stamp that states a time in the year 0050, under a certificate
-    in force from 2026 to 2036, was refused as `stamp-bad-data`; it is
-    now refused as `stamp-invalid`, "A time-stamp is dated outside the
-    time its service's certificate was in force." No case in the shared
-    test files, and no test here, has such a time-stamp pass: for that,
-    a trusted service's certificates would have to be in force in those
-    years.
-  - **Shared test files whose stored answers changed** (five, against
-    the files before this change; each new answer is the one the library
-    gives): `test-vectors/stamps.json`, case 59, "statement: a time in
-    the year 50": refused `stamp-bad-data` before, refused
-    `stamp-invalid` now, with the words above.
-    `test-vectors/der-times.json`, four cases, each refused
-    `stamp-bad-data` before and read now, in milliseconds since 1970:
-    `00000101000000Z` -62167219200000; `00500101000000Z`
-    -60589296000000; `00990101000000Z` -59042995200000;
-    `00991231235959Z` -59011459201000.
-  - **Shared test files with more cases.** `der-times.json` gains six
-    (61 before, 67 now). Three are read: `00010101000000Z`
-    -62135596800000; `00960229000000Z` -59132592000000;
-    `00991231235959.5Z` -59011459200500. Three are refused in those
-    years as in any other: 29 February 0099, a thirteenth month in 0050,
-    and hour 24 in 0050.
-    `test-vectors/times.json` gains seven cases (18 before, 25 now) for a
-    record's own time (`parseTime`, `parse_time`; format description,
-    section 3.6), which was and is the year it says in both libraries:
-    the last second of 0000, the first of 0001, 0050, 29 February 0096
-    (a leap year), 29 February 0099 (not one), the last second of 0099
-    and the first of 0100.
-  - **Tests.** `test/timestamp.test.mjs` (one test) and
-    `python/tests/test_small_years.py` (one) hold the reading of those
-    years and the dates still refused; both fail on the earlier code.
-    `test/encoding.test.mjs` (one) and the second test of the Python
-    file hold a record's own time, and pass on the earlier code too.
-  - **The signing page sets its own limit on a start**
-    (`startRefusal` in `page/sign-page.js`). A review of the hand-over
-    (3 November 2026) found that the five-minute rule rests on the clock
-    of the device the person signs on, and that the signing page set no
-    limit of its own on a start: it signed whatever start the page that
-    asked gave it. Now a permission another page asks for (`#request=`,
-    kind `permission` or `renewal`) is not signed where it starts more
-    than 300 seconds (the allowance between clocks the format uses, and
-    the one by which the recorder beside Claude Code refuses a renewal
-    handed over, `starts-later`) after this device's clock at the press
-    of Sign. It is checked at every press, on what was read and is about
-    to be signed, before any warning is shown or a passkey asked, and
-    the page says why. The limit covers such requests only. A link with
-    `#permission=` carries its own start, which the page takes as the
-    link gives it (`readStartingPermission`), and that way of signing
-    has no limit on the start, as before: it is meant for a permission
-    kept as a file. A start that is not a time is left to the format's
-    own check, as before.
-  - **The signing page warns where this device's clock looks behind**
-    (`clockWarning`). Where a request carries an earlier permission
-    (a renewal or a cancellation), whose passkey signature the page has
-    checked, and by this device's clock that permission will not start
-    for more than 300 seconds yet, either it has not started or the
-    clock is behind: the page shows a warning with the others, and signs
-    only once the person presses again. Nothing signed changes: a
-    cancellation is dated by the same clock as before.
-  - **The recorder's README** (`integrations/claude-code/README.md`,
-    "Limits") said that the signing page sets no limit of its own on the
-    start. It now says what the page in this repository does, that the
-    limit covers requests (`#request=`) only, that a link with
-    `#permission=` carries its own start and has no such limit, that the
-    limit is measured by the signing device's clock, and that a copy of
-    the page from before this change (the one served at
-    https://sign.prova.red, until it is brought up to date) sets none.
-  - **The reader of another project's receipts**
-    (`integrations/agent-middleware/judge.mjs`, `parseAmwTime`; not
-    published) reads a time in the years 0000 to 0099 as the year
-    written, for the same reason and in the same way (`setUTCFullYear`
-    in place of `Date.UTC`). **This changes what it answers:** a receipt
-    dated in those years was "Not compared: the receipt's time cannot be
-    read"; it is now compared, and one outside the permission's period
-    is found `outside-valid-time`. A date that does not exist in those
-    years is still a time that cannot be read. One test
-    (`integrations/agent-middleware/test/judge.test.mjs`), which fails
-    on the earlier code.
-  - **What these two do not do.** Both read the same clock, the signing
-    device's. A clock that is ahead is not noticed, and with such a
-    clock a start that far ahead of the true time is still signed. A
-    request with no earlier permission gives the page nothing to compare
-    the clock with. The page asks no one the time, and sends nothing
-    anywhere, as before.
-  - **Tests** (`test/sign-start.test.mjs`, seven): the limit at 300
-    seconds and one second past it, for both kinds; no limit with no
-    request; a start that is not a time; the warning at the same two
-    points, and with a clock a year behind; the warning's words the same
-    from one press to the next; and, read from the page's own text, that
-    the limit comes before the warnings and the passkey, and that both
-    signing buttons work the warning out. In a browser with a virtual
-    passkey (`test/sign-window.test.mjs`, one test, skipped where there
-    is no browser): a renewal that starts ten minutes ahead is not
-    signed, no warning is shown, nothing goes back and the passkey is
-    not asked; and with a clock a day behind, a cancellation's first
-    press shows the warning and signs nothing, and the second signs.
-
 - **The threat model, corrected on time-stamps.** Two places in
   `docs/threat-model.md` said an outside time-stamp settles a stub's
   date. It shows only that the stub existed by the stamp's time: it catches
@@ -666,6 +543,127 @@
   now start between 300 seconds after the latest cancellation and 300
   seconds after the recorder's clock; `admit-passkey` for a passkey never
   trusted needs the recorder running. Tests: `test/handover.test.mjs`.
+
+## 0.8.1 (22 November 2026)
+
+Version 0.8.1 changes how the library reads one kind of time and what the signing page will sign. A time in a time-stamp, or in its service's certificates, written in the long form with a year from 0000 to 0099, is now read as the year written; both libraries, JavaScript and Python, refused it before. What changes for a user: such a time-stamp now goes on to the later checks, so 0.8.1 refuses it as `stamp-invalid` (dated outside its service's certificate), where earlier versions refused it as `stamp-bad-data`; and five stored answers in the shared test files changed. The signing page, in this repository, now refuses to sign a permission, asked for by another page, that starts more than 300 seconds after the device's clock, and warns where the device's clock looks behind. No signed byte, label or field's meaning changes, and nothing else in the library changes. A reader in this repository of another project's receipts (not published) now reads such years in the same way, as its entry below says.
+
+- **Versions.** The library is 0.8.1, in `package.json` and `python/pyproject.toml`. `examples/frameworks/package-lock.json` gives the library's version as 0.8.1. No range changes: the Hermes plugin's `provared>=0.4.0,<0.9` still takes 0.8.1, and the test workflow's check of that bound passes. The README, the guide, the Python README and three pages say 0.8.1. The guide gives the checking page's new fingerprint, `486471a5b8f3108d08acaacb96d7c27ceeecf95b93bce8e47721b8872a9b1bbc`, since the checker in it changed.
+
+- **A time in a time-stamp or in its service's certificates, written
+  in the long form (GeneralizedTime) with a year from 0000 to 0099, is
+  now read as the year written** (`timeOf` in `src/der.js`, `time_of`
+  in `python/src/provared/der.py`). Before, both libraries refused it
+  (`stamp-bad-data`, "a time names a moment that does not exist"): in
+  JavaScript because `Date.UTC` reads a year from 0 to 99 as 1900 to
+  1999, so that the date did not come back as it went in, and in
+  Python to match. The format description never stated that refusal,
+  and a checker written from it alone reads such a year; the
+  description is unchanged, and the libraries and the shared test
+  files now agree with it. JavaScript sets the date with
+  `setUTCFullYear`, which takes every year as given; Python no longer
+  refuses a year below 100. A date that does not exist in those years
+  (29 February 0099, a thirteenth month, hour 24) is refused as in any
+  other year. The short form (UTCTime) names 1950 to 2049, as before.
+- **What a checker now answers.** Such a time goes on to the rules
+  that follow the reading of it (format description, section 21.2). A
+  time-stamp that states a time in the year 0050, under a certificate
+  in force from 2026 to 2036, was refused as `stamp-bad-data`; it is
+  now refused as `stamp-invalid`, "A time-stamp is dated outside the
+  time its service's certificate was in force." No case in the shared
+  test files, and no test here, has such a time-stamp pass: for that,
+  a trusted service's certificates would have to be in force in those
+  years.
+- **Shared test files whose stored answers changed** (five, against
+  the files before this change; each new answer is the one the library
+  gives): `test-vectors/stamps.json`, case 59, "statement: a time in
+  the year 50": refused `stamp-bad-data` before, refused
+  `stamp-invalid` now, with the words above.
+  `test-vectors/der-times.json`, four cases, each refused
+  `stamp-bad-data` before and read now, in milliseconds since 1970:
+  `00000101000000Z` -62167219200000; `00500101000000Z`
+  -60589296000000; `00990101000000Z` -59042995200000;
+  `00991231235959Z` -59011459201000.
+- **Shared test files with more cases.** `der-times.json` gains six
+  (61 before, 67 now). Three are read: `00010101000000Z`
+  -62135596800000; `00960229000000Z` -59132592000000;
+  `00991231235959.5Z` -59011459200500. Three are refused in those
+  years as in any other: 29 February 0099, a thirteenth month in 0050,
+  and hour 24 in 0050.
+  `test-vectors/times.json` gains seven cases (18 before, 25 now) for a
+  record's own time (`parseTime`, `parse_time`; format description,
+  section 3.6), which was and is the year it says in both libraries:
+  the last second of 0000, the first of 0001, 0050, 29 February 0096
+  (a leap year), 29 February 0099 (not one), the last second of 0099
+  and the first of 0100.
+- **Tests.** `test/timestamp.test.mjs` (one test) and
+  `python/tests/test_small_years.py` (one) hold the reading of those
+  years and the dates still refused; both fail on the earlier code.
+  `test/encoding.test.mjs` (one) and the second test of the Python
+  file hold a record's own time, and pass on the earlier code too.
+- **The signing page sets its own limit on a start**
+  (`startRefusal` in `page/sign-page.js`). A review of the hand-over
+  (3 November 2026) found that the five-minute rule rests on the clock
+  of the device the person signs on, and that the signing page set no
+  limit of its own on a start: it signed whatever start the page that
+  asked gave it. Now a permission another page asks for (`#request=`,
+  kind `permission` or `renewal`) is not signed where it starts more
+  than 300 seconds (the allowance between clocks the format uses, and
+  the one by which the recorder beside Claude Code refuses a renewal
+  handed over, `starts-later`) after this device's clock at the press
+  of Sign. It is checked at every press, on what was read and is about
+  to be signed, before any warning is shown or a passkey asked, and
+  the page says why. The limit covers such requests only. A link with
+  `#permission=` carries its own start, which the page takes as the
+  link gives it (`readStartingPermission`), and that way of signing
+  has no limit on the start, as before: it is meant for a permission
+  kept as a file. A start that is not a time is left to the format's
+  own check, as before.
+- **The signing page warns where this device's clock looks behind**
+  (`clockWarning`). Where a request carries an earlier permission
+  (a renewal or a cancellation), whose passkey signature the page has
+  checked, and by this device's clock that permission will not start
+  for more than 300 seconds yet, either it has not started or the
+  clock is behind: the page shows a warning with the others, and signs
+  only once the person presses again. Nothing signed changes: a
+  cancellation is dated by the same clock as before.
+- **The recorder's README** (`integrations/claude-code/README.md`,
+  "Limits") said that the signing page sets no limit of its own on the
+  start. It now says what the page in this repository does, that the
+  limit covers requests (`#request=`) only, that a link with
+  `#permission=` carries its own start and has no such limit, that the
+  limit is measured by the signing device's clock, and that a copy of
+  the page from before this change (the one served at
+  https://sign.prova.red, until it is brought up to date) sets none.
+- **The reader of another project's receipts**
+  (`integrations/agent-middleware/judge.mjs`, `parseAmwTime`; not
+  published) reads a time in the years 0000 to 0099 as the year
+  written, for the same reason and in the same way (`setUTCFullYear`
+  in place of `Date.UTC`). **This changes what it answers:** a receipt
+  dated in those years was "Not compared: the receipt's time cannot be
+  read"; it is now compared, and one outside the permission's period
+  is found `outside-valid-time`. A date that does not exist in those
+  years is still a time that cannot be read. One test
+  (`integrations/agent-middleware/test/judge.test.mjs`), which fails
+  on the earlier code.
+- **What these two do not do.** Both read the same clock, the signing
+  device's. A clock that is ahead is not noticed, and with such a
+  clock a start that far ahead of the true time is still signed. A
+  request with no earlier permission gives the page nothing to compare
+  the clock with. The page asks no one the time, and sends nothing
+  anywhere, as before.
+- **Tests** (`test/sign-start.test.mjs`, seven): the limit at 300
+  seconds and one second past it, for both kinds; no limit with no
+  request; a start that is not a time; the warning at the same two
+  points, and with a clock a year behind; the warning's words the same
+  from one press to the next; and, read from the page's own text, that
+  the limit comes before the warnings and the passkey, and that both
+  signing buttons work the warning out. In a browser with a virtual
+  passkey (`test/sign-window.test.mjs`, one test, skipped where there
+  is no browser): a renewal that starts ten minutes ahead is not
+  signed, no warning is shown, nothing goes back and the passkey is
+  not asked; and with a clock a day behind, a cancellation's first
+  press shows the warning and signs nothing, and the second signs.
 
 ## 0.8.0 (1 November 2026)
 
