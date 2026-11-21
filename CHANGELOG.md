@@ -160,6 +160,18 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
 
 ## Not yet released
 
+- **The gateway countersigns with a key set of its own** (`gateway/`,
+  `provared-gateway` 0.1.0, not yet published). Where the settings give the
+  gateway its own keys (`gateway`) and an agent's slip names them in `with`
+  for an upstream's service, the gateway countersigns each call to it that
+  it lets through, with the library's `countersign` (format description,
+  section 6), keeps its own tagged copy of the agent's calls apart from the
+  book (`gateway/copy.mjs`), and `provared-gateway compare` holds the copy
+  against the book, as the MCP executor's does. `provared-gateway keys
+  --gateway` makes the key file and prints the slip's `with` entries. The
+  package lists its new files, asks for `provared` 0.9.0 exactly, and has a
+  change log of its own (`gateway/CHANGELOG.md`). The library does not
+  change.
 - **The home page for businesses.** https://prova.red now opens for businesses that use AI agents a lot: what the guard does, how it works with claude.ai, when it keeps the tools' credentials from the agent, what a record does not prove, and how to try it. The developers' material follows, under "For developers". No code changes.
 - **The pages and READMEs name the guard 0.5.0 as current.** The README, the
   home page and the three-minutes page say the guard is at 0.5.0, and the

@@ -5,6 +5,7 @@
   "unlisted": "refuse",
   "admin": { "secretHash": "REPLACE-with-the-hash-provared-gateway-secret-prints" },
   "recorder": { "name": "Provared gateway at gateway.example.internal", "keys": "keys/recorder.jwk" },
+  "gateway": { "name": "Provared gateway at gateway.example.internal", "keys": "keys/gateway.jwk" },
   "upstreams": {
     "tickets": {
       "base": "https://tickets.example.internal",
