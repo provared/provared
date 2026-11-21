@@ -46,6 +46,8 @@ export const ADDRESS_HEADERS = ['forwarded', 'x-real-ip', 'via', 'true-client-ip
 export const CONNECTION_TOKENS = ['close', 'keep-alive'];
 /** How many calls of one agent may wait at once, unless the settings say otherwise. */
 export const WAITING_CALLS = 16;
+/** The settings the gateway knows at the top of its settings file; any other is a problem. */
+const TOP_SETTINGS = ['listen', 'bodyLimit', 'timeout', 'unlisted', 'stripHeaders', 'stripQuery', 'waitingCalls', 'waitingBytes', 'admin', 'recorder', 'gateway', 'upstreams', 'rules', 'agents'];
 /** How many bytes of bodies one agent's waiting calls may hold at once, unless the settings say otherwise: 32 MB. */
 export const WAITING_BYTES = 32 * 1024 * 1024;
 /**
@@ -107,6 +109,8 @@ export function readRules(config) {
 
   const timeout = config.timeout ?? TIMEOUT;
   if (!(Number.isSafeInteger(timeout) && timeout >= 1 && timeout <= 600000)) problems.push('"timeout" must be a whole number of milliseconds from 1 to 600,000.');
+  // A setting mis-spelt would otherwise be passed over without a word (the gateway's own keys, say, so that nothing is countersigned).
+  for (const k of Object.keys(config)) if (!TOP_SETTINGS.includes(k)) problems.push(`"${k}" is not a setting the gateway knows.`);
 
   if (!isObject(config.upstreams) || Object.keys(config.upstreams).length === 0) problems.push('"upstreams" must name at least one system behind the gateway.');
   for (const [name, u] of Object.entries(isObject(config.upstreams) ? config.upstreams : {})) {

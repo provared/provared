@@ -35,7 +35,7 @@ import {
   utf8,
   writeSeal,
 } from 'provared';
-import { loadCopyKey, openCopy, readCopy, unfinished } from './copy.mjs';
+import { countersignatureFingerprint, loadCopyKey, openCopy, readCopy, sameCall, stubIsSending, unfinished } from './copy.mjs';
 import { aboutSlip, bookFile, loadKeyFile, readIfThere, replaceFile, slipFrom, untilFree } from './files.mjs';
 import { CONNECTION_TOKENS, HOP_BY_HOP, OVERRIDE_HEADERS, SECRET_HASH, amountOf, matchRule, neverForwarded, readRules, readTarget, stripParameters, upstreamAddress } from './rules.mjs';
 
@@ -146,31 +146,38 @@ async function readRecorder(config, root) {
 // --- the gateway's own key set, and its countersignature ---
 //
 // Where the settings give the gateway a key set of its own ("gateway"), and
-// an agent's slip names those keys in "with" for the service of an
-// upstream, the gateway countersigns each call of that agent to that
-// upstream which it lets through: the countersignature of the format
-// description, section 6, made with the library's "countersign" after the
-// answer came (or did not), over the stub that names the answer's or the
-// error's fingerprint. It keeps a copy of each such agent's calls apart
-// from the book (copy.mjs), which "compare" holds against the book.
+// an agent's slip names the gateway in "with" (an entry of its own, under
+// the gateway's id, by default "gateway", with the gateway's keys), every
+// stub of that agent names the gateway's id in "with", and the gateway
+// countersigns each call it lets through: the countersignature of the
+// format description, section 6, made with the library's "countersign"
+// after the answer came (or did not), over the stub that names the answer's
+// or the error's fingerprint. The upstreams' own entries in the slip are
+// left for the upstreams' own keys. It keeps a copy of each such agent's
+// calls apart from the book (copy.mjs), which "compare" holds against the
+// book.
 
 /** The name the gateway gives itself where the settings give none. */
 export const GATEWAY_NAME = 'Provared gateway';
+/** The id the gateway has in a slip's "with" where the settings give none. */
+export const GATEWAY_ID = 'gateway';
 
-const sameKeys = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+/** Whether two key sets are the same keys: the same members with the same values, in whatever order the members are written. */
+const sameKeys = (a, b) => {
+  const plain = (k) => (isObject(k) ? JSON.stringify(Object.keys(k).sort().map((n) => [n, k[n]])) : JSON.stringify(k));
+  return Array.isArray(a) && Array.isArray(b) ? a.length === b.length && a.every((k, i) => plain(k) === plain(b[i])) : JSON.stringify(a) === JSON.stringify(b);
+};
 
 /**
- * The services a slip gives the gateway's own keys for in "with": those
- * whose calls the gateway countersigns, and whose receipts must carry its
- * countersignature.
+ * Whether a slip names the gateway in "with": an entry under the gateway's
+ * id with the gateway's own keys. Its calls the gateway then countersigns,
+ * and each of its stubs names the gateway's id.
  * @param {object} content the slip's content
- * @param {object[]} keys the gateway's public keys (Ed25519, then ML-DSA-87)
- * @returns {Set<string>}
+ * @param {{id: string, keys: object[]}} own the gateway's id and public keys (Ed25519, then ML-DSA-87)
+ * @returns {boolean}
  */
-export function gatewayServices(content, keys) {
-  const out = new Set();
-  for (const w of Array.isArray(content?.with) ? content.with : []) if (typeof w?.id === 'string' && w.keys !== undefined && sameKeys(w.keys, keys)) out.add(w.id);
-  return out;
+export function namesGateway(content, own) {
+  return (Array.isArray(content?.with) ? content.with : []).some((w) => w?.id === own.id && w.keys !== undefined && sameKeys(w.keys, own.keys));
 }
 
 /** "gateway" in the settings: the gateway's own key set, or null where it has none. */
@@ -178,9 +185,13 @@ async function readOwnKeys(config, root) {
   const g = config.gateway;
   if (g === undefined) return null;
   if (!isObject(g)) throw new Error('"gateway" must be an object: the gateway\'s own key file ("keys") and, where wanted, its name ("name").');
-  for (const k of Object.keys(g)) if (!['name', 'keys', 'privateKeys', 'keySet'].includes(k)) throw new Error(`gateway: "${k}" is not a setting the gateway knows.`);
+  for (const k of Object.keys(g)) if (!['id', 'name', 'keys', 'privateKeys', 'keySet'].includes(k)) throw new Error(`gateway: "${k}" is not a setting the gateway knows.`);
   const name = g.name ?? GATEWAY_NAME;
   if (typeof name !== 'string' || name.length < 1 || name.length > 200) throw new Error('gateway: "name" must be text of 1 to 200 characters.');
+  const id = g.id ?? GATEWAY_ID;
+  if (typeof id !== 'string' || !NAME.test(id)) throw new Error('gateway: "id" must be the form of a service\'s id in a slip: 1 to 64 lower-case letters, digits, full stops, hyphens or underscores, beginning with a letter or digit.');
+  const taken = isObject(config.upstreams) ? Object.entries(config.upstreams).find(([, u]) => u?.service === id) : undefined;
+  if (taken) throw new Error(`gateway: its id "${id}" is also the service of upstream "${taken[0]}". The gateway has an id of its own in the slip's "with", apart from the upstreams' services.`);
   let keys;
   let privateKeys;
   if (Array.isArray(g.privateKeys)) {
@@ -190,7 +201,17 @@ async function readOwnKeys(config, root) {
     ({ keys, privateKeys } = await loadKeyFile(pathFrom(root, g.keys), 'gateway'));
   } else throw new Error('gateway: name its key file ("keys"), which "provared-gateway keys --gateway" makes.');
   if (!Array.isArray(keys) || keys.length !== 2 || privateKeys.length !== 2) throw new Error('gateway: its key set must be two keys, Ed25519 then ML-DSA-87.');
-  return { name, keys, privateKeys, fingerprint: await keySetFingerprint(keys) };
+  return { id, name, keys, privateKeys, fingerprint: await keySetFingerprint(keys) };
+}
+
+/** The settings an agent's entry may hold. */
+const AGENT_SETTINGS = ['secretHash', 'slip', 'book', 'keys', 'signers', 'privateKeys', 'issuerKeys', 'journalKey', 'copy', 'copyKey'];
+
+/** A sentence where an agent's entry holds a setting the gateway does not know, or a "copy" or "copyKey" that is not a path; else null. */
+function agentSettingProblem(a) {
+  for (const k of Object.keys(a)) if (!AGENT_SETTINGS.includes(k)) return `"${k}" is not a setting the gateway knows.`;
+  for (const k of ['copy', 'copyKey']) if (a[k] !== undefined && typeof a[k] !== 'string') return `"${k}" must be the path of a file.`;
+  return null;
 }
 
 /** Where an agent's copy and its key are kept: as the settings say, or "copies/<agent>.jsonl" and the same with ".key". */
@@ -200,22 +221,51 @@ export function copyPaths(a, name, root) {
 }
 
 /** What a slip of an agent warns of, where the gateway has its own keys: plain sentences. */
-function ownKeyWarnings(at, content, services, upstreamList) {
+function ownKeyWarnings(at, content, own, upstreamList) {
   const out = [];
-  if (services.size === 0) {
-    out.push(`${at}: its slip names the gateway's own keys for no service in "with", so the gateway countersigns none of its calls. To have them countersigned, give the gateway's keys in the slip's "with" entry of each service ("provared-gateway keys --gateway" prints the entries).`);
+  const entries = Array.isArray(content?.with) ? content.with : [];
+  if (!namesGateway(content, own)) {
+    const sameId = entries.find((w) => w?.id === own.id);
+    const elsewhere = entries.filter((w) => w?.id !== own.id && w?.keys !== undefined && sameKeys(w.keys, own.keys)).map((w) => w.id);
+    out.push(`${at}: its slip does not name the gateway in "with" (an entry with the id "${own.id}" and the gateway's own keys), so the gateway countersigns none of its calls. To have them countersigned, give the slip the entry "provared-gateway keys --gateway" prints.`);
+    if (sameId) out.push(`${at}: its slip names "${own.id}" in "with" with other keys than the gateway's own, or none.`);
+    if (elsewhere.length) out.push(`${at}: its slip gives the gateway's own keys under ${elsewhere.map((s) => `"${s}"`).join(', ')}, not under the gateway's id "${own.id}". The gateway does not countersign under an upstream's service: its countersignature would read as the upstream's.`);
     return out;
   }
   const requires = Array.isArray(content.requires) ? content.requires : [];
   if (!requires.some((r) => r?.need === 'countersignature' && r.action === undefined && r.above === undefined)) {
     out.push(`${at}: its slip does not require a countersignature for every action ("requires": [{"need": "countersignature"}]). The gateway countersigns anyway, but a receipt without its countersignature is then not a finding, so the record cannot show by itself that a call went round the gateway.`);
   }
-  const others = upstreamList.filter((u) => u.service !== undefined && !services.has(u.service) && !u.countersign).map((u) => u.service);
-  if (others.length) out.push(`${at}: the gateway does not countersign its calls to the services ${[...new Set(others)].join(', ')}, since its slip does not give the gateway's own keys for them. A receipt that names one of them, written by whoever holds the agent's keys, would not be a finding.`);
   for (const u of upstreamList) {
-    if (u.countersign && services.has(u.service)) out.push(`${at}: its slip gives the gateway's own keys for "${u.service}", so the gateway countersigns those calls itself and does not ask upstream "${u.name}" to ("countersign" is not used for this agent).`);
+    if (u.countersign) out.push(`${at}: its slip names the gateway, so each of its receipts names the gateway ("${own.id}") and the gateway countersigns it; upstream "${u.name}" is not asked to ("countersign" is not used for this agent).`);
   }
   return out;
+}
+
+/** The warning where calls named by no rule are forwarded while the gateway keeps a copy: those calls have no receipt and no line in the copy. */
+const FORWARD_WARNING = '"unlisted" is "forward" and the gateway has its own keys: a call that matches no rule is forwarded with the upstream\'s credential, and has no receipt, no countersignature and no line in the gateway\'s copy, so "compare" cannot see it.';
+
+/** The documents a stub of the gateway names after those of its "sending" line: what came back, or the error. */
+export const OUTCOME_DOCUMENTS = ['provared.http-response', 'provared.event-id', 'provared.error', NOT_DELIVERED];
+
+/** A "sending" line of the copy, in the form of a journal line: what a stub for its call is written from. */
+function lineOf(s) {
+  return { sending: s.call, when: s.when, slip: s.slip, action: s.action, ...(s.amount !== undefined ? { amount: s.amount } : {}), ...(s.with !== undefined ? { with: s.with } : {}), details: s.details };
+}
+
+/**
+ * Why a stub the book holds for a call the copy shows as sent and not
+ * finished does not settle it, or null where it does: one stub only; the
+ * call the "sending" line shows, followed only by documents of an outcome;
+ * and, where the gateway countersigns under the call's slip, a valid
+ * countersignature.
+ */
+function foundProblem(found, sending, countersigned) {
+  if (found.length > 1) return `The book holds ${found.length} stubs for this call, where the gateway writes one.`;
+  const e = found[0];
+  if (!stubIsSending(e.content, sending, { outcomes: OUTCOME_DOCUMENTS })) return "The book holds a stub for this call that is not the call the gateway's copy shows as sent: its slip, action, amount, service or documents differ.";
+  if (countersigned && e.countersignature?.state !== 'valid') return "The book holds a stub for this call without a valid countersignature of the gateway, which countersigns every call under this slip.";
+  return null;
 }
 
 // --- an outside time-stamp on each seal (format description, section 21.2) ---
@@ -346,6 +396,7 @@ export async function openGateway(config, more = {}) {
   // The gateway's own key set, where the settings give one: it countersigns with it, and keeps a copy of each agent's calls.
   const own = await readOwnKeys(config, root);
   const ownCountersign = own ? (stub) => countersign(stub, own.privateKeys, now()) : null;
+  if (own && unlisted === 'forward') log({ event: 'warning', message: FORWARD_WARNING });
 
   if (!isObject(config.agents) || Object.keys(config.agents).length === 0) throw new Error('"agents" must name at least one agent.');
   const agents = new Map();
@@ -355,6 +406,8 @@ export async function openGateway(config, more = {}) {
     const at = `agent "${name}"`;
     if (!NAME.test(name)) throw new Error(`${at}: its name must be 1 to 64 lower-case letters, digits, full stops, hyphens or underscores.`);
     if (!isObject(a)) throw new Error(`${at}: must be an object.`);
+    const unknown = agentSettingProblem(a);
+    if (unknown) throw new Error(`${at}: ${unknown}`);
     if (typeof a.secretHash !== 'string' || !SECRET_HASH.test(a.secretHash)) throw new Error(`${at}: "secretHash" must be the hash of a secret (provared-gateway secret makes one).`);
     if (!Array.isArray(a.issuerKeys) || a.issuerKeys.length === 0 || !a.issuerKeys.every((k) => typeof k === 'string' && /^[A-Za-z0-9_-]{43}$/.test(k))) {
       throw new Error(`${at}: "issuerKeys" must list the thumbprints of the passkeys whose slips it takes.`);
@@ -410,16 +463,38 @@ export async function openGateway(config, more = {}) {
     if (journal.whole > 0 && journal.checked === 0) {
       throw new Error(`${at}: no line of its journal ${journalAt} checks under its journal key ${typeof keyAt === 'string' ? keyAt : '(given in memory)'}: the key is not the one the journal was written with. Put back the key the journal was written with. Setting the lines aside instead leaves the calls they stand for with no receipt; to do that, having read the journal, move it away by hand.`);
     }
-    // A call whose stub the book already holds is done, whatever the journal says.
-    const stubByCall = new Map(result.entries.filter((e) => e.kind === 'stub').flatMap((e) => (e.content?.details ?? []).filter((d) => d.name === CALL_DOCUMENT).map((d) => [d.sha256, e.fingerprint])));
-    const inBook = new Set(stubByCall.keys());
+    // The book's stubs that name a gateway.call document, by its fingerprint: a call whose stub the book holds is done.
+    const stubsByCall = new Map();
+    for (const e of result.entries) if (e.kind === 'stub') for (const d of e.content?.details ?? []) if (d.name === CALL_DOCUMENT) stubsByCall.set(d.sha256, [...(stubsByCall.get(d.sha256) ?? []), e]);
     // The slips the book holds, sound: a call may be acknowledged under any of them.
     const slipsInBook = new Set(result.entries.filter((e) => e.kind === 'slip' && e.problems.length === 0).map((e) => e.fingerprint));
+    // Whether each slip of the book names the gateway: the calls under it the gateway countersigns.
+    const slipNames = new Map(result.entries.filter((e) => e.kind === 'slip' && e.fingerprint).map((e) => [e.fingerprint, own ? namesGateway(e.content, own) : false]));
+    const copy = own ? openAgentCopy(name, copyPaths(a, name, root)) : null;
+    if (own) for (const w of ownKeyWarnings(at, about.content, own, [...upstreams.values()])) log({ event: 'warning', agent: name, message: w });
     const pending = [];
     const startedAt = now();
+    // Where the gateway keeps a copy, the copy decides, not the journal: the journal is a file beside the book that
+    // whoever holds the journal key can write, and that anyone can empty. Each "sending" line of the copy, by call.
+    const sendingInCopy = new Map();
+    if (copy) for (const l of copy.read.lines) if (l.valid && l.entry.kind === 'sending' && typeof l.entry.call === 'string') sendingInCopy.set(l.entry.call, l.entry);
+    const journalCalls = new Set();
     for (const p of journal.pending) {
       if (asideBefore.has(p.call)) continue;
-      if (p.tag === 'valid' && inBook.has(await identifierFingerprint(p.line.sending))) {
+      if (p.tag === 'valid' && copy) {
+        // A journal line is taken only where the copy holds the same call; the copy's own line is then the one acted on
+        // (below). One that names a call of the copy and says otherwise is not acted on: the copy's line decides.
+        if (sendingInCopy.has(p.call)) {
+          if (sameCall(sendingInCopy.get(p.call), p.line)) journalCalls.add(p.call);
+          else log({ event: 'journal-line-differs', agent: name, call: p.call });
+          continue;
+        }
+        p.problem = 'The gateway\'s copy holds no "sending" line for this call with the same slip, action, amount, service and documents, so the gateway did not send the call this line describes. It is never given a stub: set it aside.';
+        log({ event: 'journal-line-not-in-copy', agent: name, call: p.call });
+        pending.push(p);
+        continue;
+      }
+      if (p.tag === 'valid' && stubsByCall.has(await identifierFingerprint(p.line.sending))) {
         log({ event: 'receipt-found', agent: name, call: p.call });
         continue;
       }
@@ -427,24 +502,40 @@ export async function openGateway(config, more = {}) {
       else Object.assign(p, await unusableLine(p.line, startedAt, { slipsInBook, writer }));
       pending.push(p);
     }
-    // The services each slip of the book gives the gateway's own keys for: their calls the gateway countersigns.
-    const slipServices = new Map(result.entries.filter((e) => e.kind === 'slip' && e.fingerprint).map((e) => [e.fingerprint, own ? gatewayServices(e.content, own.keys) : new Set()]));
-    const copy = own ? openAgentCopy(name, copyPaths(a, name, root)) : null;
-    if (own) for (const w of ownKeyWarnings(at, about.content, slipServices.get(about.fingerprint) ?? new Set(), [...upstreams.values()])) log({ event: 'warning', agent: name, message: w });
-    const agent = { name, hash: Buffer.from(a.secretHash), slip: about, writer, privateKeys, issuerKeys: a.issuerKeys, file, checkOptions, stopped: null, turn: Promise.resolve(), active: 0, lastCheck: null, waiting: 0, held: 0, journal: journalAt, setAsideFile: asideAt, journalKey, pending, copy, slipServices };
-    // The copy's calls that were sent and are not settled: a stub the book holds settles one; a call the journal
-    // still holds waits for the administrator; a call the administrator set aside is noted so; any other was never
-    // sent, since its line in the journal, written before a call is sent and after the copy's, is not there.
+    const agent = { name, hash: Buffer.from(a.secretHash), slip: about, writer, privateKeys, issuerKeys: a.issuerKeys, file, checkOptions, stopped: null, turn: Promise.resolve(), active: 0, lastCheck: null, waiting: 0, held: 0, journal: journalAt, setAsideFile: asideAt, journalKey, pending, copy, slipNames };
+    // The copy's calls that were sent and are not settled. A stub the book holds settles one only where it is the
+    // call the copy shows as sent and, where the slip names the gateway, carries the gateway's countersignature;
+    // any other such stub stops the agent, and the call waits for the administrator, who can only set it aside. A call
+    // the administrator set aside is noted so. Any other was sent, as far as the gateway's own copy shows, and has no
+    // receipt, whatever the journal says: it stops the agent and waits for the administrator, and a stub written for
+    // it is written from the copy's own line.
     if (copy) {
       for (const u of unfinished(copy.read)) {
-        const call = u.sending.call;
-        const stub = stubByCall.get(await identifierFingerprint(call));
+        const s = u.sending;
+        const call = s.call;
+        const found = stubsByCall.get(await identifierFingerprint(call)) ?? [];
         const at_ = new Date(now()).toISOString();
-        if (stub) copy.note({ kind: 'done', call, when: at_, outcome: 'found-in-book', stub });
-        else if (pending.some((p) => p.call === call)) continue;
-        else if (asideBefore.has(call)) copy.note({ kind: 'set-aside', call, when: at_ });
-        else copy.note({ kind: 'withdrawn', call, when: at_, reason: 'not-sent' });
+        const line = lineOf(s);
+        if (found.length) {
+          const problem = foundProblem(found, s, s.with === own.id && slipNames.get(s.slip) === true);
+          if (problem === null) {
+            const cs = found[0].countersignature?.state === 'valid' ? await countersignatureFingerprint(text.split('\n')[found[0].index]) : null;
+            copy.note({ kind: 'done', call, when: at_, outcome: 'found-in-book', stub: found[0].fingerprint, countersigned: cs !== null, ...(cs ? { countersignature: cs } : {}) });
+            log({ event: 'receipt-found', agent: name, call });
+          } else {
+            log({ event: 'receipt-not-matching', agent: name, call, stubs: found.map((e) => e.fingerprint), problem });
+            pending.push({ call, tag: 'valid', line, problem: `${problem} It is never given a stub: set it aside.`, warning: null, inBook: found.map((e) => e.fingerprint) });
+          }
+        } else if (asideBefore.has(call)) copy.note({ kind: 'set-aside', call, when: at_ });
+        else {
+          if (!journalCalls.has(call)) log({ event: 'journal-line-missing', agent: name, call });
+          pending.push({ call, tag: 'valid', line, problem: null, ...(await unusableLine(line, startedAt, { slipsInBook, writer, upstream: s.upstream })) });
+        }
       }
+      // A copy that does not know receipts the book holds under the gateway's id: a copy taken away, or one put back from elsewhere.
+      const known = new Set(await Promise.all([...sendingInCopy.keys()].map((c) => identifierFingerprint(c))));
+      const unknown = result.entries.filter((e) => e.kind === 'stub' && e.content?.with === own.id && !(e.content.details ?? []).some((d) => d.name === CALL_DOCUMENT && known.has(d.sha256)));
+      if (unknown.length) log({ event: 'warning', agent: name, message: `${at}: its book holds ${unknown.length} receipt(s) naming the gateway ("${own.id}") that its copy ${copy.paths.copy} does not know: the copy was taken away, cut, or put back from elsewhere. "provared-gateway compare" lists them.` });
     }
     if (pending.length) {
       agent.stopped = stoppedWords(pending);
@@ -463,7 +554,7 @@ export async function openGateway(config, more = {}) {
    * the forms the gateway writes, which the library's own checks of a
    * request's fields take.
    */
-  async function unusableLine(line, startedAt, { slipsInBook, writer }) {
+  async function unusableLine(line, startedAt, { slipsInBook, writer, upstream }) {
     const no = (problem) => ({ problem, warning: null });
     const keys = ['sending', 'when', 'slip', 'action', 'amount', 'with', 'details'];
     if (!isObject(line) || Object.keys(line).some((k) => !keys.includes(k))) return no('It holds a member the gateway does not write.');
@@ -476,7 +567,8 @@ export async function openGateway(config, more = {}) {
     if (typeof line.action !== 'string' || !/^[a-z0-9][a-z0-9._-]{0,63}$/.test(line.action)) return no('Its action is not an action name.');
     if (line.with !== undefined && (typeof line.with !== 'string' || !/^[a-z0-9][a-z0-9._-]{0,63}$/.test(line.with))) return no('Its service is not a service id.');
     let warning = null;
-    const fitting = rules.filter((r) => r.action === line.action && upstreams.get(r.upstream)?.service === line.with);
+    // The rules that name this action: for the upstream the copy names, where the line is the copy's; else for any upstream where the stub names the gateway; else for the service the stub names.
+    const fitting = rules.filter((r) => r.action === line.action && (upstream !== undefined ? r.upstream === upstream : own && line.with === own.id ? true : upstreams.get(r.upstream)?.service === line.with));
     if (fitting.length === 0) {
       // The tag shows the gateway wrote this line; the rule that named the call has since been taken out of the settings.
       warning = 'No rule names this action for this service now (a rule was taken out, or changed, since the call was sent). Its tag shows the gateway wrote the line, so it can be acknowledged.';
@@ -545,8 +637,8 @@ export async function openGateway(config, more = {}) {
   };
   const refusedLine = (agent, { call, upstream, action, amount, reason, codes, denial }) =>
     noteCopy(agent, { kind: 'refused', call: call ?? randomId(), slip: agent.slip.fingerprint, ...(upstream ? { upstream: upstream.name } : {}), action, ...(amount ? { amount } : {}), reason, ...(codes ? { codes } : {}), ...(denial?.written ? { denial: denial.fingerprint } : {}) });
-  /** Whether the gateway countersigns, with its own keys, a call under this slip to this service. */
-  const countersignsFor = (agent, slip, service) => ownCountersign !== null && service !== undefined && agent.slipServices.get(slip)?.has(service) === true;
+  /** Whether the gateway countersigns, with its own keys, a call under this slip whose stub names this service: the gateway's own id, under a slip that names the gateway. */
+  const countersignsFor = (agent, slip, service) => ownCountersign !== null && service === own.id && agent.slipNames.get(slip) === true;
 
   const noteSetAside = (agent, call) => {
     const text = JSON.stringify({ setAside: call });
@@ -873,7 +965,8 @@ export async function openGateway(config, more = {}) {
       log({ event: 'refused', agent: agent.name, code: 'header-refused' });
       return refuse(res, 400, 'header-refused', 'A header name holds "_", which some servers read as "-": the gateway could not then tell which headers it removes. This upstream does not allow it ("underscoreHeaders").');
     }
-    const withService = upstream?.service !== undefined ? { with: upstream.service } : {};
+    // Where the slip names the gateway, every record of the agent names the gateway's own id; else the upstream's service, if it has one.
+    const withService = own && agent.slipNames.get(agent.slip.fingerprint) === true ? { with: own.id } : upstream?.service !== undefined ? { with: upstream.service } : {};
     const { query, removed: removedParameters } = stripParameters(t.query, stripQuery);
 
     // 3. Which rule. A call to no known upstream matches no rule.
@@ -979,8 +1072,8 @@ export async function openGateway(config, more = {}) {
     // 8. Ask the stub writer; its action is to send the call. Once sent, the call always gets its stub.
     const request = { action, ...(got.amount ? { amount: got.amount } : {}), ...withService, details };
     const credential = credentials.get(upstream.name);
-    // The gateway countersigns with its own keys where the slip gives them for this service; else the upstream is asked, where it says it can.
-    const ownSigns = countersignsFor(agent, agent.slip.fingerprint, upstream.service);
+    // The gateway countersigns with its own keys where the slip names it; else the upstream is asked, where it says it can.
+    const ownSigns = countersignsFor(agent, agent.slip.fingerprint, withService.with);
     let sent = false;
     let copyFailed = false;
     let added = [];
@@ -1259,11 +1352,11 @@ export async function openGateway(config, more = {}) {
         receiptsMissing: agent.pending.map(shownLine),
         waiting: agent.waiting,
         fileHoldsBook: agent.file.holds(agent.writer.book()),
-        countersigns: [...(agent.slipServices.get(agent.slip.fingerprint) ?? [])],
+        countersigns: own !== null && agent.slipNames.get(agent.slip.fingerprint) === true,
         copy: agent.copy ? agent.copy.path : null,
       };
     }
-    return { gateway: 'provared-gateway', recorder: recorder ? recorder.fingerprint : null, countersigner: own ? own.fingerprint : null, agents: out };
+    return { gateway: 'provared-gateway', recorder: recorder ? recorder.fingerprint : null, countersigner: own ? own.fingerprint : null, id: own ? own.id : null, agents: out };
   }
 
   let server = null;
@@ -1277,8 +1370,8 @@ export async function openGateway(config, more = {}) {
     /** What a whole check of an agent's book needs to be told: the passkeys and the recorder it trusts. */
     checkOptions: (name) => agents.get(name)?.checkOptions,
     bookPath: (name) => agents.get(name)?.file.path,
-    /** Where an agent's copy and its key are, and the gateway's own public keys: what "compare" needs. Null where the gateway has no keys of its own. */
-    copyOf: (name) => (own && agents.get(name)?.copy ? { ...agents.get(name).copy.paths, name, keys: own.keys } : null),
+    /** Where an agent's copy and its key are, and the gateway's id in a slip's "with": what "compare" needs. Null where the gateway has no keys of its own. */
+    copyOf: (name) => (own && agents.get(name)?.copy ? { ...agents.get(name).copy.paths, name, service: own.id } : null),
     /** Listen on the settings' address (by default 127.0.0.1, port 8795), or on the one given. */
     listen(at = config.listen ?? {}) {
       const host = at.host ?? '127.0.0.1';
@@ -1354,10 +1447,12 @@ export async function checkConfig(config, { root = process.cwd() } = {}) {
   let ownKeys = null;
   if (config?.gateway !== undefined) {
     try {
-      ownKeys = (await readOwnKeys(config, root)).keys;
+      const own = await readOwnKeys(config, root);
+      ownKeys = { id: own.id, keys: own.keys };
     } catch (e) {
       problems.push(e.message.startsWith('gateway') || e.message.startsWith('"gateway"') ? e.message : `gateway: ${e.message} ("provared-gateway keys --gateway" makes it).`);
     }
+    if (config.unlisted === 'forward') warnings.push(FORWARD_WARNING);
   }
   const slips = [];
   const same = sameSettings(config?.agents, root, config?.gateway !== undefined);
@@ -1370,6 +1465,8 @@ export async function checkConfig(config, { root = process.cwd() } = {}) {
       problems.push(`${at}: must be an object.`);
       continue;
     }
+    const unknown = agentSettingProblem(a);
+    if (unknown) problems.push(`${at}: ${unknown}`);
     if (typeof a.secretHash !== 'string' || !SECRET_HASH.test(a.secretHash)) problems.push(`${at}: "secretHash" must be the hash of a secret (provared-gateway secret makes one).`);
     if (typeof a.book !== 'string') problems.push(`${at}: "book" must be the path of its book file.`);
     if (typeof a.keys !== 'string' && typeof a.signers !== 'string' && !Array.isArray(a.privateKeys)) problems.push(`${at}: name its key file ("keys") or its signers ("signers").`);
@@ -1393,13 +1490,13 @@ export async function checkConfig(config, { root = process.cwd() } = {}) {
         problems.push(`${at}: ${e.message}`);
       }
     }
+    const named = ownKeys !== null && namesGateway(c, ownKeys);
     if (ownKeys) {
-      if (sameKeys(c.agent?.keys, ownKeys)) problems.push(`${at}: its slip names the gateway's own keys ("gateway") as the agent's keys, so the gateway's countersignature would add nothing to the agent's signature. Give the gateway a key file of its own.`);
-      const services = gatewayServices(c, ownKeys);
-      if (services.size) lines.push(`${at}: the gateway countersigns, with its own keys, its calls to the services ${[...services].join(', ')}`);
-      warnings.push(...ownKeyWarnings(at, c, services, [...read.upstreams.values()]));
+      if (sameKeys(c.agent?.keys, ownKeys.keys)) problems.push(`${at}: its slip names the gateway's own keys ("gateway") as the agent's keys, so the gateway's countersignature would add nothing to the agent's signature. Give the gateway a key file of its own.`);
+      if (named) lines.push(`${at}: the gateway countersigns, with its own keys, every call of this agent it lets through; each receipt names the gateway ("${ownKeys.id}")`);
+      warnings.push(...ownKeyWarnings(at, c, ownKeys, [...read.upstreams.values()]));
     }
-    slips.push({ name, content: c });
+    slips.push({ name, content: c, named });
   }
   for (const rule of read.rules) {
     const u = read.upstreams.get(rule.upstream);
@@ -1411,7 +1508,7 @@ export async function checkConfig(config, { root = process.cwd() } = {}) {
     if (u && !['GET', 'HEAD'].includes(rule.method) && kind === 'reads') warnings.push(`rule ${rule.index}: a ${rule.method} call is named "${rule.action}", whose kind is "reads". Check that the call changes nothing.`);
     for (const s of slips) {
       if (!Array.isArray(s.content.actions) || !s.content.actions.includes(rule.action)) warnings.push(`rule ${rule.index}: the slip of agent "${s.name}" does not allow "${rule.action}", so such calls are refused for it.`);
-      else if (u?.service !== undefined && !(s.content.with ?? []).some((w) => w.id === u.service)) warnings.push(`rule ${rule.index}: the slip of agent "${s.name}" does not name the service "${u.service}".`);
+      else if (!s.named && u?.service !== undefined && !(s.content.with ?? []).some((w) => w.id === u.service)) warnings.push(`rule ${rule.index}: the slip of agent "${s.name}" does not name the service "${u.service}".`);
       for (const limit of s.content.limits ?? []) {
         if (limit.action === rule.action && limit.unit !== undefined && (!rule.amount || rule.amount.unit !== limit.unit)) {
           warnings.push(`rule ${rule.index}: the slip of agent "${s.name}" limits "${rule.action}" in ${limit.unit}, and the rule gives ${rule.amount ? `an amount in ${rule.amount.unit}` : 'no amount'}.`);
@@ -1616,15 +1713,18 @@ function sameSettings(agents, root, withCopy = false) {
       const c = copyPaths(a, name, root);
       own.push(['copy', c.copy], ['copy key', c.copyKey]);
     }
+    // Each file is held against the other agents' files and against this agent's own (its copy is not its book, say).
     for (const [what, p] of own) {
-      for (const key of placeKeys(p)) {
+      const keys = placeKeys(p);
+      for (const key of keys) {
         if (files.has(key)) {
           const [other, otherWhat] = files.get(key);
+          if (other === name) return `agent "${name}": its ${what} is also its ${otherWhat}. Each of its files is a file of its own.`;
           return `agents "${other}" and "${name}" share a file: the ${otherWhat} of one is the ${what} of the other.`;
         }
       }
+      for (const key of keys) files.set(key, [name, what]);
     }
-    for (const [what, p] of own) for (const key of placeKeys(p)) files.set(key, [name, what]);
   }
   return null;
 }

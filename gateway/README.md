@@ -23,9 +23,11 @@ front of each system an agent uses (an "upstream"), and for every call:
    words, and writes a signed denial.
 
 Where the settings give the gateway a key set of its own, and the slip
-names that key set in `with` for an upstream's service, the gateway also
-countersigns each call to that upstream that it lets through, and keeps its
-own copy of the agent's calls apart from the book; `provared-gateway
+names the gateway in `with` (an entry of its own, `gateway` unless the
+settings give another id, with that key set), every receipt of the agent
+names the gateway in `with`, and the gateway countersigns each call it lets
+through and keeps its own copy of the agent's calls apart from the book;
+`provared-gateway
 compare` holds the copy against the book (below, "The gateway's
 countersignature, and its own copy").
 
@@ -68,12 +70,15 @@ upstream:
    gateway's copy against it:
 
    ```
-   npx provared-check books/patching.jsonl --issuer <the passkey's thumbprint>
+   npx --package=provared@0.9.0 provared-check books/patching.jsonl --issuer <the passkey's thumbprint>
    provared-gateway compare --config gateway.json --agent patching
    ```
 
-   The checker shows each receipt, and that it carries the gateway's
-   countersignature; `compare` says whether the copy and the book agree.
+   The checker is the library's command, which `npx` fetches with the
+   library. It shows each receipt, the party it names in `with` (here the
+   gateway's own entry), and whether its countersignature checks against the
+   keys the slip gives that entry. It cannot show who holds those keys.
+   `compare` says whether the copy and the book agree.
 
 What the checker and `compare` give is evidence, not a verdict: they show
 what the records say and that they were not changed, not that what the
@@ -110,10 +115,10 @@ agent did was right.
    provared-gateway keys --config gateway.json --gateway
    ```
 
-   It prints, for each service the upstreams name, the slip's `with` entry
-   with the gateway's two public keys, and `"requires": [{"need":
-   "countersignature"}]`. Put into the slip the entries of the services
-   whose calls the gateway is to countersign.
+   It prints the slip's `with` entry for the gateway (its id, its name and
+   its two public keys), and `"requires": [{"need": "countersignature"}]`.
+   Put both into the slip. The upstreams' own entries stay as they are,
+   for their own keys where they have any.
 
 4. The person signs the slip with their passkey (on the signing page at
    https://sign.prova.red, or with the library) and the file is saved where the
@@ -183,17 +188,25 @@ the upstream itself, with `Authorization: Bearer <its secret>`.
 
 **The gateway's own keys** (`gateway`, optional): `keys`, the gateway's
 key file (Ed25519 and ML-DSA-87, made by `provared-gateway keys
---gateway`), and `name`, the name the printed `with` entries give it
+--gateway`); `id`, the gateway's `id` in a slip's `with` (`gateway` if left
+out; it has the form of a service's id, and may not be any upstream's
+`service`); and `name`, the name the printed `with` entry gives it
 ("Provared gateway" if left out). In a program, `privateKeys` (two signers)
 and `keySet` may be given in place of `keys`. Without `gateway`, nothing
 below about the gateway's countersignature and copy applies.
+
+A setting the gateway does not know, at the top of the settings or in an
+agent's entry, is a problem: the gateway does not start, and `check` says
+so. A mis-spelt `gateway` would otherwise leave every call one-sided
+without a word.
 
 **Upstreams.** Each has a name, which is the first part of the path the
 agent calls (`/tickets/…`), and:
 
 - `base`: its address; any path in it is kept in front of the agent's.
 - `service`: the slip's `id` for the system, written into each stub's
-  `with`.
+  `with`, except for an agent whose slip names the gateway, whose stubs
+  name the gateway.
 - `credential`: the header the gateway adds, and where its value is read
   from at start: a file (`file`; one line ending at its end is dropped) or
   the environment (`env`); `prefix` goes in front, such as `Bearer `.
@@ -469,6 +482,20 @@ the journal later is taken as set aside. Deleting that file brings such
 lines back to the administrator. The agent takes calls again once nothing
 is waiting. A clean start empties the journal.
 
+**Where the gateway keeps its own copy** (below), the copy decides, not the
+journal, since anyone who can write the folder can empty the journal, and
+whoever holds the journal key can add to it. A call with a `sending` line in
+the copy and no receipt in the book was sent, as far as the gateway knows,
+whatever the journal says: it stops the agent and waits for the
+administrator, and the stub written for it is written from the copy's own
+line (the log says `journal-line-missing` where the journal has no line for
+it). A journal line is taken only where the copy holds a `sending` line for
+the same call with the same slip, action, amount, service and documents.
+One for a call the copy does not hold is listed, never given a stub, and
+can only be set aside (`journal-line-not-in-copy`); one that names a call
+of the copy and says otherwise is not acted on (`journal-line-differs`). So
+a journal line from before the gateway kept a copy can only be set aside.
+
 **A book cut part-way through a line.** A stop while a line of the book is
 written can leave the file ending part-way through it; the gateway then does
 not start, and says so. With the gateway stopped:
@@ -489,14 +516,18 @@ administrator to acknowledge.
 ## The gateway's countersignature, and its own copy
 
 **When the gateway countersigns.** Where the settings give it a key set of
-its own (`gateway`), and an agent's slip names that key set in the `with`
-entry of an upstream's service, the gateway countersigns each call of that
-agent to that upstream which it lets through. It is the countersignature
+its own (`gateway`), and an agent's slip names the gateway in `with` (an
+entry under the gateway's id, `gateway` unless the settings give another,
+with the gateway's keys), every stub of that agent names the gateway's id
+in `with`, and the gateway countersigns each call of that agent which it
+lets through, to whichever upstream. The upstreams' own entries in the
+slip are left for the upstreams' own keys. A stub then does not name the
+upstream: the gateway's copy does. It is the countersignature
 the format already defines (format description, section 6), made with the
 library's `countersign`, and nothing new: `{"stub", "type":
 "provared.countersignature.v0", "when"}`, signed by the gateway's Ed25519
 and ML-DSA-87 keys, which a checker holds against the keys the slip gives
-for the service the stub names. It is made after the upstream answered (or
+for the party the stub names, here the gateway. It is made after the upstream answered (or
 did not), over the stub that names the answer's or the error's
 fingerprint, and the countersignature goes on the stub's line in the book.
 What it says: the gateway let this call through to the upstream under this
@@ -505,19 +536,22 @@ came back, or that nothing came back. It does not say that the upstream did
 the work, or that it took the call (an error status is still "what came
 back"). A stub written when the administrator acknowledges a call (above)
 is countersigned then, where the slip the call was sent under names the
-gateway's keys for its service: the stub is dated when the call was sent,
-its countersignature when it was acknowledged.
+gateway: the stub is dated when the call was sent, its countersignature
+when it was acknowledged.
 
 The slip should require a countersignature for every action (`"requires":
-[{"need": "countersignature"}]`): then every receipt in the book under
-those services that lacks the gateway's countersignature is a finding
+[{"need": "countersignature"}]`): then every receipt in the book that
+lacks the countersignature of the party it names is a finding
 (`countersignature-missing`). The gateway warns, at start and in `check`,
 where the slip does not require it for every action, and countersigns
-anyway; and where the slip gives the gateway's keys for no service, or not
-for an upstream it reaches. For a service whose slip entry names the
-gateway's keys, the upstream is not asked to countersign (its `countersign`
-setting is not used for that agent). For any other service, nothing
-changes: the upstream countersigns where it says it can, and otherwise the
+anyway; where the slip does not name the gateway; where it names the
+gateway's id with other keys; and where it gives the gateway's keys under
+an upstream's service. The gateway does not countersign under an
+upstream's service, since its countersignature would read as the
+upstream's. For an agent whose slip names the gateway, no upstream is
+asked to countersign (its `countersign` setting is not used for that
+agent). For an agent whose slip does not, nothing changes: the upstream
+countersigns where it says it can, under its own entry, and otherwise the
 receipt is one-sided.
 
 The gateway does not start where a slip names the gateway's own keys as the
@@ -526,10 +560,16 @@ agent's keys: its countersignature would then add nothing.
 **Its own copy.** Where the gateway has its own keys, it keeps for each
 agent a copy apart from the book, only ever added to, in the form the MCP
 executor's copy has: one line for each step of a call, each numbered from 0
-and tagged with HMAC-SHA-256 (RFC 2104) of the agent's name and the line's
-text under the agent's copy key (32 random bytes, made at the first start).
-A line added or changed by someone without the key does not check, and a
-line taken out, put twice or moved is seen by the numbers. The lines:
+and tagged under the agent's copy key (32 random bytes, made at the first
+start). The tag is HMAC-SHA-256 (RFC 2104) of the agent's name in UTF-8,
+one line feed (0x0A), then the line's JSON text in UTF-8, written in
+base64url without padding; a line of the file is the tag, one space, then
+the JSON text. The journal's lines are tagged the same way under the
+journal key, so the copy key, the journal key and the other files of one
+agent must each be a file of its own (`check` and the start refuse
+otherwise). A line added or changed by someone without the key does not
+check, and a line taken out, put twice or moved is seen by the numbers.
+The lines:
 
 - `sending`: on the disk before the call goes to the upstream (and before
   the journal's line): the call's identifier, the slip, the upstream, the
@@ -541,10 +581,23 @@ line taken out, put twice or moved is seen by the numbers. The lines:
   stub;
 - `refused`: a call not sent, with the reason, the codes and the denial's
   fingerprint;
-- `set-aside`: a call the administrator set aside;
-- `withdrawn`: a call with a `sending` line and no line in the journal,
-  found at a start: the gateway stopped between the two lines, before the
-  call was sent.
+- `set-aside`: a call the administrator set aside.
+
+The gateway writes no `withdrawn` line: a call with a `sending` line and no
+receipt is never taken as not sent. `compare` lists by name any such line a
+copy holds.
+
+At a start, a call the copy shows as sent and not finished is settled by a
+stub the book holds for it only where there is one such stub, it is the
+call the `sending` line shows (the same slip, action, amount and service,
+the line's documents first, then only documents of an outcome), and, where
+the slip names the gateway, it carries a valid countersignature of the
+gateway. The copy then notes it `found-in-book`, with its countersignature's
+fingerprint. Any other such stub stops the agent (`receipt-not-matching`):
+the call is listed for the administrator, can only be set aside, and never
+gets a stub of the gateway's. At a start the gateway also warns where the
+book holds receipts naming the gateway that the copy does not know (a copy
+taken away whole, or put back from elsewhere).
 
 It holds names, times, codes and fingerprints: never an address, a body,
 an answer or a credential. A copy line that cannot be written stops that
@@ -568,24 +621,39 @@ provared-gateway compare --config gateway.json --agent patching [--book <file>] 
 
 It reads the agent's copy and its book, asks nobody, and prints in JSON,
 as the MCP executor's `compare` does, what it finds for each call the copy
-shows: `matched` (the receipt in the book is the one the gateway wrote),
-`differs` (the book holds a receipt for the call, but another), `missing`
-(the gateway sent the call and wrote its receipt, and the book has none),
-`notWritten` (the gateway could not write the receipt to the book: its own
-stop), `unfinished` (sent, and the gateway stopped before the receipt),
-`setAside`, `refused` (with whether the denial is in the book) and
-`denialsMissing`; and `notInCopy`: receipts in the book under a service
-the slip gives the gateway's keys for, which the copy does not know. A call
-is found in the book by its `gateway.call` document. It ends with 0 where
-the copy and the book agree, 3 where the calls set aside are the only
+shows: `matched` (the receipt in the book is the one the gateway wrote, it
+is the call the copy's `sending` line shows, and it carries the
+countersignature the copy records), `differs` (the book holds a receipt for
+the call, but another, or one that is not the call the `sending` line
+shows: `why` says which), `countersignatures` (a receipt the copy says the
+gateway countersigned whose countersignature is missing, does not check, or
+is another than the one the copy records), `moreThanOne` (more than one
+receipt for one call), `missing` (the gateway sent the call and wrote its
+receipt, and the book has none), `notWritten` (the gateway could not write
+the receipt to the book: its own stop), `unfinished` (sent, and the gateway
+stopped before the receipt), `setAside`, `withdrawn`, `refused` (with
+whether the denial is in the book) and `denialsMissing`; and `notInCopy`:
+receipts in the book that name the gateway, which the copy does not know.
+Each call is listed by its identifier. A call is found in the book by its
+`gateway.call` document. The summary says too whether the copy has a
+problem (a line that does not check, a number out of order, a cut last
+line) and whether the book was fully checked and is within its slips. The
+two agree only where none of these is found, the copy has no problem, and
+the book has no problem, was fully checked and is within its slips. It ends
+with 0 where they agree, 3 where the calls set aside are the only
 disagreement, and 1 otherwise. The recorder whose seals the book must hold
-is the one `--sealer` names, or else the one of the settings' key file.
+is the one `--sealer` names, or else the one of the settings' key file. It
+reads no key file of the gateway: the gateway's id is enough, since the
+book's own check holds each countersignature against the keys the slip
+gives. It takes `--config`, `--agent`, `--book` and `--sealer` only, and
+refuses any other option.
 
-It cannot find a call that never went through the gateway, whether an
-upstream did what its answer says, a copy changed by whoever holds the copy
-key, or a copy cut at its end; and it does not look at receipts under a
-service the slip does not give the gateway's keys for, which name no call
-of the copy.
+It cannot find a call that never went through the gateway, a call that
+matches no rule where `"unlisted"` is `"forward"` (sent with no receipt and
+no line in the copy; the gateway warns of this setting at start and in
+`check`), whether an upstream did what its answer says, a copy changed by
+whoever holds the copy key, or a copy cut at its end; and it does not look
+at receipts that do not name the gateway and name no call of the copy.
 
 ## Sealing, and what the gateway says about itself
 
@@ -602,9 +670,10 @@ on the same book. `status` (`GET /provared/status`) gives, for each agent,
 the slip's fingerprint, the number of entries and bytes in the book, the
 last seal, whether the book as it stands passes its check, the calls
 waiting and any calls without a receipt; and, where the gateway has its own
-keys, the fingerprint of its key set (`countersigner`), and for each agent
-the services whose calls it countersigns (`countersigns`) and where its
-copy is (`copy`). While one of the agent's calls is
+keys, the fingerprint of its key set (`countersigner`) and its id in a
+slip's `with` (`id`), and for each agent whether it countersigns the
+agent's calls (`countersigns`: true where the slip in force names the
+gateway) and where its copy is (`copy`). While one of the agent's calls is
 with its upstream, the stub writer gives no check, so the check shown is the
 last one, with `checkedNow: false` and its time in `checkedAt`. `seal`,
 `acknowledge` and `status` ask the running gateway, and need the
@@ -665,7 +734,7 @@ In a program, an agent's `privateKeys` (and the recorder's `privateKeys`
 with `keySet`) may be given as keys or signers in memory in place of
 `keys` or `signers`. `gateway.seal(name)` and `gateway.status()` do what
 the commands do. `gateway.copyOf(name)` gives where an agent's copy and its
-key are, with the gateway's public keys, and `compareCopyWithBook` (from
+key are, with the gateway's id (`service`), and `compareCopyWithBook` (from
 `provared-gateway/compare`) does what `compare` does. A program that uses `handle` with its own server must
 refuse websocket upgrades and `CONNECT` itself, as `listen` does.
 
@@ -695,8 +764,10 @@ refuse websocket upgrades and `CONNECT` itself, as `listen` does.
   gateway's key file and copy are kept where the agent's side cannot reach
   them (the agent's keys can be held in a key service, through signers);
   the gateway's own keys are read from a key file only in this version.
-  A countersignature by the upstream itself, where the upstream can give
-  one, is a record of another system.
+  In the book it is the countersignature of the party the stub names, the
+  gateway, under the gateway's own entry in the slip: it does not say that
+  the upstream took part. A countersignature by the upstream itself, where
+  the upstream can give one, is a record of another system.
 - **The gateway's keys are not changed for you.** Where its key file is
   replaced, a slip that names the old keys no longer names the gateway's:
   the gateway does not countersign under it, so where it requires a

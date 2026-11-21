@@ -16,18 +16,64 @@
 //              not be written, with the documents added after the call and no "stub": such a
 //              call is still unfinished
 //   refused:   a call that was not sent, with why, and the denial's fingerprint where one was written
-//   withdrawn: a call that has a "sending" line and was never sent (the gateway stopped
-//              before its line in the journal was written), found at the next start
+//   withdrawn: a call that has a "sending" line and was never sent. The gateway no longer
+//              writes it: a call with a "sending" line and no receipt is taken as sent,
+//              whatever the journal says, and waits for the administrator. "compare" still
+//              lists such lines by name
 //   set-aside: a call that was sent and has no receipt, which the administrator set aside
+//
+// The tag of a line is HMAC-SHA-256 under the copy key of the agent's name
+// in UTF-8, one line feed (0x0A), then the line's JSON text in UTF-8, written
+// in base64url without padding. The gateway's journal tags its lines the same
+// way under the journal key, which is why the two keys must not be one file.
 // Nothing in a line is a credential, an address, a body or an answer: only
 // names, times, codes and fingerprints.
 
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, statSync, writeFileSync, writeSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { fingerprint, fromBase64url } from 'provared';
 import { untilFree } from './files.mjs';
 
-/** HMAC-SHA-256 of a line, under the copy key, with the agent's name, in base64url. */
+const sameAmount = (a, b) => (a === undefined || b === undefined ? a === b : a !== null && b !== null && typeof a === 'object' && typeof b === 'object' && Object.keys(a).length === 2 && Object.keys(b).length === 2 && a.unit === b.unit && a.value === b.value);
+const sameDocuments = (a, b) => Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((d, i) => d?.name === b[i]?.name && d?.sha256 === b[i]?.sha256);
+
+/**
+ * Whether a line of the journal names the same call as a "sending" line of
+ * the copy: the same slip, action, amount, service and documents.
+ */
+export function sameCall(sending, line) {
+  return line !== null && typeof line === 'object' && line.slip === sending.slip && line.action === sending.action && sameAmount(line.amount, sending.amount) && line.with === sending.with && sameDocuments(line.details, sending.details);
+}
+
+/**
+ * Whether a stub's content is the call a "sending" line of the copy shows:
+ * the same slip, action, amount and service, and the line's documents
+ * first, in their order. After them come exactly the documents "after"
+ * gives, where it is a list (what the copy's "done" line holds of the
+ * outcome), or else only documents whose names "outcomes" lists.
+ */
+export function stubIsSending(content, sending, { after, outcomes }) {
+  if (content === null || typeof content !== 'object') return false;
+  if (content.slip !== sending.slip || content.action !== sending.action || content.with !== sending.with || !sameAmount(content.amount, sending.amount)) return false;
+  const d = Array.isArray(content.details) ? content.details : [];
+  const sent = Array.isArray(sending.details) ? sending.details : [];
+  if (!sameDocuments(d.slice(0, sent.length), sent)) return false;
+  const rest = d.slice(sent.length);
+  return Array.isArray(after) ? sameDocuments(rest, after) : rest.every((x) => outcomes.includes(x?.name));
+}
+
+/** The fingerprint of the countersignature a line of a book carries (of its signed content, as the copy records it), or null where it carries none. */
+export async function countersignatureFingerprint(line) {
+  try {
+    const value = JSON.parse(line);
+    return typeof value?.countersignature?.payload === 'string' ? await fingerprint(fromBase64url(value.countersignature.payload)) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** HMAC-SHA-256 of a line, under the copy key: of the agent's name, a line feed, then the text, each in UTF-8; in base64url without padding. */
 export function tagOf(key, name, text) {
   return createHmac('sha256', key).update(`${name}\n${text}`).digest('base64url');
 }

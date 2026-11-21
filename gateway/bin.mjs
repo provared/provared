@@ -31,7 +31,7 @@ import { dirname, isAbsolute, resolve } from 'node:path';
 import { keySetFingerprint, toBase64url } from 'provared';
 import { compareCopyWithBook } from './compare.mjs';
 import { loadCopyKey } from './copy.mjs';
-import { GATEWAY_NAME, checkConfig, copyPaths, journalKeyPath, loadJournalKey, openGateway, plainText, secretHash } from './gateway.mjs';
+import { GATEWAY_ID, GATEWAY_NAME, checkConfig, copyPaths, journalKeyPath, loadJournalKey, openGateway, plainText, secretHash } from './gateway.mjs';
 import { loadKeyFile, makeKeyFile } from './files.mjs';
 
 const USAGE = `provared-gateway: a reverse proxy that writes a Provared receipt for each call an agent makes through it.
@@ -133,22 +133,26 @@ async function main(args) {
     const path = isAbsolute(entry.keys) ? entry.keys : resolve(root, entry.keys);
     const others = [config.recorder?.keys, ...Object.values(config.agents ?? {}).map((a) => a?.keys)].filter((p) => typeof p === 'string').map((p) => (isAbsolute(p) ? p : resolve(root, p)));
     if (others.some((p) => p.toLowerCase() === path.toLowerCase())) throw new Error(`Nothing was written: gateway.keys (${path}) is also the key file of the recorder or of an agent. The gateway has a key file of its own.`);
+    const id = entry.id ?? GATEWAY_ID;
+    if (typeof id !== 'string' || !/^[a-z0-9][a-z0-9._-]{0,63}$/.test(id)) throw new Error('Nothing was written: gateway.id must be 1 to 64 lower-case letters, digits, full stops, hyphens or underscores, beginning with a letter or digit.');
     const keys = await makeKeyFile(path, 'gateway');
     const name = typeof entry.name === 'string' ? entry.name : GATEWAY_NAME;
-    // One "with" entry for each service the upstreams name, with the gateway's keys: the slip gives them, and requires the countersignature.
-    const services = [...new Set(Object.values(config.upstreams ?? {}).map((u) => u?.service).filter((s) => typeof s === 'string'))];
-    const out = { with: services.map((id) => ({ id, name: `${id}, through ${name}`, keys })), requires: [{ need: 'countersignature' }] };
-    console.log(`The gateway's own public keys are in ${path}. For each service whose calls the gateway is to countersign, the slip's "with" entry names them, and "requires" asks for the countersignature:`);
+    // The gateway's own "with" entry, with its keys: the slip gives it, and requires the countersignature.
+    const out = { with: [{ id, name, keys }], requires: [{ need: 'countersignature' }] };
+    console.log(`The gateway's own public keys are in ${path}. The slip's "with" names the gateway in an entry of its own, which every receipt of the agent then names, and "requires" asks for the countersignature:`);
     console.log(JSON.stringify(out, null, 2));
     return 0;
   }
   if (command === 'compare') {
+    // Only these options: a mistyped one would otherwise compare the default book, say, without a word.
+    for (let i = 0; i < rest.length; i += 2) if (!['--config', '--agent', '--book', '--sealer'].includes(rest[i])) throw new Error(`"compare" takes --config, --agent, --book and --sealer, each with a value; "${rest[i]}" is not one of them.`);
     const { config, root } = readConfig(rest);
     const agent = option(rest, '--agent');
     const entry = agent ? config.agents?.[agent] : undefined;
     if (!entry || typeof entry.book !== 'string') throw new Error(`Name the agent whose copy and book to compare: --agent <name> (one of ${Object.keys(config.agents ?? {}).join(', ')}).`);
-    if (!config.gateway || typeof config.gateway.keys !== 'string') throw new Error('The settings name no key file of the gateway\'s own ("gateway": {"keys": …}), so the gateway keeps no copy to compare.');
-    const { keys } = await loadKeyFile(isAbsolute(config.gateway.keys) ? config.gateway.keys : resolve(root, config.gateway.keys), 'gateway');
+    if (!config.gateway || typeof config.gateway !== 'object') throw new Error('The settings give the gateway no keys of its own ("gateway"), so the gateway keeps no copy to compare.');
+    // The gateway's id in a slip's "with": no key file is read, since the book's own check holds each countersignature against the keys the slip gives.
+    const service = config.gateway.id ?? GATEWAY_ID;
     const paths = copyPaths(entry, agent, root);
     const bookPath = option(rest, '--book');
     const bookAt = bookPath ? (isAbsolute(bookPath) ? bookPath : resolve(bookPath)) : isAbsolute(entry.book) ? entry.book : resolve(root, entry.book);
@@ -166,7 +170,7 @@ async function main(args) {
       if (existsSync(at)) sealKeys = [await keySetFingerprint((await loadKeyFile(at, 'recorder')).keys)];
     }
     const issuerKeys = Array.isArray(entry.issuerKeys) ? entry.issuerKeys : [];
-    const result = await compareCopyWithBook({ copyPath: paths.copy, copyKey, name: agent, keys, book: readFileSync(bookAt, 'utf8'), options: { issuerKeys, ...(sealKeys ? { sealKeys } : {}) } });
+    const result = await compareCopyWithBook({ copyPath: paths.copy, copyKey, name: agent, service, book: readFileSync(bookAt, 'utf8'), options: { issuerKeys, ...(sealKeys ? { sealKeys } : {}) } });
     console.log(JSON.stringify(result, null, 2));
     // 0: they agree. 3: they agree but for calls the administrator set aside, which is all that is known to be wrong. 1: anything else.
     return result.summary.agree ? 0 : result.summary.onlySetAside ? 3 : 1;

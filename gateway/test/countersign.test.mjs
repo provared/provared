@@ -1,8 +1,8 @@
 // The gateway's own countersignature, and its own copy of each agent's
-// calls. Where the slip names the gateway's own keys in "with" for a
-// service, the gateway countersigns each call to it that it lets through,
-// keeps a copy of the call apart from the book, and "compare" holds the copy
-// against the book.
+// calls. Where the slip names the gateway in "with" (an entry of its own,
+// with the gateway's keys), every receipt of the agent names the gateway,
+// the gateway countersigns each call it lets through, keeps a copy of the
+// call apart from the book, and "compare" holds the copy against the book.
 
 import './local-library.mjs'; // first: "provared" is this repository's own library
 import assert from 'node:assert/strict';
@@ -31,10 +31,10 @@ async function gatewayKeys() {
   return { keys: set.keys, privateKeys: [signerFromKey('Ed25519', set.privateKeys[0], set.keys[0]), signerFromKey('ML-DSA-87', set.privateKeys[1], set.keys[1])] };
 }
 
-/** A world whose gateway has its own keys, and whose slip gives them for "tickets" and asks for a countersignature for every action. */
+/** A world whose gateway has its own keys, and whose slip names the gateway ("gateway", with those keys) and asks for its countersignature for one action. */
 async function countersigningWorld(o = {}) {
   const own = o.own ?? (await gatewayKeys());
-  const services = [{ id: 'tickets', name: 'The ticket system, through the gateway', keys: own.keys }, { id: 'patch', name: 'The patch service' }];
+  const services = [{ id: 'gateway', name: 'The test gateway', keys: own.keys }, { id: 'tickets', name: 'The ticket system' }, { id: 'patch', name: 'The patch service' }];
   const w = await world({
     ...o,
     slip: { with: services, requires: o.requires ?? [{ need: 'countersignature', action: 'provared.data.read' }], ...(o.slip ?? {}) },
@@ -45,19 +45,19 @@ async function countersigningWorld(o = {}) {
 
 async function compareNow(w) {
   const at = w.gateway.copyOf('patching');
-  return compareCopyWithBook({ copyPath: at.copy, copyKey: loadCopyKey(at.copyKey, { create: false }), name: 'patching', keys: at.keys, book: readFileSync(w.bookPath, 'utf8'), options: w.gateway.checkOptions('patching') });
+  return compareCopyWithBook({ copyPath: at.copy, copyKey: loadCopyKey(at.copyKey, { create: false }), name: 'patching', service: at.service, book: readFileSync(w.bookPath, 'utf8'), options: w.gateway.checkOptions('patching') });
 }
 
 const copyLines = (w) => readCopy(w.gateway.copyOf('patching').copy, loadCopyKey(w.gateway.copyOf('patching').copyKey), 'patching').lines.map((l) => l.entry);
 
-test('the gateway countersigns, with its own keys, a call to a service its slip gives those keys for; the countersignature checks', async () => {
+test('the gateway countersigns, with its own keys, each call of an agent whose slip names the gateway; the stub names the gateway, and the countersignature checks', async () => {
   const w = await countersigningWorld({ ticketsAnswer: (c, res) => json(res, 200, { result: [1] }) });
   try {
     const r = await w.call('GET', '/tickets/api/now/table/incident');
     assert.equal(r.status, 200, r.text);
     assert.equal(w.tickets.calls.length, 1);
     const [stub] = await stubsOf(w);
-    assert.equal(stub.content.with, 'tickets');
+    assert.equal(stub.content.with, 'gateway', "the stub names the gateway's own entry, not the upstream's");
     assert.equal(stub.countersignature.state, 'valid', 'the countersignature checks against the keys the slip gives the service');
     assert.ok(stub.content.details.some((d) => d.name === 'provared.http-response'), 'the stub countersigned names the answer');
     const checked = await checkBook(readFileSync(w.bookPath, 'utf8'), w.gateway.checkOptions('patching'));
@@ -69,12 +69,14 @@ test('the gateway countersigns, with its own keys, a call to a service its slip 
     const content = JSON.parse(new TextDecoder().decode(fromBase64url(line.countersignature.payload)));
     assert.equal(content.type, 'provared.countersignature.v0');
     assert.equal(content.stub, stub.fingerprint);
-    // A call to a service the slip does not give the gateway's keys for is not countersigned by the gateway.
+    // A call to the other upstream is countersigned too, under the gateway's entry: every call of the agent names the gateway.
     const p = await w.call('POST', '/patch/v1/hosts/h1/reboot', { headers: JSONTYPE, body: {} });
     assert.equal(p.status, 200, p.text);
-    assert.equal((await stubsOf(w)).at(-1).countersignature.state, 'absent');
+    assert.equal((await stubsOf(w)).at(-1).content.with, 'gateway');
+    assert.equal((await stubsOf(w)).at(-1).countersignature.state, 'valid');
     const status = await w.gateway.status();
-    assert.deepEqual(status.agents.patching.countersigns, ['tickets']);
+    assert.equal(status.agents.patching.countersigns, true);
+    assert.equal(status.id, 'gateway');
     assert.equal(status.countersigner, await keySetFingerprint(w.own.keys));
   } finally {
     await w.close();
@@ -103,7 +105,7 @@ test('the gateway\'s copy holds a line before each call and one after it, with t
     assert.deepEqual(lines.map((l) => [l.seq, l.kind]), [[0, 'sending'], [1, 'done']]);
     const [sending, done] = lines;
     assert.equal(sending.upstream, 'tickets');
-    assert.equal(sending.with, 'tickets');
+    assert.equal(sending.with, 'gateway');
     assert.equal(sending.action, 'provared.data.read');
     const [stub] = await stubsOf(w);
     assert.equal(done.stub, stub.fingerprint);
@@ -160,20 +162,20 @@ test('compare finds a receipt left out of the book, and one in the book that the
   const key = loadCopyKey(copyAt.copyKey, { create: false });
   const options = w.gateway.checkOptions('patching');
   // The last stub taken out of the book: the gateway sent the call, and the book has no receipt for it.
-  const cut = await compareCopyWithBook({ copyPath: copyAt.copy, copyKey: key, name: 'patching', keys: copyAt.keys, book: `${lines.slice(0, -1).join('\n')}\n`, options });
+  const cut = await compareCopyWithBook({ copyPath: copyAt.copy, copyKey: key, name: 'patching', service: copyAt.service, book: `${lines.slice(0, -1).join('\n')}\n`, options });
   assert.equal(cut.summary.missingFromBook, 1);
   assert.equal(cut.summary.agree, false);
   // An empty copy: both receipts are in the book, under the service the slip gives the gateway's keys for, and the copy does not know them.
   const empty = join(tempFolder(), 'empty.jsonl');
   writeFileSync(empty, '');
-  const none = await compareCopyWithBook({ copyPath: empty, copyKey: key, name: 'patching', keys: copyAt.keys, book, options });
+  const none = await compareCopyWithBook({ copyPath: empty, copyKey: key, name: 'patching', service: copyAt.service, book, options });
   assert.equal(none.summary.notInCopy, 2);
   assert.equal(none.summary.agree, false);
   // A line of the copy changed: it no longer checks.
   const text = readFileSync(copyAt.copy, 'utf8').replace('"provared.data.read"', '"provared.data.delete"');
   const changed = join(tempFolder(), 'changed.jsonl');
   writeFileSync(changed, text);
-  const bad = await compareCopyWithBook({ copyPath: changed, copyKey: key, name: 'patching', keys: copyAt.keys, book, options });
+  const bad = await compareCopyWithBook({ copyPath: changed, copyKey: key, name: 'patching', service: copyAt.service, book, options });
   assert.ok(bad.copy.refused >= 1);
   assert.equal(bad.summary.agree, false);
 });
@@ -229,37 +231,13 @@ test('a copy that something else wrote to stops the agent: the call is not sent,
   }
 });
 
-test('at a start, a call the copy shows as sending, with no line in the journal, was never sent, and is noted as withdrawn', async () => {
-  const w = await countersigningWorld();
-  let copyAt;
-  try {
-    assert.equal((await w.call('GET', '/tickets/api/now/table/a')).status, 200);
-    copyAt = w.gateway.copyOf('patching');
-  } finally {
-    await w.close();
-  }
-  // The gateway stopped between the copy's line and the journal's: the copy has a "sending" line, the journal none.
-  const key = loadCopyKey(copyAt.copyKey, { create: false });
-  const before = readCopy(copyAt.copy, key, 'patching');
-  openCopy(copyAt.copy, key, 'patching', before.next).note({ kind: 'sending', call: 'never-sent-0001', when: new Date().toISOString(), slip: 'x', upstream: 'tickets', action: 'provared.data.read', with: 'tickets', details: [] });
-  const g = await openGateway(w.config, { root: w.folder, log: () => {} });
-  await g.close();
-  const after = readCopy(copyAt.copy, key, 'patching').lines.map((l) => l.entry);
-  assert.deepEqual(after.at(-1).kind, 'withdrawn');
-  assert.equal(after.at(-1).call, 'never-sent-0001');
-  const result = await compareCopyWithBook({ copyPath: copyAt.copy, copyKey: key, name: 'patching', keys: copyAt.keys, book: readFileSync(w.bookPath, 'utf8'), options: { issuerKeys: w.issuerKeys } });
-  assert.equal(result.summary.agree, true, JSON.stringify(result.summary));
-  assert.equal(result.withdrawn, 1);
-});
-
-test('check says which services the gateway countersigns for each agent, and warns where the slip does not require it for every action', async () => {
+test('check says that the gateway countersigns every call of an agent whose slip names it, and warns where the slip does not require it for every action', async () => {
   const w = await countersigningWorld();
   try {
     const { lines, problems, warnings } = await checkConfig(w.config, { root: w.folder });
     assert.deepEqual(problems, []);
-    assert.ok(lines.some((l) => /agent "patching": the gateway countersigns, with its own keys, its calls to the services tickets/.test(l)));
+    assert.ok(lines.some((l) => /agent "patching": the gateway countersigns, with its own keys, every call of this agent it lets through; each receipt names the gateway \("gateway"\)/.test(l)));
     assert.ok(warnings.some((x) => /does not require a countersignature for every action/.test(x)));
-    assert.ok(warnings.some((x) => /does not countersign its calls to the services patch/.test(x)));
     assert.ok(w.logs.some((e) => e.event === 'warning' && /every action/.test(e.message)));
     const asAgent = await checkConfig({ ...w.config, gateway: { keySet: w.agentSet.keys, privateKeys: w.config.agents.patching.privateKeys } }, { root: w.folder });
     assert.ok(asAgent.problems.some((p) => /as the agent's keys/.test(p)));
@@ -313,7 +291,8 @@ test('the commands: "keys --gateway" prints the slip\'s entries; a call cut off 
   const printed = JSON.parse(keys.out.slice(keys.out.indexOf('{')));
   assert.deepEqual(printed.requires, [{ need: 'countersignature' }]);
   assert.equal(printed.with.length, 1);
-  assert.equal(printed.with[0].id, 'tickets');
+  assert.equal(printed.with[0].id, 'gateway', "the gateway's own entry, apart from the upstreams' services");
+  assert.equal(printed.with[0].name, 'The test gateway');
   assert.equal(printed.with[0].keys.length, 2);
   assert.ok(!keys.out.includes('"d"') && !keys.out.includes('"priv"'), 'no private key is printed');
   const slip = await signSlip({ passkey, agentKeys, with: printed.with, requires: printed.requires });

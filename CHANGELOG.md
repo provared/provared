@@ -172,6 +172,19 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
   package lists its new files, asks for `provared` 0.9.0 exactly, and has a
   change log of its own (`gateway/CHANGELOG.md`). The library does not
   change.
+- **The gateway after the review of its countersignature** (`gateway/`,
+  not yet published). The gateway has a `with` entry of its own (`gateway`
+  by default), which every receipt of an agent whose slip names it then
+  names, so that its countersignature no longer reads as an upstream's. Its
+  own copy, not the journal, decides at a start what happened to a call: a
+  call the copy shows as sent and not finished waits for the administrator,
+  a journal line the copy does not hold is never given a stub, and a stub
+  found in the book settles a call only where it is the call the copy shows,
+  countersigned. `compare` holds each receipt's content and countersignature
+  against the copy, reports more than one receipt for a call, and agrees
+  only where the book is fully checked and within its slips. Unknown
+  settings are refused. Details in `gateway/CHANGELOG.md`. The library does
+  not change.
 - **The home page for businesses.** https://prova.red now opens for businesses that use AI agents a lot: what the guard does, how it works with claude.ai, when it keeps the tools' credentials from the agent, what a record does not prove, and how to try it. The developers' material follows, under "For developers". No code changes.
 - **The pages and READMEs name the guard 0.5.0 as current.** The README, the
   home page and the three-minutes page say the guard is at 0.5.0, and the
