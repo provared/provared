@@ -368,22 +368,17 @@ writes the executor's entry in the image's lockfile afresh, for the packed
 file and its hash, and keeps the library's entry, whose hash is still
 checked. The lockfile beside `compose.yaml` is not changed.
 
-**The lockfile's entry for the executor is provisional.** It was made from
-a pack of a working folder, before 0.5.0 is on npm, and its hash is known
-not to be npm's: a pack of a clean checkout gives another, since the file
-modes recorded in the pack differ. The file
-`package-lock.provisional.json` beside it says so. Until the lockfile is
-made again from npm, `npm ci` stops on it (`E404` now, `EINTEGRITY` once
-0.5.0 is published): it installs nothing it cannot check. The release
-rule, in this order:
+**The lockfile's entries are npm's.** Both were made from npm after
+`provared` 0.9.0 and `provared-mcp-executor` 0.5.0 were published, with the
+hashes npm gives, and `npm ci` checks them. The release rule, in this order:
 
-1. Publish `provared` 0.9.0 (the lockfile's entry for it has no hash yet), then `provared-mcp-executor` 0.5.0.
-2. In this folder, `npm install --package-lock-only --ignore-scripts`,
-   and take `package-lock.provisional.json` away; commit both.
+1. Publish `provared`, then `provared-mcp-executor`.
+2. In this folder, `npm install --package-lock-only --ignore-scripts`;
+   commit the lockfile.
 3. `node tools/release/check-recipe-lock.mjs --registry`, from the top of
-   the repository: it stops while the provisional file is there, or where
-   the lockfile's hash for the executor is not the one
-   `npm view provared-mcp-executor@0.5.0 dist.integrity` gives.
+   the repository: it stops where a `package-lock.provisional.json` is
+   beside the lockfile, or where the lockfile's hash for the executor is not
+   the one `npm view provared-mcp-executor@0.5.0 dist.integrity` gives.
 4. Only then cut the release tag that "Getting the recipe" points at.
 
 ### How the containers are held in

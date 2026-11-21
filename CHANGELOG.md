@@ -160,6 +160,18 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
 
 ## Not yet released
 
+- **The lockfiles carry what npm published.** The guard's lockfile
+  (`mcp-executor/package-lock.json`) and the recipe's
+  (`mcp-executor/recipes/claude-ai/compose/package-lock.json`) now give
+  `provared` 0.9.0 and, in the recipe's, `provared-mcp-executor` 0.5.0, as
+  published on npm on 21 November 2026, each with the hash npm gives:
+  `sha512-rLql7z1btN6FL+bDIkv1TwCp+ARm98FAU6q2+Exz7hCYvecw/ir3qGU/CPACoNrfXTEYKCY7W3SYyBgs+f1yqA==`
+  for the library and
+  `sha512-0qIyZIUEDLrjTRlFIpemqKBPLBBXQ4uyC6Kg4W74zgU4yzdFPEkAk9LmUbQu56pSftUmEQQCJei2fGB43OUtDQ==`
+  for the executor. The provisional mark (`package-lock.provisional.json`)
+  is gone, and `node tools/release/check-recipe-lock.mjs --registry` passes.
+  The recipe's tests now expect no mark and a hash on every entry.
+
 - **Static analysis passes again on the executor.** Nine warnings in
   `mcp-executor` were checked and found to be false alarms: two loops whose
   condition changes in a callback, six patterns that cannot match the same
