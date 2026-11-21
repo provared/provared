@@ -91,11 +91,11 @@ export function runCommand(bin, args, env = {}) {
   });
 }
 
-/** Wait until the test's own condition holds, or fail once the limit has passed. */
+/** Wait until the test's own condition holds, or fail once the limit has passed, on the monotonic clock (the system clock may be put forward or back meanwhile). */
 export async function until(condition, what, limit = ANSWER_LIMIT) {
-  const end = Date.now() + limit;
+  const end = performance.now() + limit;
   while (!condition()) {
-    if (Date.now() > end) throw new Error(`${what}: not so after ${limit / 1000} seconds`);
+    if (performance.now() > end) throw new Error(`${what}: not so after ${limit / 1000} seconds`);
     await new Promise((d) => setTimeout(d, 20));
   }
 }

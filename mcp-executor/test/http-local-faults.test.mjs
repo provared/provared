@@ -258,7 +258,8 @@ test('stdio: a program that takes no notice of SIGTERM is sent SIGKILL after a s
 
 for (const kind of ['request', 'notification']) {
   test(`a program that is not reading: what waits to be written to it is bounded, and a ${kind} past the bound is refused, not held`, async () => {
-    const w = await localWorld({ env: { FAKE_INIT: 'deaf' }, config: { timeout: 3000, shutdownWait: 500 } });
+    // A request held until the timeout would be answered after 20 seconds; one refused at once, well before.
+    const w = await localWorld({ env: { FAKE_INIT: 'deaf' }, config: { timeout: 20000, shutdownWait: 500 } });
     try {
       const { session } = await begin(w, 'alpha');
       // One mebibyte at a time to just under the bound, and then half as much again: more than the bound now waits, whatever little the program's pipe took.
@@ -268,15 +269,16 @@ for (const kind of ['request', 'notification']) {
         const sent = await ask(w, 'alpha', session, { jsonrpc: '2.0', method: 'notifications/progress', params: { progressToken: 'p', progress: i, message: 'x'.repeat(i < fill ? mebibyte : 1.5 * mebibyte) } });
         assert.equal(sent.status, 202, `notification ${i}: ${sent.body}`);
       }
-      const started = Date.now();
+      // On the monotonic clock: the system clock may be put forward or back meanwhile.
+      const started = performance.now();
       const refused = kind === 'request' ? await ping(w, 'alpha', session) : await ask(w, 'alpha', session, { jsonrpc: '2.0', method: 'notifications/progress', params: { progressToken: 'p', progress: fill } });
       assert.equal(refused.status, 503, refused.body);
       assert.match(refused.json.error.message, /not reading/);
-      assert.ok(Date.now() - started < 2000, 'refused at once, not at the timeout');
+      assert.ok(performance.now() - started < 10000, 'refused at once, not at the timeout');
       assert.equal(events(w, 'server-not-reading').length, 1);
       assert.equal(events(w, 'session-ended').at(-1).why, 'not-reading');
       assert.equal((await ping(w, 'alpha', session)).status, 404, 'the session is over');
-      await until(() => w.executor.programs() === 0, { timeout: 3000 });
+      await until(() => w.executor.programs() === 0, { timeout: 30000 });
     } finally {
       await w.close();
     }
@@ -491,7 +493,7 @@ test('an answer of the program to nothing in flight goes to no agent, and not on
     const stream = await openStream(w, 'alpha', session);
     const answer = await callIn(w, 'alpha', session, 'stray', {});
     assert.equal(answer.json.result?.content[0].text, 'Strayed.', answer.body);
-    await until(() => stream.text.includes('after the stray answer'));
+    await until(() => stream.text.includes('after the stray answer'), { timeout: 30000 });
     assert.ok(!stream.text.includes('an answer to nothing'), 'no response is sent on the stream');
     assert.equal(events(w, 'late-answer-dropped').length, 1);
     stream.res.destroy();

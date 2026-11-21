@@ -96,8 +96,8 @@ export function call(port, method, path, { secret, headers = {}, body, rawHeader
 
 export const ACTIONS = ['provared.data.read', 'ticket.update', 'patch.apply', 'host.reboot', 'provared.data.delete'];
 
-/** A slip for an agent's keys, signed with the development stand-in for a passkey. */
-export async function signSlip({ passkey, agentKeys, actions = ACTIONS, limits = [], never = [], requires = [], with: services = [{ id: 'tickets', name: 'The ticket system' }, { id: 'patch', name: 'The patch service' }], from = Date.now() - 60000, until = Date.now() + 3600000 }) {
+/** A slip for an agent's keys, signed with the development stand-in for a passkey. It lasts a day unless "until" says otherwise, so that a system clock put forward while a test runs does not end it under the test. */
+export async function signSlip({ passkey, agentKeys, actions = ACTIONS, limits = [], never = [], requires = [], with: services = [{ id: 'tickets', name: 'The ticket system' }, { id: 'patch', name: 'The patch service' }], from = Date.now() - 60000, until = Date.now() + 24 * 3600000 }) {
   const prepared = await prepareSlip({
     issuer: { name: 'Sam (development)', key: passkey.key, rpId: passkey.rpId, origin: passkey.origin },
     agent: { name: 'A patching agent, through the gateway at 127.0.0.1', keys: agentKeys },

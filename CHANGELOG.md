@@ -223,6 +223,21 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
     and its copy could not say so) settles the call where it is the call
     sent, countersigned; one without the countersignature the permission
     names does not, and the call waits to be set aside.
+  - **Three tests that failed now and then** no longer rest on timing they
+    do not control. "A seal the sealer signed whose answer never came"
+    (`test/central-sealer.test.mjs`) raced the executor's own retry two
+    seconds after a failure: on a busy computer the seal was added before
+    the test had looked, and it found calls taken. The stand-in sealer now
+    holds the executor's questions until the test has looked. "A program
+    that is not reading" (`test/http-local-faults.test.mjs`) measured
+    "refused at once" on the system clock with a bound of two seconds
+    against a timeout of three; it now measures on the monotonic clock,
+    with a bound of ten seconds against a timeout of twenty. "An answer of
+    the program to nothing in flight" waited five seconds; it now waits up
+    to thirty. In every test, `until` (`test/world.mjs`) measures its limit
+    on the monotonic clock, so a system clock put forward no longer ends a
+    wait at once; and a test's slip lasts a day, not an hour, so a clock put
+    forward by more than an hour no longer ends it under a running test.
   - **Documents.** The executor's README ("A call the executor was sending
     when it stopped"; "The copy, and comparing it with the book") and
     DESIGN.md (sections 7 and 8) say so.

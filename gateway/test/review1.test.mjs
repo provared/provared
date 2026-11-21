@@ -112,9 +112,9 @@ test('M3: an agent may have only so many calls waiting, holding only so many byt
   const LIMIT = 120000;
   const soon = (p, what) => Promise.race([p, new Promise((_, no) => setTimeout(() => no(new Error(`${what}: no answer in ${LIMIT / 1000} seconds`)), LIMIT).unref())]);
   const until = async (ready, what) => {
-    const deadline = Date.now() + LIMIT;
+    const deadline = performance.now() + LIMIT;
     while (!(await ready())) {
-      if (Date.now() > deadline) throw new Error(`${what}: not in ${LIMIT / 1000} seconds`);
+      if (performance.now() > deadline) throw new Error(`${what}: not in ${LIMIT / 1000} seconds`);
       await new Promise((d) => setTimeout(d, 10));
     }
   };

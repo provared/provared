@@ -141,3 +141,8 @@ These change what the entries above describe.
   end; a start that should be refused and is not closes the gateway it
   opened. Before, a test that failed while a gateway program it had
   started was running left the test file waiting with no end.
+- **Tests and the system clock.** Each wait's limit is measured on the
+  monotonic clock (`test/limits.mjs`, `test/review1.test.mjs`), so a system
+  clock put forward or back no longer ends a wait at once or stretches it;
+  and a test's slip lasts a day, not an hour (`test/world.mjs`), so a clock
+  put forward by more than an hour no longer ends it under a running test.
