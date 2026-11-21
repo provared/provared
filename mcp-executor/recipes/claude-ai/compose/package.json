@@ -6,7 +6,7 @@
   "license": "Apache-2.0",
   "type": "module",
   "dependencies": {
-    "provared": "0.7.0",
+    "provared": "0.8.1",
     "provared-mcp-executor": "0.5.0"
   }
 }

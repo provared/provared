@@ -193,11 +193,11 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
     the book without one, logged as `stamp-not-given` and answered as
     `stampProblem` (X303).
   - **Versions.** The sealer and the gateway ask for `provared`
-    `>=0.6.0 <0.8.0`, and the executor for `0.7.0`, none of which has
-    `provared/net/timestamp`: their tests run against this repository's
-    library. Installed with one of those versions, a program whose
-    settings give `stamp` is refused at its start, in words that say
-    so. The ranges are to be raised when 0.8.1 is published.
+    `>=0.8.1 <0.9.0`, and the executor for `0.8.1` exactly, the first
+    version with `provared/net/timestamp` (0.8.1 is published). Installed
+    with an earlier version, a program whose settings give `stamp` is
+    refused at its start, in words that say so: the refusal looks for the
+    client, not for a version number.
   - **The format description** (section 21.2) says how the reference
     software asks for a time-stamp, what the service learns, and that a
     time-stamp not given never costs a seal; section 21.3 says what a

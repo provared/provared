@@ -137,8 +137,7 @@ says which servers are affected and what to check; `CHANGELOG.md` in the
 repository has the details.
 
 It needs Node.js 24.7 or later. It depends only on the `provared` library,
-at exactly version 0.7.0: its receipts name
-
+at exactly version 0.8.1: its receipts name
 `provared.tool-name` and `provared.tool-result`, which the format reserved
 in 0.7.0 and which a checker of 0.5.0 or 0.6.0 refuses (0.4.0 and
 earlier read them as labels); and its owner's check uses two functions
