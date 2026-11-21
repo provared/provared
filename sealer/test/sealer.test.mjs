@@ -15,6 +15,7 @@ import { spawnSync } from 'node:child_process';
 import nodeCrypto from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
+import net from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import v8 from 'node:v8';
@@ -1111,4 +1112,265 @@ test('the command: init, keys, add-recorder and release-unsealed', async () => {
   assert.equal(run('keys', '--folder', folder).status, 0);
   assert.equal(run('nonsense', '--folder', folder).status, 2);
   assert.equal(run('--help').status, 0);
+});
+
+const MIB = 1024 * 1024;
+/**
+ * A listener that is not the sealer: it answers any question with status
+ * 200, no proof, and a body of "offer" bytes, its length declared or not.
+ * Gives {address, sent(): how many bytes it has handed over, close()}.
+ */
+async function largeAnswer(offer, { declared }) {
+  let sent = 0;
+  const chunk = Buffer.alloc(MIB, 0x20);
+  const sockets = new Set();
+  const server = net.createServer((socket) => {
+    sockets.add(socket);
+    socket.on('error', () => {});
+    socket.on('close', () => sockets.delete(socket));
+    let begun = false;
+    socket.on('data', () => {
+      if (begun) return;
+      begun = true;
+      socket.write(`HTTP/1.1 200 OK\r\ncontent-type: application/json\r\n${declared ? `content-length: ${offer}\r\n` : ''}connection: close\r\n\r\n`);
+      const pump = () => {
+        while (sent < offer && !socket.destroyed) {
+          sent += chunk.length;
+          if (!socket.write(chunk)) return socket.once('drain', pump);
+        }
+        socket.end();
+      };
+      pump();
+    });
+  });
+  await new Promise((done) => server.listen(0, '127.0.0.1', done));
+  return {
+    address: `http://127.0.0.1:${server.address().port}`,
+    sent: () => sent,
+    close: () =>
+      new Promise((done) => {
+        for (const s of sockets) s.destroy();
+        server.close(() => done());
+      }),
+  };
+}
+
+test('a recorder follows no redirect: what listens at the sealer\'s address cannot send the question elsewhere (X288)', async () => {
+  const token = toBase64url(nodeCrypto.randomBytes(32));
+  // Where a redirect would send the question, and what listens at the sealer's address, which answers with a redirect.
+  const reached = [];
+  const elsewhere = http.createServer((q, a) => {
+    reached.push(q.url);
+    a.writeHead(200, { 'content-type': 'application/json' }).end('{}');
+  });
+  await new Promise((done) => elsewhere.listen(0, '127.0.0.1', done));
+  let status = 307;
+  const redirecting = http.createServer((q, a) => {
+    q.resume();
+    a.writeHead(status, { location: `http://127.0.0.1:${elsewhere.address().port}${q.url}` }).end();
+  });
+  await new Promise((done) => redirecting.listen(0, '127.0.0.1', done));
+  try {
+    const client = connectSealer({ address: `http://127.0.0.1:${redirecting.address().port}`, recorder: 'agent-one', token });
+    for (status of [301, 302, 303, 307, 308]) await assert.rejects(client.about(), Error, String(status));
+    assert.deepEqual(reached, [], 'no question reached the address a redirect named');
+  } finally {
+    redirecting.closeAllConnections();
+    elsewhere.closeAllConnections();
+    await new Promise((done) => redirecting.close(done));
+    await new Promise((done) => elsewhere.close(done));
+  }
+});
+
+test('a recorder reads an answer up to 8 MiB and no further, with its length declared or not: what listens at the sealer\'s address cannot fill its memory', async () => {
+  const token = toBase64url(nodeCrypto.randomBytes(32));
+  for (const declared of [false, true]) {
+    const big = await largeAnswer(96 * MIB, { declared });
+    try {
+      // How many bytes of the answer's body the client took.
+      let taken = 0;
+      const counting = async (url, init) => {
+        const r = await fetch(url, init);
+        const counted = r.body.pipeThrough(
+          new TransformStream({
+            transform(piece, controller) {
+              taken += piece.length;
+              controller.enqueue(piece);
+            },
+          }),
+        );
+        return new Response(counted, { status: r.status, headers: r.headers });
+      };
+      const client = connectSealer({ address: big.address, recorder: 'agent-one', token, fetchImpl: counting });
+      await assert.rejects(client.about(), /The sealer's answer is larger than an answer may be\./, `declared: ${declared}`);
+      if (declared) assert.ok(taken < MIB, `a length declared over the limit: ${taken} bytes of the body were taken`);
+      else assert.ok(taken > 8 * MIB && taken <= 9 * MIB, `no length declared: ${taken} bytes of the body were taken`);
+      assert.ok(big.sent() <= 40 * MIB, `the listener handed over ${big.sent()} of its ${96 * MIB} bytes before the connection was given up`);
+    } finally {
+      await big.close();
+    }
+  }
+});
+
+// --- an outside time-stamp on each seal: the settings' "stamp" ---
+//
+// The service is one on this computer that the OpenSSL program answers for
+// (the repository's test/helpers/tsa.mjs); where there is no OpenSSL
+// program, the test that needs it is skipped and says why.
+
+const { NO_OPENSSL, findOpenssl, startTestTsa } = await import('../../test/helpers/tsa.mjs');
+
+/** An address on this computer that nothing listens on: a port that was free a moment ago. */
+async function nobodyThere() {
+  const s = http.createServer();
+  await new Promise((done) => s.listen(0, '127.0.0.1', done));
+  const port = s.address().port;
+  await new Promise((done) => s.close(done));
+  return `http://127.0.0.1:${port}/`;
+}
+
+test('the settings\' "stamp": each seal carries the time-stamp the service gave, which counts for a reader who trusts the service', { skip: findOpenssl() ? false : NO_OPENSSL }, async () => {
+  const tsa = await startTestTsa();
+  const { folder, tokens } = await sealerFolder({ stamp: { address: tsa.address } });
+  const running = await startSealer({ folder });
+  try {
+    const client = connectSealer({ address: running.address, recorder: 'agent-one', token: tokens['agent-one'] });
+    const b = await smallBook();
+    await client.extend(b.first, 0, b.leaves, { line: b.line });
+    const s = await client.seal(b.first, { previous: null });
+    assert.equal(s.stampProblem, undefined);
+    assert.equal(s.entry.stamps.length, 1);
+    const c = await checkBook(lineOf([...b.lines, s.line]), { sealKeys: [running.fingerprint], stampServices: [tsa.authority] });
+    assert.deepEqual(c.problems, []);
+    assert.deepEqual(c.entries.at(-1).stamps.map((x) => [x.kind, x.state]), [['service', 'valid']]);
+    // The time-stamp is kept with the seal in the state.
+    assert.deepEqual(onDisk(folder).books[0].latest.entry.stamps, s.entry.stamps);
+  } finally {
+    await running.close();
+    await tsa.close();
+  }
+});
+
+test('the settings\' "stamp.authority": a time-stamp signed by another certificate is not kept; the one named is, and "/seal" names its signer (X344)', { skip: findOpenssl() ? false : NO_OPENSSL }, async () => {
+  const tsa = await startTestTsa();
+  const stranger = await startTestTsa();
+  const opened = [];
+  try {
+    // A stranger answering at the service's address: the seal is given without its time-stamp, and the reason says whose it was.
+    const one = await sealerFolder({ stamp: { address: stranger.address, authority: tsa.authority } });
+    const running = await startSealer({ folder: one.folder });
+    opened.push(running);
+    assert.deepEqual(running.warnings, []);
+    let client = connectSealer({ address: running.address, recorder: 'agent-one', token: one.tokens['agent-one'] });
+    let b = await smallBook();
+    await client.extend(b.first, 0, b.leaves, { line: b.line });
+    const refused = await client.seal(b.first, { previous: null });
+    assert.equal(refused.entry.stamps, undefined);
+    assert.equal(refused.stampedBy, undefined);
+    assert.equal(refused.stampProblem.code, 'stamp-not-given');
+    assert.match(refused.stampProblem.message, new RegExp(`signed by the certificate whose fingerprint is ${stranger.authority}`));
+    // The service named: kept, and its signer named in the answer.
+    const two = await sealerFolder({ stamp: { address: tsa.address, authority: [tsa.authority] } });
+    const good = await startSealer({ folder: two.folder });
+    opened.push(good);
+    client = connectSealer({ address: good.address, recorder: 'agent-one', token: two.tokens['agent-one'] });
+    b = await smallBook();
+    await client.extend(b.first, 0, b.leaves, { line: b.line });
+    const s = await client.seal(b.first, { previous: null });
+    assert.equal(s.entry.stamps.length, 1);
+    assert.equal(s.stampedBy, tsa.authority);
+    // With none named, the signer is still named, and the start warns of plain http:.
+    const three = await sealerFolder({ stamp: { address: tsa.address } });
+    const plain = await startSealer({ folder: three.folder });
+    opened.push(plain);
+    assert.match(plain.warnings.join(' '), /plain http: and no "authority" is named/);
+    client = connectSealer({ address: plain.address, recorder: 'agent-one', token: three.tokens['agent-one'] });
+    b = await smallBook();
+    await client.extend(b.first, 0, b.leaves, { line: b.line });
+    assert.equal((await client.seal(b.first, { previous: null })).stampedBy, tsa.authority);
+  } finally {
+    for (const r of opened) await r.close();
+    await tsa.close();
+    await stranger.close();
+  }
+});
+
+test('the settings\' "stamp.authority": one fingerprint or a list of 1 to 16 (X344)', async () => {
+  const fp = 'A'.repeat(43);
+  for (const bad of ['', 'A'.repeat(42), [], [fp, 7], Array(17).fill(fp), {}, null]) {
+    const { folder } = await sealerFolder({}, []);
+    writeFileSync(join(folder, 'sealer.json'), JSON.stringify({ name: 'Example central sealer (invented)', port: 0, stamp: { address: 'http://127.0.0.1/', authority: bad } }));
+    await refusedStart({ folder }, /"stamp\.authority" must be the fingerprint/);
+  }
+  const { folder } = await sealerFolder({ stamp: { address: 'http://127.0.0.1/', authority: [fp, 'b'.repeat(43)] } }, []);
+  const running = await startSealer({ folder });
+  assert.deepEqual(running.warnings, []);
+  await running.close();
+});
+
+test('the settings\' "stamp": a service that cannot be reached costs no seal, and the reason is given with it', async () => {
+  const { folder, tokens } = await sealerFolder({ stamp: { address: await nobodyThere(), timeout: 2000 } });
+  const running = await startSealer({ folder });
+  let sealed = null;
+  try {
+    const client = connectSealer({ address: running.address, recorder: 'agent-one', token: tokens['agent-one'] });
+    const b = await smallBook();
+    await client.extend(b.first, 0, b.leaves, { line: b.line });
+    const s = await client.seal(b.first, { previous: null });
+    assert.ok(s.entry, JSON.stringify(s.refused));
+    assert.equal(s.entry.stamps, undefined);
+    assert.equal(s.stampProblem.code, 'stamp-not-given');
+    assert.match(s.stampProblem.message, /could not be reached/);
+    assert.deepEqual((await checkBook(lineOf([...b.lines, s.line]), { sealKeys: [running.fingerprint] })).problems, []);
+    assert.equal(onDisk(folder).books[0].latest.entry.seal.payload, s.entry.seal.payload);
+    // A recorder that never had the answer (its question timed out) and asks for the latest seal is told the reason too (X306).
+    const latest = await client.latest(b.first);
+    assert.equal(latest.fingerprint, s.fingerprint);
+    assert.deepEqual(latest.stampProblem, s.stampProblem);
+    assert.deepEqual((await client.latest({ first: b.first, number: 1 })).stampProblem, s.stampProblem);
+    sealed = { first: b.first, fingerprint: s.fingerprint };
+  } finally {
+    await running.close();
+  }
+  // Kept in memory only: after a start, the latest seal is given without it.
+  const again = await startSealer({ folder });
+  try {
+    const client = connectSealer({ address: again.address, recorder: 'agent-one', token: tokens['agent-one'] });
+    const latest = await client.latest(sealed.first);
+    assert.equal(latest.fingerprint, sealed.fingerprint);
+    assert.equal(latest.stampProblem, undefined);
+  } finally {
+    await again.close();
+  }
+});
+
+test('the settings\' "stamp": 2.5 seconds by default, so that the signing and the wait stay below a recorder\'s 5; at most 20; and less than the time each signature is given (X304, X354)', async () => {
+  const { folder } = await sealerFolder({ stamp: { address: 'http://127.0.0.1/' } }, []);
+  await refusedStart({ folder, signWithin: 2500 }, /"stamp\.timeout" \(2500 ms\) must be less than/);
+  const fine = await startSealer({ folder, signWithin: 2501 });
+  await fine.close();
+  const { folder: short } = await sealerFolder({ stamp: { address: 'http://127.0.0.1/', timeout: 2000 } }, []);
+  const running = await startSealer({ folder: short, signWithin: 4000 });
+  await running.close();
+});
+
+test('the settings\' "stamp": left out, nothing is asked; given, it is an address on the web and a time limit in range, and not beside a "stamp" function', async () => {
+  for (const [stamp, words] of [
+    ['http://127.0.0.1/', /"stamp" must be an object/],
+    [{}, /"stamp\.address"/],
+    [{ address: 'ftp://127.0.0.1/' }, /"stamp\.address"/],
+    [{ address: 'http://user:secret@127.0.0.1/' }, /"stamp\.address"/],
+    [{ address: 'http://127.0.0.1/#x' }, /"stamp\.address"/],
+    [{ address: 'http://127.0.0.1/tsa?key=secret' }, /"stamp\.address"/],
+    [{ address: 'http://127.0.0.1/tsa?' }, /"stamp\.address"/],
+    [{ address: 'http://127.0.0.1/', timeout: 99 }, /"stamp\.timeout"/],
+    [{ address: 'http://127.0.0.1/', timeout: 20001 }, /"stamp\.timeout" must be a whole number of milliseconds from 100 to 20000/],
+    [{ address: 'http://127.0.0.1/', policy: '1.2.3' }, /holds "policy"/],
+  ]) {
+    const { folder } = await sealerFolder({}, []);
+    writeFileSync(join(folder, 'sealer.json'), JSON.stringify({ name: 'Example central sealer (invented)', port: 0, stamp }));
+    await refusedStart({ folder }, words);
+  }
+  const { folder } = await sealerFolder({ stamp: { address: 'http://127.0.0.1/' } }, []);
+  await refusedStart({ folder, stamp: async () => null }, /give one of the two/);
 });

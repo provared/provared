@@ -141,7 +141,7 @@ export async function world(o = {}) {
   const config = {
     listen: { host: '127.0.0.1', port: 0 },
     admin: { secretHash: await secretHash(ADMIN_SECRET) },
-    recorder: { name: 'The test gateway', keySet: sealSet.keys, privateKeys: sealSet.privateKeys },
+    recorder: { name: 'The test gateway', keySet: sealSet.keys, privateKeys: sealSet.privateKeys, ...(o.recorder ?? {}) },
     upstreams: {
       tickets: { base: tickets.base, service: 'tickets', credential: { header: 'Authorization', env: envName, prefix: 'Bearer ' }, eventIdHeader: 'X-Request-Id', ...(o.tickets ?? {}) },
       patch: { base: `${patch.base}/svc`, service: 'patch', credential: { header: 'X-Api-Key', file: tokenFile }, requestIdHeader: 'X-Gateway-Call', ...(o.patch ?? {}) },

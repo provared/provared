@@ -61,6 +61,7 @@ import * as f from './fields.js';
 import { SEAL_METHODS, checkSealKeySet } from './keys.js';
 import { CLOCK_ALLOWANCE_MS, decodeStamps, keySetFingerprint, sealOver } from './seal.js';
 import { holdSigningKeys, methodAvailable } from './signatures.js';
+import { checkStamp } from './timestamp.js';
 import { leafHash, treeBuilder } from './tree.js';
 import { sequenceOf } from './witnessing.js';
 
@@ -179,10 +180,27 @@ function readRules(given) {
   return { agents, books, text: JSON.stringify([agents ? [...agents].sort() : null, books]) };
 }
 
+// The latest time that a time-stamp from a service states for a seal this sealer holds ({entry, fingerprint}), or
+// null where it holds none, or none of its time-stamps can be read. Each is read by checkStamp, which asks nobody.
+async function latestServiceTime(held) {
+  let latest = null;
+  if (!held || !Array.isArray(held.entry?.stamps)) return latest;
+  for (const item of held.entry.stamps) {
+    if (typeof item !== 'string') continue;
+    try {
+      const read = await checkStamp(fromBase64url(item), fromBase64url(held.fingerprint));
+      if (Number.isFinite(read.time) && (latest === null || read.time > latest)) latest = read.time;
+    } catch {
+      // A time-stamp that does not pass is not one a checker counts: it gives no time.
+    }
+  }
+  return latest;
+}
+
 // Wait for a promise at most "ms" milliseconds.
-function within(promise, ms, what) {
+function within(promise, ms, what, code = 'check-failed') {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Refusal('check-failed', `${what} gave no answer within ${ms} milliseconds.`)), ms);
+    const timer = setTimeout(() => reject(new Refusal(code, `${what} gave no answer within ${ms} milliseconds.`)), ms);
     Promise.resolve(promise).then(
       (v) => {
         clearTimeout(timer);
@@ -202,8 +220,12 @@ function within(promise, ms, what) {
  * @param {object} o
  * @param {{keys: object[], name: string}} o.by the recorder's public key set (Ed25519, ML-DSA-87, SLH-DSA-SHA2-256s) and its name (a label)
  * @param {any[]} o.signers its three private keys, or signers (signatures.js), in the order of the key set, as writeSeal takes them
- * @param {(fingerprintBytes: Uint8Array) => any} [o.stamp] asks a time-stamp service for a stamp over a seal's fingerprint:
- *   gives an item of "stamps" (format description, section 21.2), or null for none. No service is named here
+ * @param {(fingerprintBytes: Uint8Array, context: {when: number, after: number|null}) => any} [o.stamp] asks a time-stamp
+ *   service for a stamp over a seal's fingerprint: gives an item of "stamps" (format description, section 21.2), or null
+ *   for none. "when" is the seal's time as a checker reads it, and "after" the latest time a time-stamp from a service
+ *   gave the seal before it, where this sealer holds that seal: a stamp that keeps the book sound is not dated more
+ *   than 300 seconds before either. No service is named here. A hook that fails, or is slower than "signWithin",
+ *   leaves the seal without a time-stamp, and the answer says why ("stampProblem")
  * @param {object} [o.state] the state a sealer handed back before, as saved
  * @param {() => number} [o.clock] the time now, in milliseconds since 1970; Date.now by default
  * @param {number} [o.signWithin] how long each signature, and the time-stamp hook, may take, in milliseconds (30 seconds)
@@ -551,14 +573,19 @@ export async function openSealer({ by, signers, stamp, state, clock = Date.now, 
       let stampProblem = null;
       if (stamp) {
         try {
-          const item = await within(stamp(made.fingerprintBytes.slice()), signWithin, 'The time-stamp hook');
+          // What the hook is told, so that it can keep only a time-stamp that fits (format description, section
+          // 21.2, rule 7, and section 21.3): the seal's own time as a checker reads it, and the latest time that a
+          // time-stamp from a service gave the seal before it, where this sealer holds that seal.
+          const context = { when: parseTime(formatTime(when)), after: await latestServiceTime(before) };
+          const item = await within(stamp(made.fingerprintBytes.slice(), context), signWithin, 'The time-stamp hook', 'stamp-not-given');
           if (item !== null && item !== undefined) {
             const copy = JSON.parse(canonicalJson(item));
             decodeStamps([copy]);
             entry.stamps = [copy];
           }
         } catch (e) {
-          stampProblem = problemFrom(e);
+          // A hook that fails in a way of its own is said as a time-stamp not given, in its own words.
+          stampProblem = e instanceof Refusal ? problemFrom(e) : { code: 'stamp-not-given', message: `The time-stamp hook gave no time-stamp${typeof e?.message === 'string' && e.message !== '' ? `: ${e.message.slice(0, 300)}` : '.'}` };
         }
       }
       // Signed and checked: kept, whatever the time-stamp did.

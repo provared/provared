@@ -26,7 +26,7 @@ import { appendFileSync, readFileSync, truncateSync, writeFileSync } from 'node:
 import http from 'node:http';
 import { dirname, isAbsolute, resolve } from 'node:path';
 import { toBase64url } from 'provared';
-import { checkConfig, journalKeyPath, loadJournalKey, openGateway, secretHash } from './gateway.mjs';
+import { checkConfig, journalKeyPath, loadJournalKey, openGateway, plainText, secretHash } from './gateway.mjs';
 import { makeKeyFile } from './files.mjs';
 
 const USAGE = `provared-gateway: a reverse proxy that writes a Provared receipt for each call an agent makes through it.
@@ -43,6 +43,13 @@ const USAGE = `provared-gateway: a reverse proxy that writes a Provared receipt 
 "seal", "acknowledge" and "status" ask the running gateway, with the administrator's secret in
 PROVARED_GATEWAY_ADMIN_SECRET; "seal --offline", "acknowledge --offline" and "repair" work on the files
 of a stopped gateway, and need no secret.`;
+
+/** What "Sealed: ..." adds where the seal carries a time-stamp, with the fingerprint of the certificate that signed it (X344). */
+const stampWords = (sealed) => {
+  if (sealed?.stamped !== true) return '';
+  const by = typeof sealed.stampedBy === 'string' && /^[A-Za-z0-9_-]{43}$/.test(sealed.stampedBy) ? ` signed by the certificate ${sealed.stampedBy}` : '';
+  return `, with a time-stamp${by}`;
+};
 
 function option(args, name) {
   const at = args.indexOf(name);
@@ -230,7 +237,8 @@ async function main(args) {
       const gateway = await openGateway(config, { root });
       const sealed = await gateway.seal(agent);
       await gateway.close();
-      console.log(`Sealed (the book was opened here; no gateway may be running on it): entry ${sealed.entry} of ${agent}'s book is the seal ${sealed.fingerprint}.`);
+      console.log(`Sealed (the book was opened here; no gateway may be running on it): entry ${sealed.entry} of ${agent}'s book is the seal ${sealed.fingerprint}${stampWords(sealed)}.`);
+      if (sealed.stampProblem) console.error(`The seal has no time-stamp: ${plainText(sealed.stampProblem.message)} (${plainText(sealed.stampProblem.code)})`);
       return 0;
     }
     let answer;
@@ -244,7 +252,8 @@ async function main(args) {
       console.error(`The book was not sealed: ${answer.value.message ?? answer.status}`);
       return 1;
     }
-    console.log(`Sealed: entry ${answer.value.entry} of ${agent}'s book is the seal ${answer.value.fingerprint}.`);
+    console.log(`Sealed: entry ${answer.value.entry} of ${agent}'s book is the seal ${answer.value.fingerprint}${stampWords(answer.value)}.`);
+    if (answer.value.stampProblem) console.error(`The seal has no time-stamp: ${plainText(answer.value.stampProblem.message)} (${plainText(answer.value.stampProblem.code)})`);
     return 0;
   }
   if (command === 'start') {

@@ -11,13 +11,14 @@
 import './local-library.mjs'; // first: "provared" is this repository's own library
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { test } from 'node:test';
 
 const { checkBook, identifierFingerprint } = await import('provared');
 const { CALL_META, RESULT_DOCUMENT, UNREADABLE_ANSWER } = await import('../executor.mjs');
 const { CODES, misspelt, readMessage } = await import('../jsonrpc.mjs');
-const { httpWorld, post, call } = await import('./http-world.mjs');
-const { TOOLS, world } = await import('./world.mjs');
+const { httpWorld, openHttpWorld, post, call } = await import('./http-world.mjs');
+const { FAKE_SERVER, TOOLS, world } = await import('./world.mjs');
 
 const stubsOf = (checked) => checked.entries.filter((e) => e.kind === 'stub');
 const docs = (stub) => Object.fromEntries(stub.content.details.map((d) => [d.name, d.sha256]));
@@ -43,7 +44,33 @@ const TWO_READINGS = [
   ['a second arguments with the long s', (id) => ({ jsonrpc: '2.0', id, method: 'tools/call', params: { name: 'order', arguments: { total: 1 }, [`argument${LONG_S}`]: { total: 999999 } } })],
   ['"Arguments" beside "arguments": the amount the executor checked is not the one the server acts on', (id) => ({ jsonrpc: '2.0', id, method: 'tools/call', params: { name: 'order', arguments: { total: 1 }, Arguments: { total: 999999 } } })],
   ['"Arguments" alone: the executor saw no arguments', (id) => ({ jsonrpc: '2.0', id, method: 'tools/call', params: { name: 'echo', Arguments: { total: 999999 }, Name: 'order' } })],
+  ['the method itself in other capitals: no call to the executor, a call to a server that reads the method so (X253)', (id) => ({ jsonrpc: '2.0', id, method: 'Tools/Call', params: ORDER })],
 ];
+
+test('readMessage: a method of the agent\'s that is one the executor acts on, written in other capitals, is refused (X253)', () => {
+  const read = (method, more) => readMessage(Buffer.from(JSON.stringify({ jsonrpc: '2.0', id: 7, method, params: {} })), more);
+  for (const method of ['Tools/Call', 'TOOLS/CALL', 'tools/Call', `tool${LONG_S}/call`, 'Tools/List', 'tools/LIST', 'Initialize', 'INITIALIZE', 'Notifications/Cancelled', 'notifications/CANCELLED']) {
+    const got = read(method);
+    assert.equal(got.refused?.code, CODES.invalidRequest, method);
+    assert.equal(got.id, 7, 'the refusal names the request');
+    assert.equal(read(method, { strictNumbers: false }).kind, 'request', 'a line of the server is not read for it');
+  }
+  for (const method of ['tools/call', 'tools/list', 'initialize', 'notifications/cancelled', 'ping', 'sampling/createMessage', 'resources/templates/list', 'tools/calls', 'Other/Method']) assert.equal(read(method).kind, 'request', method);
+});
+
+test('stdio, with "unlisted": "forward": a tool with no rule is sent on unchecked, but not one whose name is a ruled tool\'s in other capitals (X253)', async () => {
+  const w = await world({ config: { unlisted: 'forward' } });
+  try {
+    for (const name of ['Order', 'ORDER', 'Echo']) {
+      const refused = await w.client.call(name, { total: 999999 });
+      assert.equal(refused.error?.code, CODES.invalidRequest, name);
+    }
+    assert.equal((await w.client.call('hidden', {})).error?.code, -32602, 'the server\'s own answer: a tool with no rule, sent on');
+    assert.deepEqual(w.fakeSeen().filter((e) => e.seen?.method === 'tools/call').map((e) => e.seen.params.name), ['hidden'], 'only that one reached the server');
+  } finally {
+    await w.close();
+  }
+});
 
 test('readMessage: a member at the top level other than the six of JSON-RPC is refused, from the agent and from the server', () => {
   for (const strictNumbers of [true, false]) {
@@ -166,6 +193,43 @@ test('HTTP, in front of an upstream: no message with two readings reaches a serv
     // An answer of the upstream with a second result or id in other capitals.
     for (const how of ['capital-result', 'capital-id']) await call(w, 'alpha', 'odd', { how });
     const after = stubsOf(await checkBook(w.executor.agent('alpha').writer.book(), { issuerKeys: w.settings.agents.alpha.issuerKeys })).slice(1);
+    assert.equal(after.length, 2);
+    for (const stub of after) {
+      assert.equal(docs(stub)['provared.error'], await identifierFingerprint(UNREADABLE_ANSWER), 'the receipt says the answer could not be read');
+      assert.equal(docs(stub)[RESULT_DOCUMENT], undefined);
+    }
+  } finally {
+    await w.close();
+  }
+});
+
+test('HTTP, in front of a local program: no message with two readings reaches a program that ignores capitals', async () => {
+  const w = await httpWorld({ open: false });
+  delete w.settings.upstream;
+  w.fakeLog = join(w.folder, 'fake.log');
+  w.settings.server = { command: process.execPath, args: [FAKE_SERVER], env: { FAKE_LOG: { value: w.fakeLog }, FAKE_FOLD: { value: '1' } } };
+  w.settings.tools = { echo: { action: 'provared.data.read' }, order: { action: 'supplies.order', amount: { unit: 'GBP', pointer: '/total' } }, capresult: { action: 'tool.run' }, capid: { action: 'tool.run' } };
+  await openHttpWorld(w, { serverStderr: null });
+  try {
+    const begun = await post(w, 'alpha', { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'test', version: '1' } } });
+    assert.equal(begun.status, 200, begun.body);
+    const headers = { 'mcp-session-id': begun.headers.get('mcp-session-id'), 'mcp-protocol-version': '2025-11-25' };
+    let id = 100;
+    for (const [what, make] of TWO_READINGS) {
+      const answer = await post(w, 'alpha', make(id++), { headers });
+      assert.equal(answer.status, 400, what);
+      assert.equal(answer.json.error.code, CODES.invalidRequest, what);
+    }
+    const meta = await post(w, 'alpha', { jsonrpc: '2.0', id: id++, method: 'tools/call', params: { name: 'order', arguments: { total: 999999 }, _meta: { [CALL_META.toUpperCase()]: 'the-agent-s-own' } } }, { headers });
+    assert.equal(meta.json.error.code, CODES.invalidRequest);
+    const answer = await post(w, 'alpha', { jsonrpc: '2.0', id: id++, method: 'tools/call', params: { name: 'echo', arguments: { a: 1 } } }, { headers });
+    assert.equal(answer.status, 200, answer.body);
+    assert.deepEqual(ranByProgram(w.fakeLog).map((e) => e.ran), ['echo'], 'the program ran the one call the executor checked');
+    const book = () => checkBook(w.executor.agent('alpha').writer.book(), { issuerKeys: w.settings.agents.alpha.issuerKeys });
+    assert.deepEqual(stubsOf(await book()).map((s) => s.content.action), ['provared.data.read']);
+    // An answer of the program with a second result or id in other capitals.
+    for (const tool of ['capresult', 'capid']) await post(w, 'alpha', { jsonrpc: '2.0', id: id++, method: 'tools/call', params: { name: tool, arguments: {} } }, { headers });
+    const after = stubsOf(await book()).slice(1);
     assert.equal(after.length, 2);
     for (const stub of after) {
       assert.equal(docs(stub)['provared.error'], await identifierFingerprint(UNREADABLE_ANSWER), 'the receipt says the answer could not be read');

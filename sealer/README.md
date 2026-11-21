@@ -80,6 +80,59 @@ otherwise.
 | `name` | The name the seals give (`by.name`): a label, 1 to 200 characters |
 | `port` | The port on 127.0.0.1; 8797 by default |
 | `signers` | Optional. For any of `Ed25519`, `ML-DSA-87` and `SLH-DSA-SHA2-256s`, the path of a module (from the folder) whose default export is an async function that gives a signer for that method: an object with `key`, the public key, and `sign(data)`, which gives the signature bytes. It takes the place of the key file's key for that method |
+| `stamp` | Optional. `{"address": ..., "timeout": ..., "authority": ...}`: a time-stamp service (RFC 3161) that each seal is sent to, below. `authority`, optional, is the fingerprint of the certificate the service signs with, or a list of up to 16 (the SHA-256 of the certificate in base64url, 43 characters, as a checker's `stampServices` names it). `address` begins `http://` or `https://` and holds no user name, password, query or fragment; `timeout` is how long the request may take, from 100 to 20,000 milliseconds, 2,500 if left out, and less than the time `startSealer` gives each signature (`signWithin`, 30,000 unless given). No service is named by this package: the address is yours to choose. Needs `provared` 0.9.0 or later, the first release with `provared/net/timestamp` |
+
+**An outside time-stamp on each seal.** With `stamp`, the sealer sends
+each seal's fingerprint to that service as it signs it, in the request
+of RFC 3161 (SHA-256, a random 64-bit number used once, the service's
+certificate asked for), and puts the time-stamp it gets back beside the
+seal, in `stamps`. The request and the check are the library's
+(`provared/net/timestamp`): the answer is read up to 12,544 bytes and
+within the time limit, a redirect is not followed, and the time-stamp is
+kept only if the library's `checkStamp` passes it for this fingerprint,
+it carries the number used once that was sent, and the time it states is
+within 300 seconds of the sealer's clock, no more than 300 seconds before
+the seal's own `when`, and no more than 300 seconds before the time a
+service's time-stamp gave the seal just before it (the only earlier seal
+the sealer holds). Anything else costs no seal:
+the seal is signed and given out without a time-stamp, and the answer to
+`/seal` says why in `stampProblem` (`stamp-not-given`, or the code of
+`checkStamp`). Until the book's next seal, and until the sealer stops,
+`/latest` gives the same `stampProblem` beside the seal, so that a
+recorder whose question timed out, and which takes the seal back, is
+told why too; it is kept in memory only, for the latest 10,000 books.
+The service sees the seal's fingerprint, this computer's address and
+when it asked; nothing of the book. A settings' `stamp` needs `provared`
+0.9.0 or later; with an earlier one the sealer does not start, and says
+why.
+
+The check of the answer shows that the time-stamp was made for this seal,
+not who made it: over plain `http:`, anyone between the sealer and the
+service can answer in its place with a key of their own. With
+`authority`, a time-stamp signed by any other certificate is not kept
+(`stamp-not-given`, naming the fingerprint that signed it). Whether or
+not it is given, the answer to `/seal` names the certificate that signed
+a time-stamp it carries, in `stampedBy`. Where the address begins `http:`
+and no `authority` is named, `start` warns on its standard error.
+
+While the seal is signed and then the service is asked, the sealer
+answers no other question, and that holds up every recorder: the signing
+(about 1.5 seconds with the key file here, longer with signers held
+elsewhere) and the wait for the service add up. A recorder's question
+to the sealer times out after 5 seconds unless its settings say
+otherwise (the executor's `recorder.sealer.timeout`), which is why the
+time limit is 2.5 seconds unless set: with a service that never answers,
+a seal then took 4.3 to 4.4 seconds in all here, and another recorder's
+question asked meanwhile was answered after 4.1 to 4.5 seconds (four
+runs); with the earlier 4 seconds, that question timed out. Signers that take longer
+than 2.5 seconds need a shorter limit, or recorders that wait longer.
+Set it longer, or a service answer
+slowly, and other recorders' questions asked meanwhile time out: their
+lines stay unsent and are sent again, every 2 seconds, and a seal they
+asked for is taken back from `/latest` once the sealer answers; calls are
+refused only once a recorder's unsent lines pass its `maxUnsent`. The
+settings' `stamp` and a `stamp` function given to `startSealer` are not
+taken together.
 
 A signer is how a key held in a key service or a hardware module is
 reached (the library's guide, "Keys held elsewhere: signers"). Every
@@ -216,7 +269,11 @@ HMAC-SHA-256 under the token over `provared sealer v1: the sealer's
 answer`, the question's proof, the status and the SHA-256 of the
 answer's body. So the token never travels, a program that listens in the
 sealer's place learns nothing it can use, and the recorder can tell an
-answer from the sealer from any other.
+answer from the sealer from any other. `connectSealer` reads an answer
+up to 8 MiB and no further, whether its length is declared or not, so
+such a program cannot fill the recorder's memory with its answer. It
+follows no redirect: an answer of 301, 302, 303, 307 or 308 makes the
+question fail, so such a program cannot have it sent anywhere else.
 `connectSealer({ address, recorder, token })` in `sealer.mjs` does all
 this. Its calls take the library's arguments, with one difference: the
 last argument of `extend`, `seal` and `update` (`more`) may hold only
@@ -233,7 +290,7 @@ id itself. A `when` given as a `Date` is sent as its milliseconds.
 | `/extend` | `{book, at, leaves, follows?, line?}` | `{size}`, or `{refused, size}` where `at` is not the number of lines the sealer holds |
 | `/seal` | `{book, previous, when?}` | `{entry, line, fingerprint}`; `stampProblem` where a time-stamp was asked for and failed |
 | `/update` | `{book, entry, leaves, line?}` | `{size}` |
-| `/latest` | `{book}` | `{latest}`: the latest seal it holds of the book, or null |
+| `/latest` | `{book}` | `{latest}`: the latest seal it holds of the book, or null; with `stampProblem` where that seal was given out without its time-stamp since the sealer started |
 | `/held` | `{book}` | `{held}`: how many lines, the latest seal's fingerprint, whether the book is closed, or null |
 
 `book` is the leaf fingerprint of the book's first line, in base64url, or
@@ -371,8 +428,11 @@ for another recorder's agent.
   kept in memory only. After a start, a question sent in the minute
   before it could be taken once more; every call is guarded by its place
   or its seal, so this changes nothing the second time.
-- It names no time-stamp service: a program that embeds it may give the
-  library's `stamp` function to `startSealer`. It asks no witness yet.
+- It names no time-stamp service: one is asked only where the settings'
+  `stamp` gives its address, or a program that embeds the sealer gives a
+  `stamp` function to `startSealer`. It asks no witness yet. It does not
+  check that a service's certificate is one anybody trusts: whoever
+  checks a book decides that, by the fingerprint of the certificate.
 - A state put back from an older copy, with a recorder that hides the
   seals made since, can be made to sign a second history of the lines
   after the latest seal that state holds. A later book brought in with

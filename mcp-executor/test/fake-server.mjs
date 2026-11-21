@@ -22,6 +22,12 @@ const log = (entry) => {
 
 process.stderr.write('fake-server: started\n');
 
+// With FAKE_IGNORE_TERM the server takes no notice of SIGTERM and does not end when its input closes: only a signal it cannot ignore ends it.
+if (process.env.FAKE_IGNORE_TERM) {
+  process.on('SIGTERM', () => log({ sigterm: true }));
+  setInterval(() => {}, 1000);
+}
+
 const TOOLS = [
   { name: 'echo', description: 'Gives back its arguments, and what the server sees.', inputSchema: { type: 'object' } },
   { name: 'order', description: 'Places an order.', inputSchema: { type: 'object', properties: { total: { type: 'integer' } } } },
@@ -80,6 +86,13 @@ function onMessage(given) {
   }
   if (id === undefined) return; // other notifications
   if (method === 'server/discover') return result(id, { resultType: 'complete', supportedVersions: ['2026-07-28'], capabilities: { tools: {} }, _meta: { 'io.modelcontextprotocol/serverInfo': { name: 'fake-server', version: '0.0.1' } } });
+  // FAKE_INIT: "error" answers initialize with an error, "never" does not answer it, "deaf" answers it and reads nothing after.
+  if (method === 'initialize' && process.env.FAKE_INIT === 'error') return failure(id, -32602, 'Unsupported protocol version');
+  if (method === 'initialize' && process.env.FAKE_INIT === 'never') return;
+  if (method === 'initialize' && process.env.FAKE_INIT === 'deaf') {
+    setImmediate(() => process.stdin.pause());
+    setInterval(() => {}, 1000);
+  }
   if (method === 'initialize') return result(id, { protocolVersion: params.protocolVersion ?? '2025-11-25', capabilities: { tools: { listChanged: false } }, serverInfo: { name: 'fake-server', version: '0.0.1' } });
   if (method === 'ping') return result(id, {});
   if (method === 'never') return; // a request that is never answered
@@ -138,6 +151,44 @@ function onMessage(given) {
     // A second result, or a second id, under a name in other capitals: a client that ignores capitals would read the second.
     if (name === 'capresult') return process.stdout.write(`{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"content":[{"type":"text","text":"the result"}]},"Result":{"content":[{"type":"text","text":"the other result"}]}}\n`);
     if (name === 'capid') return process.stdout.write(`{"jsonrpc":"2.0","id":${JSON.stringify(id)},"ID":"someone-else","result":{"content":[{"type":"text","text":"the result"}]}}\n`);
+    if (name === 'flood') {
+      // Notifications without pause, until the server is ended; or "count" of them, and then the answer.
+      const line = `${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/message', params: { level: 'info', data: 'x'.repeat(80) } })}\n`;
+      let left = args.count ?? Infinity;
+      const more = () => {
+        const now = Math.min(left, 500);
+        left -= now;
+        process.stdout.write(line.repeat(now), () => (left > 0 ? setImmediate(more) : text('Flooded.')));
+      };
+      return more();
+    }
+    // "count" notifications, then the answer, and the server ends as soon as the answer is written: an exit close behind much output.
+    if (name === 'chatty') {
+      let notes = '';
+      for (let i = 0; i < (args.count ?? 1500); i++) notes += `${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/message', params: { level: 'info', data: `n${i}` } })}\n`;
+      if (notes) process.stdout.write(notes);
+      return process.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: 'Chatty.' }] } })}\n`, () => process.exit(0));
+    }
+    // A line of 100 KiB on its standard error, then a short one.
+    if (name === 'longerr') return process.stderr.write(`${'L'.repeat(100 * 1024)}\nafter the long line\n`, () => text('Long.'));
+    // A flood on its standard error: "mib" MiB in lines of 1 KiB, written at once, then the answer.
+    if (name === 'floodErr') return process.stderr.write(`${'E'.repeat(1023)}\n`.repeat(1024 * (args.mib ?? 4)), () => text('Flooded.'));
+    // Busy, not stuck: works for "ms" milliseconds without reading anything, then answers.
+    if (name === 'work') {
+      const until = Date.now() + (args.ms ?? 1000);
+      while (Date.now() < until);
+      return text('Worked.');
+    }
+    // An answer to nothing the executor asked, then a notification, then the answer.
+    if (name === 'stray') {
+      send({ jsonrpc: '2.0', id: 'nobody', result: { content: [{ type: 'text', text: 'an answer to nothing' }] } });
+      send({ jsonrpc: '2.0', method: 'notifications/message', params: { level: 'info', data: 'after the stray answer' } });
+      return text('Strayed.');
+    }
+    // Much on its standard error, and the answer only once all of it is written.
+    if (name === 'loud') return process.stderr.write(`${'e'.repeat(1023)}\n`.repeat(args.kib ?? 1024), () => text('Loud.'));
+    // Half a line on its standard error, with no line feed.
+    if (name === 'mutter') return process.stderr.write('half a line', () => text('Muttered.'));
     // Answers nested "depth" levels deep, written as text: a result, an error, and a notification before a plain result.
     if (name === 'deep') return process.stdout.write(`{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"content":[{"type":"text","text":"deep"}],"structuredContent":{"a":${deep(args.depth)}}}}\n`);
     if (name === 'deeperror') return process.stdout.write(`{"jsonrpc":"2.0","id":${JSON.stringify(id)},"error":{"code":-32000,"message":"deep","data":${deep(args.depth)}}}\n`);
@@ -160,43 +211,50 @@ function onMessage(given) {
   return failure(id, -32601, `Method not found: ${method}`);
 }
 
-function onLine(line) {
-  if (line === '') return;
-  let m;
-  try {
-    m = JSON.parse(line);
-  } catch {
-    log({ notJson: line.slice(0, 120) });
-    failure(null, -32700, 'Parse error');
-    return;
-  }
-  onMessage(m);
-}
-
-// FAKE_LINE_ENDS: how the server ends a line. Not set: at a line feed alone.
-// "readline": as node:readline does, at a bare carriage return, U+2028 and
-// U+2029 too. "universal": at a line feed, a carriage return, or the two
-// together, as a text reader with universal newlines does, which Python's
-// io.TextIOWrapper gives unless told otherwise, as the official Python
-// SDK's stdio server uses, and how Python opens its standard input on
-// Windows.
+// FAKE_LINE_ENDS=universal: the server ends a line at a line feed, a carriage
+// return, or the two together, as a text reader with universal newlines
+// does, which Python's io.TextIOWrapper gives unless told otherwise, as the
+// official Python SDK's stdio server uses, and how Python opens its standard
+// input on Windows. Not set: at a line feed alone. (FAKE_READLINE, below, is
+// node:readline itself.)
 const lineEnd = process.env.FAKE_LINE_ENDS === 'universal' ? /\r\n|\r(?!$)|\n/ : /\n/;
 process.stdin.setEncoding('utf8');
-if (process.env.FAKE_LINE_ENDS === 'readline') createInterface({ input: process.stdin }).on('line', onLine);
-else {
-  process.stdin.on('data', (chunk) => {
-    buffer += chunk;
-    for (;;) {
-      const found = lineEnd.exec(buffer);
-      if (!found) break;
-      const line = buffer.slice(0, found.index).replace(/\r$/, '');
-      buffer = buffer.slice(found.index + found[0].length);
-      onLine(line);
+const onData = (chunk) => {
+  buffer += chunk;
+  for (;;) {
+    const found = lineEnd.exec(buffer);
+    if (!found) break;
+    const line = buffer.slice(0, found.index).replace(/\r$/, '');
+    buffer = buffer.slice(found.index + found[0].length);
+    if (line === '') continue;
+    let m;
+    try {
+      m = JSON.parse(line);
+    } catch {
+      log({ notJson: line.slice(0, 120) });
+      failure(null, -32700, 'Parse error');
+      continue;
     }
+    onMessage(m);
+  }
+};
+// With FAKE_READLINE the server reads its lines as node:readline does, which ends a line at a bare carriage return, U+2028 and U+2029 as well as at a line feed.
+if (process.env.FAKE_READLINE) {
+  createInterface({ input: process.stdin }).on('line', (line) => {
+    if (line === '') return;
+    let m;
+    try {
+      m = JSON.parse(line);
+    } catch {
+      log({ notJson: line.slice(0, 120) });
+      return failure(null, -32700, 'Parse error');
+    }
+    onMessage(m);
   });
-}
+} else process.stdin.on('data', onData);
 process.stdin.on('end', () => {
   log({ stdinEnded: true });
+  if (process.env.FAKE_IGNORE_TERM) return;
   if (process.env.FAKE_LINGER) setTimeout(() => process.exit(0), Number(process.env.FAKE_LINGER));
   else process.exit(0);
 });

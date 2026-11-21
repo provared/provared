@@ -274,7 +274,9 @@ test('attack: a batch, or a message shape that would carry a tools/call past the
     assert.equal(batch.status, 400);
     assert.match(batch.json.error.message, /batch/);
     const asNotification = await post(w, 'alpha', { jsonrpc: '2.0', method: 'tools/call', params: callBody.params });
-    assert.equal(asNotification.status, 202, 'dropped: nothing to answer');
+    assert.equal(asNotification.status, 400, 'not sent on, and not answered as accepted (X247)');
+    assert.equal(asNotification.json.error.code, -32600);
+    assert.equal(seenCalls(w).length, 0, 'it did not reach the upstream');
     assert.ok(w.logs.some((e) => e.event === 'notification-dropped' && e.method === 'tools/call'));
     const nullId = await post(w, 'alpha', { ...callBody, id: null });
     assert.equal(nullId.status, 400);
@@ -463,7 +465,7 @@ test('attack: a request from a browser page. An Origin is refused unless the set
 });
 
 test('two simultaneous calls by one agent, and by two agents: each book holds its own receipts in order, and the limits hold per agent', async () => {
-  const w = await httpWorld({ config: { maxWaiting: 2 } });
+  const w = await httpWorld({ config: { maxWaiting: 2, timeout: 10000 } });
   try {
     const [slow, fast] = await Promise.all([call(w, 'alpha', 'slow', { ms: 300, tag: 'first' }, { id: 'a-1' }), (async () => {
       await pause(50);
@@ -488,16 +490,17 @@ test('two simultaneous calls by one agent, and by two agents: each book holds it
     assert.equal(copyOf(w, 'beta').lines.length, 2);
 
     // The limit on calls in progress is each agent's own.
-    const first = call(w, 'alpha', 'slow', { ms: 400 }, { id: 'l-1' });
-    const second = call(w, 'alpha', 'slow', { ms: 400 }, { id: 'l-2' });
-    await pause(100);
+    // Two calls that stay with the upstream long enough for what follows, however busy the computer or slow the disk: 3 seconds each, within the 10 a call may take here; the test waits until both are in hand, and asks its two refusals, which take no time, before anything else.
+    const first = call(w, 'alpha', 'slow', { ms: 3000 }, { id: 'l-1' });
+    const second = call(w, 'alpha', 'slow', { ms: 3000 }, { id: 'l-2' });
+    await until(() => w.executor.agent('alpha').calls() === 2);
     const third = await call(w, 'alpha', 'echo', {}, { id: 'l-3' });
     assert.equal(third.json.error.code, 1001);
     assert.match(third.json.error.message, /maxWaiting/);
-    const betas = await call(w, 'beta', 'echo', {}, { id: 'l-3' });
-    assert.equal(betas.status, 200, 'the other agent is not held back');
     const again = await call(w, 'alpha', 'echo', {}, { id: 'l-1' });
     assert.equal(again.json.error.code, -32600, 'the same id while that call is in progress');
+    const betas = await call(w, 'beta', 'echo', {}, { id: 'l-3' });
+    assert.equal(betas.status, 200, 'the other agent is not held back');
     await Promise.all([first, second]);
     assert.equal(stubsOf(await bookOf(w, 'alpha')).length, 5);
   } finally {

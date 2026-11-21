@@ -1,0 +1,15 @@
+# Runs provared-guard-update.service once a week, on Monday between 04:00
+# and 05:00, server time; a week missed while the server was off is run at
+# the next start. Off until the business switches it on (README.md, one
+# folder up from compose/, "Updates").
+
+[Unit]
+Description=Run the Provared guard's update command once a week
+
+[Timer]
+OnCalendar=Mon *-*-* 04:00:00
+RandomizedDelaySec=1h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

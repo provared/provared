@@ -889,8 +889,8 @@ export interface Sealer extends SealerCalls {
 export function openSealer(o: {
   by: { keys: SealKeySet; name: string };
   signers: unknown[];
-  /** Ask a time-stamp service for a stamp over a seal's fingerprint: an item of "stamps", or null. */
-  stamp?: (fingerprintBytes: Uint8Array) => Promise<StampItem | null> | StampItem | null;
+  /** Ask a time-stamp service for a stamp over a seal's fingerprint: an item of "stamps", or null. "when" is the seal's time, "after" the latest time a service's time-stamp gave the seal before it (null where unknown), in milliseconds. */
+  stamp?: (fingerprintBytes: Uint8Array, context: { when: number; after: number | null }) => Promise<StampItem | null> | StampItem | null;
   state?: SealerState;
   clock?: () => number;
   signWithin?: number;

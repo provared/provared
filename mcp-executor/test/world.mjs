@@ -99,9 +99,12 @@ export async function world({ slip = {}, config = {}, env = {}, open = true, mor
     } catch {
       return [];
     }
-    return text.split('\n').filter(Boolean).map((l) => JSON.parse(l));
+    // Whole lines only: the server may be half-way through writing its last one.
+    return text.slice(0, text.lastIndexOf('\n') + 1).split('\n').filter(Boolean).map((l) => JSON.parse(l));
   };
   w.executorPrivateKeys = async () => (await loadKeyFile(join(folder, 'keys', 'executor.jwk'), 'agent')).privateKeys;
+  // Until an executor is open there is nothing to close: so a test whose start fails reports that, and not "w.close is not a function".
+  w.close = async () => {};
   if (open) await openWorld(w, more);
   return w;
 }

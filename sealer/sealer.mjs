@@ -27,8 +27,9 @@
 // the state cannot be saved, every question taken up after that is
 // answered "sealer-stopped" until the program is started again.
 //
-// What it does not do: it names no time-stamp service (a program that
-// embeds it may give a "stamp" function); it asks no witness; it does not
+// What it does not do: it names no time-stamp service (the settings'
+// "stamp" may give one's address, or a program that embeds it a "stamp"
+// function); it asks no witness; it does not
 // check that a recorder sends the fingerprints of real lines (the book's
 // own check does that, when the seal is added to it).
 
@@ -176,7 +177,7 @@ export function readSettings(folder) {
   const s = readJson(files.settings, 'The settings');
   if (s === null) throw new Error(`There are no settings (${files.settings}): run "provared-sealer init" first.`);
   if (typeof s !== 'object' || Array.isArray(s)) throw new Error('The settings must be a JSON object.');
-  for (const name of Object.keys(s)) if (!['name', 'port', 'signers'].includes(name)) throw new Error(`The settings hold "${name}", which the sealer does not know.`);
+  for (const name of Object.keys(s)) if (!['name', 'port', 'signers', 'stamp'].includes(name)) throw new Error(`The settings hold "${name}", which the sealer does not know.`);
   if (typeof s.name !== 'string' || s.name.length < 1 || s.name.length > 200) throw new Error('The settings\' "name" must be text of 1 to 200 characters: the name the seals give.');
   const port = s.port ?? DEFAULT_PORT;
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('The settings\' "port" must be a port number.');
@@ -186,7 +187,81 @@ export function readSettings(folder) {
     if (!METHODS.includes(alg)) throw new Error(`The settings' "signers" name "${alg}", which is not one of ${METHODS.join(', ')}.`);
     if (typeof path !== 'string' || path.length === 0) throw new Error(`The settings' "signers.${alg}" must be the path of a module.`);
   }
-  return { name: s.name, port, signers };
+  return { name: s.name, port, signers, stamp: s.stamp === undefined ? null : readStampSettings(s.stamp) };
+}
+
+// --- an outside time-stamp on each seal (format description, section 21.2) ---
+
+/**
+ * How long the request for a time-stamp may take, unless the settings say
+ * otherwise, and the least and the most they may say: milliseconds. The
+ * sealer answers one question at a time, and the seal is signed before the
+ * service is asked, so a seal holds up every recorder for its signing (a
+ * second or two) and then this wait: 2.5 seconds by default, so that the
+ * two together stay below the 5 seconds a recorder's question may take
+ * unless its settings say otherwise (X354); at most 20 seconds, well below
+ * the 30 seconds the library gives the hook ("signWithin") and a recorder
+ * gives the question for a seal.
+ */
+export const STAMP_TIMEOUT = 2500;
+export const STAMP_TIMEOUT_MIN = 100;
+export const STAMP_TIMEOUT_MAX = 20000;
+
+/**
+ * The settings' "stamp", read: {address, timeout}. The address is that of
+ * a time-stamp service (RFC 3161) on the web, http: or https:, with no user
+ * name, password, query or fragment. No service is named here.
+ */
+function readStampSettings(c) {
+  if (c === null || typeof c !== 'object' || Array.isArray(c)) throw new Error('The settings\' "stamp" must be an object: the address of a time-stamp service and, where wanted, a time limit.');
+  for (const k of Object.keys(c)) if (!['address', 'timeout', 'authority'].includes(k)) throw new Error(`The settings' "stamp" holds "${k}", which is not a setting of a time-stamp service: it takes "address", "timeout" and "authority".`);
+  // The certificate the service signs with, as a checker names the service: a time-stamp signed by another is not kept (X344).
+  const list = typeof c.authority === 'string' ? [c.authority] : c.authority;
+  const authority = c.authority === undefined ? null : Array.isArray(list) && list.length > 0 && list.length <= 16 && list.every((x) => typeof x === 'string' && /^[A-Za-z0-9_-]{43}$/.test(x)) ? [...list] : undefined;
+  if (authority === undefined) throw new Error('The settings\' "stamp.authority" must be the fingerprint of the certificate the service signs its time-stamps with, as a checker names the service ("stampServices": the SHA-256 of the certificate in base64url, 43 characters), or a list of 1 to 16 of them.');
+  let url = null;
+  try {
+    url = typeof c.address === 'string' ? new URL(c.address) : null;
+  } catch {
+    url = null;
+  }
+  if (!url || !['http:', 'https:'].includes(url.protocol) || url.username !== '' || url.password !== '' || url.hash !== '' || /[?#]/.test(url.href)) {
+    throw new Error('The settings\' "stamp.address" must be the whole address of a time-stamp service (RFC 3161), beginning http:// or https://, with no user name, password, query or fragment.');
+  }
+  const timeout = c.timeout ?? STAMP_TIMEOUT;
+  if (!Number.isInteger(timeout) || timeout < STAMP_TIMEOUT_MIN || timeout > STAMP_TIMEOUT_MAX) throw new Error(`The settings' "stamp.timeout" must be a whole number of milliseconds from ${STAMP_TIMEOUT_MIN} to ${STAMP_TIMEOUT_MAX}: how long the request for a time-stamp may take.`);
+  return { address: c.address, timeout, ...(authority ? { authority } : {}) };
+}
+
+/** What the sealer says at its start where a time-stamp service is asked over plain http: and no certificate is named. */
+export const HTTP_STAMP_WARNING = 'The settings\' "stamp": the service is asked over plain http: and no "authority" is named, so a time-stamp signed by anyone who answers in its place is kept. Name the fingerprint of the service\'s certificate in "stamp.authority" (the "stampedBy" of a seal shows it).';
+
+/**
+ * The function that asks the service the settings give for a time-stamp
+ * over a seal's fingerprint (the library's askForStamp), and the
+ * fingerprints of the certificates that signed the time-stamps it gave,
+ * by time-stamp ("signers"), for the answer to "/seal". Where "authority"
+ * is given, a time-stamp signed by another is not kept.
+ */
+async function stampHook({ address, timeout, authority }) {
+  let net;
+  try {
+    net = await import('provared/net/timestamp');
+  } catch (e) {
+    throw new Error(`The settings give a time-stamp service ("stamp"), and the library installed has no client for one (provared/net/timestamp): ${e.code ?? e.message}`);
+  }
+  // A library from before "authority" would take a time-stamp from any signer: where one is named, it is refused.
+  if (authority && typeof net.stampAuthority !== 'function') throw new Error('The settings\' "stamp.authority": the library installed does not hold a time-stamp to the certificate named, so no time-stamp could be trusted to be the service\'s. Install a library that does, or leave "authority" out.');
+  net.stampService({ address, timeout, ...(authority ? { authority } : {}) }); // the address, the time limit and "authority", read once
+  const signers = new Map();
+  const hook = async (fingerprintBytes, context = {}) => {
+    const got = await net.askForStamp(fingerprintBytes, { address, timeout, when: context?.when, after: context?.after, ...(authority ? { authority } : {}) });
+    signers.set(got.stamp, got.authority);
+    // Only the last few are needed: the answer to "/seal" is made just after its time-stamp.
+    if (signers.size > 64) signers.delete(signers.keys().next().value);
+    return got.stamp;
+  };
+  return { hook, signers };
 }
 
 // --- keys ---
@@ -442,6 +517,13 @@ export async function startSealer({ folder, port, fresh = false, stamp, clock = 
   if (!Number.isSafeInteger(maxWaitingBytes) || maxWaitingBytes < 1) throw new Error('"maxWaitingBytes" must be a whole number, 1 or more.');
   const files = sealerFiles(folder);
   const settings = readSettings(folder);
+  // A time-stamp service the settings give, or a "stamp" function a program that embeds the sealer gives: not both.
+  if (stamp !== undefined && settings.stamp) throw new Error('The settings give a time-stamp service ("stamp"), and a "stamp" function was given too: give one of the two.');
+  // The request's own limit comes first, so that a slow service is said as a time-stamp not given, in its own words.
+  if (settings.stamp && signWithin !== undefined && settings.stamp.timeout >= signWithin) throw new Error(`The settings' "stamp.timeout" (${settings.stamp.timeout} ms) must be less than the time the sealer gives each signature and the time-stamp ("signWithin", ${signWithin} ms).`);
+  // The fingerprint of the certificate that signed each time-stamp the service gave, for the answer to "/seal" (X344).
+  let stampSigners = null;
+  if (settings.stamp) ({ hook: stamp, signers: stampSigners } = await stampHook(settings.stamp));
   const { by, signers, fingerprint } = await loadSigners(folder);
   const recorders = readRecorders(folder);
   takeLock(files.lock);
@@ -505,6 +587,17 @@ export async function startSealer({ folder, port, fresh = false, stamp, clock = 
       return out;
     };
 
+    // For each book, the reason its latest seal was given out without a time-stamp, while that seal is its latest: in
+    // memory only, so not known after a start, and for the latest 10,000 books at most.
+    const stampProblems = new Map();
+    // A book is named by its first line's leaf fingerprint alone (book 1) or with its number ({first, number}).
+    const bookKey = (name, book) => JSON.stringify([name, typeof book === 'string' ? book : book?.first, typeof book === 'string' ? 1 : book?.number]);
+    const keepStampProblem = (key, kept) => {
+      stampProblems.delete(key);
+      if (kept) stampProblems.set(key, kept);
+      if (stampProblems.size > 10000) stampProblems.delete(stampProblems.keys().next().value);
+    };
+
     // One question, for one recorder, in its turn: the library's answer, with the state saved first where a change must last.
     async function answer(name, path, body) {
       const { view } = served.get(name);
@@ -515,7 +608,11 @@ export async function startSealer({ folder, port, fresh = false, stamp, clock = 
         return refusal('bad-field', `body: holds a member that a question to ${path} does not take. It takes ${known.length === 0 ? 'none' : known.join(', ')}.`);
       }
       if (path === '/about') return { name: by.name, keys: by.keys, sealer: fingerprint };
-      if (path === '/latest') return { latest: view.latest(body.book) };
+      if (path === '/latest') {
+        const latest = view.latest(body.book);
+        const kept = latest ? stampProblems.get(bookKey(name, body.book)) : undefined;
+        return { latest: kept && kept.fingerprint === latest.fingerprint ? { ...latest, stampProblem: kept.stampProblem } : latest };
+      }
       if (path === '/held') return { held: view.held(body.book) };
       if (path === '/extend') {
         const leaves = leavesOf(body.leaves);
@@ -545,6 +642,11 @@ export async function startSealer({ folder, port, fresh = false, stamp, clock = 
       save(got.state);
       const given = { entry: got.entry, line: got.line, fingerprint: got.fingerprint };
       if (got.stampProblem) given.stampProblem = got.stampProblem;
+      const signedBy = typeof got.entry?.stamps?.[0] === 'string' ? stampSigners?.get(got.entry.stamps[0]) : undefined;
+      if (signedBy) given.stampedBy = signedBy;
+      // Why the book's latest seal has no time-stamp, kept in memory, so that a recorder that never had this answer
+      // and asks for the latest seal is told it too.
+      keepStampProblem(bookKey(name, body.book), got.stampProblem ? { fingerprint: got.fingerprint, stampProblem: got.stampProblem } : null);
       return given;
     }
 
@@ -675,6 +777,8 @@ export async function startSealer({ folder, port, fresh = false, stamp, clock = 
       port: actual,
       fingerprint,
       by,
+      /** What the start says of the settings that is not a problem: a time-stamp service asked over http: with no certificate named (X344). */
+      warnings: settings.stamp && !settings.stamp.authority && /^http:/i.test(settings.stamp.address) ? [HTTP_STAMP_WARNING] : [],
       async close() {
         await new Promise((ok) => server.close(() => ok()));
         server.closeAllConnections?.();
@@ -721,14 +825,34 @@ export function connectSealer({ address, recorder, token, fetchImpl = fetch, clo
     const nonce = toBase64url(nodeCrypto.randomBytes(32));
     const head = sealerHmac(key, LABELS.head, recorder, path, time, nonce, String(bytes.length)).toString('base64url');
     const proof = sealerHmac(key, LABELS.question, recorder, path, time, nonce, sha256(bytes)).toString('base64url');
-    // The body goes as bytes, so its length is declared (Content-Length), as the first proof says.
+    // The body goes as bytes, so its length is declared (Content-Length), as the first proof says. A redirect is not
+    // followed: the question goes to the sealer's address and nowhere else, whatever listens there says.
     const r = await fetchImpl(new URL(path, address), {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'provared-sealer-recorder': recorder, 'provared-sealer-time': time, 'provared-sealer-nonce': nonce, 'provared-sealer-head': head, 'provared-sealer-proof': proof },
       body: bytes,
+      redirect: 'error',
     });
-    const answer = Buffer.from(await r.arrayBuffer());
-    if (answer.length > MAX_BODY_BYTES) throw new Error('The sealer\'s answer is larger than an answer may be.');
+    // The answer is read up to the limit and no further, since whatever listens at the address may send it: a length
+    // declared over the limit is refused before any of the body is read, and the body is read piece by piece, with a
+    // count that stops at the limit. The rest is not read, and the connection is given up.
+    const tooLarge = () => new Error('The sealer\'s answer is larger than an answer may be.');
+    if (Number(r.headers.get('content-length')) > MAX_BODY_BYTES) {
+      await r.body?.cancel().catch(() => {});
+      throw tooLarge();
+    }
+    const pieces = [];
+    let size = 0;
+    const reader = r.body?.getReader();
+    for (let piece = await reader?.read(); piece && !piece.done; piece = await reader.read()) {
+      size += piece.value.length;
+      if (size > MAX_BODY_BYTES) {
+        await reader.cancel().catch(() => {});
+        throw tooLarge();
+      }
+      pieces.push(piece.value);
+    }
+    const answer = Buffer.concat(pieces);
     if (!sameProof(r.headers.get('provared-sealer-proof'), sealerHmac(key, LABELS.answer, proof, String(r.status), sha256(answer)))) {
       // A sealer that holds too many bodies at once says so before it has read the question, so with no proof. Nothing it
       // says is used either; but what to do is to ask again later, not to look for an impostor.

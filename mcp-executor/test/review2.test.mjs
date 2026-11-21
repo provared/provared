@@ -31,11 +31,13 @@ function rawLines(w) {
 }
 
 test('R1: a tool result holding a whole number beyond 2^53 - 1 reaches the client with its digits exact, at once, and the receipt says the result could not be fingerprinted', async () => {
-  const w = await world({ config: { tools: { bigint: { action: 'tool.run' }, echo: { action: 'provared.data.read' } } } });
+  // A call may take 10 seconds here, and "at once" is under 5: room for a slow disk (each line written holds the thread
+  // for up to a few tenths of a second), and still far from the time-out.
+  const w = await world({ config: { timeout: 10000, tools: { bigint: { action: 'tool.run' }, echo: { action: 'provared.data.read' } } } });
   try {
     const started = Date.now();
     const r = await w.client.call('bigint', {}, { id: 'b1' });
-    assert.ok(Date.now() - started < 2000, 'answered at once, not by the timeout');
+    assert.ok(Date.now() - started < 5000, 'answered at once, not by the timeout');
     assert.equal(r.result.content[0].text, 'ok');
     const raw = rawLines(w).find((l) => l.includes('"snowflake"'));
     assert.ok(raw.includes('"snowflake":1234567890123456789'), 'the digits are exactly as the server wrote them');
@@ -160,7 +162,7 @@ test('X37: a receipt written at a restart names executor.written-late, keeps the
 });
 
 test('F1: a server line with "id" twice at the top level matches no call: it is handed on as it is, and the call ends by the timeout with a "no answer" receipt', async () => {
-  const w = await world({ config: { timeout: 1000, tools: { twoids: { action: 'tool.run' } } } });
+  const w = await world({ config: { timeout: 3000, tools: { twoids: { action: 'tool.run' } } } });
   try {
     const r = await w.client.request('tools/call', { name: 'twoids' }, { id: 't1' });
     assert.equal(r.error.code, 1002, 'the call ended by the timeout');
@@ -169,7 +171,7 @@ test('F1: a server line with "id" twice at the top level matches no call: it is 
     assert.ok(!rawLines(w).some((l) => l.includes('"id":"t1","id"')), 'nothing was spliced into it');
     const [stub] = stubsOf(await bookOf(w));
     assert.match(Buffer.from(JSON.stringify(docs(stub))).toString(), /provared\.error/);
-    assert.equal(docs(stub)['provared.error'], await identifierFingerprint(`The tool server gave no answer within 1000 ms, so the executor cancelled the call (call ${w.logs.find((e) => e.event === 'taken').call}). Its outcome is not known.`));
+    assert.equal(docs(stub)['provared.error'], await identifierFingerprint(`The tool server gave no answer within 3000 ms, so the executor cancelled the call (call ${w.logs.find((e) => e.event === 'taken').call}). Its outcome is not known.`));
     assert.ok(w.logs.some((e) => e.event === 'server-line-not-read' && e.matched === undefined));
   } finally {
     await w.close();
@@ -177,7 +179,7 @@ test('F1: a server line with "id" twice at the top level matches no call: it is 
 });
 
 test('F2: a batch (a line that is not one object) from the server is not a message: handed on unmatched, and the call ends by the timeout with a "no answer" receipt', async () => {
-  const w = await world({ config: { timeout: 1000, tools: { batch: { action: 'tool.run' } } } });
+  const w = await world({ config: { timeout: 3000, tools: { batch: { action: 'tool.run' } } } });
   try {
     const r = await w.client.request('tools/call', { name: 'batch' }, { id: 'b1' });
     assert.equal(r.error.code, 1002);

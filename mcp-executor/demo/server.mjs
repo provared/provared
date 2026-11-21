@@ -15,7 +15,6 @@
 
 import { timingSafeEqual } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { createInterface } from 'node:readline';
 
 function tokenMatches() {
   let expected;
@@ -66,7 +65,7 @@ function call(name, args) {
   return null;
 }
 
-createInterface({ input: process.stdin }).on('line', (line) => {
+function onLine(line) {
   let m;
   try {
     m = JSON.parse(line);
@@ -90,4 +89,25 @@ createInterface({ input: process.stdin }).on('line', (line) => {
   } else {
     send({ jsonrpc: '2.0', id, error: { code: -32601, message: `Method not found: ${method}` } });
   }
+}
+
+// One message to a line, and a line ends at a line feed alone (with one
+// carriage return before it, if there is one). A bare carriage return, or
+// U+2028 or U+2029 in a text, is part of its message: a reader that ended
+// a line at each of those, as node:readline does, would cut one message
+// into several, and read a piece of it as a message of its own.
+let waiting = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => {
+  waiting += chunk;
+  for (;;) {
+    const at = waiting.indexOf('\n');
+    if (at === -1) break;
+    const line = waiting.slice(0, at).replace(/\r$/, '');
+    waiting = waiting.slice(at + 1);
+    onLine(line);
+  }
+});
+process.stdin.on('end', () => {
+  if (waiting !== '') onLine(waiting.replace(/\r$/, ''));
 });

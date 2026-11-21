@@ -1,0 +1,9 @@
+# What the recipe keeps on the server, never to be committed: the domain,
+# the guard's keys, books and state, Caddy's certificates and keys, and a
+# packed copy of the executor with its override.
+.env
+guard-data/
+caddy-data/
+caddy-config/
+pack/
+compose.override.yaml

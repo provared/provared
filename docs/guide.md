@@ -6,7 +6,7 @@ Everything about the format, the library, the checker, the stub writer beside an
 
 ## Status
 
-**Version 0.8.1, a draft.** Published as it is, by one author in their
+**Version 0.9.0, a draft.** Published as it is, by one author in their
 own time; fixes as time allows. The format may still change, so do not
 rely on a draft record staying checkable.
 
@@ -32,7 +32,7 @@ An Internet-Draft is a working document, not a standard.
 | `docs/threat-model.md` | Who might attack a record, what each part protects, and what it does not |
 | `src/` | The library: the checker, the writers for every kind of record, the stub writer beside an agent and the connector for an agent's tools. No outside code |
 | `bin/provared-check.mjs` | The checker for the command line |
-| `bin/provared-headers.mjs`, `net/` | A command that fetches the chain of Bitcoin block headers from nodes you name, so that a block time-stamp can be checked with no node of your own. The only code here that makes a network request. Experimental |
+| `bin/provared-headers.mjs`, `net/` | A command that fetches the chain of Bitcoin block headers from nodes you name, so that a block time-stamp can be checked with no node of your own (Experimental); and `provared/net/timestamp`, which asks a time-stamp service whose address you give for a time-stamp over a seal. The only code here that makes a network request |
 | `page/` | The checking page, the signing page and the demonstration page |
 | `demo/` | The demonstration: an invented office agent works under a permission and goes outside it four times |
 | `samples/` | A sample record, written once, that the tests keep checking |
@@ -153,7 +153,7 @@ be loaded from anywhere. The tool prints the file's SHA-256 fingerprint,
 so that a copy can be compared with it. (Tried on 8 October 2026 in the
 three browser builds this repository is tested with, and on 13 October
 2026 in Chrome 155, Edge 155 and Brave 155.) The file for
-version 0.8.1 is attached to the release on GitHub. Its SHA-256
+version 0.9.0 is attached to the release on GitHub. Its SHA-256
 fingerprint is
 `486471a5b8f3108d08acaacb96d7c27ceeecf95b93bce8e47721b8872a9b1bbc`.
 
@@ -1172,7 +1172,29 @@ the book; it needs Node.js), `writeWitness` and `openWitness` (a
 witness; `openWitness` needs Node.js), `consistencyProof`, `writeBook` and `makeShow`, all from
 `provared`. The library asks no time-stamp service itself: you send
 the seal's fingerprint to the service you choose and put its answer
-beside the seal. In a browser, `createPasskey`, `signSlipWithPasskey`,
+beside the seal. `provared/net/timestamp`, kept apart from the library,
+does that for you in Node.js: `askForStamp(fingerprintBytes, {address,
+timeout, when, after})` sends the request of RFC 3161 (SHA-256, a random
+64-bit number used once, the certificate asked for) to the address you
+give (no user name, password, query or fragment), reads the answer up to
+12,544 bytes within the time limit (10 seconds unless you say), follows
+no redirect, and gives the item of `stamps` only once `checkStamp` has
+passed it for that fingerprint, it carries the number used once that was
+sent, and its time is within 300 seconds of your clock and no more than
+300 seconds before `when` (the seal's own time) and `after` (the latest
+time a service's time-stamp gave a seal before it), where you give them;
+otherwise it throws a `Refusal` (`stamp-not-given`, or a code of
+`checkStamp`). Those checks show the answer was made for this request,
+not who made it: give `authority`, the fingerprint of the service's
+certificate or a list of them (as in `stampServices`), and a time-stamp
+signed by any other certificate is refused (`stamp-not-given`); left out,
+any signer is taken. Either way it also gives `authority`, the
+fingerprint of the certificate that signed. `stampService({address,
+timeout, authority})` gives the same as the
+`stamp` that `openSealer` takes; `openSealer` gives its `stamp` a second
+argument, `{when, after}`, from the seal and the seal it holds before
+it. A `stamp` that gives no answer within `signWithin` costs no seal: the
+seal comes back with `stampProblem` (`stamp-not-given`). No service is named in this package. In a browser, `createPasskey`, `signSlipWithPasskey`,
 `approveWithPasskey` and `cancelWithPasskey` from
 `provared/passkey-browser`. For a slip with covered fields in a browser:
 `prepareSlip` with `cover`, then `signChallengeWithPasskey` with what it
@@ -1222,7 +1244,9 @@ And about time:
 It never holds money, never starts a payment and issues no token. It
 reports nothing back from the machine it runs on. The checker makes no
 network request. Only `provared-headers`, which you run yourself,
-connects to anything: to the Bitcoin nodes you name, for block headers.
+connects to anything: to the Bitcoin nodes you name, for block headers;
+and `provared/net/timestamp`, where a program calls it: to the time-stamp
+service whose address it is given, with a seal's fingerprint.
 
 ## Not built yet
 

@@ -56,7 +56,9 @@ agent B ──HTTP, secret B──►  executor          token, from a file
 ```
 
 Each agent signs in with a secret of its own and has its own slip, keys,
-book and copy; the handling of a call is the same code as on stdio.
+book and copy; the handling of a call is the same code as on stdio. Where
+the settings name `oauth`, an agent may instead be a connection a client
+made through OAuth, approved by the owner (section 14).
 
 ## 3. Sources, as read on 31 October 2026
 
@@ -176,9 +178,10 @@ gives one; `with` the executor's id; `details`:
 | `executor.rules` | the rules file on content in force (its parsed content in the one form of RFC 8785); only where the settings name one | no, a label |
 | `provared.tool-result` | the server's `result`, in the one form of RFC 8785 (added after the call) | yes (added after 0.6.0) |
 | `provared.error` | the error text (added after the call where there was no result, or where the result could not be fingerprinted or the answer not read) | yes |
-| `executor.written-late` | a fixed text; only in a receipt written at a restart, from the copy | no, a label |
+| `executor.written-late` | a fixed text; only in a receipt written later than its call, from the copy: one text in a receipt written at a restart, another in one written when the administrator acknowledged the call (X140) | no, a label |
+| `executor.acknowledged` | a fixed text; only in a receipt written when the administrator acknowledged the call (X140) | no, a label |
 
-`executor.call` and `executor.written-late` are labels. The tool's name
+`executor.call`, `executor.written-late` and `executor.acknowledged` are labels. The tool's name
 and the tool's result were labels (`mcp.tool`, `mcp.result`) until the
 format reserved `provared.tool-name` and `provared.tool-result` (F-158;
 section 27), which the executor now writes; so the executor needs a
@@ -221,9 +224,11 @@ each call: `sending` (before the call goes to the server; on the disk
 first), `done` (once the stub is in the book, with the stub's and the
 countersignature's fingerprints and the documents added after the call;
 or, where the book could not be written, with those documents and no
-stub, so that the call stays unfinished), `refused` (with the reason, the
-codes and the denial's fingerprint) and `withdrawn` (cancelled before it
-was sent). Each line carries its number from 0 and HMAC-SHA-256 (RFC 2104)
+stub, so that the call stays unfinished; the kind of outcome only where
+there are such documents, X165), `refused` (with the reason, the
+codes and the denial's fingerprint), `withdrawn` (cancelled before it
+was sent) and `set-aside` (a call that was sent and has no receipt, which
+the administrator set aside; X130). Each line carries its number from 0 and HMAC-SHA-256 (RFC 2104)
 of its text and the executor's name under the copy key, so that a line
 added or changed by someone without the key does not check, and a line
 taken out, put twice or moved is seen by the numbers. A copy cut at its
@@ -249,7 +254,8 @@ executor in `with` and the same `executor.call` fingerprint.
 | differs | the book holds a receipt for the call, but not the one the executor wrote |
 | missing | the executor sent the call and wrote its receipt, and the book has no receipt for it: whoever keeps the book left it out, or the book is older than the copy |
 | not written | the executor sent the call and could not write its receipt to the book (its own stop): told apart from an omission by the book's keeper; the next start of the executor writes it |
-| unfinished | the executor sent the call and stopped before the receipt; the next start writes it |
+| unfinished | the executor sent the call and stopped before the receipt; the next start writes it, or, where the permission has changed since, the administrator acknowledges it |
+| set aside | the executor sent the call, and the administrator set it aside: it has no receipt, and the copy and the book do not agree (X130) |
 | not in the copy | a receipt in the book names the executor, and the executor's copy does not know it: not written by this executor (its countersignature state says whether it was forged, which cannot succeed without the executor's keys, or left one-sided) |
 | denial missing | the executor wrote a denial that the book lacks |
 
@@ -274,13 +280,22 @@ itself has a problem.
   result's or the error's fingerprint where a `done` line without a stub
   holds it (the receipt was made and the book could not be written), or
   else naming `provared.error` with a fixed text saying the outcome is not
-  known. Where that permission is no longer the one in force, the executor
-  does not start and says what to do (put the old permission back for one
-  start). Such a receipt names `executor.written-late`, so that the book
+  known. Such a receipt names `executor.written-late`, so that the book
   itself says so: its `when` is the time the call was sent, and its
   countersignature is dated at the restart, so a reader sees both times.
-  The founder has kept this automatic late receipt (F-158). An
-  acknowledgement command, as the gateway has, is stage 2.
+  The founder has kept this automatic late receipt (F-158).
+- **The same, where the permission has changed since.** The executor
+  writes no receipt by itself under a permission that is no longer the
+  one in force: the call waits for the administrator, who acknowledges it
+  or sets it aside (`acknowledge`; section 12, X127 to X131, X140, X141).
+  Over stdio the executor does not start while a call waits; over HTTP it
+  starts, and that agent's calls to tools that have a rule are refused
+  until none waits (a call to a tool no rule names is answered as
+  always: a denial, or, with `unlisted: forward`, sent on unrecorded).
+- **Two programs on one book.** A program that opens a book and its copy
+  to write takes a lock first, which the operating system releases when
+  the program ends; a second is refused before it reads anything (X139).
+  A command with `--offline` writes no late receipt by itself (X143).
 - **The copy cannot be read** (its key missing with lines present; no line
   checks; a line cut by a stop): the executor does not start.
 - **The server ends.** The call in flight gets its receipt with
@@ -316,8 +331,16 @@ itself has a problem.
   that starts it. A credential read from that environment (`env`), or a
   program found through that `PATH`, is only as safe as the client; the
   settings can name the program by its path and the folders to look in.
-- The clocks: times in receipts are the executor's; a countersignature is
-  by the same clock. Seals and outside time-stamps are stage 2.
+- The clocks: times in receipts are the executor's; a countersignature
+  and a seal are by the same clock. No outside time-stamp is put beside a
+  seal (X135) unless the settings give a time-stamp service
+  (`recorder.stamp`, X298 to X301); then a seal the service stamped shows,
+  to a reader who trusts the service, a time that does not rest on the
+  executor's clock.
+- The recorder's sealing keys are in a file on the executor, beside the
+  agent's keys and the executor's own. Whoever can read the executor's
+  files can seal a book of their own making; a central sealer, seals held
+  elsewhere and witnesses are later steps (X134).
 - One tool call at a time: a long call delays the next.
 - A response from the server that is not a message (not JSON, not UTF-8,
   a batch or any line that is not one object, or `id` twice at the top
@@ -333,7 +356,8 @@ itself has a problem.
 `provared-mcp-executor http --config …` runs the executor as a Streamable
 HTTP MCP server (2026-07-28: "each message is an HTTP POST to a single MCP
 endpoint; replies arrive as a JSON object or a request-scoped SSE stream")
-in front of one upstream HTTP MCP server (`http.mjs`). Four things differ
+in front of one upstream HTTP MCP server (`http.mjs`), or of a local
+program started for each session (section 10.1). Four things differ
 from stdio; the rest (the rules, the check, the documents, the
 countersignature, the copy) is the same code, `callCore` in
 `executor.mjs`, which each transport reaches through a small link (X101).
@@ -341,7 +365,8 @@ countersignature, the copy) is the same code, `callCore` in
 1. **Who is calling.** Each agent signs in with a secret of its own, as the
    gateway's agents do: one `Authorization: Bearer <secret>` header, whose
    SHA-256 the settings hold as `secretHash`, compared in constant time
-   (X102). Each agent has its own slip, keys, book, copy and copy key
+   (X102). Or, with `oauth`, with an access token the executor issued
+   for one agent (section 14). Each agent has its own slip, keys, book, copy and copy key
    (X103); its calls go through its own writer, one at a time, and its
    limits are its own. The executor accepts no other token: the agent's
    `Authorization` is removed, and the upstream is sent the executor's
@@ -409,6 +434,761 @@ token the upstream encodes before echoing is not seen by the check of
 X105, and JSON's escaping of a `/`, `"` or `\` in the token counts as
 encoding; and the credential is kept from an agent only for what passes
 through the executor.
+
+### 10.1 A local program in place of the upstream
+
+The tool server behind the HTTP executor may be a local program: one the
+executor starts and speaks to over its standard input and output, as the
+stdio executor does (section 5), where the rest of this section describes
+an upstream HTTP MCP server. The sign-in (a secret, or OAuth, section 14),
+the agents, the rules, the check, the documents, the countersignature and
+the copy are unchanged: a `tools/call` reaches `callCore` through a link
+that writes one line to the program and reads one line back
+(`local.mjs`, and `localLink` in `http.mjs`).
+
+A stdio program holds one conversation: it is initialised once, and
+whatever it writes goes to whoever started it. So no two agents may share
+one. The executor starts **one program for each MCP session**, and a
+session is one agent's.
+
+The rules of the Streamable HTTP transport followed here are those of
+revision 2025-11-25, the one with sessions. **This mode serves clients and
+programs that speak 2025-11-25** (and the two revisions before it that
+have the same transport, 2025-06-18 and 2025-03-26). **Revision
+2026-07-28, which is published and drops sessions, is not yet supported
+here:** a client that speaks only that revision cannot use a local
+program, and a program that speaks only that revision, and so answers
+`initialize` with an error, cannot be served (X247). Its text was not
+among the sources of section 3 and was not fetched by the builder, who
+makes no request to an outside service: X232 to X240 give the rules as the
+builder held them. An independent review then read the published text on
+14 November 2026 (revision 2025-11-25: the pages on transports, lifecycle,
+cancellation and the base protocol; revision 2026-07-28: versioning and
+Streamable HTTP). It found X232 to X237 in agreement with the text but for
+six differences, which X247 lists with what was done about each. Where a
+choice is the plainest option and not the specification's, it says so.
+
+**X231. One upstream: `upstream` or `server`, never both.** The HTTP
+settings name either `upstream.url` (and its credential) or a `server`
+block, with `shutdownWait`. Settings with both are refused, and so are
+settings with neither. `server` is the stdio executor's, read by the same
+code (`readServerSettings`): the program, its arguments, its folder, the
+folders a bare name is looked for in, and its environment, each variable
+from a file, from the executor's environment or from the settings, with
+the same warnings; only the warning's words differ, since over HTTP it is
+whoever starts the executor, not an agent's client, that sets its
+environment. The program is found, and its credentials are read, once, at
+the executor's start, as a stdio start does; every session's program is
+given the same environment. Why: the plainest option. One block read by
+one piece of code cannot drift into two sets of rules.
+
+**X232. A session is begun by `initialize`, and has a program of its
+own.** An `initialize` request sent with no `Mcp-Session-Id` starts the
+program and is sent to it; where the program answers with a result, the
+answer goes back with a new `Mcp-Session-Id`: 32 random bytes in
+base64url. Every later message must name its session. A message with no
+session, other than that `initialize`, is refused with 400; a session that
+is not known, has ended, or is another agent's is answered 404, and
+nothing reaches any program; an `initialize` that names a session is
+refused with 400. By the specification (2025-11-25): the server may give a
+session id with the result of `initialize`, of visible ASCII characters
+and not to be guessed; a server that needs one answers a request without
+it, other than the initialisation, with 400, and an ended session with
+404, after which the client begins a new one. The 400 for an `initialize`
+under a session is the plainest option. A request of the 2026-07-28
+revision, which has no sessions, is therefore refused in front of a local
+program: the executor serves the session era only there, and a request
+whose `MCP-Protocol-Version` header names 2026-07-28 is refused with 400
+(X247), unless it is the `initialize` that begins a session (X287).
+
+**X233. One answer to a request, and one stream for the program's own
+messages.** A request is answered with one JSON body, under the agent's
+id; the answer to `tools/list` is filtered as on stdio. A notification, or
+the agent's response to a request of the program's, is answered 202 once
+it is written to the program; one that is not written is answered with an
+error, never 202 (X247: 400 for a request's method sent with no id, which
+is not sent on; 503 where the program is not reading, X244; 502 where it
+has ended). The program's own requests and
+notifications go on the session's GET stream, as events with no id; where
+the agent has no stream open they are dropped, and the log says so
+(`server-message-dropped`, at most once a second for each session, with
+the count: X245). A session has one stream: a later GET takes
+the place of the earlier, which is ended. Nothing is replayed. A response
+of the program that answers nothing in flight (it came after a timeout or
+a cancellation) is dropped, and so is a line that cannot be read as a
+message and names no request in flight; on stdio such a line is handed on
+as it is, and here there is no request it could answer. By the
+specification: a request is answered with `application/json` or an event
+stream, and a client takes both; a notification or a response with 202;
+the server may send its requests and notifications on the GET stream, and
+must not send a response there. One stream, no replay and the dropping
+are the plainest options: the specification lets a server keep several
+streams and replay, and requires neither. The specification also says
+that the messages on the GET stream should be unrelated to a request of
+the client's that is running, and puts those that belong to a request on
+that request's own answer, sent as a stream. Here every message of the
+program goes on the GET stream, whatever it belongs to: X247 says why.
+
+**X234. When a session ends, and how.** A session ends when the agent
+sends DELETE under it (answered 204); when its program ends by itself;
+when it has been idle (X235); when it makes room for a new one (X235);
+when the connection made through OAuth it was begun under ends; when a
+message names it under another connection than its own; when its program
+is not reading (X244) or writes without pause (X245); and when the
+executor stops, after which no program is started (X246). However it
+ends, it is forgotten at once, its stream is
+closed, and its program's input is closed; a program that has not ended
+`shutdownWait` later is ended by force, as on stdio: it is sent SIGTERM,
+which a program may ignore, and after a second wait SIGKILL, which it
+cannot (X242). A call still with the
+program when the program ends is settled as on stdio, with the same text
+in its receipt ("The tool server ended before it answered this call…",
+`SERVER_ENDED`); at the executor's stop the calls are settled first, as
+the executor's stop (X115), and the programs are ended after. Why: a
+session begun under a connection belongs to it, so the next connection
+approved for the same agent (X201) must not carry it on; `oauth.mjs`
+tells the sessions of a connection's end (`watch`), and the check on each
+message stands behind that; while `watch` works the check is never
+reached through the executor, so it is tested on `local.mjs` alone
+(`test/http-local-faults.test.mjs`). An access token's end does not end the
+session: the next token of the same connection goes on with it. The
+specification lets a server end a session at any time; the rest is the
+plainest option. The one difference from X229 is stated: there, a call
+already taken is not cut when its token ends; here, a call with the
+program when its connection ends gets the receipt of a program that
+ended, unless the program answers before it ends.
+
+**X235. The limits: `sessions.max` and `sessions.idle`.** An agent may
+have `sessions.max` sessions at once (8 unless the settings say otherwise;
+1 to 256), and the executor runs at most that many programs for each
+agent, the programs of sessions just ended, which have not gone yet, among
+them (X243). Where an agent at its most begins another, its own session
+that has been quiet longest, with no message in hand, is ended to make
+room, and the new session is begun once a program of the agent's has
+gone; where each of them has a message in hand, or no program goes in
+time, the `initialize` is refused with 503. Another agent's sessions are never counted and
+never ended. A session is ended once `sessions.idle` milliseconds have
+passed since the agent's last message under it (30 minutes unless the
+settings say otherwise; a second to a day); while a message is in hand,
+a call that is still with the program among them, the time does not run.
+An open GET stream is not a message: it does not keep a session. Why: the
+plainest options. A client that does not end its sessions would otherwise
+lock itself out for the idle time; ending the quietest harms only the
+agent that asked. The numbers are the builder's: no source gives them.
+
+**X236. A call's id is its session's.** A call in flight is held by its
+session and its id, so two sessions of one agent may each have a call
+under the same id at once (`link.key`). By the specification: a request's
+id is unique within a session, and a client numbers each session from the
+start. In front of an upstream HTTP server the calls are still held by
+the agent and the id alone, as before.
+
+**X237. Cancellation and time, as on stdio.** The agent's
+`notifications/cancelled` for a call is written to the program under the
+executor's id for the call, and the call is settled as cancelled; for
+another request in flight it is renamed in the same way. On the
+executor's `timeout` the program is sent the cancellation, as on stdio.
+Closing the connection is not a cancellation (X111, the legacy rule): the
+call runs on, bounded by `timeout`, and its outcome is recorded. A request
+other than a call that the program has not answered within `timeout` is
+answered 504, the program is sent the cancellation for it under the
+executor's id (X247), and a later answer is dropped; `initialize` is such
+a request, is never cancelled, and then no session is begun and the
+program is ended. Why: stdio's rules, with the one
+addition that a request must end, since an HTTP request cannot wait for
+ever.
+
+**X238. A program that will not start.** A program that is not found, or
+a credential that cannot be read, stops the executor's start, and `check`
+names it. A program that is found and cannot be run, or that ends before
+it answers `initialize`, begins no session: the agent is answered 502, or
+504 where it gave no answer in time, with the reason, and the program is
+ended. Where the program answers `initialize` with an error, that error
+goes to the agent, no session is begun and the program is ended. Why: the
+plainest option. No session exists that has no program behind it.
+
+**X239. What it does not do.** The program's credentials are not looked
+for in what it answers: as on stdio, and unlike the upstream's token
+(X105). The mirrored headers of X110 are checked as before and go
+nowhere, since a program takes no headers. The programs are not kept from
+each other by the executor: each is given the same environment and the
+same folder, and what they share on the disk is theirs to keep apart.
+What each writes to its standard error goes to the executor's, among the
+executor's own log lines, with nothing to say which session wrote it: in
+whole lines, each with its line feed, so that a line of a program's never
+runs into a line of the executor's own (a line of more than 64 KiB is
+dropped, and what a program writes with no line feed is written on when
+the program ends).
+Nothing of a session outlives the executor: after a restart every
+session id is unknown, and the client begins again. A restart still
+writes the receipt of a call that was with a program, from the agent's
+copy (section 8).
+
+**X240. `init --http --demo`.** It writes, in the current folder and over
+no file already there, settings whose `server` is the demonstration's
+made-up server (`demo/server.mjs`, the tools `echo` and `add`, which reach
+no network) started by the Node.js that runs the command; the OAuth
+settings with the public address and the client left to put in; one agent
+kept for a connection; the demonstration's rules on content; and the
+made-up credential the made-up server asks for. Unlike `demo`, nothing is
+signed by a stand-in: the keys, the permission and the owner are set up as
+for any agent over HTTP. Why: so that the sign-in can be tried from a
+client with no tool server of anyone's behind it.
+
+### 10.2 After the review of the local program
+
+An independent review of section 10.1 as built found one serious weakness
+that every transport has, and that the published versions up to 0.4.1
+have too (X241); five things a program or an agent could do to the
+executor as a whole (X242 to X246); and where 10.1 differs from the
+published specification (X247). X248 came from a second review, of a tool
+server. The tests are `test/names.test.mjs`, `test/lines.test.mjs` and
+`test/http-local-faults.test.mjs`.
+
+**X241. A message is refused where a name in it differs only in capitals
+from one the executor reads.** Three rules, in `readMessage`
+(`jsonrpc.mjs`), the same on stdio, over HTTP in front of an upstream, and
+over HTTP in front of a local program:
+
+- At its top level a message has the members `jsonrpc`, `id`, `method`,
+  `params`, `result` and `error`, written exactly so, and no other. A
+  message with any other member is refused. This holds for the agent's
+  messages and for the server's.
+- The agent's `params` hold, in one object at any depth (so in
+  `arguments` and in `_meta` too), no two names that are one once folded,
+  as X8 folds them: capitals, the long s and `s`, the Kelvin sign and `k`.
+- In the `params` of a `tools/call` the names `name`, `arguments` and
+  `_meta`, and in those of a `notifications/cancelled` the name
+  `requestId`, are written exactly: a name that is one of them once
+  folded, and is not written so, is refused (`Arguments` with no
+  `arguments`). In the `_meta` of a `tools/call` the same holds for
+  `red.prova/call-id` and `traceparent` (`handleCall` in `executor.mjs`).
+
+The agent is answered with the error -32600 (over HTTP, with 400), as for
+a member name given twice, which the executor has refused from the start,
+and nothing is sent to the server. A message of the server's that the
+first rule refuses is treated as any line the executor cannot read: a
+call's receipt says the answer could not be read and names no result, and
+the line goes to the agent as it was. In a `tools/list` answer that the
+executor filters, a tool with a second name in other capitals is not
+shown, and a member that is `tools` once folded, and is not `tools`, is
+left out.
+
+Why: the review ran a tool that no rule names through a made-up server
+whose JSON reader takes member names without regard to capitals, the
+later one winning, as the standard JSON reader of the Go language does
+for the fields it knows. `{"method":"ping","Method":"tools/call", ...}`
+was a ping to the executor, passed on with no check and no receipt, and a
+tool call to that server. `{"name":"echo","Name":"order", ...}` was
+checked and receipted as `echo`, and run as `order`. Every version up to
+0.4.1 has this weakness where it stands in front of such a server; 0.4.2
+has the same fix. A server that reads names exactly, as the JSON readers
+of Node.js and Python do, is not affected. Servers built on the official
+Go SDK before 1.3.1 ignore capitals (GHSA-wvj2-96wp-fq3f); other servers
+have not been checked.
+
+No denial is written for such a message: it has two readings, and a
+denial would name a tool and an amount that may not be the ones meant.
+X8's refusal of such arguments, and the content rules' own, stay in the
+code for a caller of `amountOf` and `testCall`; through the executor they
+are no longer reached, since the message is refused before any rule is
+read.
+
+What this does not cover. The folding is that of capitals and a little
+wider: besides the two letters above it makes one of the sharp s and
+`ss`, of the dotless i, the dotted capital I and `i`, and of the
+ligatures and their letters, so `Masse` and `Maße` in one object are
+refused too; it errs on the side of refusing, and the refusal says
+"differ only in capitals, or in letters that some readers take as the
+same". A reader that takes two names for one in another way (by leaving
+out `_` or `-`, or by a Unicode normal form) is not covered. Nothing is
+checked in the `result` or `error` of the agent's own answers to a
+server's requests, where the executor reads nothing. A lone name in the
+arguments in other capitals (`Total` where a rule reads `/total`) is not
+refused here: the amount is then not found and the call is refused (X8),
+and a rule on content refuses a call where such a name stands on the way
+to a pointer the rule reads (X249). The method, and a tool's name, in
+other capitals: X253. The cost:
+arguments that rightly hold two names that differ only in capitals in one
+object (`path` and `PATH`) can no longer be sent.
+
+The other ways. Refuse only at the top level and one level deep in a
+tool call's `params`, the review's smallest fix: not taken, since a
+server that folds names folds them at every depth of the arguments it
+reads into its own types. Or fold names in the executor and read as such
+a server would: not taken, since the executor would then differ from the
+servers that read names exactly.
+
+**X242. A program that will not end: SIGTERM, then SIGKILL, and a stop
+that always finishes.** A program still running `shutdownWait` after its
+input was closed is sent SIGTERM; one still running after a second wait is
+sent SIGKILL, which no program can ignore. The second wait is
+`shutdownWait` again, and at most 5 seconds (`KILL_WAIT`). The same on
+stdio (`executor.mjs`) and for each session's program (`local.mjs`). On
+Linux and macOS both signals go to the program's whole process group, so
+to whatever the program started; on Windows the first is already final,
+and it ends the one process the executor started (X252). The executor's stop waits for the
+programs for the two waits and 2 seconds more (`CLOSE_MARGIN`); where one
+is still there, the log says how many (`servers-not-ended`) and the stop
+goes on: the server is closed, the writers finish, the OAuth state's last
+write is made and the locks are given up. Why: as built, a program that
+took no notice of SIGTERM ran on with its credentials after its session
+had ended, and the executor's stop then never finished (the review ran
+it on Linux). The order is the specification's for stdio: close the
+input, then SIGTERM, then SIGKILL. The second wait takes no setting of
+its own: the plainest option. A program that the system will not end even
+then is not ended by the executor.
+
+**X243. `sessions.max` bounds an agent's programs, not only its
+sessions.** An agent never has more than `sessions.max` programs running:
+those of its sessions, one whose `initialize` is not answered yet among
+them, and those of sessions that have ended and whose programs have not
+gone yet. A program is the process the executor started and, on Linux and
+macOS, whatever that process started and left in its group (X252); on
+Windows, the one process. Where an agent at its most begins another session, room is made
+as X235 says, and the `initialize` then waits until one of the agent's
+programs has gone; a session just begun, whose first message is not yet
+in hand, makes no room. Where no program goes within the two waits of
+X242 and 2 seconds more, the `initialize` is refused with 503. Why: as
+built, a session that made room was forgotten at once and its program ran
+on for up to `shutdownWait`, so one agent that sent `initialize` again
+and again had 40 programs running under a limit of 2 (the review ran it).
+The other way, the review's: refuse past twice the limit; not taken,
+since the settings' owner is told one number, and it should hold. The
+cost: an `initialize` that needs room takes as long as the program that
+makes it takes to end.
+
+**X244. What waits to be written to a program that is not reading is
+bounded.** Before a message is written to a program, the bytes already
+waiting for it are counted (`child.stdin.writableLength`). Where they are
+more than 16 MiB (`BACKLOG_LIMIT`, the bound X113 gives for an agent that
+is not reading), nothing is written, the session is ended and its program
+is ended as at every other end, given `shutdownWait` first (X363; it was
+ended by force at once), and the agent is answered 503: a request, a
+notification and a response alike. A tool call that could not be written
+is receipted as one that could not be sent. So the executor holds at most
+the bound and one message more for each session. Why: as built, a
+notification was answered 202 and held in memory without limit, and 30
+notifications of 8 MiB to a program that read nothing took the executor's
+memory from 99 to 367 MiB (the review ran it). The other way: hold the
+agent's request until the program reads again; not taken, since a
+program that far behind is not serving its session.
+
+**X245. A program that writes without pause.** Three things. One read of
+a program's output is handled at a time, and everything else that waits
+is taken before the next (`pause` and `setImmediate`), so that another
+agent's request is not held up. A line of a program that goes nowhere (a
+message of its own with no stream open, an answer to nothing in flight, a
+line that cannot be read or is too long) is logged at most once a second
+for each session and each kind, with the count since the last such line
+of the log. And a program that writes more than 1,000 messages that
+answer nothing in flight in each of 5 seconds running has its session
+ended and is ended by force at once (`FLOOD_PER_SECOND`, `FLOOD_SECONDS`;
+`server-flooding` in the log); a call that was with it is receipted as
+for any program that ends. The seconds are the clock's, counted from the
+session's start: the first, the second, and so on. A second that holds
+1,000 or fewer, or none, breaks the run, so a program that writes evenly
+is ended only above 1,000 a second, and one that writes in bursts only
+where a burst of more than 1,000 falls in each of five seconds one after
+another. (As first built the count ran over windows of one to two
+seconds, and ended a program writing 1,001 at once every 1.9 seconds,
+about half the stated rate; a re-check ran it.) Messages that reach an open stream are counted
+too: they cost the executor the same. Why: as built, 400,000
+notifications of one agent's program made another agent's `ping` wait
+4,457 ms on Windows, and the log gained 400,000 lines, 42 MiB (the review
+ran it). The numbers are the builder's: no source gives them. A program
+that writes a great deal for less than 5 seconds is not ended.
+
+**X246. No program is started once the stop has begun.** `close()` tells
+the sessions at once (`noMore`), and `begin` refuses from then on: an
+`initialize` whose body arrives after the stop began, or that was waiting
+for room (X243), is answered 503 and starts nothing. Why: as built, the
+one look at the stop came before the body was read, so such an
+`initialize` started a program after the stop had taken its list of
+programs, and that program outlived the executor (the review ran it).
+
+**X247. Where section 10.1 differs from the specification, revision
+2025-11-25, and what was done.** As the review read the text:
+
+1. *The protocol-version header.* "If the server receives a request with
+   an invalid or unsupported `MCP-Protocol-Version`, it MUST respond with
+   400 Bad Request." Followed. In front of a local program no one else
+   reads the header, so the executor answers for it: a request, of any
+   method, whose header names a version other than 2025-11-25, 2025-06-18
+   or 2025-03-26 (`LOCAL_VERSIONS`, the revisions with this transport and
+   sessions) is refused with 400 and starts nothing, unless the version is
+   the one its session's program answered `initialize` with. Since X287
+   the `initialize` that begins a session, sent with no session id, is
+   not held to the header. A request
+   with no such header is taken, as the specification allows. The last
+   exception is the builder's: a program that answers with an earlier
+   version, to a client that goes along with it, is still served. In
+   front of an upstream the header goes on to the upstream, which answers
+   for it, as before.
+2. *202 where the message was not accepted.* "If the server cannot accept
+   the input, it MUST return an HTTP error status code." Followed. A
+   request's method sent with no id is not sent on, as before, and is now
+   refused with 400, in front of a local program and of an upstream; a
+   notification or a response that could not be written to the program is
+   answered 503 (the program is not reading, X244) or 502 (it has ended).
+3. *Messages that belong to a request.* The text puts them on the answer
+   to that request, sent as a stream, and says the messages on the GET
+   stream should be unrelated to a request that is running. Not followed,
+   and it cannot be from here: a program on stdio writes its requests and
+   notifications on one output, and nothing in a request of the program's
+   says which request of the agent's it belongs to. So every message of
+   the program goes on the session's GET stream, the progress of a call
+   and a question a tool asks during it among them. A client must have
+   the stream open to be asked: where it is not, the question is dropped
+   and the call waits out `timeout`.
+4. *The timeout of a request other than a call.* "The sender SHOULD issue
+   a cancellation notification for that request." Followed: at `timeout`
+   the program is sent `notifications/cancelled` under the executor's id
+   for the request. `initialize` is not cancelled, as the specification
+   forbids; the program is ended.
+5. *Ending a program.* Close the input, then SIGTERM, then SIGKILL.
+   Followed: X242.
+6. *Not in this design:* calls that ask for a task (`params.task`,
+   `tasks/result`, `tasks/cancel`). Such a call is checked and receipted
+   as any call; its receipt's result is the task's handle, not the tool's
+   result, and the later requests for the result pass with no receipt.
+   The same on every transport.
+
+The 204 for a DELETE and the 400 for an `initialize` that names a session
+are the builder's: the text names no status for either.
+
+Revision 2026-07-28 is published and marked current. For Streamable HTTP
+it has no sessions, no GET stream and no DELETE, and no `initialize`:
+each request carries its version. Section 10.1 is the earlier way
+throughout, which that revision still allows a server to offer. In front
+of a local program revision 2026-07-28 is not yet supported: a client
+that speaks it and the earlier way falls back to `initialize` (read, not
+tried: the 400 it is given carries -32600); a client that speaks it alone
+cannot use a local program; and a program that speaks it alone, and so
+answers `initialize` with an error, cannot be served.
+
+**X287. The `initialize` that begins a session is not held to the
+`MCP-Protocol-Version` header, and the log names the version that was
+refused.** It changes the first point of X247 for one request. In front
+of a local program, a POST that carries no `Mcp-Session-Id` and whose one
+message is the request `initialize` is taken whatever its
+`MCP-Protocol-Version` header holds. The program is started, and the
+version it answers `initialize` with is the session's, as X247 has it: a
+later request of that session whose header names another version, not
+among `LOCAL_VERSIONS`, is refused as before. Every other request keeps
+X247's rule: any request under a session, an `initialize` that names one
+among them; a GET or a DELETE; and a POST with no session id whose
+message is anything else, a notification named `initialize` among them.
+
+Why: the specification asks a client for the header on the requests that
+follow initialization. The version is agreed inside `initialize`: the
+client names one in the body, and the server answers with its own. So a
+header on the opening `initialize` settles nothing, and a refusal for it
+turned away a client that would have agreed on a version the executor
+serves. The log of an executor in front of a local program, behind a
+client that connects through the front door (section 14), showed each
+new connection's first request refused with `protocol-version`, and a
+session begun straight after. That log did not say which version the
+header named, so the line now says more.
+
+The order of the checks. The message is known only once the body has
+been read. So for a POST with no session id, and for no other request,
+the header's check now comes after the checks of the body: its content
+type (415), its size and its time (413, 408), and that it is one message
+(400). It still comes before the check of the mirrored headers (X110). A
+POST with no session id that fails one of those is now answered for
+that, where it was answered for the header. The order of the other
+checks is unchanged, and under a session the header's check is still the
+first. A GET or a DELETE with no session id is not an `initialize`: its
+header is checked first, before it is refused for naming no session.
+`test/http-local-faults.test.mjs` holds both places: a POST with no
+session id whose mirrored header also disagrees is refused for its
+version, and a GET and a DELETE with no session id are refused for
+theirs, with `"session": false` in the log.
+
+The log line. `{"event":"refused","code":"protocol-version"}` now has
+`"version"`: the header's value where it is written as a revision is
+(`^\d{4}-\d{2}-\d{2}$`), and `"other"` for anything else, so that
+nothing a client chooses is copied into the log but ten characters of
+digits and hyphens. And `"session"`: `true` where an `Mcp-Session-Id`
+came with the request, `false` where none did. Nothing else of the
+request is in the line: not its method, and not the session's id. The
+test's list of other values has one that ends in a date
+(`x2026-07-28`), so that the form is held at its start as well as at its
+end.
+
+Not known: whether the request the log showed refused was an
+`initialize`. Where it was another message, sent the way of revision
+2026-07-28, it is still refused, and the client falls back to
+`initialize` as before; the line's new fields will say which version it
+named and whether it came under a session.
+
+**X248. One message, one line, for a reader of UTF-8.** This makes a
+message one line for a reader that takes the bytes as UTF-8; one that
+takes them as another encoding may still cut a line inside a character
+beyond ASCII, inside a text, where quotation marks are escaped, so it can
+spoil a message and cannot hide a call. A
+message the executor writes to a program's standard input, on stdio and
+for a session's program, is first made one line (`oneLine` in
+`jsonrpc.mjs`), and is still the same JSON: a line feed or a carriage
+return between its values becomes a space, and U+0085, U+2028 and U+2029
+in a text are written as the escapes `\u0085`, `\u2028` and `\u2029`.
+The demonstration's made-up server (`demo/server.mjs`) ends a line at a
+line feed alone, where it read with `node:readline` before. Why: a review
+of a tool server found that `node:readline` ends a line at a bare
+carriage return, U+2028 and U+2029 as well as at a line feed. Through the
+executor on stdio, a call with U+2028 in a text argument reached such a
+server as two lines, was not answered, and was recorded as "outcome not
+known". The builder then found two worse cases. On stdio, a message with
+a whole `tools/call` between two carriage returns, where JSON allows
+them, was one `ping` to the executor and, to such a server, three lines,
+the second a call the executor never checked. And over HTTP in front of a
+local program, a body may hold line feeds between its values, which were
+written to the program as they came: the same message, with line feeds,
+ran an unchecked call on any program that reads lines, and a body set out
+over several lines was never answered. Neither was in a published
+version's HTTP mode, which has no local program; the stdio case is in
+every published version up to 0.4.1, in front of a server that ends a
+line at a bare carriage return; 0.4.2 has the same fix. A text reader
+with universal newlines ends a line there too, which Python's
+`io.TextIOWrapper` gives unless told otherwise, as the official Python
+SDK's stdio server uses, and how Python opens its standard input on
+Windows: servers built on the official Python SDK read standard input
+through `io.TextIOWrapper`, so they end a line at a bare carriage return;
+other servers have not been checked. U+0085 is escaped as well because
+some line readers end a line there. The other way: refuse such messages; not
+taken, since each is valid JSON and a body over several lines is
+ordinary.
+
+**X249. A rule on content does not take for absent what it cannot read
+exactly (0.4.2).** Where a rule reads a pointer, in a `when` or
+a `test`, two things on the way to it are now `content-unreadable`, and
+the call is refused with a denial (`unreadableAt` and `holds` in
+`rules.mjs`):
+
+- An object on the way holds a member that is the pointer's name once
+  folded (as X241 folds) and is not written as the rule reads it: `Path`
+  where the rule reads `/path`, `SCAN` in the content where it reads
+  `/scan`.
+- The way stops, with names still to follow, at a value that is neither
+  an object nor a list: a text, a number, true, false or null.
+
+Why: an independent review of 0.4.2 ran the README's own example rules
+in front of the made-up server that ignores capitals. `write_file` with
+`Path` in place of `path` was let through and receipted as an allowed
+change, since the rule's `when` found no `path` and the rule did not
+apply, and the server wrote the file with the scan on; an `edit_file`
+under `Path`, and a lone `SCAN` inside the content, passed too. Every
+version with rules on content, from 0.2.0 to 0.4.1, does the same. X241
+could not catch it: the message has one reading of its tool and one
+spelling of each name, and only a rule knows which names matter. The
+second came from the same review: a rule that tests `/debug` in `options`
+refused `{"options":{"debug":true}}` and let through the same object
+given as a text that holds JSON, which a server may read as the object
+(as the reviewer recalls of one SDK; not run).
+
+A denial is written here, unlike X241: the tool and the rule are known,
+and only the content could not be read. What stays as it was: a member
+that is simply not there is absent, and `orAbsent` and `absent` hold for
+it; a list that is asked for a member by name has none; and a rule sees
+a name in other capitals only on the way to a pointer it reads. The cost:
+a call whose arguments rightly hold a name that differs only in capitals
+from one a rule reads, in the object the rule reads it from, is refused.
+
+The other way: fold names in the rule's own reading, so that `/path`
+finds `Path`. Not taken: a server that reads names exactly would then
+act on what the rule did not test. `test/content-rules.test.mjs` runs
+both, the first in front of the made-up server that ignores capitals.
+
+**X250. Reading a message never ends the executor, and a refusal names
+its request where it can (0.4.2).** The check of X241 for two names that
+are one once folded walks the message's text as it came
+(`foldedInParams` in `jsonrpc.mjs`), as `repeatedName` does, and calls
+nothing that calls itself. `readMessage` also catches whatever its
+reading throws and refuses the line; no line is known to reach that. The
+refusals for a member name given twice, and for a whole number beyond
+2^53 - 1, are answered under the request's id where the text has one
+top-level `id` that is text or a whole number every reader holds exactly
+(`topLevelId`); before, under no id.
+
+A message nested more than 256 levels deep, objects and lists together
+and the message itself the first, is not read at all (`MAX_DEPTH` and
+`deeperThan` in `jsonrpc.mjs`, which walks the text and calls nothing
+that calls itself). The agent's is refused with -32600 under its id, and
+nothing is sent to the server. The server's is a line the executor
+cannot read, as X241 treats a member it does not know: where it answers
+a call, the receipt says the answer could not be read and names no
+result, and the line goes to the agent as it was; where it answers
+another request, it is handed on as it was; a notification or a request
+of the server's is handed on as it was.
+
+One answer is not handed on: the server's answer to a `tools/list` that
+the executor is to filter (`hideUnlisted`) and cannot read, whether it
+is nested too deeply, names a member twice, holds no `tools` list in its
+result or, over HTTP, comes under another id or is no message. Handed on
+as it was, it would show the agent the tools the executor is to hide. The
+agent's request is answered with the error -32603 under its id, with the
+words of `LIST_NOT_READ`, and the log says `tools-list-not-read`
+(`executor.mjs` on stdio; `http.mjs` for a JSON body, for an event, and
+for the answer of a local program).
+The server's own error to `tools/list` goes on as it is (over HTTP, as
+X260 has it). Before, in
+every version, such a list was handed on unfiltered. What stays: a line
+of the server's that the executor cannot match to any request (an id
+given twice, no id or a null one, a list of messages, a byte order mark
+before the message), and an event with no id, under another id or
+holding a list of messages, are handed on as they were, and may hold
+anything the server chooses to write: a list of tools too, with the
+request not answered.
+`test/list.test.mjs` runs each on stdio and over HTTP.
+
+Why: the same review found that the first build of 0.4.2, never
+released, wrote the `params` out afresh to look for such names, which
+calls itself once for each level of nesting: one line of 10 KB, 5,000
+levels deep, overflowed the stack where the lines are read and ended the
+executor on stdio (over HTTP it answered 500 and went on). The walk
+closed that one place, and others were left, on both sides: an agent's
+cancellation of a call in flight is written afresh for the server; a
+server's error is written out for the receipt, and its list of tools is
+written afresh once filtered. Each calls itself in the same way: one
+deep answer of the server's ended the executor (run), and so did the
+agent's deep cancellation of a call in flight (run in the review's
+re-check: 0.4.1 ends at `executor.mjs:1214`). A limit where the message
+is read closes them together, and whatever is written later. 256 is the
+builder's number: it is far below the depth at which any of these
+overflows (some thousands), and above what the library fingerprints: the
+fingerprint of a call's arguments, and of its result, takes 64 levels.
+Between the two, as before, a call whose arguments nest too deeply is
+answered with error 1001 and not sent, and a result that nests too
+deeply is receipted as a result that could not be fingerprinted. The
+receipt's text for an answer that could not be read names three reasons
+(not JSON, a name given twice, not a response) and not this one; the
+text is left as it is, since its fingerprint is what receipts name. And
+a client on stdio that is answered under no id cannot match the answer
+to its request, and waits out its own timeout.
+
+The other way: catch the error at each place that writes a value out.
+Not taken: each new place would need its own, and the stack's depth
+where one is reached is not the same from one run to the next.
+`test/deep.test.mjs` sends 200,000 levels each way on stdio and over
+HTTP: the agent's requests, a call and a cancellation, and the server's
+result, error, list of tools and notification.
+
+X249 and X250 hold in front of a local program as elsewhere: its calls go
+through the same rules, its lines are read by the same `readMessage`, and
+its answer to a `tools/list` that cannot be read is answered with the
+same error (`answerLocal` in `http.mjs`; `test/list.test.mjs`).
+
+**X251. A program's exit does not overtake its last lines.** The calls
+that were with a program are settled once its output has ended, not when
+the process exits: at the exit the executor goes on reading what the
+program wrote, for at most a second more (`OUTPUT_WAIT`) where something
+the program started still holds its output open. The same on stdio. Why:
+a re-check ran a program that writes 1,500 notifications, then its
+answer, and ends. With one read of its output handled at a time (X245),
+the exit was seen before the answer was read: on Linux 0 of 20 such
+answers reached the agent, each call was receipted as "ended before it
+answered", and the answer was dropped as late. The record erred on the
+careful side, but the tool had done its work, and an agent told otherwise
+may do it twice. On stdio there is no pause between reads and no lost
+answer was seen; the same order is kept there, since an exit can be seen
+before the last of the output is read. `test/http-local-faults.test.mjs`
+runs such a program; the test fails without the fix on Linux, and on
+Windows it passes either way.
+
+**X252. The stop reaches what a program started, on Linux and macOS.**
+There the executor starts a program as the leader of a process group of
+its own (`detached`), and SIGTERM and SIGKILL (X242) go to the group
+(`signalProgram` in `executor.mjs`): to the program, and to whatever it
+started that has not left the group. Where the program itself has gone
+and something is left in its group, that is sent SIGTERM, and SIGKILL
+after the second wait; until it has gone it counts as the program still
+running, for `sessions.max` (X243) and for the stop. On stdio what is
+left is sent SIGKILL when the server has gone. Why: a re-check put a
+launcher in front of the server, one that passes no signal on, as a shell
+script that does not `exec` its server does. The signals reached the
+launcher alone: with `sessions.max` 2, eight real servers were alive, and
+all eight outlived the executor's stop, each with the credentials in its
+environment. What this costs: a program is no longer in the executor's
+own process group, so a signal sent to the executor's group from a
+terminal (Ctrl-C) reaches the executor alone, which then ends the program
+as it ends any. What it does not cover: a process that leaves the group
+(one that starts a session of its own, as a daemon does) is not reached.
+
+**On Windows** there are no such groups, and the executor ends the one
+process it started. What that process started is ended only where the
+system ties it to its parent: Node.js ties its children to itself there,
+and a re-check saw the real servers behind a launcher written in Node.js
+end with it; other launchers (`cmd.exe`, a virtual environment's
+`python.exe`) were not tried. So on Windows the signals, the count of
+`sessions.max` and "no program outlives the stop" hold for the process
+the executor starts: name the server itself in `server.command`, not a
+launcher. The other way, to end the tree with the system's own command
+for it: not taken, since it starts a program of the system's for each
+end, and was not tried. The test (a launcher that passes no signal on,
+`test/launcher.mjs`) runs on Linux and macOS and is skipped on Windows.
+
+**X253. A method, and with `forward` a tool's name, in other capitals.**
+X241 folds the names of members, not their values. Two values are now
+held to the same rule. A message of the agent's whose method is
+`tools/call`, `tools/list`, `initialize` or `notifications/cancelled`
+once folded, and is not written so, is refused with -32600 (`readMessage`
+in `jsonrpc.mjs`): the executor acts on those four, and would pass
+`Tools/Call` by as a method it does not know. And where the settings send
+a tool with no rule on unchecked (`"unlisted": "forward"`), a call whose
+tool name is a ruled tool's once folded, and is not written so, is
+refused with -32600 and not sent on (`handleCall`); with the default,
+`refuse`, it is refused as a tool with no rule, as before. Why: a
+re-check sent `{"method":"Tools/Call", ...}`: answered with the program's
+own result, no receipt, no denial, and a made-up program that reads the
+method without regard to capitals ran the call. No MCP server is known
+to read a method or a tool's name so; the usual SDKs compare them
+exactly. What stays: any other method in other capitals is sent on as it
+is, as any method the executor does not act on.
+
+**X260. Over HTTP, the upstream's own error answer to `tools/list` goes
+on as it is, and the executor's own error in its place is sent as JSON
+(0.4.2).** X250 answers for a list the executor is to filter
+and cannot read, and let one answer through: the upstream's error under
+the request's id. Two things follow from the review's re-check.
+
+An upstream may refuse a request it could not read, or a session it does
+not know, with a 4xx and a JSON-RPC error under a null id. As X250 was
+first built, the agent was given -32603 in place of the upstream's
+words. Now a JSON body that is an error answer and nothing more is
+handed on as it was, with its status and content type, under whatever
+id it has (`errorAnswer` in `jsonrpc.mjs`): one object whose members are
+`jsonrpc` (`"2.0"`), `id` (text, a whole number or null) and `error` (an
+object with a whole number `code` and a text `message`), each once and
+written exactly so, nested no deeper than 256 levels, with no member
+name given twice at any depth. Such a body has no `result`, under any
+spelling, for any reader, so it holds no list of tools as a client
+reads one. What its `message` and `data` say is the upstream's to
+choose, as in its error under the request's id. Everything else is
+answered as X250 has it: a result beside the error, a member the
+executor does not know, a list of messages, a byte order mark, an error
+that is not such an object.
+
+Where the executor writes its own error in place of the upstream's
+answer, the body is the executor's, so it is sent as
+`application/json; charset=utf-8` with its own length and
+`cache-control: no-store`, as the executor's other refusals are, and
+not under the upstream's content type (`text/html` for a page) or its
+word on caching. The status stays the upstream's, so that a client that
+acts on the status is not misled. The upstream's `content-length` and
+`content-encoding` were never handed on: of the upstream's headers only
+the content type, the session, the protocol version and the word on
+caching come back.
+
+The other way for the first: hand on every error under a null id as the
+text came. Not taken: a body with a `result` beside the error, or with
+`Result`, is a list to some reader. The other way for the second: keep
+the upstream's word on caching. Not taken: it was said of a body the
+agent is not given. `test/list.test.mjs` runs both, and fourteen bodies
+that are not such an error answer. This is for an upstream over HTTP. In
+front of a local program the answer is the line the program gave under
+the request's own id, and its own error goes on as it is (X250,
+`answerLocal`).
 
 ## 11. F-157: rules on the content of a change
 
@@ -553,13 +1333,12 @@ into the record.
   apply (X77).
 - That a member is named as the program reads it, beyond the way to the
   pointers a rule reads: on that way a name in other capitals is refused
-  as unreadable (X249, from 0.4.2; before, a lone `SCAN` passed an
-  `absent` or `orAbsent` test on `/scan`, X77); elsewhere the rule does
-  not see it.
+  as unreadable (X249; before, a lone `SCAN` passed an `absent` or
+  `orAbsent` test on `/scan`, X77); elsewhere the rule does not see it.
 - That content nested in content is read: `as: "json"` reads one layer.
   JSON text where the rule's pointer walks on is refused as unreadable
-  (X249, from 0.4.2); JSON text in a member the rule does not walk
-  through is a string to the rule (X77).
+  (X249); JSON text in a member the rule does not walk through is a
+  string to the rule (X77).
 - Anything about a call to a tool the rule does not name, or a tool whose
   arguments are not plain data.
 - That the rules were right, or were applied. The record holds the
@@ -577,13 +1356,80 @@ name the path is given, and which other tools reach the same file.
 ## 12. Stage 2 and later
 
 Built so far of stage 2: the rules on the content of a change (section
-11), and the HTTP transport with several agents on one executor (section
-10). Still to build:
+11); the HTTP transport with several agents on one executor (section
+10); and, in 0.5.0, sealing a book by command and on a timer,
+acknowledging a call sent under a permission no longer in force, and the
+status (below; X120 to X146); and a book sealed by a central sealer,
+which holds the recorder's keys away from the executor (below; X147 to
+X159). Two reviews of these changed parts of them: X160 to X166, and
+X167 to X171; and a re-check of the fixes of the later one, X288 and
+X289.
 
-- An `acknowledge` command for a call sent under a permission no longer in
-  force, as the gateway has.
-- Sealing the book on a timer or by command, with the recorder's three
-  keys; seals held elsewhere and witnesses (library 0.6.0).
+**Sealing.** The settings name a recorder (`recorder`: its key file, a
+name, and `sealEvery`). A seal is the library's (format description,
+section 21.1), signed with the recorder's three keys, and goes into the
+book through the stub writer's `add`, in the agent's turn, so that it
+covers the book as it is and is added only if the whole book still passes
+its check with it. By command: `seal` asks the running HTTP executor
+(`POST /provared/seal`, the administrator's secret), or opens the files
+with `--offline`. On a timer, on both transports: at a start, and then
+every `sealEvery` milliseconds, a book that holds an entry after its last
+seal is sealed (at a start, only where that seal is at least `sealEvery`
+old, or there is none), each agent's book in a round of its own. Every
+use of the recorder's key file goes through `sealing.mjs`.
+
+**A central sealer.** In place of the key file, the settings may name a
+central sealer (`recorder.sealer`): the program in `sealer/`, which
+holds the recorder's three keys (format description, section 21.7). The
+executor then holds the recorder's token and no key of the recorder's.
+From `save()` in `openAgent`, the one place where a line reaches a book
+file, the leaf fingerprint of each new line is sent to the sealer, in
+order, each at its place (the sealer's `extend`; the book's first line
+itself with the first of them). The questions, their HMAC proofs and the
+check of each answer are the sealer's own client, copied
+(`sealer-client.mjs`, X151); the leaf fingerprint is the library's. A
+seal is asked of the sealer, only once it has answered for every line,
+and its entry is added through the stub writer's `add`. At a start the
+sealer must answer, and what it holds is compared with the book file
+(the sealer's `held` and `latest`). While it does not answer, the lines
+wait in the book file, the status says how many and since when, and past
+a limit the agent's calls are refused with a denial. Everything of this
+is in `sealing.mjs`; `executor.mjs` calls it from `save()`, from `seal`,
+at the start of an agent, and before a call is sent.
+
+**Acknowledging.** A call the copy shows as sent, with no receipt in the
+book, under another permission than the one in force, waits for the
+administrator. `acknowledge` writes its receipt from the copy's line,
+through a stub writer opened for the permission it was sent under, or
+sets it aside (a `set-aside` line in the copy; no receipt). The receipt
+names `executor.acknowledged` and `executor.written-late` (X140), and is
+countersigned with the executor's keys, or with those of a key file it
+held before where the permission names them (X141).
+
+**Status.** `GET /provared/status` of a running HTTP executor, or the
+files read without writing: the last seal, whether the book as it stands
+passes its check, and the calls waiting to be acknowledged.
+
+**One program at a time.** A book and its copy are locked for the program
+that opens them to write, by a lock the operating system releases when
+the program ends (`lock.mjs`, X139). A command with `--offline` is not a
+start, and writes no receipt by itself (X143). The state file of an HTTP
+executor that takes connections is locked in the same way, for the
+executor that opens it and for the command `owner` (X285).
+
+**Who is asked.** Before a command sends the administrator's secret to a
+running executor, the executor signs the command's challenge and the
+address it was asked at with its own keys (`identity.mjs`, X138). The
+command checks that with the executor's public keys alone (X166).
+
+Still to build:
+
+- Seals held elsewhere and witnesses (library 0.6.0). (An outside
+  time-stamp beside a seal is built: `recorder.stamp`, X298 to X301.)
+- With a central sealer (X158): bringing a sealer up to date after its
+  record was lost or put back; a second book under one permission; a
+  sealer on another computer, which the sealer's program does not yet
+  allow.
 - The copy shipped line by line to a place the executor's operator cannot
   change (a sealer, a witness, an append-only store).
 - Content read in other forms than JSON (YAML, TOML, `key = value`
@@ -594,12 +1440,16 @@ Built so far of stage 2: the rules on the content of a change (section
 ## 13. The choices, numbered for review
 
 Each is what, why, and the other way. None changes a record or a rule of
-the format: the executor writes ordinary stubs, countersignatures and
-denials.
+the format: the executor writes ordinary stubs, countersignatures,
+denials and, from 0.5.0, seals.
 
 **X1. A package of its own, `mcp-executor/`, named `provared-mcp-executor`,
-depending on `provared` 0.7.0 (`^0.7.0`; it was `>0.6.0 <0.8.0` until
-0.7.0 was cut, and `^0.6.0` until the reserved names of X12 came).** Two files are copies of the gateway's
+depending on `provared` 0.7.0 (exactly, from 0.5.0: X281; it was `^0.7.0`
+before that, `>0.6.0 <0.8.0` until 0.7.0 was cut, and `^0.6.0` until the
+reserved names of X12 came).** It
+has no other runtime dependency: the owner's check over OAuth (section
+14.1) uses the library's own check of a passkey's signature (X270). Two
+files are copies of the gateway's
 (`files.mjs`; `test/local-library.mjs`), held identical by a test. Why: the
 package works by name once installed; copying keeps the two executors from
 depending on each other. The other way: an export from the gateway
@@ -657,9 +1507,8 @@ from the arguments, an object that names one member twice once folded
 (`total` and `TOTAL`; the long s and `s`; the Kelvin sign and `k`) gives
 no amount and the call is refused, as the gateway refuses such bodies.
 Why: a server written in a language whose JSON reader folds names could
-act on the other value. The other way: trust the exact names. (From
-0.4.2 such arguments are refused in every call, before any rule is read:
-X241.)
+act on the other value. The other way: trust the exact names. (Such
+arguments are now refused in every call, before any rule is read: X241.)
 
 **X9. The executor refuses to start unless the permission fits it.** The
 slip's `agent.keys` must be the keys the executor holds for the agent; the
@@ -1764,285 +2613,2118 @@ sending staying open for ever and holding a slot. `timeout` again rather
 than a knob of its own (as X113). The other way: Node's `requestTimeout`,
 which does not tell a body from a stream.
 
-**X241. A message is refused where a name in it differs only in capitals
-from one the executor reads (0.4.2).** The number is the one this choice
-has in the later design, so that one number names one choice. Three
-rules, in `readMessage` (`jsonrpc.mjs`), the same on stdio and over HTTP:
+**X120. The recorder is named in the settings as the gateway names it:
+`recorder.keys`, a file of three keys (Ed25519, ML-DSA-87,
+SLH-DSA-SHA2-256s), and `recorder.name`.** The name is a label on each
+seal and is the executor's `name` unless given. There is no `signers`
+module here, as there is none for the executor's other keys: keys held in
+a key service are a later step for all of them (section 12). Why: one
+shape for the same thing in both programs. The other way: a fixed default
+name, as the gateway's "Provared gateway", which would give every
+executor's seals the same label.
 
-- At its top level a message has the members `jsonrpc`, `id`, `method`,
-  `params`, `result` and `error`, written exactly so, and no other. A
-  message with any other member is refused. This holds for the agent's
-  messages and for the server's.
-- The agent's `params` hold, in one object at any depth (so in
-  `arguments` and in `_meta` too), no two names that are one once folded,
-  as X8 folds them: capitals, the long s and `s`, the Kelvin sign and `k`.
-- In the `params` of a `tools/call` the names `name`, `arguments` and
-  `_meta`, and in those of a `notifications/cancelled` the name
-  `requestId`, are written exactly: a name that is one of them once
-  folded, and is not written so, is refused (`Arguments` with no
-  `arguments`). In the `_meta` of a `tools/call` the same holds for
-  `red.prova/call-id` and `traceparent` (`handleCall` in `executor.mjs`).
+**X121. `keys` makes the recorder's key file with the others, and prints
+the fingerprint of its key set on the standard error, not in the JSON.**
+The gateway has `keys --recorder`; here one run of `keys` makes every key
+file the settings name. What `keys` prints on its standard output is what
+goes into a permission, and the recorder's keys go into none; over HTTP
+the members of that JSON are the agents' names, so a member `recorder`
+could be read as an agent. The fingerprint is what a reader names as the
+recorder they expect; `check` and `status` give it too. The recorder's
+file may not be the executor's or an agent's. The other way: a
+`--recorder` flag, and a second run.
 
-The agent is answered with the error -32600, as for a member name given
-twice, which the executor has refused from the start, and nothing is sent
-to the server. A message of the server's that the first rule refuses is
-treated as any line the executor cannot read: a call's receipt says the
-answer could not be read and names no result, and the line goes to the
-agent as it was. In a `tools/list` answer that the executor filters, a
-tool with a second name in other capitals is not shown, and a member that
-is `tools` once folded, and is not `tools`, is left out.
+**X122. Where the settings name a recorder, every check the executor
+makes of a book names that recorder as the one expected (`sealKeys`), as
+the gateway does.** A seal signed with other keys is then a problem
+(`sealer-not-expected`), and the executor does not start on such a book.
+Where the settings name none, a seal in the book is checked and its keys
+are compared with nothing, as the format description allows. `compare`
+does the same where the recorder's key file is there to be read. The
+other way: never name the recorder, which would let anyone who can write
+the book file add a seal of their own that the executor then builds on.
 
-Why: a review ran a tool that no rule names through a made-up server
-whose JSON reader takes member names without regard to capitals, the
-later one winning, as the standard JSON reader of the Go language does
-for the fields it knows. `{"method":"ping","Method":"tools/call", ...}`
-was a ping to the executor, passed on with no check and no receipt, and a
-tool call to that server. `{"name":"echo","Name":"order", ...}` was
-checked and receipted as `echo`, and run as `order`. Every version up to
-0.4.1 has this weakness where it stands in front of such a server. A
-server that reads names exactly, as the JSON readers of Node.js and
-Python do, is not affected. Servers built on the official Go SDK before
-1.3.1 ignore capitals (GHSA-wvj2-96wp-fq3f); other servers have not been
-checked.
+**X123. A seal is added in the agent's turn, through the stub writer's
+`add`, and by no check of the executor's own.** The library's `add` takes
+an entry only if the whole book still passes its check with it; a second
+check here could not be shown to matter by any test. Before a seal is
+asked for, the agent must not be stopped (no seal while a call waits to
+be acknowledged, as the gateway) and the book file must be as the
+executor left it, which is the check made before a call is sent (section
+8). A seal waits behind a call in progress and holds up that agent's
+next: about two seconds, most of it the SLH-DSA signature, which is made
+outside the program's own thread so that other agents are served
+meanwhile (X145), one at a time (X161).
 
-No denial is written for such a message: it has two readings, and a
-denial would name a tool and an amount that may not be the ones meant.
-X8's refusal of such arguments, and the content rules' own, stay in the
-code for a caller of `amountOf` and `testCall`; through the executor they
-are no longer reached, since the message is refused before any rule is
-read.
+**X124. Over stdio there is no administrator's address: `seal` and
+`acknowledge` take `--offline` only, and `status` reads the files.** The
+stdio executor is started by the agent's client and speaks on its
+standard streams alone. An address to ask it at would be a listener and a
+secret that stage 1 does not have, on a computer the agent's client
+controls. So the gateway's `--offline` is the only way by command, the
+timer (X125) is the way while it runs, and the executor does not start
+with a call waiting (X127). A command with `--offline` is refused while
+an executor runs on the files (X139). `status` writes nothing and may be
+run at any time. The other
+way: a local socket or named pipe for the administrator.
 
-What this does not cover. The folding is that of capitals and a little
-wider: besides the two letters above it makes one of the sharp s and
-`ss`, of the dotless i, the dotted capital I and `i`, and of the
-ligatures and their letters, so `Masse` and `Maße` in one object are
-refused too; it errs on the side of refusing, and the refusal says
-"differ only in capitals, or in letters that some readers take as the
-same". A reader that takes two names for one in another way (by leaving
-out `_` or `-`, or by a Unicode normal form) is not covered. Nothing is
-checked in the `result` or `error` of the agent's own answers to a
-server's requests, where the executor reads nothing. A lone name in the
-arguments in other capitals (`Total` where a rule reads `/total`) is not
-refused here: the amount is then not found and the call is refused (X8),
-and a rule on content refuses a call where such a name stands on the way
-to a pointer the rule reads (X249). The cost:
-arguments that rightly hold two names that differ only in capitals in one
-object (`path` and `PATH`) can no longer be sent.
+**X125. The timer: `recorder.sealEvery`, in milliseconds as the other
+times in the settings, from 1,000 to 604,800,000 (seven days); off unless
+given.** Two rules. At a start, a book that holds an entry after its last
+seal is sealed where that seal is at least `sealEvery` old, or there is
+none. Then, every `sealEvery` milliseconds after the round before has
+ended, a book that holds an entry after its last seal is sealed. Why the
+first rule: over stdio the executor lives only as long as the client's
+session, and a session shorter than `sealEvery` would never be sealed by
+a clock that starts again with each session. Why never a seal over a
+seal: a seal is about 52 KB, and an idle executor would otherwise grow
+its books for nothing. The gateway has no timer and leaves it to the
+system's scheduler; a stdio executor cannot be sealed from outside while
+it runs (X124), so the timer is in the program. Each agent's book has its
+round to itself, so that one agent's long call holds back its own seal
+and no other's; over HTTP the timer starts once the executor is
+listening; a seal that cannot be written is logged once for as long as
+the reason stays the same; and a `sealEvery` under a minute is warned
+about. The timer does not keep the program running. When the executor
+ends no further seal is asked for; one already waiting its turn is
+written. The other
+way: a fixed time of day.
 
-The other ways. Refuse only at the top level and one level deep in a
-tool call's `params`, the review's smallest fix: not taken, since a
-server that folds names folds them at every depth of the arguments it
-reads into its own types. Or fold names in the executor and read as such
-a server would: not taken, since the executor would then differ from the
-servers that read names exactly. `test/names.test.mjs` sends each such
-message on stdio and over HTTP, in front of a made-up server that reads
-names without regard to capitals, and reads that server's own record of
-what it ran.
+**X126. The executor's own addresses over HTTP are the gateway's, with
+four rules added.** `GET /provared/status`, `POST /provared/seal` and
+`POST /provared/acknowledge`, under the administrator's secret, kept as
+its SHA-256 in `admin.secretHash` and compared in constant time; without
+`admin` they answer 404; answers are JSON in the gateway's form
+(`{"taken": false, "code", "message"}` for a refusal; 401, 400, 409 as
+there). Added, because this executor listens for agents on the same
+port: a request that names an `Origin` is refused whatever
+`allowedOrigins` says (the administrator is never a web page); a body is
+read up to 64 KiB and no further, whatever `bodyLimit` is; `path` may
+not be `/provared` or under it; an executor that is stopping answers 503;
+a fourth address, `POST /provared/hello`, lets a command see that it has
+reached the executor before it sends the secret (X138); and
+`admin.secretHash` may not be an agent's, so that no agent is the
+administrator. The commands read the secret from
+`PROVARED_MCP_EXECUTOR_ADMIN_SECRET`, named after the program as the
+gateway's variable is. The other way: a second port for the
+administrator.
 
-**X248. One message, one line, for a reader of UTF-8 (0.4.2).** The
-number is the one this choice has in the later design, as for X241. A
-message the executor writes to the tool server's standard input is first
-made one line (`oneLine` in `jsonrpc.mjs`, used by `toServer` in
-`executor.mjs`), and is still the same JSON: a line feed or a carriage
-return between its values, where alone JSON allows them outside a text,
-becomes a space; and U+0085, U+2028 and U+2029, which JSON allows only
-inside a text, are written as their JSON escapes. The agent's own text is
-changed in nothing else. This makes the message one line for a reader
-that takes the bytes as UTF-8 and ends a line at any of those. A reader
-that takes the bytes as another encoding may still cut a line inside a
-character beyond ASCII (one that reads Latin-1 and ends a line at the
-byte 0x85 does); such a cut falls inside a text, where quotation marks
-are escaped, so it can spoil a message and cannot hide a call. The other
-way, to write every character beyond ASCII as an escape, was not taken
-for 0.4.2: it would change the bytes of every message with such a
-character, for a reader that no server is known to be.
+**X127. A call sent under a permission no longer in force waits for the
+administrator; the automatic late receipt stays for a call sent under the
+permission in force (F-158).** Until 0.5.0 the executor did not start and
+asked for the old permission to be put back for one start. Now: over
+HTTP it starts and that agent's calls are refused (1001) until none
+waits, as the gateway stops one agent; over stdio it does not start
+(X124) and names `acknowledge --offline`. Why not write the receipt
+automatically under the old permission: a new permission in place means
+a person decided something between the two starts, and a receipt under
+the permission they replaced is theirs to allow.
 
-Why: the executor ends a line at a line feed alone, as the specification
-frames stdio, and some readers end one at more. `node:readline` ends a
-line at a bare carriage return, U+2028 and U+2029; a text reader with
-universal newlines, which Python's `io.TextIOWrapper` gives unless told
-otherwise, as the official Python SDK's stdio server uses, and how Python
-opens its standard input on Windows, ends one at a bare carriage return.
-A message of the agent's with a whole
-`tools/call` between two carriage returns, inside a list in the `params`
-of a `ping`, was one `ping` to the executor, passed on with no check, and
-three lines to such a server, the second a call that the executor never
-saw: it ran with no receipt and no denial, and its answer came back to
-the agent (run, in front of a made-up server reading each way). A text
-argument with U+2028 in it reached a server that reads with
-`node:readline` as two lines: no call was hidden, since the quotation
-marks of a text within a text are escaped, but the call was not answered
-and was recorded as "outcome not known". Every version from 0.1.0 to
-0.4.1 wrote the agent's text to the server as it came. A server that ends
-a line at a line feed alone is not affected. Servers built on the
-official Python SDK read standard input through `io.TextIOWrapper`, so
-they end a line at a bare carriage return; other servers have not been
-checked. U+0085 is escaped as well because some line readers end a line
-there.
+**X128. The acknowledged receipt.** As the gateway's: a stub writer for
+the permission the call was sent under is opened on the book as it stands
+and writes the stub, dated when the call was sent; the agent's own writer
+takes the line only if the book still passes its check with it. As this
+executor's late receipt: `with` is the executor, it is countersigned with
+the executor's keys (dated at the acknowledgement), and it names the
+outcome the copy holds, or `provared.error` with a fixed text. Which
+labels and texts it names was changed after the review of 0.5.0, before
+any version wrote one: X140 gives them.
 
-Over HTTP the executor sends the upstream a body, not lines, and nothing
-changes. The demonstration's made-up server (`demo/server.mjs`) still
-reads with `node:readline`; behind the executor it is now sent one line
-for each message.
+**X129. Which lines can have a receipt.** The gateway's rules, read for
+the copy: the line holds only the members and documents the executor
+writes before a call is sent, none twice, with the tool's and the call's
+fingerprints matching; it names a permission the book holds; its time is
+not after this start; its amount fits its rule's unit, or, where the rule
+has gone, is of the right form, with a warning. Three differences. (1) A
+line whose tag does not check never reaches the list: the executor does
+not start on a copy with such a line (section 8), where the gateway
+starts and names the line `line-<16 characters>` to be set aside. (2) The
+permission must name the agent's keys and, in `with`, the executor's keys
+as the executor holds them now, checked before anything is signed: under
+other executor keys the countersignature would not check, and the
+receipt would read as one the executor never saw. Since X141 the
+executor's keys may also be those of a key file it held before, named in
+the settings, which then countersigns. The other way: write it one-sided,
+as a call that was sent always gets its receipt (section 5). (3) The library's own checks of a request's fields are left to the
+moment the receipt is written: the checks above are at least as strict,
+so no test could show a second check mattering; a receipt the library
+refuses (one dated before the receipt ahead of it) is not written, and
+the call stays waiting.
 
-The other way: refuse a message with a carriage return between its
-values. Not taken: it is valid JSON, and the same message on one line is
-plainer than a refusal. `test/lines.test.mjs` sends such messages in
-front of the made-up server reading each of the two ways, and reads its
-own record of what it read.
+**X130. A call set aside is a line in the copy (`set-aside`), not a file
+apart, and `compare` does not agree from then on.** The gateway keeps a
+file beside its journal because a clean start empties the journal; the
+copy is never emptied, and its numbered, tagged lines already hold. A
+later `sending` line for the same call is not taken up again. `compare`
+lists the call under `setAside` and ends with code 1: the executor sent a
+call the book does not show, which is what `compare` is for, whoever
+decided it. The other way: count a call set aside as settled, which
+would make setting aside a way to quiet `compare`. X142 makes this known
+state possible to tell from a new disagreement.
 
-**X249. A rule on content does not take for absent what it cannot read
-exactly (0.4.2).** The number follows X248, so that it names the same
-choice in the later design. Where a rule reads a pointer, in a `when` or
-a `test`, two things on the way to it are now `content-unreadable`, and
-the call is refused with a denial (`unreadableAt` and `holds` in
-`rules.mjs`):
+**X131. Never two receipts for one call.** At a start, a call whose
+receipt the book holds is finished, whatever the copy says (as before).
+On acknowledgement, the book is looked at again before each receipt is
+written, so a receipt that reached the book while its line did not reach
+the copy is found, not written twice.
 
-- An object on the way holds a member that is the pointer's name once
-  folded (as X241 folds) and is not written as the rule reads it: `Path`
-  where the rule reads `/path`, `SCAN` in the content where it reads
-  `/scan`.
-- The way stops, with names still to follow, at a value that is neither
-  an object nor a list: a text, a number, true, false or null.
+**X132. One program writes a copy at a time.** Before each line, the
+copy file must be the size this program left it; else nothing more is
+written. Why: `acknowledge --offline` is the first thing that writes a
+copy from a second program, and a running executor that wrote on after
+it would give a line a number already used, after which no start takes
+the copy. Since X139 a lock keeps a second program off the files before
+it reads them; this check stays behind it, for a program that got past
+the lock.
 
-Why: an independent review of 0.4.2 ran the README's own example rules
-in front of the made-up server that ignores capitals. `write_file` with
-`Path` in place of `path` was let through and receipted as an allowed
-change, since the rule's `when` found no `path` and the rule did not
-apply, and the server wrote the file with the scan on; an `edit_file`
-under `Path`, and a lone `SCAN` inside the content, passed too. Every
-version with rules on content, from 0.2.0 to 0.4.1, does the same. X241
-could not catch it: the message has one reading of its tool and one
-spelling of each name, and only a rule knows which names matter. The
-second came from the same review: a rule that tests `/debug` in `options`
-refused `{"options":{"debug":true}}` and let through the same object
-given as a text that holds JSON, which a server may read as the object
-(as the reviewer recalls of one SDK; not run).
+**X133. What the status holds is the gateway's, by name**: `slip`,
+`entries`, `bytes`, `lastSeal`, `sound`, `withinSlips`, `checkedAt`,
+`checkedNow`, `stopped`, `receiptsMissing`, `waiting`, `fileHoldsBook`,
+with the seal's time added to `lastSeal`. Read from the files it is
+marked `"from": "files"`, has `slipInBook` and `receiptsAtNextStart`, and
+leaves out what only a running executor knows. In a program the method is
+`report()` on both transports, since the stdio executor already had a
+`status()` that counts its requests.
 
-A denial is written here, unlike X241: the tool and the rule are known,
-and only the content could not be read. What stays as it was: a member
-that is simply not there is absent, and `orAbsent` and `absent` hold for
-it; a list that is asked for a member by name has none; and a rule sees
-a name in other capitals only on the way to a pointer it reads. The cost:
-a call whose arguments rightly hold a name that differs only in capitals
-from one a rule reads, in the object the rule reads it from, is refused.
+**X134. Where a central sealer fits.** `sealing.mjs` gives the executor a
+sealer: an object with `fingerprint`, `name` and `seal(book, {previous,
+when})`, which hands back the seal record. Every use the executor makes
+of the recorder's key file goes through `sealing.mjs`: making it (`keys`),
+reading it to see that it is whole (`check`, `compare`) and reading it to
+seal; the file itself is read and written by `files.mjs`, as every key
+file is, and the sealer handed to the rest of the program holds a
+fingerprint, a name and `seal`, never a key. A later step puts in its
+place an object with the same `seal` that asks the central sealer in
+`sealer/`, which holds the keys elsewhere. The one place where every new
+line reaches a book file is `save()` in `openAgent` (`executor.mjs`), for
+the permission's own line, a call, a late or acknowledged receipt, a
+denial and a seal alike (the permission's line went to the file from
+`prepareAgent` until the review of 0.5.0): that is where each new line's
+leaf fingerprint would be sent as it is written. A book looks
+the same either way: the format description (section 21.7) says a seal
+made from fingerprints is the same record. This was written before it
+was built; X147 to X159 are what was built, in those two places.
 
-The other way: fold names in the rule's own reading, so that `/path`
-finds `Path`. Not taken: a server that reads names exactly would then
-act on what the rule did not test. `test/content-rules.test.mjs` runs
-both, the first in front of the made-up server that ignores capitals.
+**X135. No outside time-stamp is written.** A seal's time is the
+recorder's own word. The README says so under its limits, as the
+gateway's does. (Since X298, one is written where the settings give a
+time-stamp service, `recorder.stamp`; without it, this holds as it was.)
 
-**X250. Reading a message never ends the executor, and a refusal names
-its request where it can (0.4.2).** The check of X241 for two names that
-are one once folded walks the message's text as it came
-(`foldedInParams` in `jsonrpc.mjs`), as `repeatedName` does, and calls
-nothing that calls itself. `readMessage` also catches whatever its
-reading throws and refuses the line; no line is known to reach that. The
-refusals for a member name given twice, and for a whole number beyond
-2^53 - 1, are answered under the request's id where the text has one
-top-level `id` that is text or a whole number every reader holds exactly
-(`topLevelId`); before, under no id.
+**X136. The example settings name no recorder and no administrator.**
+`init`, `keys` and `check` on the examples do what they did in 0.4.1;
+`check` warns that the executor cannot seal, and over HTTP that its own
+addresses answer nothing, and says what to add. The other way: name both
+in the examples, which adds a key file and a secret to the first five
+minutes.
 
-A message nested more than 256 levels deep, objects and lists together
-and the message itself the first, is not read at all (`MAX_DEPTH` and
-`deeperThan` in `jsonrpc.mjs`, which walks the text and calls nothing
-that calls itself). The agent's is refused with -32600 under its id, and
-nothing is sent to the server. The server's is a line the executor
-cannot read, as X241 treats a member it does not know: where it answers
-a call, the receipt says the answer could not be read and names no
-result, and the line goes to the agent as it was; where it answers
-another request, it is handed on as it was; a notification or a request
-of the server's is handed on as it was.
+**X137. `--offline` did not look for a running executor**, as the
+gateway's does not, and the README said never to use it beside one. The
+review of 0.5.0 showed what that cost (a false receipt for a call in
+flight), and X139 replaces this choice: a command with `--offline` is
+refused while an executor runs on the files.
 
-One answer is not handed on: the server's answer to a `tools/list` that
-the executor is to filter (`hideUnlisted`) and cannot read, whether it
-is nested too deeply, names a member twice, holds no `tools` list in its
-result or, over HTTP, comes under another id or is no message. Handed on
-as it was, it would show the agent the tools the executor is to hide. The
-agent's request is answered with the error -32603 under its id, with the
-words of `LIST_NOT_READ`, and the log says `tools-list-not-read`
-(`executor.mjs` on stdio; `http.mjs` for a JSON body and for an event).
-The server's own error to `tools/list` goes on as it is (over HTTP, as
-X260 has it). Before, in
-every version, such a list was handed on unfiltered. What stays: a line
-of the server's that the executor cannot match to any request (an id
-given twice, no id or a null one, a list of messages, a byte order mark
-before the message), and an event with no id, under another id or
-holding a list of messages, are handed on as they were, and may hold
-anything the server chooses to write: a list of tools too, with the
-request not answered.
-`test/list.test.mjs` runs each on stdio and over HTTP.
+The choices from X138 on were made after an independent review of 0.5.0,
+before it was published. X138, X140, X141 and X142 are for the founder's
+review.
 
-Why: the same review found that the first build of 0.4.2, never
-released, wrote the `params` out afresh to look for such names, which
-calls itself once for each level of nesting: one line of 10 KB, 5,000
-levels deep, overflowed the stack where the lines are read and ended the
-executor on stdio (over HTTP it answered 500 and went on). The walk
-closed that one place, and others were left, on both sides: an agent's
-cancellation of a call in flight is written afresh for the server; a
-server's error is written out for the receipt, and its list of tools is
-written afresh once filtered. Each calls itself in the same way: one
-deep answer of the server's ended the executor (run), and so did the
-agent's deep cancellation of a call in flight (run in the review's
-re-check: 0.4.1 ends at `executor.mjs:1214`). A limit where the message
-is read closes them together, and whatever is written later. 256 is the
-builder's number: it is far below the depth at which any of these
-overflows (some thousands), and above what the library fingerprints: the
-fingerprint of a call's arguments, and of its result, takes 64 levels.
-Between the two, as before, a call whose arguments nest too deeply is
-answered with error 1001 and not sent, and a result that nests too
-deeply is receipted as a result that could not be fingerprinted. The
-receipt's text for an answer that could not be read names three reasons
-(not JSON, a name given twice, not a response) and not this one; the
-text is left as it is, since its fingerprint is what receipts name. And
-a client on stdio that is answered under no id cannot match the answer
-to its request, and waits out its own timeout.
+**X138. A command sends the administrator's secret only once the executor
+has shown that it is the executor (for the founder's review).** The
+commands ask over plain HTTP at the address the settings name, and
+whatever listens there would be handed the secret: a program on the same
+computer that takes the port while the executor is down, say. So a
+command first sends 32 fresh random bytes, in base64url, with no secret,
+to `POST /provared/hello`. The executor answers with two signatures, by
+the two keys of its own key file (Ed25519 and ML-DSA-87, the keys it
+countersigns with), each over the bytes of this text:
 
-The other way: catch the error at each place that writes a value out.
-Not taken: each new place would need its own, and the stack's depth
-where one is reached is not the same from one run to the next.
-`test/deep.test.mjs` sends 200,000 levels each way on stdio and over
-HTTP: the agent's requests, a call and a cancellation, and the server's
-result, error, list of tools and notification.
+```
+provared-mcp-executor hello v1\n<challenge>\n<address>\n<port>\n
+```
 
-**X260. Over HTTP, the upstream's own error answer to `tools/list` goes
-on as it is, and the executor's own error in its place is sent as JSON
-(0.4.2).** The number is out of order: X251 to X253 name other choices
-in the later design. X250 answers for a list the executor is to filter
-and cannot read, and let one answer through: the upstream's error under
-the request's id. Two things follow from the review's re-check.
+where `<challenge>` is the 43 characters it was sent, and `<address>` and
+`<port>` are where it received the request (an IPv4 address reached over
+IPv6 written as the IPv4 address; the port in decimal). The command checks
+both signatures against the public keys in `executor.keys`, which it
+reads itself, over its own challenge and the address and port it
+connected to, and sends the secret only then, on the same connection.
+What is fixed, and why:
+- *Both keys sign, and both must check*, as for every record of the
+  executor's: breaking one method is not enough.
+- *The address and port are signed.* Without them a listener in the
+  middle could fetch the executor's answer to the command's challenge and
+  hand it back; with them that answer names the executor's address, not
+  the listener's.
+- *The same connection.* The secret is written to the connection the
+  answer came on. Where that connection has closed, the command stops and
+  says to try again.
+- *The text cannot be a record's.* Every record is signed over two runs
+  of base64url joined by a full stop; this text holds spaces and line
+  feeds, and a challenge that is not 43 characters of base64url is
+  refused. So the address, which signs for anyone, cannot be used to have
+  the executor countersign something.
+- *No new primitive.* The signatures are made by the library's signers
+  for the key file and checked with the Web Crypto methods the library
+  itself uses. The library has no public function that checks a signature
+  over bytes that are not a record, so the check calls Web Crypto
+  directly (`identity.mjs`).
+- *No secret at `hello`, and none without `admin`.* It answers 404 where
+  the settings name no administrator, as the other addresses do.
+What it does not do: it does not encrypt. Whoever can read the connection
+reads the secret; the README says so. As first built, the command had to
+be able to read `executor.keys`, which holds the private keys too, and so
+to run as the executor's user; since X166 it needs the public keys alone.
+The other ways: never send the secret and answer the
+executor's challenge with an HMAC of it, which needs the executor to keep
+the secret and not its hash; or take the executor's public keys from the
+agents' permissions, which a command could read as another user, but
+which whoever can write those files could replace.
 
-An upstream may refuse a request it could not read, or a session it does
-not know, with a 4xx and a JSON-RPC error under a null id. As X250 was
-first built, the agent was given -32603 in place of the upstream's
-words. Now a JSON body that is an error answer and nothing more is
-handed on as it was, with its status and content type, under whatever
-id it has (`errorAnswer` in `jsonrpc.mjs`): one object whose members are
-`jsonrpc` (`"2.0"`), `id` (text, a whole number or null) and `error` (an
-object with a whole number `code` and a text `message`), each once and
-written exactly so, nested no deeper than 256 levels, with no member
-name given twice at any depth. Such a body has no `result`, under any
-spelling, for any reader, so it holds no list of tools as a client
-reads one. What its `message` and `data` say is the upstream's to
-choose, as in its error under the request's id. Everything else is
-answered as X250 has it: a result beside the error, a member the
-executor does not know, a list of messages, a byte order mark, an error
-that is not such an object.
+**X139. One program writes a book and its copy at a time, by a lock the
+operating system releases (replaces X137).** Before `stdio`, `http` or a
+command with `--offline` reads an agent's files, it takes a lock named
+after the book file; a second program is refused at once, having read
+and written nothing. Why: the review showed that a command with
+`--offline` beside a running executor took a call in flight for a call
+cut off by a stop, wrote it a receipt saying the outcome was not known,
+countersigned it and sealed over it, and that the comparison then agreed.
+The lock is a listener, so that it goes when the program goes, however
+it ends, and none is left behind by a stopped program: on Windows a named
+pipe, on Linux a socket in the abstract namespace, elsewhere a socket
+file in `/tmp`, told from one left behind by trying to connect to it. Its
+name is the SHA-256 of the book file's path as the file system resolves
+it. Over HTTP a command takes every agent's lock, since it opens every
+agent's files. Commands that only read (`status`, `check`, `compare`)
+take none. What it does not reach is in `lock.mjs` and the README: two
+paths to one file that the file system does not resolve; a shared folder
+seen from two computers, or from two containers that do not share a
+network; two programs racing for a socket file left behind (not on
+Windows or Linux); and a program that takes the name first, which keeps
+the executor from starting and gains nothing else. The checks of X123
+and X132 stay behind it. Node.js offers no file lock, and no way to open
+a file without sharing, so a listener it is. The other way: a lock file
+holding a process number, which a stopped program leaves behind and
+another program can be given the number of.
 
-Where the executor writes its own error in place of the upstream's
-answer, the body is the executor's, so it is sent as
-`application/json; charset=utf-8` with its own length and
-`cache-control: no-store`, as the executor's other refusals are, and
-not under the upstream's content type (`text/html` for a page) or its
-word on caching. The status stays the upstream's, so that a client that
-acts on the status is not misled. The upstream's `content-length` and
-`content-encoding` were never handed on: of the upstream's headers only
-the content type, the session, the protocol version and the word on
-caching come back.
+**X140. An acknowledged receipt has a label of its own, and three short
+texts (for the founder's review; replaces what X128 said of labels).**
+It names `executor.acknowledged` as well as `executor.written-late`. The
+first says who decided (a person, under a permission that had been
+replaced); the second says when the receipt was written (later than the
+call, from the copy). A reader can so count a person's interventions in
+a book by the label alone, and whoever looks for late receipts still
+finds both kinds. The texts, each named by its SHA-256 in base64url:
 
-The other way for the first: hand on every error under a null id as the
-text came. Not taken: a body with a `result` beside the error, or with
-`Result`, is a list to some reader. The other way for the second: keep
-the upstream's word on caching. Not taken: it was said of a body the
-agent is not given. `test/list.test.mjs` runs both, and fourteen bodies
-that are not such an error answer.
+| Document | Text | Fingerprint |
+|---|---|---|
+| `executor.acknowledged` | The administrator acknowledged this call. The permission it was made under was not the one in force when this receipt was written. | `poJcnPoQB6EyH2Pvp2ZPgD6_2XrDua1XAOpPHBaUezI` |
+| `executor.written-late` | This receipt was written later than its call, from the executor's own copy. Its date is the time the copy gives for the call. | `L_sk-qfojehaePxOm8pV-04nhqDY78T5E040ZwBKtho` |
+| `provared.error` (no outcome in the copy) | The executor recorded that it was sending this call, and has no record of its outcome. | `pOqSHPh3dRwENnfo2e8cGdYHpsYRvvGW2CUyBeGaGiU` |
+
+They claim only what the executor knows. The copy's line is written
+before the call goes to the server, so the executor knows that it was
+sending the call, not that the server received it. It cannot tell a stop
+from any other reason for the receipt not being in the book, so no text
+says "stopped". No text says that there is a countersignature, since a
+receipt can stand without one. The texts of a receipt written at a
+restart (`WRITTEN_LATE`, `OUTCOME_UNKNOWN`) say more than that, and are
+left as they are: receipts of 0.4.1 carry their fingerprints. A test
+holds all five texts and fingerprints, letter for letter. A text is not
+changed once a version that writes it is published.
+
+**X141. The settings may name the key files the executor held before
+(for the founder's review).** `executor.formerKeys`, a list of up to 16
+paths. A former key file is used for one thing: to countersign the
+receipt of a call the administrator acknowledges, where the permission
+the call was sent under names that file's keys for the executor. Why: new
+executor keys always mean a new permission, and keys are changed after
+trouble, which is when a call is left unfinished; without this, such a
+call could only be set aside, and then the book never shows it. The
+receipt checks as any other of that permission, and its line in the copy
+and the answer of `acknowledge` say that former keys were used. Where no
+former key file fits, setting aside stays the only way; the executor
+writes no one-sided receipt, by itself or on request. The other way: a
+receipt without a countersignature, asked for by call, which is true but
+reads as the mark of a call that went round the executor.
+
+**X142. `compare` tells calls set aside from a new disagreement (for the
+founder's review).** It still does not agree while a call set aside has
+no receipt (X130). Its answer now says `onlySetAside: true` where the
+calls set aside are the only disagreement, and the command then ends
+with code 3, where it ends with 1 for anything else and 0 where the two
+agree. Why: a check that fails for ever stops being read; with one code
+for both, a receipt left out later changed nothing a scheduler could see.
+The other way: let the operator name the calls they know of, and end
+with 0 for those; that hides a set-aside once named.
+
+**X143. A command with `--offline` is not a start.** It writes no receipt
+by itself for a call the copy shows as sent and unfinished; `status`
+counts such calls, and `seal --offline` does not seal that book while
+there is one. Why: to a second program a call in flight looks the same as
+a call cut off by a stop; the lock of X139 keeps the second program out,
+and this holds where the lock does not reach.
+
+**X144. `acknowledge` gives back what it did.** `{written, setAside,
+failed, remaining}`: a call that was to get a receipt or be set aside and
+did not is named in `failed` with why, and the calls after it are tried
+all the same, unless the book file or the copy can no longer be written.
+Why: a call set aside cannot be taken back, and the review showed the
+command saying only an error where it had set one aside. Over HTTP the
+answer is 200 with the same members.
+
+**X145. The third seal key signs outside the program's own thread.**
+`sealing.mjs` wraps the SLH-DSA key as a signer that uses Node.js's
+`crypto.sign` in its form with a callback, where the library's signer for
+a key in memory uses the form that does not give way and held up every
+agent for about a second and a half. The signature is the same.
+
+**X146. Smaller rules of the commands.** `seal`, `acknowledge`, `status`
+and `compare` refuse an option they do not know, as `demo` and `init` do:
+a mistyped `--set-aside` had been taken for none, and the call given a
+receipt. `status` ends with 1 where a book does not pass its check, a
+call waits or an agent has stopped. `compare --sealer` names the recorder
+by the fingerprint of its key set, as the checker does, for whoever
+compares without the recorder's key file, and the answer says which
+recorder was expected, or that none was. `secret` says that the secret it
+makes may be an agent's or the administrator's.
+
+The choices from X147 on are for a book sealed by a central sealer
+(section 12). X152, X153 and X156 are for the founder's review.
+
+**X147. The settings name a central sealer in place of the recorder's
+key file, never beside it.** `recorder.sealer`: `address`, `name`,
+`token`, `keySet` and, where wanted, `timeout` and `maxUnsent`;
+`recorder.sealEvery` as before. `recorder.keys` or `recorder.name` beside
+`recorder.sealer` is a problem with the settings. Why: the point of a
+central sealer is that whoever runs the executor holds no key that makes
+a seal; a key file kept as a second way, for when the sealer does not
+answer, would give that back, and a book would then hold seals of two
+key sets, of which a reader expects one. The seals give the sealer's own
+name, so a name here would say nothing. Without `recorder.sealer`
+nothing changes: the key file is read as in X120. The other way: both,
+with the key file used while the sealer is away.
+
+**X148. The settings name the key set the sealer signs with
+(`recorder.sealer.keySet`), and the executor does not ask for it.** It
+is the fingerprint `provared-sealer init` prints, the one a reader
+names. Every check the executor makes of a book expects it (X122), so
+`check`, `compare` and the reading of the files need no answer from the
+sealer; at the sealer's first answer its own word for its key set
+(`about`) is held against it, and another stops the start. Why: what a
+reader is told to expect is then written down by the person who set the
+executor up, and not taken from whoever answers at the address. The
+other way: take the key set from the sealer at each start.
+
+**X149. The recorder's token is read from a file or from the
+environment, and is never in the settings.** `recorder.sealer.token` is
+`{"file": <path>}` or `{"env": <name>}`, one of the two; a value
+written there is a problem, and is not repeated in the message. What is
+read must have the form of a token (32 bytes in base64url) and is never
+logged or printed. The same two ways as the tool server's credentials
+(`server.env`), without the third, a value in the settings.
+
+**X150. Each line is sent from `save()`, once it is in the book file, at
+its place.** The link to the sealer (`sealing.mjs`) is told the text the
+file now holds; it works out the leaf fingerprint of each new line with
+the library's `leafFingerprint` and sends them with the sealer's
+`extend`, naming the place of the first. The place moves on only by the
+sealer's own answer, which must be the place plus the number sent. The
+book's first line goes itself with the first question, as the sealer
+asks. One question is asked at a time, for every book of one executor,
+so that several agents do not fill the sealer's sixteen places. Nothing
+is kept but the count of lines the sealer has answered for: the lines
+that wait are the book file's own. The answer to a call is not held back
+until the sealer has its receipt: the tool has done its work by then,
+and holding the answer would protect nothing.
+
+**X151. The sealer's client is a copy, `sealer-client.mjs`, held to the
+sealer's by a test, declaration by declaration.** The executor depends
+on the library alone, as before. The copy holds the labels, the proofs,
+the members a question may hold and `connectSealer`; a test
+(`test/same-files.test.mjs`) takes each of the ten declarations from the
+copy and from `sealer/sealer.mjs` and holds them the same byte for
+byte, and holds that the copy has no other code. Why not the package:
+`provared-sealer` is not published, and it is the program that keeps the
+keys and signs, which the executor should not carry. Why not the whole
+file, as X1 does for `files.mjs`: the client is one part of a file that
+also holds the server and the key files. The other way: the sealer's
+client in a file of its own in `sealer/`, copied whole; that changes the
+sealer's package, which this step does not.
+
+**X152. At a start the sealer must answer, and what it holds is compared
+with the book file before anything is written (for the founder's
+review).** Compared: the key set (X148); that the sealer holds no more
+lines than the file; that its latest seal is the book's last seal; that
+no later book follows this one. Where they do not agree, the executor
+does not start. Where the sealer's latest seal covers exactly the lines
+of the file and is not in it, the sealer signed and the book never took
+the seal (X156): it is asked for (`latest`) and added, then. Not
+compared, because it cannot be: the lines after the sealer's latest
+seal, of which the sealer holds fingerprints and gives none back; a
+change among them shows when the next seal is added (X155). After the
+permission's line is written, the sealer must also take every line of
+the file before the agent takes a call, so that a sealer that was not
+told this agent stops the start. A command with `--offline` opens the
+files the same way. Why the sealer must answer: an executor that
+started without it could write a line where a seal the sealer had
+signed must stand, and nothing could then put the two right. The other
+way: start, and queue; it needs the executor to remember across a stop
+that a seal was asked for.
+
+**X153. While the sealer does not answer, lines wait, in order, and past
+a limit calls are refused (for the founder's review).** No question
+waits longer than `recorder.sealer.timeout` (5,000 ms unless given; 100
+to 60,000). After a question that failed, the lines are sent again
+every two seconds. A sealer that answers that the place is not the one
+it holds (`out-of-step`: it was started again, and stands at its latest
+seal) is asked what it holds, compared as at a start, and sent the
+lines from there; after three such rounds in a row it is given up on
+until the next try. `recorder.sealer.maxUnsent` (100 unless given; 0 to
+10,000) is how many lines of one book may be unsent: past it, a call
+waits for one try to send them, at most `timeout`, and none where a try
+failed within the last second; it is then refused as a rule of the
+executor's refuses, with a denial, a line in the copy and the code
+`sealer-behind`. The denial is a line, and so unsent too;
+`denialsPerHour` bounds them. Receipts written late at a start and
+acknowledged receipts are not held to the limit: their calls were sent
+already. A sealer's refusal to take lines (the recorder past its number
+of books, say) leaves them unsent in the same way, with the sealer's
+words in the status. Why a limit in lines: it bounds what whoever runs
+the executor could still change unseen. The other ways: a limit in
+time; no call at all while a line is unsent (`maxUnsent` 0 gives that).
+
+**X154. A seal is asked of the sealer only after it has said what it
+holds.** In the agent's turn: the sealer is asked (`held`), compared as
+at a start, and sent what it lacks; only where it then answers for every
+line, and its latest seal is the book's last, is `seal` asked, with
+`previous` and with `when`, the executor's clock, as with a key file
+(the sealer takes a time within 300 seconds of its own). The question
+may take 30 seconds. The entry is added whole through the stub writer's
+`add`; the seal's place and fingerprint, as the executor reports and
+keeps them, come from the book's own check, not from the sealer's
+answer. A refusal by the sealer leaves the book without a seal and the
+agent at work. Why ask first: a sealer started again stands at its
+latest seal, or at the first line; asked for a seal as it stood, it
+would sign over fewer lines than the book holds.
+
+**X155. A seal the book refuses stops the agent, and the executor does
+not start on that book again.** The sealer signed over other lines than
+the book holds: the book file was changed after the lines were sent, or
+other lines were sent. The sealer's latest seal is then one the book can
+never hold, and the sealer signs no other history. Nothing the executor
+could do would make the two agree, so it stops (`sealer-disagrees`) and
+keeps both as they are.
+
+**X156. Where a seal may have been signed and the answer did not come,
+no line is written until the sealer has said (for the founder's
+review).** A seal sits after exactly the entries it covers, so a line
+written before a seal that was signed would shut that seal out for
+good. Until the sealer has said, the agent takes no call, answering as
+it does when stopped, and writes no denial. The sealer is asked again
+every two seconds, and at the next seal or start; a seal it signed is
+added in the agent's turn, before any other line. At a start with a
+permission new to the book, the seal cannot be added, since the
+permission's line would come first: the executor says so, and is
+started once with the permission the book last held. The other way:
+write on, and lose the book's seals.
+
+**X157. What the status says, and `keys`.** Each agent has `sealer`:
+from a running executor `address`, `recorder`, `unsent`, `since`,
+`answeredAt` and `problem`; from the files, where the sealer is asked
+once (`held`), `reached`, `holds`, `unsent`, `latestSeal` and `problem`.
+`since` is in a running executor's memory only. Unsent lines do not
+change the code `status` ends with: they are ordinary while a sealer is
+away. `recorder` shows the sealer's key set, its address, the
+recorder's name and `maxUnsent`. Where the settings name a sealer,
+`keys` says the fingerprint of each agent's key set, which the sealer
+is told when the recorder is added, and makes no recorder's key file;
+it runs before `recorder.sealer` is complete.
+
+**X158. Not built.** Bringing a sealer up to date after its record was
+lost or put back (the sealer's `update`): the executor stops, and says
+that it is to be done with the sealer's own client. A second book under
+one permission (format description, section 21.6): the executor seals
+first books only, and a new book file under a permission whose first
+book the sealer holds is not started on. Going on, under a central
+sealer, with a book already sealed with a key file (X122 refuses it).
+Witnesses for the seals, and seals held elsewhere. A time-stamp that a
+sealer puts beside its seal is added with the entry; since X299 the
+reason a sealer gives for one it was not given is logged.
+
+**X159. A limit that is the sealer's protocol's.** The question for a
+seal names the seal before, and not the number of lines the seal should
+cover. A sealer that is started again between its answer about what it
+holds and the question for a seal signs over the lines it then holds.
+For a book that has a seal, that is none new, and it refuses. For a
+book with no seal yet, it signs over the first line alone; the book
+refuses that seal, and X155 applies. The executor cannot close this from
+its side; a question for a seal that named the number of lines would.
+
+The choices from X160 on come from a second review of the fixes to
+`seal`, `acknowledge` and `status`.
+
+**X160. `POST /provared/hello` reads little, for a short time, from few
+callers at once.** It needs no secret, so anyone who can reach the
+executor may ask. A challenge is some 60 bytes of JSON, so a body of
+more than 256 bytes is refused with 400 and nothing is signed; a body
+that has not arrived whole within 5 seconds is refused with 400, where
+the agents' own `timeout` may be minutes; and where 8 such questions are
+already in hand a ninth is answered 503 (`busy`) at once, with nothing
+read and nothing signed. These are fixed numbers, not settings: a
+command sends one question and waits for one answer. A caller can still
+ask again and again, one after another; each answer costs two
+signatures. X168 changes the 5 seconds to 1, and what the 8 count.
+
+**X161. One SLH-DSA signature at a time.** Node.js's thread pool has
+four threads unless `UV_THREADPOOL_SIZE` says otherwise, and a call needs
+it too: its receipt is signed there and the upstream's name is looked up
+there. Each agent's round of the timer starts at the same moment, so four
+books with something new filled the pool for the two seconds or so of
+their third signatures, and every agent's call waited. `sealing.mjs` now
+makes these signatures one after another, for every recorder in the
+program, so that sealing takes one thread of the pool at most. The
+fourth of four seals asked for at once is then done some four signatures
+later, where it had been one, and that agent's next call, which waits
+for its own seal, waits that much longer. Other agents' calls do not
+wait. The rounds were not set apart in time instead: the
+queue holds however the seals are asked for, by the timer or by
+`seal --agent`.
+
+**X162. The lock's name, on Windows, writes the folder out in full.**
+`lockName` resolves the book's folder with `realpathSync.native`, which
+writes a short name (`C:\Users\LONGNA~1`) out in full, and falls back to
+`realpathSync` where that fails. A guard started with a short name and a
+command run with the long one had taken two locks. The book file's own
+name is still taken as written, since the file may not be there yet.
+
+**X163. A socket file left behind is cleared by one program at a time
+(not Windows or Linux).** Every try for the lock is made under the
+folder `<socket file>.clearing`: the program that makes it tries to
+listen, and where the place is taken looks whether the file answers,
+clears it away where it does not, listens, and takes the folder away; a
+program that cannot make the folder is refused (or asks again, X164).
+Two programs that started together after a third was stopped had both
+cleared the file and both listened. The first try to listen was at first
+made without the folder, which left a gap (X171): while one program held
+the folder and had been told that nobody answered, because the holder
+had just let go and its file was gone, a third could listen at the
+empty place, and the first then cleared that new file away and listened
+too. Now no program listens while another holds the folder. A socket file
+that gives no answer within 2 seconds counts as live: the start had
+waited for ever. A folder left by a program stopped in that moment is
+not taken away by itself, since that would let two programs in again;
+the refusal names it, to be taken away by hand. Such a folder now also
+refuses a lock whose place is empty, and every first try makes it, so
+any program ended by force in its first try (about 2 milliseconds of a
+start or a command, where nobody holds the lock) can leave it, not only
+one that found a file to clear; a later start is then refused until it
+is taken away. A program that finds the folder looks again for 100
+milliseconds, a command too, and says the folder was left only where it
+is more than 5 seconds old (X361). Not run on a Mac: the
+tests of this branch run on Linux, where a socket file works the same
+way when it is asked for.
+
+**X164. A start asks again for a lock that is held.** For 10 seconds
+over HTTP; over stdio, for `shutdownWait` and 5 seconds more where that
+is longer, since the guard before keeps the lock while its server is
+given that time to end. A command (`seal`, `acknowledge` with
+`--offline`) asks once, as before: it is run by hand, and a person can run
+it again. A client that started the executor again at once had been
+refused where 0.4.1 started.
+
+**X165. A `done` line names the kind of outcome only beside its
+documents.** The third fixed text of an acknowledged receipt, "The
+executor recorded that it was sending this call, and has no record of
+its outcome.", was approved word for word and does not change. It is
+written where the copy holds no document of the outcome. A `done` line
+with no stub and no documents (the documents could not be made, and the
+book could not be written) had still named the kind, `"outcome":
+"answer"` or another, so the copy held something of the outcome after
+all. Such a line now names no kind, so the text is true wherever it is
+written. Nothing reads the kind back: it was for whoever reads the copy.
+A line with documents names its kind as before.
+
+**X166. A command checks a running executor with its public keys alone
+(for the founder's review).** Under X138 the command read `executor.keys`
+with the reader that loads the private keys. So the administrator, who
+until then needed only a secret, had to be able to read the keys that
+countersign every receipt, and a file of the public keys alone was
+refused ("Unsupported key usage for Ed25519 key"). The command now takes
+the public parts of the two keys and loads no private key
+(`readPublicKeys` in `identity.mjs`). What is fixed, and why:
+- *Where the keys are read.* From `executor.keys`, as before; or from the
+  file that `--public-keys <file>` names to `status`, `seal` and
+  `acknowledge`, in place of it. The option is refused where the command
+  asks no running executor (`--offline`, and the stdio executor's
+  settings), so that it is not taken for something it does not do.
+- *The file of public keys.* The form of a key file with nothing private
+  in it: `{"about": <a sentence>, "keys": [<Ed25519>, <ML-DSA-87>]}`,
+  each key the public JSON Web Key that `keys` prints in the `with`
+  entry. `keys --public-keys <file>` writes it, for the HTTP executor's
+  settings, to a new file: it overwrites nothing and refuses a key file
+  of the settings. The plainest form there is: no new format, no new
+  label, no signed byte.
+- *The check is the same.* Both signatures, over the same text, the
+  address and port the command connected to, and the same connection
+  (X138). The file must hold exactly the two keys, Ed25519 and then
+  ML-DSA-87, each one that Web Crypto takes as a key to check a signature
+  with. Anything else is said to hold no usable keys, and nothing is
+  sent, not even a challenge.
+- *What the file is trusted for.* Whoever can change the file the command
+  reads can make it trust another listener, as with `executor.keys` and
+  with the settings themselves. The file is no secret; it is kept where
+  only the administrator can change it.
+- *The executor still needs its private keys.* A start, `check`, `keys`
+  or a command with `--offline` that is given a file of public keys says
+  that it holds public keys only (`loadSigningKeys` in `executor.mjs`;
+  `files.mjs` is the gateway's file byte for byte, and is left as it is).
+
+Through a forwarder (an SSH tunnel, a published container port, a
+reverse proxy) the address the executor signs is not the one the command
+connected to, and the command refuses. That is X138 as designed, and the
+README now says it. The other way to the public keys, not built: from
+the agents' permissions, checked against `issuerKeys` as a start checks
+them. `issuerKeys` is in the settings the command already trusts, so it
+would be as strong; but the command would read and check every agent's
+permission where a file of two keys is plainer.
+
+The choices from X167 on come from a third review, of the book sealed by
+a central sealer and of the fixes above.
+
+**X167. A seal that comes a second time, by another way, is not added
+again and stops nothing.** After an answer that was lost (X156) the
+executor asks the sealer every two seconds, and a seal it finds is
+handed to the agent's turn. A seal asked for in that moment (the timer's
+next round, or `seal`) is handed the same seal and adds it. The one
+handed over first then came to a book that held it already; the book
+refused it, and the agent was stopped as under X155, with a sound book
+and a message that was not true. Now `addCentralSeal` adds nothing where
+all three of these hold of one of the book's lines (`heldSeal`):
+- the line is the entry byte for byte, the entry written out with the
+  library's `entryLine`, as `add` writes it, wherever it stands in the
+  book;
+- the book's own check takes that line as a seal with nothing wrong;
+- its fingerprint by that check is the one the sealer named for its
+  latest seal.
+
+This held at first only of the book's last line. A re-check found that
+a line written between the two arrivals (the denial of a call for a tool
+no rule names, which is written whatever the doubt) left the seal no
+longer last, so the agent was stopped as before; hence any line. The
+book's check must take the line as a sound seal at the place where it
+stands, so nothing is passed over that the book does not hold as that
+seal. Every seal of the central sealer's reaches the book through
+`addCentralSeal`, which tells the link of it (`sealed`) as it is added,
+or stops the agent where the file could not be written; so a seal passed
+over leaves nothing between the book and the sealer untold. That the
+check finds nothing wrong with the line is a guard that no running
+executor is known to reach, since the writer's book always passes its
+check; a test of `heldSeal` by itself holds it.
+
+Anything else goes to `add` as before, and a refusal there stops the
+agent (X155): an entry that differs in one byte, a line of the book
+where it is no seal, or a seal of the book under another fingerprint.
+A seal newly signed, the answer to `seal`, comes with no fingerprint
+named and always goes to `add`. Why the line and the fingerprint both:
+the fingerprint is the sealer's word until the book's check has made it,
+and the line alone would let any last line pass as "the seal". The link
+also hands one seal to the agent's turn at a time (`sealing.mjs`): while
+one waits there, a later question that finds the same seal hands nothing
+over, so that a turn that is long in coming does not gather the same
+seal many times, each with a check of the whole book. The other way:
+tell the two cases apart by the book's refusal; `add` gives one refusal
+for every entry it does not take.
+
+**X168. A `hello` takes a place only once its body is whole, and a
+command that is told `busy` asks again.** Under X160 a question took one
+of the 8 places from the moment it arrived, for up to 5 seconds. A
+caller with no secret who kept 8 questions open, each with a body begun
+and never ended, and began each again when it was given up on, filled
+every place: `status`, `seal` and `acknowledge` were then answered 503
+and ended with code 2. What is fixed now, as numbers and not settings:
+- *The body has 1 second* (it had 5). A command sends its 60 bytes at
+  once.
+- *A place is taken once the body has arrived whole and holds a
+  challenge*, and is kept for the two signatures alone. So the places
+  bound the signing, and a caller who sends a body slowly, or never
+  ends it, holds none. A caller cannot keep a place either: it is given
+  up when the answer is written, whether or not the caller reads it.
+- *Of the 8 places, callers at one address hold 4 at most.* A fifth
+  from that address is answered 503 (`busy`) while others still find a
+  place. The address is the one the connection comes from. Callers at
+  one address count as one caller: a program on the administrator's own
+  computer shares the administrator's four places.
+- *The command asks again.* Told `busy`, a command waits half a second
+  and asks again, five times in all, then says that what answers is
+  busy and that the secret was not sent. It had said that what answers
+  "did not show that it is the executor", which was not the reason.
+  `busy` is taken on the listener's word: the command sends it nothing
+  but the challenge, each time.
+
+What stays: questions whose bodies are not whole are not counted, so
+their number is not bounded here. Each holds a connection for a second
+and 256 bytes at most; the number of connections to the executor is not
+bounded either. And a caller can still ask whole questions as fast as the
+executor signs, which costs two signatures each (X160). The other ways:
+a count of unfinished questions for each address, which a program at
+the administrator's own address fills as before; the oldest unfinished
+question giving way to a new one, which bounds them and is more to get
+right.
+
+**X169. An answer at the sealer's address is read up to 8 MiB and no
+further.** The client read the whole answer into memory and looked at
+its size afterwards, before its proof. Whatever listens at
+`recorder.sealer.address` could so send as much as it liked for as long
+as a question may take: while the sealer is stopped, any program on the
+computer can take its port, and the executor asks every two seconds.
+With 200 MB offered, the executor's side read all of it and its memory
+rose from 54 MB to 679 MB; it now takes 16 MB off the listener and
+stays at 80 MB. A length declared over the limit is refused before any
+of the body is read; a body is read piece by piece with a count, and
+the reading stops, and the connection is given up, once the count
+passes the limit. The words of the refusal are as they were. The change
+is made in `sealer/sealer.mjs`, the sealer's own client, and copied
+(X151): the test that holds the copy holds this too.
+
+**X170. What the test of the copy takes for a comment.** X151's test
+holds that `sealer-client.mjs` has no code but the ten declarations and
+two import lines. It had let through any line that began `//`, `/**` or
+` *`, and so a line of code after a comment mark (`/** */ run();`). It
+now takes for a comment only: a line that begins `//`; a line that
+begins `/**` and ends with the first `*/` in it; or a block that opens
+with `/**` alone on a line and closes with ` */` alone on a line, every
+line between beginning ` * ` (or being ` *`) and holding no `*/`. A
+line that holds a carriage return, U+2028 or U+2029 counts as code,
+since each ends a `//` comment. These are the forms the copy's comments
+have. The other way: read the file with a JavaScript parser; the
+package has none, and takes no dependency for a test.
+
+**X171. A socket file of another user's is named in the refusal (not
+Windows or Linux); and what a re-check of the lock found here.** A
+re-check of the lock on another branch, whose `lock.mjs` is older than
+X162 to X164, found two faults. Both were looked for in this one.
+- *Two programs taking over one socket file left behind.* For a file
+  left by a program ended by force, X163 closes it. On Linux, with
+  Node.js told it runs on another system so that `lock.mjs` takes the
+  socket file's way: such a file, then 8 starts at one moment, 60
+  rounds; 2 starts one straight after the other, 150 rounds; and 8
+  starts that ask again for 10 seconds, 30 rounds. Never two holders at
+  once, never a folder left. With the folder of X163 taken out of a
+  copy, the same probe found two holders at once in 28 of 30 rounds and
+  in 15 of 60. The re-check's own fix (every program that takes the lock
+  looks a moment later whether the name still leads to its own listener)
+  is not added. A later re-check found that X163 did not close it where
+  the holder lets go in the usual way, which takes its file away: the
+  first try to listen was made without the folder, so a third program
+  could listen in the moment between another's finding nobody there and
+  its clearing the place (two holders in 28 of 30 rounds, asked every
+  millisecond; not seen at a start's pace of every 250 ms). That first
+  try is now made under the folder too (X163), and a test holds that
+  nobody listens, for a book's lock or a state file's, while the folder
+  is there.
+- *A file left by another user.* Here too. A socket file left in `/tmp`
+  by a program of another user (an executor once run as root) may not
+  be connected to, so it cannot be told from a live one; and `/tmp`
+  lets only its owner take it away. The start was refused with "An
+  executor is running on the book …", which need not be so. The lock is
+  still refused, since nothing else is safe, and the refusal now names
+  the file and says who can take it away. `alive` gives the code of the
+  refusal (`EACCES`, `EPERM`) in place of `true`; `lockAt` puts the file
+  and the code on its `LOCKED` error (`notAsked`, `why`); `lockFiles`
+  writes the sentence. No function's arguments or result change. A
+  later re-check found two more files another user can leave that reach
+  the same end with the old words: a socket file this user may connect
+  to (made under a umask of 0), where nothing answers, and a link that
+  leads nowhere. Both are told from a live file, and neither can be taken
+  away by this user. The lock is still refused; `lockAt` now puts the
+  file and the code of the refusal to take it away on its `LOCKED` error
+  (`notCleared`, `why`), and the refusal, of `lockFiles` and `lockState`
+  alike, names the file, says that no program holds it and that that
+  user or an administrator takes it away. Its test makes taking the file
+  away fail as `/tmp` makes it fail, since the tests have one user.
+- *On Windows, a folder's short name, or `\\?\` in front.* Not here:
+  X162 resolves the folder with `realpathSync.native`, which gives one
+  name for all of them. A test now holds `\\?\` beside the short name.
+  Still another lock, and said in the README: a share of the computer's
+  own drive (`\\localhost\D$\…`, `\\127.0.0.1\D$\…`) and `::$DATA`
+  after the file's name.
+
+The choices from X288 on come from a re-check of the fixes of the third
+review. They are numbered after the last choice of section 14, which was
+written in the meantime.
+
+**X288. The sealer's client follows no redirect.** `connectSealer`
+(`sealer/sealer.mjs`, and its copy `sealer-client.mjs`, X151) called
+`fetch` with no `redirect`, so it followed one. It takes only
+`http://127.0.0.1:<port>` as the sealer's address, but whatever listens
+there (any program on the computer, while the sealer is stopped) could
+answer 307 and have the question sent again to the address it named:
+the body and the five `provared-sealer-` headers, though not the token.
+Nothing the answer from there said was used, since it is held to its
+size and its proof like any other. The `fetch` now carries
+`redirect: 'error'`, the fetch standard's own way to refuse a redirect:
+an answer of 301, 302, 303, 307 or 308 makes the question fail, as one
+that is not answered, and it is sent nowhere else. A test in each
+package holds it. `provared-sealer` stays at 0.1.0, which is not
+published.
+
+**X289. A start asks again for the lock on its state file, as for a
+book's (the founder's decision; amends X285 for starts only).** Under
+X285 an HTTP executor whose settings name `oauth` asked once for the
+lock on its state file and was refused at once where it was held, while
+the same start asked again for each book's lock for 10 seconds (X164).
+So a client that started the executor again while the one before was
+still ending was turned away by the state file's lock, which X164 had
+been made to prevent. `openHttpExecutor` now passes `lockState` the
+same time as the books' locks, 10 seconds (`LOCK_WAIT_MS`, or the
+`lockWait` a test gives). The command `owner` still asks once, as every
+command does under X164: a person runs it by hand and can run it again,
+and it then opens the agents' files as a command, asking once for each
+book's lock, so that waiting for the state file alone would only move
+the refusal to the book. A command with `--offline` still takes no lock
+for the state file. A test holds that a start waits and then starts once
+the executor before has closed, and that it is refused once its time is
+up.
+
+The four that follow put an outside time-stamp (format description,
+section 21.2) beside each seal the executor signs. The request, the
+reading of the answer and its check are the library's
+(`provared/net/timestamp`, X290 to X297 in its CHANGELOG entry);
+`test/stamp.test.mjs` holds them, against a time-stamp service on this
+computer that the OpenSSL program answers for, skipped where there is
+none.
+
+**X298. `recorder.stamp`: `{address, timeout}`.** `address` is a whole
+address beginning `http://` or `https://`, with no user name, password
+or fragment; `timeout` is a whole number of milliseconds from 100 to
+20,000, 5,000 if left out (X355; before, 60,000 and 10,000). Any other member is refused, not set aside,
+since a member mistyped would leave a person thinking seals were
+time-stamped. No service is named, in the code, the examples or the
+documents. Plain `http:` is taken because services in use answer on it
+and nothing secret is sent. Its signature, its fingerprint and its
+number used once show only that the answer was made for this request,
+not who made it: over `http:` anyone between the executor and the
+service can answer in its place with a key of their own. Only
+`authority` (X344) holds the time-stamp to the service's certificate;
+without it, a time-stamp from a stranger is kept and shown as one, and a
+checker who names the real service does not count it.
+
+**X299. Not beside `recorder.sealer`.** A central sealer signs the seal
+and gives its entry whole; it asks for the time-stamp itself, under its
+own settings' `stamp`. The executor adding a second one to an entry the
+sealer keeps would make the two hold different lines. Where the sealer
+says it was not given one (`stampProblem`), the executor logs
+`stamp-not-given` with the sealer's code and reason and hands it on in
+`seal`'s answer.
+
+**X300. A time-stamp never costs a seal.** The seal is signed first. The
+service is then asked; where it gives no time-stamp that passes, or the
+book does not take the seal with it, the seal goes in without one. The
+log has `stamp-not-given` (the entry, the seal, the code, the reason),
+`seal` answers `stampProblem`, and the command prints it on its standard
+error. A seal that carries one answers `stamped: true` and its `sealed`
+event says so. While the service is asked the agent's calls wait, as for
+the seal's own signatures, for at most `timeout`.
+
+**X301. The client is loaded only where the setting is given.**
+`provared/net/timestamp` is imported when `recorder.stamp` is read, not
+at the start of every executor, so that one without the setting runs as
+before on a library that does not have it; with the setting, such a
+library is refused at the start, in words that say so, and `check` says
+the same (X309).
+
+After the review of step 3.3:
+
+**X306. A seal taken back keeps the sealer's reason.** The central
+sealer answers `stampProblem` beside its latest seal (`/latest`) as well
+as beside the seal it signs, while that seal is the book's latest and the
+sealer has not stopped. The executor's link hands it on with a seal it
+takes back, so the log has the same `stamp-not-given` event as when the
+answer came.
+
+**X307. The time-stamp is held against the seal and the book.** Beside
+this computer's clock, the time a time-stamp states must be no more than
+300 seconds before the seal's own `when` (in whole seconds, as a checker
+reads it) and before the latest time that a service's time-stamp
+(`valid` or `untrusted`: a checker may trust it) gave a seal of the book
+that passed its check (`stampContext`). Further off, a checker who trusts
+the service would find the seal dated after its time-stamp, or the times
+going backwards (format description, sections 21.2 and 21.3), so it is
+not kept, and the seal goes in without it (X300).
+
+**X309. `check` loads the client.** Where `recorder.stamp` is given,
+`check` loads `provared/net/timestamp` as a start does, and says plainly
+where the library installed has none. The README names the release that
+has it: `provared` 0.9.0. The dependency ranges now ask for 0.9.0
+(not yet published).
+
+**X310. A sealer's words are cut and made plain.** A problem's words
+that came from a central sealer are printed with control and format
+characters (`\p{Cf}`) as spaces, and cut at 600 characters.
+
+**X311. An address with a query is refused.** As a user name or a
+password is: a query can carry a key to the service, and the address is
+shown in `check`, `status` and the log, so it is refused rather than
+hidden there.
+
+**X344. `recorder.stamp.authority`: the certificate that must sign.**
+Optional: the fingerprint of the service's certificate, or a list of 1 to
+16, in the form a checker names the services it trusts (`stampServices`:
+the SHA-256 of the certificate in base64url, 43 characters). Where it is
+given, the library's `askForStamp` passes it to `checkStamp` as
+`trusted`, and a time-stamp whose state is not `valid` is not kept
+(`stamp-not-given`, naming the fingerprint that signed it); the seal goes
+in without one, as X300 says. Where it is left out, any certificate is
+taken, as before. Whether or not it is given, a seal that carries a
+time-stamp answers `stampedBy` (the fingerprint of the certificate that
+signed it), its `sealed` event has it, the `seal` command prints it, and
+`status` shows it with the last seal. `check` warns where the address
+begins `http:` and no `authority` is named. Why: the check of the answer
+shows that it was made for this request, not who made it (X298), so
+without a certificate named, anyone who can answer in the service's place
+has a time-stamp kept and reported as one, and the moment for a real one
+is gone. A library without `stampAuthority` is refused where `authority`
+is given, so that it is never set aside unheard.
+
+**X348. A central sealer's time-stamp is said.** The `seal` answer and
+the `sealed` event of a seal from a central sealer say `stamped: true`,
+with `stampedBy`, where the entry the sealer gave carries a sound
+time-stamp from a service, as the book's own check reads it, and
+`stamped: false` where it carries none; the command prints "with no
+time-stamp". Why: before, a seal the sealer time-stamped was reported as
+one with none, and as one whose reason was lost at a restart. Only seals
+from a central sealer say `stamped: false`, so a guard that signs its
+own seals with no `recorder.stamp` answers as before.
+
+**X353. A local program's standard error is bounded.** Of each program's
+standard error, at most `STDERR_PER_SECOND` (256 KiB) is written on to
+the executor's in each second of the clock, and nothing while more than
+`STDERR_BACKLOG` (1 MiB) already waits there (`writableLength`), for
+every program together; lines past either are dropped and counted, in
+`server-stderr-dropped` once a second (as X245 counts lines of its
+output). The reading hands back between chunks (`setImmediate`), as for
+its output. Why: before, every line was written on, and the answer of
+`write` was not looked at. On Linux, where a write to a pipe does not
+wait, a program that wrote 200 MiB made the executor hold up to 149 MiB
+of it; on Windows, where it waits, 30 MiB stopped the executor for 15
+seconds, for every agent. Dropping, not pausing the program, was chosen
+so that a program is never held in the middle of a tool by its own
+logging. The lines are not counted for the flood rule: a program that
+logs much is not ended for it.
+
+**X361. The folder of another program's clearing is looked at again.**
+Where a try for a socket file's lock finds the folder of X163 at the end
+of its asking, it looks again every 10 milliseconds for 100 more (a
+command, which asks once, too), and is refused only where the folder is
+still there. The refusal says a program was stopped and left the folder
+only where the folder is more than 5 seconds old (`CLEARING_LEFT_MS`; a
+program holds it for at most about the 2 seconds a socket file is given
+to answer); otherwise it says another program was taking the lock at
+that moment. Why: two programs that asked at one moment were told that
+a folder was left, which was gone when looked for. A folder left behind
+is still not taken away by itself (X163).
+
+**X362. A socket file that no program holds, and that this user may not
+take away, has a refusal of its own.** It says the lock cannot be
+taken, that nothing answers at the file so no program holds it, and the
+code of the refusal to take it away; "it belongs to another user, or is
+a link that leads nowhere" only for `EPERM` and `EACCES`. Why: the
+refusal had begun "An executor is running", which the lock knew was not
+so.
+
+**X363. A program past the bound of X244 is given `shutdownWait`.** Its
+session ends as before, and its input is closed; it is sent SIGTERM only
+once `shutdownWait` has passed, as at every other end of a session. Why:
+a program that does one thing at a time reads nothing during a long
+call, and was ended part-way through it once 16 MiB waited for it; now
+the call it was busy with may still be answered. Not taken: refusing the
+message and keeping the session, which would need an outcome of its own
+for a tool call refused that way; and tying the bound to `bodyLimit`,
+which would let each session hold up to 1 GiB. The README says that a
+program must keep reading while it works.
+
+## 14. The executor as an OAuth-protected connector
+
+Over HTTP an agent may also connect through OAuth, from 0.5.0, where the
+settings name `oauth` (`oauth.mjs`). This is what a client needs that
+cannot be given a secret by hand: it finds out how to sign in, sends a
+person to a page of the executor's, and gets tokens. The executor is its
+own authorisation server, for itself alone. It still speaks plain HTTP: a
+reverse proxy in front gives it HTTPS and its public address (X216).
+
+Sources, as read on 13 November 2026: the MCP authorization specification
+(2025-11-25); the OAuth 2.1 draft; RFC 9728 (protected resource
+metadata); RFC 8414 (authorisation server metadata); RFC 7636 (PKCE); RFC
+8707 (resource indicators); RFC 6750 (bearer tokens); RFC 9207 (the `iss`
+parameter); the OAuth Client ID Metadata Document draft.
+
+The flow, as built:
+
+1. A client posts to the MCP endpoint with no token. The answer is 401
+   with `WWW-Authenticate: Bearer resource_metadata="<issuer>/.well-known/oauth-protected-resource<path>"`.
+2. The client reads that document: the resource (`<issuer><path>`) and its
+   one authorisation server, the issuer. It then reads
+   `<issuer>/.well-known/oauth-authorization-server`.
+3. The client sends the person's browser to `/oauth/authorize`, naming
+   itself by the URL of its metadata document, with a PKCE challenge
+   (S256) and the resource. The executor takes only a client on the
+   settings' list, fetches its document, and checks the redirect address
+   against it.
+4. The page shows the owner who asks, and which agent the connection would
+   become. The owner proves who they are by the owner's check (X212) and
+   approves; the browser goes back to the client with a code.
+5. The client trades the code and its PKCE verifier at `/oauth/token` for
+   an access token and a refresh token. Each call it then makes carries
+   the access token, and is handled as any agent's: under that agent's
+   slip, into that agent's book.
+
+**X201. One connection is one agent.** An agent under `agents.<name>`
+marked `"oauth": true` (in place of `secretHash`) is kept for a connection.
+It has its own slip, keys, book and copy, exactly as an agent with a
+secret. The owner chooses the agent on the page. Approving a connection
+for an agent ends any connection it had before, with its tokens. Agents
+with secrets work as before, beside them. Why: the receipts then say which
+agent acted, and nothing about the rules or the records changes. No
+standard covers this; it is the plainest. The other way: one agent made
+for each approval, with its own permission; that needs a person to sign a
+permission at approval, which the passkey page of the library does
+elsewhere.
+
+An approval leaves no mark in the agent's book. Approvals, new
+connections and their ends go to the executor's log only, and there is no
+record of a new kind for them. So the receipts say which agent acted, not
+which connection or which client. Where an agent is approved again,
+perhaps for another client, the calls before and after stand in one book
+with nothing between them: someone who reads the book alone cannot tell
+that the connection changed.
+
+**X202. The issuer is the public address the settings name.**
+`oauth.issuer` is an origin with no path: `https://…`, or
+`http://127.0.0.1:<port>` for tests only (and `http://localhost:<port>`,
+X277). The resource is
+`<issuer><path>`. The resource's metadata is at the address RFC 9728
+section 3.1 gives for it (the path put after
+`/.well-known/oauth-protected-resource`), and nowhere else, since the
+`resource` in it must be the one the address was made from. The server's
+metadata is at RFC 8414's address for an issuer with no path. Why: the
+specification's discovery, in its first form. The other way: an issuer
+with a path, or the OpenID Connect address as well; neither is needed.
+
+**X203. A client is only one the settings list, by its Client ID Metadata
+Document.** `oauth.clients` lists the URLs of the documents. With none,
+no client can connect (and the start warns). There is no Dynamic Client
+Registration. A document is used only where its `client_id` is the URL it
+was fetched from, it names `redirect_uris`, and its
+`token_endpoint_auth_method` is `"none"`; where it names `grant_types` or
+`response_types` they must include `authorization_code` and `code`. A
+client's URL is https, with a path; an `http://127.0.0.1` one is taken
+only where the issuer is one too. Why: the MCP specification's preferred
+way for a client and a server that have never met, and the list keeps the
+executor from fetching what an outsider names. The other way: Dynamic
+Client Registration, which lets anyone register.
+
+**X204. A document is fetched over HTTPS, small and quickly.** Node.js
+checks the certificate. No redirection is followed. At most 5 KiB (the
+size the draft suggests a server limit itself to), within 5 seconds, and
+only an answer of 200 in JSON. Why: the draft's advice, and the plainest
+bounds.
+
+**X205. A document is kept, and its copy outlives a fetch that got no
+answer.** It is kept for its `Cache-Control: max-age`, held between 5
+minutes and 24 hours, or 1 hour where none is given; one sent with
+`no-store` or `no-cache` is kept for the 5 minutes. Then it is fetched
+again. Where that fetch gets no answer, or an answer of 500 or above, the
+copy kept is used while it is no more than 7 days old, and the log says
+so. Any other failure refuses the request, copy or no copy: an answer that
+is not 200 (a 404 or a 410 among them: the client has withdrawn its
+document), a redirection, a document too large, not JSON, or one that does
+not pass X203. The executor makes one fetch at a time for each client, and
+after a fetch that failed it makes no other for a minute: requests in that
+minute get the answer the failed fetch gave. The copies are in the state
+file (X210), so they outlive a start. Why: a client whose document was out
+of reach for a moment was otherwise stopped, though nothing about it had
+changed; a client that has withdrawn its document must not stay usable for
+ever; and no one should be able to make the executor call a client's
+server as often as they call the executor. The draft asks for a longest
+age and names none; a week is the executor's. The other way: refuse once
+the copy has expired.
+
+**X206. The redirect address is matched exactly.** The text the client
+sends must be one of the document's `redirect_uris`, character for
+character, with one exception that OAuth 2.1 (section 8.4.2) requires of a
+server: for an address on the person's own computer written as an IP
+address (`http://127.0.0.1` or `http://[::1]`), the port may differ.
+`localhost` gets no exception. A request whose client or redirect address
+does not pass is answered on the page, and the browser is not sent back
+(RFC 6749, section 4.1.2.1). Every later error is sent back to the client
+with `error`, `state` and `iss`.
+
+**X207. The request at the page, and the code.** `response_type=code`
+only. A PKCE challenge is required, with `code_challenge_method=S256`:
+`plain` is refused, and so is a challenge with no method named, since the
+standard's default for that is `plain`. `resource` must be given and be
+the executor's resource, or the answer is `invalid_target`, as the MCP
+specification has a client always send it. Its scheme and host may be in
+capitals, as that specification asks a server to take them; the path is
+compared as it is, so a path with a slash added is another resource.
+`state` comes back as it was, and `iss` with it (RFC 9207). A request
+waits at the page for 10 minutes, in the page's form (X228); the page
+that says a recovery code is spent may hold it for up to five minutes
+more (X283). An approved
+request is answered once: the same form sent again gets no second code. A
+refusal is not kept, so the same page may still be approved after it.
+A code lasts 60 seconds, is kept only as its hash and in memory, and is
+used once, by the client it was given to, with the right verifier. The
+token request need not send `redirect_uri`, which OAuth 2.1 takes out of
+it, since PKCE ties the code to the client that asked; where it is sent,
+it must be the one the code was given for. A code used a second time is
+refused, and where that request is otherwise right (the client, the
+redirect address where sent, the verifier) the tokens the code gave are
+revoked (OAuth 2.1, section 4.1.3). A used code shown by someone who has
+no verifier ends nothing: the code is in the address at the client's
+callback, and seeing it proves nothing. A parameter given twice is
+refused.
+
+**X208. An access token is random, opaque and short-lived.** 32 random
+bytes in base64url. The executor keeps only its SHA-256, as it keeps the
+agents' secrets. It is bound to the resource, the client and the one
+agent, and lasts 1 hour. At each request the executor checks that it has
+not expired, that the resource is still the executor's, that the client
+is still on the list and that the agent is still marked `oauth`. A stream
+held open is ended with its token (X229). A
+refused token gets 401 with `error="invalid_token"` (RFC 6750, section
+3.1) beside `resource_metadata`. The upstream never sees it: as for a
+secret, the agent's `Authorization` is removed and the executor's own
+credential sent. Why: an opaque token reveals nothing, and a hash in the
+file opens nothing.
+
+**X209. A refresh token is rotated every time, and a reused one ends the
+connection.** Each refresh gives a new access token and a new refresh
+token; the old refresh token is kept, as its hash, as spent (the last
+1,000). A spent one used again revokes the whole connection, its newest
+tokens with it (OAuth 2.1, section 4.3.1). A refresh token lasts 30 days
+from its issue, and a refresh keeps the scope of the approval.
+
+**X210. The state is one file only the executor may read, written
+whole.** `oauth.state` (default `oauth-state.json`) holds each connection
+(its agent, client, resource, scope, the hashes of its tokens and their
+ends), the copies of the clients' documents, and the owner (X226). No
+token is in it. It is
+written through a new temporary file with mode 0600, which is made sure to
+be on the disk (`fsync`) and then put in its place, so a stop part-way, or
+a power cut, leaves the old file or the new. On Windows the mode does
+nothing: the folder's own permissions must keep others out. A file not in
+the executor's form stops the start. The codes are kept in memory, and a
+request waiting at the page in its form, under a key made at the start
+(X228), so a start ends them.
+
+Memory never runs ahead of the file, with one exception. New tokens, a new
+connection and a new owner are in memory only once the file holds them:
+where the write fails, memory is put back as it was, the client is
+answered 500 (`server_error`; the owner's setup, `not-written`) and keeps
+what it had, so that its next try is not taken for a token used twice.
+
+The exception is the end of a connection: by a refresh token or a code
+used twice, or, at a start, for a client off the list or an agent no
+longer marked (X215). It holds in memory at once, whether or not the file
+could be written, so an ended connection is not used again while the
+executor runs. Where the file could not be written, the file is behind:
+it still holds the connection, and a start from it would bring the
+connection back, with its tokens. So the executor does three things.
+- It tries the write again every second, one try each time with no
+  waiting inside it, until the file is written. The log says
+  `oauth-state-not-written` when the write fails, not again at each try
+  after it, and `oauth-state-written` when the file has caught up. Any
+  other write of the state that succeeds in between brings the file up to
+  date as well.
+- It tries once more when it closes, while the agents' locks are still
+  held.
+- Where the end is still unwritten after that, it does not close quietly.
+  The log says `oauth-ends-not-written`; `close()` gives the connections
+  (`endsNotWritten`: the agent, the client and why each was ended); and the
+  command `http` names them on its error output and ends with code 1, not
+  0. Before the executor is started again, the file must be made writable
+  and those agents' entries taken out of its `grants`, or `owner --reset`
+  run, which removes the owner and ends every connection.
+
+What this does not cover: an executor that is killed, or loses power,
+while an end is unwritten says nothing at its stop, and the next start
+brings the connection back. The end is made lasting only by a write, and
+this choice cannot make a write succeed. Why this way: an ended connection
+must stay ended while the executor is at work, so the end cannot wait for
+the file as a new token does; and the plainest way to make it last is to
+go on trying the one write, and to say so where it never succeeded. The
+other way: a second file of ended connections beside the state, which a
+full disk stops as well, and which would be one more file to keep in step
+with the first.
+
+Each of the three steps of a write is tried again for at most 1
+second while another program holds the file (the executor's other files
+are tried for 10), so that a write that cannot be made is given up well
+inside the 10 seconds a client gives a sign-in request (X213). The file is
+read only once every agent's lock is held (`lock.mjs`), as the command
+`owner` writes it under the same locks: so what that command wrote is what
+a start reads, and a start cannot undo it. The file has a lock of its own
+as well, taken before the agents' (X285).
+
+**X211. Failed attempts are not counted, and shut nothing.** Until this
+choice was changed, 5 failures at the owner's check in 15 minutes, or 20 at
+`/oauth/token` in a minute, shut that address for everyone for the rest of
+the time. A count by address counts nothing behind a reverse proxy, where
+every request comes from the proxy, so the count was for the whole
+executor; and so anyone who could reach the executor could keep the owner
+from being set up, keep the owner from approving, and keep a client from
+refreshing, for as long as they liked, with a few requests. The count
+bought nothing in return. Everything it guarded is 160 or 256 random bits
+(the setup link's code, the recovery code, a challenge, a code, a token)
+or a signature, none of which can be guessed at any rate. So a request
+that proves itself is never refused for what others sent before it: the
+token, the code or the signature is checked, and nothing else decides. The
+cost: a check given through the interface of X212 gets no protection from
+the executor against guessing, so what it asks for must not be guessable.
+The other way: a count by the address a proxy reports, which the executor
+would have to trust.
+
+**X212. The owner's check, behind one interface, at a page that runs
+nothing of anyone else's.** The page is plain HTML: no style, no image, no
+inline script, under a Content-Security-Policy of `default-src 'none'`,
+`frame-ancestors 'none'` and `form-action` the executor and the client's
+redirect origin. The owner's answer must come with an `Origin` that is the
+issuer; `null`, which a browser sends for a page of no known origin, is
+never taken. So the pages are sent with `Referrer-Policy: same-origin`:
+under `no-referrer` a browser sends a page's own form with `Origin: null`
+(the Fetch standard), and no answer could be approved from a browser at
+all. With `same-origin` the form carries the executor's origin, and still
+no referrer goes to another site. The 303 that sends the browser back to
+the client keeps `no-referrer`. The answer names the request by the form's
+`request` field (X228), which holds a random identifier. The page cannot
+tell whose request it is: listing a client admits that client as a whole,
+not one account at it, so anyone with an account there can begin a request
+and send its link to the owner. The page therefore says: "Approve only a
+connection you began yourself, just now." The check itself is one object
+given to the executor (`ownerCheck`): `form()` gives the HTML of its
+fields on the page, and `check(fields, {request, origin, note})` says
+whether they prove the owner; `note` is what the check itself had sealed
+into the request, or null. It answers `true`, or the name of the proof
+that passed (`passkey`, `recovery` or `setup`), which the log's line for
+the approval then gives as `by` (X274); `{"pause": {"title", "body",
+"request"}}`, where a page of the check's is to be shown before anything
+is approved, whose one button, Continue, sends that request with the
+agent chosen (X276); `{"problem"}`, a fault of the executor's own, shown
+as it is (500); `{"refusal"}`, a refusal in the check's own words (403);
+anything else is a refusal, with the executor's words. Only `true` and
+those three names approve (X282). A check may also run a script from the
+executor's own address (`scripts`) and answer at addresses of its own
+(`owns`, `take`). Left out, as the command `http` leaves it, the check is
+the one by the owner's passkey (section 14.1). Given as `null`, there is
+none, and the page approves nothing (503). The other tests use a test
+check. What the executor sends is all that this choice covers: a program
+on the owner's own computer that changes the pages a browser shows can
+still add a script of its own to them.
+
+**X213. The time limits.** A client gives a tool call up to 240 seconds,
+but a sign-in request and a refresh far less: 10 and 30 seconds. With
+`oauth`, the executor's `timeout` is 230,000 ms unless the settings say
+otherwise, so that the executor answers a slow call, with its receipt,
+before the client gives up; a `timeout` above 240,000 ms is warned about.
+Without `oauth` the default stays 300,000 ms. The token endpoint and the
+two metadata addresses make no request to anyone, and answer at once; a
+write of the state that cannot be made is given up within about 3 seconds
+(X210). Only the page fetches a document (5 seconds, X204), and the
+owner's browser asks for the page, not the client.
+
+**X214. The executor has no scopes.** It names none in its metadata. A
+`scope` the client asks for is kept with the approval and given back as it
+was; it means nothing to the executor, since what an agent may do is its
+permission. An empty `scope=` is no scope: RFC 6749's grammar has no empty
+one, so none is kept and none is given back, and a refresh that sends it
+where none was approved is taken. Why: RFC 6749 lets a server give back
+the scope asked for, and a scope of the executor's own would be a second
+permission beside the signed one. The other way: refuse any scope
+(`invalid_scope`).
+
+**X215. What the metadata says, and what it does not.** The server's
+metadata names the two endpoints, `code` only, `query` only, the two grant
+types, `S256` only, `none` only, `client_id_metadata_document_supported`
+and `authorization_response_iss_parameter_supported`. It names no
+registration endpoint and no revocation endpoint (a connection ends by
+reuse, by a new approval, by the client being taken off the list, or by
+removing it from the state file while the executor is stopped). The
+settings are read at a start, so a client taken off the list is refused
+from the next start. At that start the executor takes the connections of
+every client no longer on the list, and of every agent no longer marked
+`oauth`, out of the state file. So they are ended for good: putting the
+client back, or marking the agent again, does not bring them back (where
+the file cannot be written at that start, X210 says what follows). The two
+metadata documents have no CORS headers: the clients this is for read
+them from their servers.
+
+**X216. Plain HTTP, behind a reverse proxy.** The executor does not speak
+TLS. A proxy in front of it must give it HTTPS at the issuer's address and
+pass the path and the `Origin` header on unchanged. Why: certificates are
+the proxy's work. The settings' `listen` stays the local address.
+
+### 14.1 The owner's check by the owner's passkey
+
+Built from 0.5.0 (`owner.mjs`, `owner-steps.mjs`, `owner-page.mjs`). It
+fills the interface of X212. The owner's check is a plain passkey: nothing
+is asked of it but that it verifies its user. The executor checks a
+passkey's signature with the `provared` library's own check, and has no
+runtime dependency but that library (X270).
+
+Before 0.5.0 was released, this section described another design: the
+passkey had to give the PRF extension, whose output opened a key kept in
+the browser, and that key signed the executor's challenge; two packages
+did the cryptography. A device whose own passkey gives no PRF could not
+set an owner up at all, so the founder chose one plain passkey prompt.
+The choices that design needed are marked below as replaced (X217, X219,
+X220, X222, X230); nothing of it was ever released.
+
+The flow, as built:
+
+1. **The setup link.** On the server, with the executor stopped,
+   `provared-mcp-executor owner --config …` prints a link,
+   `<issuer>/oauth/owner#<code>`. It works once, for 15 minutes. So no one
+   who merely finds the address can claim the executor (X218).
+2. **The setup.** In the browser, the library's own `createPasskey` makes
+   a passkey for the executor's host, with the user verified. The page
+   sends the executor the setup link's code, the passkey's identifier and
+   its public key (X271). The executor answers with a recovery code, which
+   it has just made and of which it keeps only a hash; the page shows it
+   once (X276).
+3. **The first approval, in the same prompt.** Where the owner opens the
+   setup link and then adds the executor in a client, in the same browser,
+   the client's page finds the link's code there. Approve on that page
+   makes the passkey, and the one setup message both makes the owner and
+   approves that one request. Where the client's page was opened first, the
+   setup link shows that page again while its request still waits (X272).
+4. **A later approval.** When the owner presses Approve, the page asks the
+   executor for a challenge for that request (X221), and the library's own
+   `signChallengeWithPasskey` has the passkey sign it (X273). The page
+   puts the passkey's three values in the form (X274). Without the
+   passkey, the owner types the recovery code in its box instead.
+5. **The check.** The executor checks the passkey's answer with the
+   library's `checkAssertion` (Web Authentication Level 3, section 7.2),
+   against the public key it keeps: the challenge is its own for this
+   request, the origin is the issuer, the relying party is the issuer's
+   host, a person was present and was verified, and the signature fits
+   the key.
+
+**X217. Replaced by X270.** It fixed the namespace of the earlier design's
+key derivation labels (`provared-mcp-executor`). Nothing is derived now,
+so there is no namespace.
+
+**X218. The setup link, from a command on a stopped executor.** `owner`
+opens the files for itself alone, as a command with `--offline` does
+(`lock.mjs`), so it is refused while the executor runs, and the state file
+has one writer at a time. It takes the state file's own lock first
+(X285), so it is refused as well while an executor with other agents
+holds that file. The code is 32 random bytes in base64url; the
+state file keeps only its SHA-256 and its end, 15 minutes after the
+command. It is in the link's fragment, which a browser does not send in
+the address: the page sends it in the setup message. It is spent when an
+owner is set up. A new `owner` before then replaces it. Why: the plainest
+way to get a secret from the server to the owner's browser once. The other
+way: a command that asks the running executor with the administrator's
+secret, which needs that secret set up first.
+
+**X219. Replaced by X271.** It was the setup message of the earlier
+design: a public key for signatures made in the browser, and two locked
+copies of the key behind it.
+
+**X220. Replaced by X273 and X276.** It gave the page the two locked
+copies. Nothing is locked now: the page is told the passkey's identifier
+with its challenge (X273), and the recovery code goes to the executor in
+the form (X276). The addresses `/oauth/owner/passkey` and
+`/oauth/owner/recovery` are gone.
+
+**X221. The challenge.** `POST /oauth/owner/challenge` with `{"request"}`,
+the `request` field of a page waiting for the owner, gives `{"challenge",
+"request", "credentialId"}`: 32 random bytes in base64url, the same
+request with that challenge and its end sealed into it (X228), and the
+identifier of the passkey to ask (X273). The page puts the new request
+in its form in place of the one it had, so a form holds one challenge at
+a time. An earlier challenge given for the same request is not ended by a
+later one: nothing is kept that could say so, and it still passes until
+its 2 minutes are over. No harm follows, since each needs the passkey's
+signature and the request is answered once. The challenge lasts 2 minutes and
+belongs to that request alone, since it is under the request's seal. The
+executor keeps nothing of a challenge it gives out. It keeps, until they
+end, only the challenges whose signature passed, so that none passes
+twice; only the owner can add to them, so there is no cap, and nothing
+anyone sends can push the owner's challenge out. A wrong signature spends
+nothing. Until this choice was changed, the challenges were kept in
+memory, at most 1,000, and 1,000 requests from anyone pushed the owner's
+out. The page asks for the challenge when the owner presses Approve, and
+the passkey's prompt follows at once: the 2 minutes are the time the owner
+has at that prompt. A prompt left longer is answered with a refusal, and
+Approve, pressed again, gets a new challenge.
+
+**X222. Replaced by X274.** It named the two fields of the earlier
+design's answer: the challenge and a signature by the key kept in the
+browser.
+
+**X223. One owner; a reset ends every connection.** While an owner exists,
+`owner` is refused, and so is a setup message (409). `owner --reset`
+removes the owner and every connection, with its tokens, then prints a new
+link. Why: a second setup would let whoever opens it approve connections;
+a new owner should not inherit the old one's connections.
+
+**X224. The pages' files come from the executor.** It serves
+`owner-page.mjs` as `/oauth/owner/page.js`, `owner-steps.mjs` as
+`/oauth/owner/steps.js`, and the `.js` files of the `provared` library's
+`src/`, as Node.js finds the installed package, under
+`/oauth/owner/lib/provared/`: the page's script loads the library's
+`passkey-browser.js` from there, and what that file loads in turn. They are
+read once at the start, as `text/javascript` with `nosniff` and
+`no-store`; any other path there is 404. The setup page and the
+authorisation page are served under `default-src 'none'; script-src 'self';
+connect-src 'self'; form-action 'self'` (and the client's origin, at the
+authorisation page); `frame-ancestors 'none'; base-uri 'none'`. They load
+one module script by its address, and nothing inline. Every `POST` under
+`/oauth/owner/` must come with an `Origin` that is the issuer, in JSON of
+at most 16 KiB.
+
+**X225. The passkey belongs to the issuer's host.** The library's
+`createPasskey` is given the site's name `provared-mcp-executor` and the
+user name `Owner of <host>`; it names the page's host name as the relying
+party, which is the issuer's. At each check the executor takes the relying
+party from its own settings, never from the page: the issuer's host name,
+without the port. After a change of public address the passkey no longer
+works there. The owner then approves with the recovery code (X276), or
+resets the owner (X223) to make a passkey at the new address. The founder
+accepted this.
+
+**X226. The owner is kept in the state file.** Beside the connections:
+`owner` and `setup` (the link's hash and end). `owner` is `{"credentialId",
+"key", "recoveryHash", "created"}`: the passkey's identifier, 1 to 1,023
+bytes in base64url (Web Authentication's bounds); its public key as a JWK,
+in exactly the form the library takes for a passkey's key (`ES256`,
+`RS256` or `Ed25519`; the method is the key's `alg`, so it is not kept a
+second time); the SHA-256 of the recovery code, in base64url; and when the
+owner was made. Once the recovery code has been used it has a fifth
+member, `"recoverySpent": true` (X282); before that the member is not
+there, and no other value of it is read. Nothing that could stand in for
+the passkey or the code is kept. A file written before them reads as having neither; one whose owner
+or setup is not in this form stops the start (and X278).
+
+**X227. The answers of the owner's addresses.** JSON
+`{"error", "message"}`, with the codes `origin-refused` (403),
+`bad-request` (400), `owner-exists` (409), `setup-ended` (403: no link, or
+it has ended), `setup-refused` (403: not the link's code), `no-owner`
+(409), `not-found` (404: not one of the executor's files), `not-allowed`
+(405) and `not-written` (500: the state file could not be written, so no
+owner was set up, and the link still works). No failed attempt is counted
+(X211). Every JSON answer of the front door, these among them, is sent
+with `X-Content-Type-Options: nosniff`, as the pages and the scripts are.
+
+**X228. A request waiting at the page is kept in the page's form, under
+the executor's seal.** The hidden field `request` holds the request's
+fields (a random identifier of 32 bytes, the client, the redirect address,
+`state`, the PKCE challenge, the scope, its end, and what the owner's check
+has noted in it, X221 and X272) as a JWS in compact form with `HS256` (RFC 7515;
+RFC 7518, section 3.2): the fields as JSON, under HMAC-SHA-256 (RFC 2104).
+The header is always `{"alg":"HS256"}`; it is under the MAC with the
+fields, and the executor never reads an algorithm from it, so a text with
+any other header does not pass. The key is 32 random bytes that the
+executor makes at each start,
+holds in memory and never writes down. The executor reads a request back
+only where the MAC is its own (compared in constant time), the request has
+not ended and it has not been approved before. Nothing of a waiting
+request is kept in memory. The fields are not secret: the browser sent
+them all in the address. Why: until this choice was changed, the waiting
+requests were kept in memory, at most 1,000, the oldest dropped; anyone
+can ask for a page, so 1,000 requests from anyone pushed the owner's page
+out. With nothing kept, there is nothing to push out. What is kept in
+memory is made only by an answer that passed the owner's check: the
+identifiers of approved requests, until they would have ended, and the
+codes. A start makes a new key, so it ends every waiting request, as it
+did before. HMAC-SHA-256 is Node.js's own; no cryptography is new. The
+other way: keep the requests in memory and count them for each address,
+which behind a proxy counts nothing (X211).
+
+**X229. A stream opened with an access token ends with the token and with
+the connection.** A token is checked when its request arrives (X208). The
+GET stream of server messages has no end of its own, so one opened with an
+access token was held open after the token had expired or its connection
+had ended, went on carrying what the upstream sent, and kept one of the
+agent's places. The executor now ends such a stream when the token it was
+opened with stops being one the executor takes, for whatever reason: the
+token expires (`token-expired`); its connection ends, by a refresh token
+used twice, a code used twice or a new approval of its agent
+(`connection-ended`); or later refreshes push the token out, since a
+connection keeps its 16 newest access tokens only (`token-dropped`). The
+stream is held under its token, and after every change of the state the
+executor ends each stream whose token it would now refuse; the token's
+expiry is timed. The log says `stream-ended`, with the reason. A client
+with a newer token opens it again. A call, or
+any other message, that the executor has already taken is not cut: it was
+allowed when it arrived, cutting it would leave a call's outcome unknown,
+and it ends within the executor's `timeout`, with its receipt. A stream
+opened with an agent's own secret is not touched. No standard covers this.
+
+**X230. Replaced by X275.** It offered a second button, for a passkey on
+a phone or a security key, where the device's own gave no PRF, and kept
+the passkey's transports.
+
+**X270. A plain passkey, checked by the library's own check.** The owner
+is one passkey. The executor asks nothing of it but a signature made with
+its user verified: no extension, no attestation. Its signature is checked
+by the `provared` library's `checkAssertion`, which follows Web
+Authentication Level 3, section 7.2, as far as that applies without a
+session: the client data is an answer to "sign" (`webauthn.get`), for this
+challenge, at this origin and not inside another site's page; the
+authenticator data names this relying party, with the user present and
+verified, and nothing left over; and the signature (`ES256`, `RS256` or
+`Ed25519`) fits the key. The key's form is checked by the library's
+`checkKey`, at the setup and whenever the state file is read. The library
+has both functions but does not name them among its exports, so the
+executor loads them from the library's own files (`src/webauthn.js`,
+`src/keys.js`), found beside the library's main file as Node.js finds the
+package; a test runs them through the executor. So the executor's only
+runtime dependency is `provared`.
+
+Three things this does not do. It does not check how the passkey was made
+(Web Authentication, section 7.1): the setup asks for no attestation, and
+the public key is the one the browser's `getPublicKey()` gave, sent by the
+page. What makes a key the owner's is the setup link's code (X218) and
+nothing else: whoever holds the code could send any key, so a check of the
+ceremony would add nothing to whose key it is. It does not use the
+signature counter, which many passkeys leave at zero. And it does not
+look at the passkey's identifier in an answer: there is one owner and one
+key, and a signature that fits the key is the owner's.
+
+A known limit of the library's check, left as it is. Of the client data's
+`crossOrigin` it refuses only the value `true`: text such as `"true"`
+passes, and `topOrigin` is not read. A browser writes a boolean there, and
+the client data is under the passkey's signature, so no way to misuse this
+is known; a check that took only `false` or nothing would be tidier, and
+is the library's to make.
+
+Why: a passkey with PRF could not be made on a device whose own
+authenticator gives none, and then there was no owner at all. A plain
+passkey is what every authenticator gives, and the library already checks
+one for the permissions people sign. The other way: have the library name
+`checkAssertion` and `checkKey` among its exports, which needs a release
+of the library before the executor's. Its next release should name them,
+and the executor then take them by name (X281 says what holds until then).
+
+**X271. The setup message.** `POST /oauth/owner/setup`, JSON: `{"code",
+"credentialId", "key"}` and, where the page holds one, `"request"` (X272).
+`credentialId` is the passkey's identifier, 1 to 1,023 bytes in base64url
+without padding, written as Node.js writes it. `key` is its public key as
+a JWK, in exactly the library's form for a passkey's key (X226). No other
+member is taken. The answer is `{"owner": "set", "recoveryCode"}` (X276)
+and, where a request was sent, `"request"` (X272). A message that is not
+in this form is refused (400), and the link still works. Before it makes
+the passkey, the page asks `POST /oauth/owner/link` with `{"code"}`
+whether the link still works (`{"link": "open"}`, or the refusal the setup
+would get), so that no passkey is made for a setup the executor would
+refuse. Why: the identifier and the key are all that a later check needs.
+
+**X272. The setup and the first approval take one prompt.** The authority
+to make the owner is the setup link's code and nothing else (X218): there
+is no rule that the first visitor becomes the owner, and no request is
+approved without the owner pressing Approve on a page that shows it.
+Within that, the pages save the owner a second prompt.
+
+- The setup page keeps the link's code in the browser's storage for the
+  executor's address (`localStorage`), once the executor has said that the
+  link works. Only the executor's own scripts run at that address (X224),
+  so only they read it. The page takes the code out of the address bar, as
+  before.
+- The authorisation page, where the executor has no owner, says so, and
+  shows the request and the warning of X212 all the same. Where the
+  browser holds a code that still works, it says that Approve makes the
+  passkey and approves in one prompt. Approve then makes the passkey and
+  sends the setup message with the form's `request`. The executor makes
+  the owner and, where that request still waits, gives it back with a
+  note under its seal (X228) that the setup approved it, naming the new
+  owner's passkey. The page shows the recovery code and puts the request
+  in its form; the owner writes the code down and presses the same
+  button, now "Continue", and the form goes as any approval does. The
+  owner's check passes a request that carries that note, for that owner.
+  The code is spent by the setup.
+- Where the browser holds no code, the authorisation page offers a
+  button, "Keep this connection for the setup link". Only a press of it
+  puts the page's `request` in the same storage; the fields of a request
+  are not secret (X228). A page that merely opens keeps nothing, and
+  takes nothing out. One request is kept: where the press takes the place
+  of another that was kept before, the page says so (X282). Until this was
+  changed, the page kept its request as
+  it opened, so any page that sent the browser to an authorisation
+  address, with nothing pressed, put its own request in the place of the
+  owner's, and the setup page then offered that one as "the connection
+  that is waiting". The setup page, opened afterwards, sends it with the code to
+  `/oauth/owner/link`, which answers `"waiting": "<the client's host>"`
+  only where that request still waits (X207's 10 minutes, by the
+  executor's clock, under its seal). The page then offers "Review the
+  connection that is waiting": a form that posts the request to
+  `/oauth/authorize` with `decision=show`. The executor answers with the
+  authorisation page for that same request (the same identifier and the
+  same end), from the executor's own page only (`Origin`), and approves
+  nothing by it. Approve there is the one prompt, as above. A request
+  that has ended is not offered, and is taken out of the storage.
+- The setup page alone still makes the passkey ("Make the passkey"),
+  approves nothing, whatever waits, and says what to do next: add the
+  executor's address in a client the settings list.
+
+What this costs. Someone can begin a request and send its link to the
+owner before the owner is set up (X212). The owner who opens it and then
+the setup link is shown that request, by its client's host, with the
+warning, and it is approved only if they press Approve: the same as at any
+later approval, and no more than 10 minutes after the page was made. A
+request that ends between Approve and the setup message is not approved,
+and the owner is set up all the same, since by then the passkey has been
+made. The code and a kept request stay in the browser's storage until
+they are used, or until a page of the executor's next finds them ended:
+so a code that has ended may lie there, of no use to anyone. A program on the owner's computer
+that reads the browser's storage can read them, as it could already
+change the pages (X212). A browser with no storage loses only the one
+prompt. A start ends every waiting request (X228), and `owner` needs the
+executor stopped (X218): so the link is to be made before the start, and
+a request begun before a restart must be begun again from the client.
+
+Why: the founder asked for one prompt. Approving on the code's authority
+is no weaker than the two steps were: whoever holds the code can make
+themselves the owner and then approve anything. The other ways: a second
+prompt straight after the first, which proves nothing more; or to approve
+the waiting request as soon as the setup link is opened, which would let
+a request sent to the owner by someone else through without being shown.
+
+**X273. What the passkey signs.** The challenge given to the passkey is
+the SHA-256 of the executor's 32 challenge bytes (X221), which the page's
+script works out with the library's `sha256` and hands to the library's
+`signChallengeWithPasskey`, with the passkey's identifier and the page's
+host name as the relying party, the user verified. Why: `checkAssertion`
+takes the bytes that had to be signed and holds the client data's
+challenge against their SHA-256; the bytes here are the executor's
+challenge itself, with nothing added. The origin and the relying party
+are bound in by the passkey's own answer, and the request by the seal the
+challenge is under, so no label of the executor's own is needed, and none
+was invented. The identifier comes with the challenge (X221): it is no
+secret, and the browser needs it to ask the right passkey.
+
+**X274. The answer's fields.** The page fills four hidden fields in the
+form, beside the request, the agent and the decision: `owner_challenge`
+(the 32 bytes), `owner_authenticator_data` (37 to 1,024 bytes),
+`owner_client_data` (at most 4,096 bytes) and `owner_signature` (at most
+1,024 bytes), each in base64url. The recovery code's box is the field
+`owner_recovery` (X276). The check passes where one of three things
+holds, and says which: the request carries the setup's note for this
+owner (`setup`, X272); it carries the note that the recovery code
+approved it, for this owner (`recovery`, X276); or the challenge is the
+one sealed into this request, has not expired and has not passed before,
+and `checkAssertion` says the signature is valid, with the issuer as the
+origin and the issuer's host name as the relying party (`passkey`). A
+signing method this computer cannot check counts as not proved. The
+signature is checked before anything is kept. The log's line for an
+approval names the proof: `{"event": "oauth-approved", …, "by":
+"passkey"}`, or `"recovery"`, or `"setup"`. Why: an approval leaves no
+mark in the agent's book (X201), so the log's line is the one record of
+it, and it should say how it was made.
+
+**X275. One call makes the passkey, wherever the browser keeps it.** The
+page calls the library's `createPasskey`, as it is: the methods `ES256`,
+`Ed25519` and `RS256`, the user verified, no attestation, and no
+authenticator named. So the browser itself offers what it has: the
+device's own authenticator, a phone, or a security key. There is no
+second button, and the passkey's transports are not kept: the library's
+function neither gives them nor takes them, and with one passkey named by
+its identifier a browser finds it without them. Why: the second button
+existed to get round a device with no PRF, which no longer matters; the
+library's call is the one already used where people sign permissions.
+The other way: a call of the executor's own to the browser, to name an
+authenticator or keep transports, which would be a second copy of the
+library's.
+
+**X276. The recovery code.** At the setup the executor makes 20 random
+bytes (160 bits) with Node.js's `randomBytes` and writes them in base32
+(RFC 4648): 32 letters and digits, shown in eight groups of four with
+hyphens. It is in the answer to the setup message, once; the executor
+keeps the SHA-256 of the 32 characters, in base64url, as it keeps its
+tokens (X208), and the code itself nowhere. Typed into its box on the
+authorisation page, it goes to the executor in the form, and approves
+that one request in the passkey's place; the page's script then asks for
+no passkey. The box does not show what is typed (`type="password"`), and
+asks the browser not to keep it (`autocomplete="off"`). As typed, spaces
+and hyphens are taken out and small letters made capitals; what is left
+is hashed, and the hashes are compared in constant time.
+
+A code approves once, and is then spent. No new one is made in its place
+(X282, which replaces what this choice said until then: that the executor
+made a new code and showed it). Where the code typed is the owner's, the
+executor marks it as spent, in one write of the state; it approves
+nothing after that, whoever types it. Nothing is approved yet. The answer
+is a page, "The recovery code is spent", with one button, Continue, and a
+form that holds the same request with a note under its seal (X228) that
+the recovery code approved it, for this owner, and the agent that was
+chosen. Continue sends that form, the check passes it, and the browser
+goes back to the client, as after the first approval (X272). That page
+has five minutes of its own for Continue, counted from when the code was
+spent, or what was left of the request's 10 minutes where that is more
+(X283). A page whose Continue is not pressed in that time approves
+nothing; the code is spent all the same. The log says `owner-recovery-spent`, and
+the approval's line says `"by": "recovery"` (X274). Where the state
+cannot be written, the page says so (500), nothing is approved, and the
+code is not spent.
+
+It approves, and does nothing else: it does not make a new passkey. To
+replace a lost passkey, or to have a recovery code again, the owner is
+reset on the server (X223), which ends every connection.
+
+Why: 160 random bits cannot be guessed, so a plain hash is enough, as for
+a token; and a code that could set up a new passkey would be a second
+setup link that never ends. In the first form of this choice the code
+could be used as often as it was typed: so a code that had once been
+seen, over a shoulder or in a note, was a second owner, tied to no device
+and to no address, that never ended, and nothing set its approvals apart
+in the log. Spent by its first use, and not replaced, a code that leaks
+is worth one approval at most, and its use shows: in the log, and on
+every authorisation page after it (X282). The other ways: a code that
+works for ever, with a warning to reset the owner when it may have been
+seen; and a new code in the spent one's place, which X282 says why it was
+given up.
+
+**X277. The issuer may be `http://localhost` with a port, for tests.**
+Beside `http://127.0.0.1` (X202). A client's document at
+`http://127.0.0.1` is taken where the issuer is either. Why: a browser
+makes no passkey at an IP address, and treats `localhost` as this
+computer and as a secure context, so this is the one way to try the
+owner's passkey in a browser with no proxy and no certificate. The
+executor's `listen` is unchanged.
+
+**X278. An owner in the earlier form stops the start.** A state file
+whose `owner` holds `routingPublicKey` was written by a build of the
+design this one replaced, which was never released. The start stops and
+says to run `provared-mcp-executor owner --config <settings> --reset`;
+`owner` without `--reset` says the same. The reset removes that owner as
+it removes any, with every connection. Why: that owner's key opens
+nothing here, and a silent reset would end connections unasked.
+
+**X279. The page names the client by its host.** The authorisation page
+is headed "Approve `<host>` connecting to your guard", and its first line
+names the same host: that of the address of the client's metadata
+document, which the settings list (X203). The name a document gives
+itself (`client_name`) is not shown. Why: the host is what the owner put
+in the settings; a name is whatever the client's server says.
+
+**X280. A setup whose answer is lost does not read as someone else's.**
+The executor writes the owner, and then sends the one answer that holds
+the recovery code. Where that answer does not arrive (the connection
+drops, or the executor stops), the owner exists, the link is spent, and
+the code was never seen. The page then says that the answer did not
+arrive, that a passkey was made and the setup may have finished, and to
+press again. The next press finds an owner (`owner-exists`, 409), and the
+executor's message for that says what it most often means: the setup
+finished but its answer did not arrive; the passkey is the owner's and
+approves connections; a recovery code is to be had by running `owner
+--reset` on the server and setting up again. On the authorisation page,
+Approve then asks that passkey, as at any later approval. Why: until this
+was written, the second press said only that an owner was already set up
+and a second setup refused, which reads as if another had taken the
+executor. A reset at that moment ends no connection, since none exists
+yet. Not done: the passkey made by a setup that was refused or not
+written stays on the device, and the next try makes another with the same
+name; the library's `createPasskey` has no way to leave one out.
+
+**X281. The library at one exact version, held at the start.** The
+package names `provared` at exactly `0.7.0`, in `package.json` and in
+`package-lock.json`, and no longer at any 0.7 version. When it is loaded,
+the executor looks in the library's folder for `checkAssertion`
+(`webauthn.js`), `checkKey` and `PASSKEY_METHODS` (`keys.js`); where one
+is not there, or a file cannot be loaded, nothing starts, and the message
+names what was looked for and says to install the version the package
+names. Why: the library does not name these among its exports (X270), so
+it promises nothing about them, and a range let npm install a version
+nobody had run the executor against; a missing name then gave refusals
+that did not say why. 0.7.0 is the version the owner's check was run
+against, in the tests' own steps and in a browser. The tests themselves
+use this repository's library, as every package's do. The other way,
+which is the better one once it can be had: the next release of the
+library names both functions among its exports, and the executor takes
+them by name and may name a range again.
+
+**X282. A recovery code is used once and is not replaced; it is spent in
+one step.** The founder's decision of 15 November 2026. It replaces the
+part of X276 that made a new code each time one was used and showed it on
+a page, "Write down your new recovery code", and X276's reason for that
+(that the owner is not left one approval from a reset). The rest of X276
+stands. X280 is not changed: what it says of a recovery code, that one is
+to be had by `owner --reset` and a new setup, is now the one way to a new
+code in every case.
+
+- **One use, no new code.** A code that is the owner's is marked as spent
+  in the state file (`"recoverySpent": true`, X226) and approves the one
+  request it was typed for, once its page's Continue is pressed. Nothing
+  is made in its place. Its hash stays in the file, so that the same code
+  typed again can be told that it was used. The setup, which first shows
+  a code, is as it was; so is `owner --reset`, which removes the owner
+  and so the mark; so is the passkey.
+- **Spent in one step.** The front door's state has one operation for
+  it, which looks whether the code is spent and, where it is not, writes
+  that it is, with nothing waited for between the look and the write. It
+  answers whether this call spent the code. The step is one program's:
+  it looks at that program's memory, which is the whole of the state
+  while one program holds the state file, and the file is locked for the
+  executor that opens it, so that no second one holds it (X285). So of
+  any number of answers
+  that hold the same code, sent one after another or at once, for one
+  request or several, one spends it and is shown the page; each of the
+  others is refused (403) in words that say the code was already used,
+  that nothing was approved, and what to do. The log has
+  `owner-recovery-refused` with `"code": "spent"` for each. The request
+  the page is to hold is made before the code is spent: where there is
+  none to make, nothing is spent. A wrong code is told only that the
+  check did not pass, as before.
+- **What the pages say.** The page that answers the use is headed "The
+  recovery code is spent". It says that the code is good for this one
+  connection and nothing after it, that no new code takes its place, and
+  that a new one comes from stopping the executor and running
+  `provared-mcp-executor owner --config <settings> --reset` on the
+  server, which is the command as its own help writes it; and what that
+  command does. Every authorisation page after that says the same in the
+  place of the code's box, which is no longer there. So an owner who did
+  not use the code sees that someone did, without trying it.
+- **One press.** The page's script sends an approval once: Approve with
+  a code typed, Approve once the passkey has signed, and Continue. A
+  second press sends nothing, and the button is disabled. It is disabled
+  a moment after the press and not in it, since a browser leaves a
+  disabled button's `decision` out of the form. A page that the browser
+  shows again as it was left (by Back) takes a press again. The page
+  that says the code is spent runs the executor's script for this, under
+  the same policy as the authorisation page (X224); it holds no secret
+  now. Refuse is not held to one press where no approval was sent: it
+  changes nothing then. Once an approval has been sent, Refuse sends
+  nothing either, and is disabled with the other button (X284, which
+  replaces what this choice said until then: that Refuse is never held
+  back).
+- **The owner's check approves by one of four values.** `true`, or one
+  of the names `passkey`, `recovery` and `setup` (X212). Until this
+  choice any text that was not empty approved, so a check given by
+  someone else that answered a word for "no" would have approved. The
+  check built in answers only those three names.
+- **Two smaller things.** "Keep this connection for the setup link"
+  says so where it takes the place of a connection kept before (X272).
+  Where the library lacks the passkey checks (X281), the command prints
+  the message X281 gives, on one line, and ends with 1; before, Node.js
+  printed it as an uncaught error with its stack. No command runs, as
+  before, `--version` and `stdio` among them. A program that loads the
+  executor as a library gets the same error as before, now with the code
+  `ERR_PROVARED_LIBRARY`.
+
+Why. A new code in the spent one's place went to whoever had typed the
+old one. The executor cannot tell the owner from someone who has seen the
+code, so one code that leaked gave approvals without end, each with the
+code the page before had shown; and "worth one approval at most" was not
+true. The new code was also written before it was seen, so two presses of
+Approve, or an answer lost on its way, left the owner with no code and
+nothing to say so.
+
+What it costs. An owner who has no passkey has one approval, and then
+needs a reset, which ends every connection; such an owner needs a reset
+in any case to have a passkey again, since the code makes none. A code is
+spent when it is typed and its page is sent, not when Continue is
+pressed: where that page does not arrive, or is closed, the code is gone
+and nothing was approved. The one press in the page's script guards
+against the common cause, a double press; a browser that runs no script
+has no such guard, and its second press is told that the code was used.
+
+The other ways. To spend the code only when Continue is pressed, so that
+a page that is lost costs nothing: not taken, because the decision is
+that a second press of Approve is refused as already used, and because
+the page would then promise a spending that had not happened. To keep
+replacing the code and say on every page when one was last used: given
+up by the decision, since the code that works would still be with
+whoever used the last one.
+
+**X283. The page that says a code is spent has five minutes of its own.**
+A request lasts 10 minutes from when its authorisation page opened
+(X207). Until this choice the page that answers a recovery code's use
+(X282) held the request with that same end. So an owner who needed most
+of the 10 minutes to find the code typed it in time, the code was spent,
+and Continue, pressed after reading the page, was told that the request
+had ended: the code was gone, nothing was approved, and no page had named
+a limit. Now the request on that page ends no sooner than five minutes
+after the code was spent (`CONTINUE_LIFE` in `owner.mjs`). Where more
+than five minutes of the 10 were left, it keeps them: the page's time is
+never cut. The page says: "You have 5 minutes to press Continue, once",
+and that where the time runs out first nothing is approved and the code
+is spent all the same. A code typed after the 10 minutes is refused
+before it is spent, as before.
+
+It is the same request, under the same seal and the same id, with a later
+end; so it is still answered once (X207). The executor keeps the id of a
+request it approved until five minutes after that request's own end, and
+no longer only until its end: a request approved by the passkey on its
+first page is then not approved a second time by a Continue on a page
+that outlives the first. One code is spent once while the executor runs,
+and a restart ends every request (X228), so a request is given this time
+once at most, and no request lasts more than 15 minutes. Only that page
+gives it: the note a passkey's challenge seals into a request keeps the
+request's own end. `test/owner.test.mjs` holds this: a challenge asked
+with a minute of the 10 left, its form sent a minute and a second later,
+is refused, and nothing is approved.
+
+Why five minutes: the page has a command to note down and one button;
+five minutes is enough to read it, and short beside the 10 a request
+has. The other way: to refuse a code, unspent, where under a minute of
+its page was left. Not taken: the owner would have to begin again from
+the client to use the code, and a code typed with just over a minute left
+would still leave too little time to read the page.
+
+**X284. Once an approval has been sent, no button of the form sends
+anything more, Refuse included.** Until this choice the page's script
+held back only the button that was pressed, and X282 said that Refuse
+"changes nothing". In one case it did. An owner pressed Approve with the
+recovery code typed, thought again, and pressed Refuse before the answer
+came. The executor took the first form and spent the code; the browser
+dropped that answer for the second form's, and went back to the client
+with `access_denied`. Nothing was approved, the code was gone, and the
+page with Continue was never seen. After a passkey had signed, the same
+two presses would have left an approval in the log and no connection
+made. Now, from the moment an approval is sent (Approve with a code
+typed, Approve once the passkey has signed, or Continue), a press of any
+submit button of the form sends nothing, and every one of them is
+disabled a moment later, as X282 has it for the button pressed. A page
+the browser shows again as it was left (by Back) takes a press of either
+button again. Why: a Refuse sent behind an approval cannot undo it. The
+executor answers each form by itself, and the first has already been
+taken. What it costs: an owner who thinks again after pressing Approve
+cannot refuse on that page. With a code typed, the page that follows
+still asks for Continue, and closing it approves nothing. After a
+passkey, the approval stands, and the browser goes back to the client
+with its code; what ends a connection is as it was. A browser that runs
+no script has no such guard, as X282 says of the double press. Run in a
+headless Chromium browser, version 157, with the executor's answer held
+back 800 ms and Refuse pressed 200 ms after Approve with the code typed:
+one form was sent, and the browser came to "The recovery code is spent".
+Not run in a browser: the same two presses after a passkey, which the
+tests' stand-in page shows.
+
+**X285. One program holds a state file, by a lock of the file's own.**
+An HTTP executor whose settings name `oauth` takes a lock named after
+the state file (`oauth.state`) before it reads anything, and holds it
+until it has closed. The command `owner` takes the same lock before it
+opens the agents' files, and holds it while it works. A second program
+that asks for it is refused at once (a start, since X289, after asking
+again as for a book's lock), with the code `LOCKED`: "An
+executor is running on the state file … (oauth.state), or the command
+"owner" is at work on it", and that two executors need a state file
+each. Neither the state file nor any agent's files were read or written
+by then. The lock is the one X139
+describes, made by the same function under the same kind of name: the
+SHA-256 of the state file's path as the file system resolves it. It has
+the same limits (two paths to one file that the file system does not
+resolve, a shared folder, two containers that do not share a network).
+
+Why: until this choice only each agent's book was locked. An executor
+keeps the owner and the connections in its memory, and writes the whole
+of it over the state file at each change (X210). So a second executor
+whose settings named other agents and the same state file started
+without complaint; two settings files in one folder that both leave
+`state` at its default are enough. Each then held its own copy of the
+owner: the recovery code spent at one was unspent at the other, and
+approved a connection at each, which X282 says cannot happen; and each
+one's next write removed what the other had written, the mark of a spent
+code and its connections among them. An attacker cannot bring this
+about; an operator can, by mistake. X282's single step is one program's,
+and this lock is what makes one program the only one.
+
+What it does not do. A command at work on the agents' files with
+`--offline` (`seal`, `acknowledge`) does not open the state file, and
+takes no lock for it. A program that calls `makeOwnerSetup` itself, and
+not through the command, takes no lock. Behind the lock there is no
+second check, as there is for a book (X123, X132): two executors that
+got past it, in one of the ways above, would write over each other as
+before. The other way that was tried: to read the mark of a spent code
+from the file before spending. It was not enough: by then the second
+program had written its own memory over the file, mark and all.
+
+**X286. The log line of a spent code cannot change the answer.** The line
+`owner-recovery-spent` is written once the state holds the mark and
+before the page is made. Where the log function threw there, the check
+ended without an answer, and the owner was told "The owner's check did
+not pass" (403): the code was spent, and there was no page with Continue.
+The line is now written inside a `try`: whether or not the log took it,
+the page that says the code is spent follows. The command's own log
+writes to standard error and does not throw; this could happen only to a
+program that opens the executor as a library and gives it a log of its
+own. Where the line is lost, the state file still holds the mark, and the
+approval's line still says `"by": "recovery"`. The approval's own line,
+`oauth-approved`, comes one step later: the approval is kept, and then
+the line is written, before the browser is sent back with its code.
+Where the log threw there, Continue was answered 500 and the browser got
+no code, so the recovery code was spent and nothing was approved. That
+line is now written inside a `try` too: the browser is sent back with
+its code whether or not the log took it, and `oauth-connected` follows
+when the client exchanges the code. So two lines are covered,
+`owner-recovery-spent` and `oauth-approved`. Not changed: the other log
+lines of an approval. One that throws at `owner-recovery-refused`
+gives the plain refusal in place of the words that say the code was
+used, with nothing spent by that answer; the executor does not guard
+every line against a log that throws.
+
+What the tests show, and what they do not. `test/owner.test.mjs` runs the
+page's own steps (`owner-steps.mjs`) in Node.js against the executor's
+addresses, with a software passkey: the library's own test stand-in,
+which builds the three values a real passkey returns. It covers the setup
+and the first approval in one prompt, in each order; a later approval
+with an `ES256`, an `RS256` and an `Ed25519` key; the recovery code,
+spent by its use and not replaced, typed again, and sent in four answers
+at once (X282), typed late on its page (X283), with a log that throws
+at the spent line or at the approval's line (X286), and with a second executor on the same state file (X285); a
+setup whose answer is lost; a request
+kept only by the owner's press, and not replaced by another page; and
+each refusal: a code used twice, expired or wrong; a request approved
+twice or ended; a challenge from another request, expired or never given;
+another origin, another relying party, the user not verified, another
+key; a state file in the earlier form; a library without the checks. The same file runs the page's
+script itself (`owner-page.mjs`), fetched from the executor as a browser
+fetches it, with the library's `passkey-browser.js` as served, on a
+stand-in page with a stand-in for `navigator.credentials` and for the
+browser's storage. `test/review3.test.mjs` reads the headers the pages
+are sent with. `test/review4.test.mjs` makes the state file unwritable (a
+folder stands where its temporary file goes) while a connection is ended,
+and shows the end written by the timer and at the close, and the
+command's code 1 where it could not be; it does not kill the executor or
+cut its power.
+Outside the tests, the pages were run in a real browser: headless
+Chromium 153, driven by a script, with a virtual authenticator that
+verifies its user, against the commands `owner` and `http` at
+`http://localhost` (X277), with a stand-in client. The setup and the
+first approval took one prompt in each order; a later approval took one;
+the recovery code approved with none, behind the page that showed the
+new code, and the spent one was then refused; a page that opened kept
+nothing, and a request the owner had kept was not replaced by another
+tab's; each approval went through to a token and a tool call; the scripts
+loaded under the page's policy with nothing on the console. This was run
+with the library as published (0.7.0) and with this repository's. The
+first run of all stopped at its first page, which did not finish loading
+in 30 seconds; the cause was not found, and it did not happen in the
+eight runs after it. Those runs were of the recovery code as X276 first
+had it, with a new code shown. As X282 has it, the pages were run in a
+headless Chromium browser, version 157, driven by a script, with this
+repository's library
+and no authenticator, against an executor opened as the tests open it,
+at `http://127.0.0.1`. With the executor's answer held back for 700 and
+1,500 ms, Approve with the code typed was pressed twice, 60, 158 and 421
+ms apart: one form was sent each time, carrying `decision=approve`, the
+button was disabled, and the browser came to "The recovery code is
+spent", with no code on it and the command; Continue, pressed twice in
+the same way, sent one form, and the log read `owner-recovery-spent` and
+then `oauth-approved` by `recovery`. Refuse, pressed twice in the same
+way, sent two forms, which shows the run would have seen a second. After
+a wrong code and Back, Approve took a press again; the next
+authorisation page had no box and said the code was spent. Nothing but
+the failed load of the stand-in client's address was on the console. Not
+run in a browser as X282 has it: the one press after a passkey, which
+only the tests' stand-in page shows; any other browser; and whether, on
+Back, the browser brought the page back as it was left or loaded it
+again, which was not looked at. A virtual
+authenticator is not a device: no passkey on a computer's own
+authenticator, a phone or a security key has been tried here, and no client but the stand-in; the
+recipe's README says how to try them by hand. In an earlier run, of the
+earlier design, a client whose callback sent the browser on to
+another host was stopped by the page's own `form-action`, after the code
+had reached the callback: the executor does not yet answer that case, and
+the recipe says to watch for it.

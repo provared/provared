@@ -1,6 +1,6 @@
 {
   "name": "provared-mcp-executor",
-  "version": "0.4.2",
+  "version": "0.5.0",
   "mcpName": "io.github.provared/mcp-executor",
   "description": "An executor for MCP tool servers: it stands between agents and a tool server, holds the server's credential, checks each tool call against a permission a person signed with a passkey, sends on the calls the permission allows, and writes a signed, countersigned Provared receipt for each. Evidence, not a verdict.",
   "author": "Pavel Izmaylov",
@@ -43,11 +43,20 @@
   "files": [
     "executor.mjs",
     "http.mjs",
+    "local.mjs",
+    "oauth.mjs",
+    "owner.mjs",
+    "owner-steps.mjs",
+    "owner-page.mjs",
     "compare.mjs",
     "copy.mjs",
     "jsonrpc.mjs",
     "files.mjs",
     "rules.mjs",
+    "sealing.mjs",
+    "sealer-client.mjs",
+    "lock.mjs",
+    "identity.mjs",
     "bin.mjs",
     "quiet.mjs",
     "demo.mjs",
@@ -66,6 +75,6 @@
     "test": "node --disable-warning=ExperimentalWarning --test --test-timeout=60000 --test-force-exit test/*.test.mjs"
   },
   "dependencies": {
-    "provared": "^0.7.0"
+    "provared": "0.9.0"
   }
 }

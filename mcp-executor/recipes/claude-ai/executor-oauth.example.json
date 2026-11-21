@@ -1,0 +1,34 @@
+{
+  "name": "Provared MCP executor for claude.ai",
+  "service": "executor",
+  "listen": { "host": "127.0.0.1", "port": 8796 },
+  "path": "/mcp",
+  "upstream": {
+    "url": "<address of the upstream MCP endpoint>",
+    "credential": { "file": "<file that holds the upstream's bearer token>" }
+  },
+  "oauth": {
+    "issuer": "<public https address of the reverse proxy, such as https://guard.example.com>",
+    "clients": ["https://claude.ai/oauth/mcp-oauth-client-metadata"],
+    "state": "oauth-state.json"
+  },
+  "agents": {
+    "claude-1": {
+      "oauth": true,
+      "slip": "slips/claude-1.json",
+      "book": "books/claude-1.jsonl",
+      "keys": "keys/claude-1.jwk",
+      "issuerKeys": ["<thumbprint of the person's passkey>"]
+    }
+  },
+  "executor": {
+    "keys": "keys/executor.jwk"
+  },
+  "tools": {
+    "read_file": { "action": "provared.data.read" }
+  },
+  "unlisted": "refuse",
+  "hideUnlisted": true,
+  "timeout": 230000,
+  "allowedOrigins": []
+}

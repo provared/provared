@@ -130,7 +130,110 @@ async function readRecorder(config, root) {
   } else if (typeof r.keys === 'string') {
     ({ keys, privateKeys } = await loadKeyFile(pathFrom(root, r.keys), 'recorder'));
   } else throw new Error('recorder: name its key file ("keys") or its signers ("signers").');
-  return { name, keys, privateKeys, fingerprint: await keySetFingerprint(keys) };
+  // Checked whenever it is there, whatever it holds: null, "" or false is refused as any other wrong value is.
+  const stampSettings = r.stamp === undefined ? null : readStampSettings(r.stamp);
+  if (r.stamp !== undefined) {
+    const problem = stampProblems(stampSettings);
+    if (problem) throw new Error(problem);
+  }
+  return { name, keys, privateKeys, fingerprint: await keySetFingerprint(keys), stamp: stampSettings ? await stampHook(stampSettings) : null, stampSettings };
+}
+
+// --- an outside time-stamp on each seal (format description, section 21.2) ---
+//
+// Where "recorder.stamp" gives a time-stamp service, each seal is sent to it
+// as its fingerprint, and the time-stamp it gives goes on the seal's line,
+// in "stamps". The request and the check of the answer are the library's
+// (provared/net/timestamp, loaded only where the setting is given). A
+// time-stamp that is not given never costs the seal: the seal goes into the
+// book without one, and the reason is said.
+
+/** How long the request for a time-stamp may take, unless the settings say otherwise, and the least and the most they may say: milliseconds. */
+export const STAMP_TIMEOUT = 5000;
+export const STAMP_TIMEOUT_MIN = 100;
+export const STAMP_TIMEOUT_MAX = 20000;
+
+/** "recorder.stamp", as given: {address, timeout}, the time limit filled in where it is left out. Not checked: stampProblems does that. */
+function readStampSettings(c) {
+  return c !== null && typeof c === 'object' && !Array.isArray(c) ? { ...c, timeout: c.timeout ?? STAMP_TIMEOUT } : c;
+}
+
+/** What is wrong with "recorder.stamp", or null. The address is that of a service on the web, http: or https:, with no user name, password, query or fragment. */
+function stampProblems(c) {
+  if (c === null || typeof c !== 'object' || Array.isArray(c)) return 'recorder.stamp: must be an object: the address of a time-stamp service and, where wanted, a time limit.';
+  for (const k of Object.keys(c)) if (!['address', 'timeout', 'authority'].includes(k)) return `recorder.stamp.${k}: is not a setting of a time-stamp service: it takes "address", "timeout" and "authority".`;
+  if (c.authority !== undefined && readAuthority(c.authority) === null) return 'recorder.stamp.authority: must be the fingerprint of the certificate the service signs its time-stamps with, as a checker names the service ("stampServices": the SHA-256 of the certificate in base64url, 43 characters), or a list of 1 to 16 of them.';
+  let url = null;
+  try {
+    url = typeof c.address === 'string' ? new URL(c.address) : null;
+  } catch {
+    url = null;
+  }
+  if (!url || !['http:', 'https:'].includes(url.protocol) || url.username !== '' || url.password !== '' || url.hash !== '' || /[?#]/.test(url.href)) return 'recorder.stamp.address: must be the whole address of a time-stamp service (RFC 3161), beginning http:// or https://, with no user name, password, query or fragment.';
+  if (!Number.isInteger(c.timeout) || c.timeout < STAMP_TIMEOUT_MIN || c.timeout > STAMP_TIMEOUT_MAX) return `recorder.stamp.timeout: must be a whole number of milliseconds from ${STAMP_TIMEOUT_MIN} to ${STAMP_TIMEOUT_MAX}: how long the request for a time-stamp may take.`;
+  return null;
+}
+
+/**
+ * What a time-stamp over a new seal is held against: the seal's own time as
+ * a checker reads it (whole seconds), and the latest time that a sound
+ * time-stamp from a service gave a seal before it in the book, or null.
+ */
+function stampContext(entries, when) {
+  let after = null;
+  for (const e of entries) {
+    if (e.kind !== 'seal' || e.problems.length > 0) continue;
+    for (const s of e.stamps ?? []) {
+      if (s.kind === 'service' && (s.state === 'valid' || s.state === 'untrusted') && Number.isFinite(s.time) && (after === null || s.time > after)) after = s.time;
+    }
+  }
+  return { when: Math.floor(when / 1000) * 1000, after };
+}
+
+/**
+ * Text from an answer, on one line and with no character that steers a
+ * terminal or cannot be seen, for the commands to print. Control and format
+ * characters (those that turn text round or hide it), the characters
+ * Unicode says are ignored where not understood, and every kind of blank
+ * (the blank braille pattern among them) become spaces; a letter keeps one
+ * accent at most; the text is cut at 600 whole characters (X356).
+ */
+export const plainText = (v) => {
+  const text = String(v).replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}\p{Zs}\u2800]/gu, ' ').replace(/(\p{M})\p{M}+/gu, '$1');
+  const characters = [...text];
+  return characters.length > 600 ? `${characters.slice(0, 600).join('')}...` : text;
+};
+
+/** "authority", read as the library reads it (stampAuthority): a list of 1 to 16 certificate fingerprints, or null where it is not one. */
+function readAuthority(a) {
+  const list = typeof a === 'string' ? [a] : a;
+  return Array.isArray(list) && list.length > 0 && list.length <= 16 && list.every((x) => typeof x === 'string' && /^[A-Za-z0-9_-]{43}$/.test(x)) ? [...list] : null;
+}
+
+/** What "check" warns of where a time-stamp service is asked over plain http: and no certificate is named. */
+export const HTTP_STAMP_WARNING = 'recorder.stamp: the service is asked over plain http: and no "authority" is named, so a time-stamp signed by anyone who answers in its place is kept and reported as a time-stamp. Name the fingerprint of the service\'s certificate in "authority" (the "stampedBy" of a seal shows it).';
+
+/**
+ * The function that asks the service the settings give for a time-stamp
+ * over a seal's fingerprint (the library's askForStamp): it gives the item
+ * of "stamps" and the fingerprint of the certificate that signed it. Where
+ * "authority" is given, a time-stamp signed by another is not kept.
+ */
+async function stampHook({ address, timeout, authority }) {
+  let net;
+  try {
+    net = await import('provared/net/timestamp');
+  } catch (e) {
+    throw new Error(`recorder.stamp: the library installed has no client for a time-stamp service (provared/net/timestamp), so no time-stamp can be asked for (${e.code ?? e.message}).`);
+  }
+  const named = authority === undefined ? null : readAuthority(authority);
+  // A library from before "authority" would take a time-stamp from any signer: where one is named, it is refused.
+  if (named && typeof net.stampAuthority !== 'function') throw new Error('recorder.stamp.authority: the library installed does not hold a time-stamp to the certificate named, so no time-stamp could be trusted to be the service\'s. Install a library that does, or leave "authority" out.');
+  net.stampService({ address, timeout, ...(named ? { authority: named } : {}) }); // the address, the time limit and "authority", read once
+  return async (fingerprintBytes, context = {}) => {
+    const got = await net.askForStamp(fingerprintBytes, { address, timeout, when: context?.when, after: context?.after, ...(named ? { authority: named } : {}) });
+    return { stamp: got.stamp, authority: got.authority };
+  };
 }
 
 // --- the gateway ---
@@ -864,10 +967,36 @@ export async function openGateway(config, more = {}) {
       const result = await agent.writer.check();
       const seals = result.entries.filter((e) => e.kind === 'seal' && e.problems.length === 0);
       const previous = seals.length ? seals[seals.length - 1].fingerprint : undefined;
-      const sealed = await writeSeal(agent.writer.book(), { by: { keys: recorder.keys, name: recorder.name }, ...(previous ? { previous } : {}), when: now() }, recorder.privateKeys);
-      await agent.writer.add({ seal: sealed.record });
+      const when = now();
+      const sealed = await writeSeal(agent.writer.book(), { by: { keys: recorder.keys, name: recorder.name }, ...(previous ? { previous } : {}), when }, recorder.privateKeys);
+      // An outside time-stamp, where the settings give a service. A seal is never lost for want of one: where the service
+      // gives none, or the book does not take the seal with it, the seal goes in without it and the reason is said.
+      let stamps;
+      let stampedBy = null;
+      let stampProblem = null;
+      if (recorder.stamp) {
+        try {
+          // Held against the seal's own time, and the latest time a service's time-stamp gave a seal before it.
+          const got = await recorder.stamp(sealed.fingerprintBytes.slice(), stampContext(result.entries, when));
+          stamps = [typeof got === 'string' ? got : got.stamp];
+          // The certificate that signed it, so that the operator can tell readers which service to trust (X344).
+          if (typeof got?.authority === 'string') stampedBy = got.authority;
+        } catch (e) {
+          stampProblem = { code: typeof e?.code === 'string' && e.code.startsWith('stamp-') ? e.code : 'stamp-not-given', message: typeof e?.message === 'string' && e.message !== '' ? e.message : 'The time-stamp service gave no time-stamp.' };
+        }
+      }
+      if (stamps) {
+        try {
+          await agent.writer.add({ seal: sealed.record, stamps });
+        } catch (e) {
+          stamps = undefined;
+          stampProblem = { code: 'stamp-not-given', message: `The book did not take the seal with its time-stamp (${e.message}), so the seal went in without it.` };
+        }
+      }
+      if (!stamps) await agent.writer.add({ seal: sealed.record });
       if (!save(agent)) throw new Error(`The seal is in the gateway's memory, and the book file could not be written: ${agent.stopped}`);
-      return { agent: name, entry: result.size, fingerprint: sealed.fingerprint };
+      if (stampProblem) log({ event: 'stamp-not-given', agent: name, entry: result.size, seal: sealed.fingerprint, code: stampProblem.code, reason: stampProblem.message });
+      return { agent: name, entry: result.size, fingerprint: sealed.fingerprint, ...(stamps ? { stamped: true, ...(stampedBy ? { stampedBy } : {}) } : {}), ...(stampProblem ? { stampProblem } : {}) };
     });
   }
 
@@ -950,7 +1079,9 @@ export async function openGateway(config, more = {}) {
         if (result) {
           const seals = result.entries.filter((e) => e.kind === 'seal' && e.problems.length === 0);
           const last = seals.at(-1);
-          checked = { entries: result.size, lastSeal: last ? { entry: last.index, fingerprint: last.fingerprint } : null, sound: !result.summary.problemFound, withinSlips: result.summary.withinSlips, at: new Date(now()).toISOString() };
+          // Who signed the last seal's time-stamp, where it has one from a service (X344).
+          const by = (last?.stamps ?? []).find((s) => s.kind === 'service' && typeof s.authority === 'string' && (s.state === 'valid' || s.state === 'untrusted'))?.authority;
+          checked = { entries: result.size, lastSeal: last ? { entry: last.index, fingerprint: last.fingerprint, ...(by ? { stampedBy: by } : {}) } : null, sound: !result.summary.problemFound, withinSlips: result.summary.withinSlips, at: new Date(now()).toISOString() };
           agent.lastCheck = checked;
         }
       }
@@ -1040,6 +1171,19 @@ export async function checkConfig(config, { root = process.cwd() } = {}) {
       problems.push(`recorder: ${e.message} (provared-gateway keys --recorder makes it).`);
     }
   } else if (typeof config.recorder?.signers !== 'string' && !Array.isArray(config.recorder?.privateKeys)) problems.push('recorder: name its key file ("keys") or its signers ("signers").');
+  if (config?.recorder?.stamp !== undefined) {
+    const problem = stampProblems(readStampSettings(config.recorder.stamp));
+    if (problem) problems.push(problem);
+    // The client is part of the library from the release that has provared/net/timestamp: a library without it is said here.
+    else {
+      try {
+        await stampHook(readStampSettings(config.recorder.stamp));
+      } catch (e) {
+        problems.push(e.message);
+      }
+      if (config.recorder.stamp.authority === undefined && /^http:/i.test(config.recorder.stamp.address)) warnings.push(HTTP_STAMP_WARNING);
+    }
+  }
   if (config?.admin === undefined) warnings.push('No administrator secret is named ("admin"), so GET /provared/status and POST /provared/seal answer nothing; "seal --offline" still works on a stopped gateway.');
   else if (typeof config.admin?.secretHash !== 'string' || !SECRET_HASH.test(config.admin.secretHash)) problems.push('admin: "secretHash" must be the hash of a secret (provared-gateway secret makes one).');
   const slips = [];

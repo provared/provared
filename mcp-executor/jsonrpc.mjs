@@ -205,6 +205,9 @@ const READ_IN_PARAMS = new Map([
   ['notifications/cancelled', ['requestId']],
 ]);
 
+/** The methods the executor itself acts on (a call it checks, a list it filters, a session it begins, a cancellation it renames). A method of the agent's that is one of them once folded (foldName), and is not written so, is refused: a server that reads a method without regard to capitals would act on it, and the executor would pass it by (X253). */
+const READ_METHODS = ['tools/call', 'tools/list', 'initialize', 'notifications/cancelled'];
+
 const SAFE = BigInt(Number.MAX_SAFE_INTEGER);
 
 /**
@@ -348,6 +351,7 @@ function readStrictly(line, { strictNumbers = true } = {}) {
   if (hasMethod) {
     if (typeof message.method !== 'string') return { refused: { code: CODES.invalidRequest, message: 'The method must be text.' }, id: knownId };
     if (hasResult || hasError) return { refused: { code: CODES.invalidRequest, message: 'A message with a method carries no result or error.' }, id: knownId };
+    if (strictNumbers && misspelt({ [message.method]: true }, READ_METHODS) !== null) return { refused: { code: CODES.invalidRequest, message: `The method differs only in capitals, or in letters that some readers take as the same, from one the executor acts on (${READ_METHODS.join(', ')}), which two readers may read differently.` }, id: knownId };
     if (Object.hasOwn(message, 'params') && (message.params === null || typeof message.params !== 'object' || Array.isArray(message.params))) {
       return { refused: { code: CODES.invalidRequest, message: 'The params must be an object.' }, id: knownId };
     }

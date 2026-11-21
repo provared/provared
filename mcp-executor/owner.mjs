@@ -1,0 +1,452 @@
+// The owner's check by the owner's passkey (DESIGN.md, section 14.1, choices
+// X270 onward), for the OAuth front door (oauth.mjs, X212).
+//
+// A plain passkey: no extension of it is asked for, so any passkey that
+// verifies its user will do. At the setup the browser makes the passkey and
+// sends its identifier and its public key, with the setup link's code. At
+// each approval the passkey signs the executor's challenge for that one
+// request, and the executor checks the signature with the library's own
+// check of a passkey's signature (checkAssertion: Web Authentication Level
+// 3, section 7.2), against the public key it keeps, with its public address
+// as the origin and that address's host as the relying party. A recovery
+// code, made here and shown once, approves one connection in the passkey's
+// place and is then spent: no new one is made in its place, and the next
+// comes with a new owner, from "owner --reset" (X282). Only its SHA-256 is
+// kept.
+//
+// What it serves, beside the front door's addresses:
+//
+//   GET  /oauth/owner                  the setup page (the link's code is in its fragment)
+//   GET  /oauth/owner/page.js          the pages' script (owner-page.mjs)
+//   GET  /oauth/owner/steps.js         its steps (owner-steps.mjs)
+//   GET  /oauth/owner/lib/provared/…   the library's own files, for its passkey functions
+//   POST /oauth/owner/link             whether the setup link still works (X271)
+//   POST /oauth/owner/setup            the new owner, and with it the approval of one request that waits (X271, X272)
+//   POST /oauth/owner/challenge        a challenge for one request at the page (X273)
+//
+// No failed attempt is counted here (X211): the setup link's code and a
+// challenge are 256 random bits, the recovery code 160, and the answer is a
+// signature, so none can be guessed, and a count could only shut the owner
+// out.
+
+import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { readdirSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { CHALLENGE_PATH, FIELD_AUTHENTICATOR_DATA, FIELD_CHALLENGE, FIELD_CLIENT_DATA, FIELD_RECOVERY, FIELD_SIGNATURE, LINK_PATH, OWNER_PATH, SETUP_PATH } from './owner-steps.mjs';
+
+export { OWNER_PATH };
+
+/**
+ * The library's folder of files, as Node.js finds the package. The pages
+ * are served its files from there (X224), and the executor takes from
+ * there the two functions the library has for a passkey but does not name
+ * among its exports: the check of a passkey's signature and the check of a
+ * public key's form (X270). The library promises neither by name, so the
+ * package names one exact version of it, and what was found is held
+ * against what is used before anything else is done: a library without
+ * them stops the start, and says why. The error carries LIBRARY_PROBLEM as
+ * its code, by which the command knows it and prints its message alone
+ * (bin.mjs).
+ */
+export const LIBRARY_PROBLEM = 'ERR_PROVARED_LIBRARY';
+export async function passkeyChecks(folder) {
+  const found = {};
+  try {
+    found.checkAssertion = (await import(pathToFileURL(join(folder, 'webauthn.js')).href)).checkAssertion;
+    Object.assign(found, (({ PASSKEY_METHODS, checkKey }) => ({ PASSKEY_METHODS, checkKey }))(await import(pathToFileURL(join(folder, 'keys.js')).href)));
+  } catch {
+    // Said below: one of the two files is not there, or cannot be loaded.
+  }
+  if (typeof found.checkAssertion !== 'function' || typeof found.checkKey !== 'function' || !Array.isArray(found.PASSKEY_METHODS)) {
+    throw Object.assign(new Error(`provared-mcp-executor: the "provared" library at ${folder} does not have the passkey checks this version was built with (checkAssertion in webauthn.js; checkKey and PASSKEY_METHODS in keys.js). Install the version of "provared" that this package's package.json names. Nothing was started.`), { code: LIBRARY_PROBLEM });
+  }
+  return found;
+}
+const LIBRARY = dirname(fileURLToPath(import.meta.resolve('provared')));
+const { checkAssertion, PASSKEY_METHODS, checkKey } = await passkeyChecks(LIBRARY);
+
+/** How long a setup link and a challenge last, in milliseconds (X218, X273). */
+export const SETUP_LIFE = 15 * 60 * 1000;
+export const CHALLENGE_LIFE = 2 * 60 * 1000;
+/** How long the page that says a recovery code is spent has for its Continue, from when the code was spent, in milliseconds (X283). */
+export const CONTINUE_LIFE = 5 * 60 * 1000;
+/** A recovery code is this many random bytes, written in base32 (X276). */
+export const RECOVERY_BYTES = 20;
+/** The command that makes a new owner, and with it a new recovery code, as the command's own help writes it (bin.mjs, X282). */
+export const RESET_COMMAND = 'provared-mcp-executor owner --config <settings> --reset';
+/** What is said to a recovery code that was the owner's and is spent (X282). */
+export const RECOVERY_USED = `This recovery code was already used, and is spent: a code approves one connection. Nothing was approved by this. If you pressed Approve twice, the first press spent the code, and the page it was answered with, whose Continue approves, was lost to the second. If you did not use the code, someone else did: reset the owner. The owner's passkey still approves: go back and press Approve with the box empty. A new code comes from stopping the executor and running "${RESET_COMMAND}" on the server, which removes the owner and ends every connection.`;
+const BODY_LIMIT = 16 * 1024;
+const BODY_TIME = 10 * 1000;
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const B64URL = /^[A-Za-z0-9_-]*$/;
+const HASH = /^[A-Za-z0-9_-]{43}$/;
+const isObject = (v) => typeof v === 'object' && v !== null && !Array.isArray(v);
+const escape = (text) => String(text).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+
+/** The bytes a base64url text stands for, where it is written as the executor writes it and its length is within [least, most]; else null. */
+export function bytesOf(text, least, most = least) {
+  if (typeof text !== 'string' || !B64URL.test(text)) return null;
+  const b = Buffer.from(text, 'base64url');
+  if (b.toString('base64url') !== text || b.length < least || b.length > most) return null;
+  return new Uint8Array(b);
+}
+
+/** Whether an object has exactly these members. */
+const only = (v, keys) => isObject(v) && Object.keys(v).length === keys.length && keys.every((k) => Object.hasOwn(v, k));
+
+/** Bytes in base32 (RFC 4648, section 6), with no padding. */
+const BASE32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+export function base32(bytes) {
+  let out = '';
+  let held = 0;
+  let bits = 0;
+  for (const b of bytes) {
+    held = (held << 8) | b;
+    bits += 8;
+    while (bits >= 5) {
+      bits -= 5;
+      out += BASE32[(held >>> bits) & 31];
+    }
+    held &= (1 << bits) - 1;
+  }
+  if (bits > 0) out += BASE32[(held << (5 - bits)) & 31];
+  return out;
+}
+
+/** A recovery code as it was typed, in the form its hash was made from: in capitals, with the spaces and hyphens taken out (X276). Whether it is the owner's is for its hash to say. */
+export const recoveryText = (typed) => String(typed).replace(/[\s-]/g, '').toUpperCase();
+
+/** What says that a state file holds an owner in the form of the builds before the plain passkey (never released). */
+export const isOldOwner = (v) => isObject(v) && Object.hasOwn(v, 'routingPublicKey');
+
+/**
+ * The owner as the executor keeps it, or {problem} (X226): the passkey's
+ * identifier, in base64url; its public key as a JWK, in exactly the form
+ * the library takes for a passkey's key (ES256, RS256 or Ed25519; the
+ * method is the key's "alg"); and the SHA-256 of the recovery code, in
+ * base64url.
+ */
+export function readOwner(v) {
+  if (!only(v, ['credentialId', 'key', 'recoveryHash'])) return { problem: 'the owner is not {credentialId, key, recoveryHash}' };
+  if (!bytesOf(v.credentialId, 1, 1023)) return { problem: 'credentialId is not 1 to 1023 bytes in base64url' };
+  try {
+    checkKey(v.key, PASSKEY_METHODS, 'key');
+  } catch (e) {
+    return { problem: `key is not a passkey's public key as a JWK (${e.message})` };
+  }
+  if (typeof v.recoveryHash !== 'string' || !HASH.test(v.recoveryHash)) return { problem: 'recoveryHash is not a SHA-256 in base64url' };
+  const key = {};
+  for (const name of Object.keys(v.key).sort()) key[name] = v.key[name];
+  return { owner: { credentialId: v.credentialId, key, recoveryHash: v.recoveryHash } };
+}
+
+const sameText = (a, b) => {
+  const x = Buffer.from(String(a));
+  const y = Buffer.from(String(b));
+  return x.length === y.length && timingSafeEqual(x, y);
+};
+
+/** A JSON body, read to BODY_LIMIT bytes within BODY_TIME ms: the value, or undefined. */
+function readJson(req) {
+  return new Promise((done) => {
+    const type = String(req.headers['content-type'] ?? '').toLowerCase();
+    if (!/^application\/json\s*(;|$)/.test(type)) {
+      req.resume();
+      return done(undefined);
+    }
+    const chunks = [];
+    let size = 0;
+    let over = false;
+    const end = (value) => {
+      if (over) return;
+      over = true;
+      clearTimeout(timer);
+      done(value);
+    };
+    const timer = setTimeout(() => {
+      end(undefined);
+      req.destroy();
+    }, BODY_TIME);
+    req.on('data', (c) => {
+      size += c.length;
+      if (size > BODY_LIMIT) end(undefined);
+      else if (!over) chunks.push(c);
+    });
+    req.on('error', () => end(undefined));
+    req.on('end', () => {
+      try {
+        end(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks))));
+      } catch {
+        end(undefined);
+      }
+    });
+  });
+}
+
+/** The files the pages load, by their address: the script, its steps, and the library's own files (X224). */
+function pageFiles() {
+  const files = new Map();
+  const js = (path, file) => files.set(path, readFileSync(file));
+  js(`${OWNER_PATH}/page.js`, join(HERE, 'owner-page.mjs'));
+  js(`${OWNER_PATH}/steps.js`, join(HERE, 'owner-steps.mjs'));
+  for (const f of readdirSync(LIBRARY)) if (f.endsWith('.js')) js(`${OWNER_PATH}/lib/provared/${f}`, join(LIBRARY, f));
+  return files;
+}
+
+/**
+ * The owner's check by passkey, for openFrontDoor.
+ *
+ * issuer     the executor's public address: the origin every signature must name, and its host the relying party
+ * resource   the address a client is given for the executor, and "clients" the clients the settings list: what the setup page says to do next
+ * store      {owner() -> the owner or null, setup() -> {hash, expires} or null, setOwner(owner), spendRecovery() -> whether this call spent the recovery code}: the front door's state file
+ * withNote   (request, note, {ownTime}) -> the same waiting request with the note sealed into it, as the text for the page's form; null where the text is not a request waiting at the page (X228).
+ *            With "ownTime", the request does not end before CONTINUE_LIFE from now (X283)
+ * clientOf   (request) -> the client of a request waiting at the page, or null where the text is not one
+ * page, json the front door's ways to answer with a page and with JSON
+ * hashOf     SHA-256 in base64url, as the front door keeps its hashes
+ */
+export function openPasskeyCheck({ issuer, resource = `${issuer}/mcp`, clients = [], now = Date.now, log = () => {}, store, withNote, clientOf = () => null, page, json, hashOf }) {
+  const files = pageFiles();
+  const { host, hostname } = new URL(issuer);
+  /**
+   * A challenge is not kept here: it is sealed into its request, in the
+   * page's form (X273). Kept here, until they end, are only the challenges
+   * whose signature passed, so that none passes twice. Only the owner can
+   * add to them, so they need no cap.
+   */
+  const used = new Map();
+  const tidy = () => {
+    const t = now();
+    for (const [k, expires] of used) if (expires <= t) used.delete(k);
+  };
+  const refuse = (res, status, code, message, extra = {}) => {
+    log({ event: 'oauth-refused', code });
+    json(res, status, { error: code, message }, extra);
+  };
+  /** The host a client is known by: that of its metadata document's address. */
+  const hostOf = (client) => {
+    try {
+      return new URL(client).host;
+    } catch {
+      return 'a client';
+    }
+  };
+  const clientHosts = [...new Set(clients.map(hostOf))];
+
+  const setupPage = [
+    `<p>This page makes the owner of the executor at ${escape(host)}: a passkey, and a recovery code. The executor keeps the passkey's public key and a hash of the recovery code, and nothing that could stand in for either.</p>`,
+    `<p>The passkey belongs to ${escape(host)}. If the executor's public address changes, the passkey no longer works there; the recovery code still approves a connection.</p>`,
+    // Shown by the page's script where a request waits that an authorisation page left in this browser (X272): the owner is shown that page again, and approves there or not.
+    '<form method="post" action="/oauth/authorize" id="owner-review" hidden>',
+    '<input type="hidden" name="request" id="owner-review-request" value="">',
+    '<p><button type="submit" name="decision" value="show">Review the connection that is waiting</button></p>',
+    '</form>',
+    '<p><button type="button" id="owner-setup">Make the passkey</button></p>',
+    '<p id="owner-status" role="status"></p>',
+    '<pre id="owner-recovery" hidden></pre>',
+    `<p id="owner-next" hidden>Next: add ${escape(resource)} in ${escape(clientHosts.length > 0 ? clientHosts.join(' or ') : 'a client the settings list')}, and approve that connection with this passkey.</p>`,
+    `<script type="module" src="${OWNER_PATH}/page.js"></script>`,
+  ].join('\n');
+
+  /** Whether a setup with this code is refused: no, while no owner exists and the link's code is given before it ends (X218, X223). Answers the refusal. */
+  function linkRefused(res, v) {
+    if (store.owner()) {
+      // Most often this is the owner's own setup, seen again: so it says what to do where its answer was lost, and does not read as if another had taken the executor (X280).
+      refuse(res, 409, 'owner-exists', 'An owner is already set up on this executor, so this setup link is of no more use. If you made the passkey here a moment ago and saw no recovery code, the setup finished but its answer did not arrive: your passkey is the owner\'s and approves connections. To get a recovery code, run "provared-mcp-executor owner --reset" on the server and set up again. A second setup is refused unless the owner is reset there.');
+      return true;
+    }
+    const setup = store.setup();
+    if (!setup || setup.expires <= now()) {
+      refuse(res, 403, 'setup-ended', 'This setup link has been used or has ended. Make a new one on the server.');
+      return true;
+    }
+    if (!isObject(v) || typeof v.code !== 'string' || !sameText(hashOf(v.code), setup.hash)) {
+      refuse(res, 403, 'setup-refused', 'This is not the code of the setup link.');
+      return true;
+    }
+    return false;
+  }
+
+  /** POST /oauth/owner/link (X271): whether the link still works, before the page makes a passkey; and, where the page holds a request, whether it still waits, and whose it is (X272). */
+  function linkOpen(res, v) {
+    if (linkRefused(res, v)) return;
+    const withRequest = Object.hasOwn(v, 'request');
+    if (!only(v, withRequest ? ['code', 'request'] : ['code']) || (withRequest && typeof v.request !== 'string')) return refuse(res, 400, 'bad-request', 'Send {"code": "<the code after the # of the link>"} and, where the page holds one, "request".');
+    const client = withRequest ? clientOf(v.request) : null;
+    json(res, 200, client === null ? { link: 'open' } : { link: 'open', waiting: hostOf(client) });
+  }
+
+  /** POST /oauth/owner/setup (X271): once, with the link's code, while no owner exists. With a request that waits at the page, the same message approves it (X272). */
+  function setUp(res, v) {
+    if (linkRefused(res, v)) return;
+    const withRequest = Object.hasOwn(v, 'request');
+    if (!only(v, withRequest ? ['code', 'credentialId', 'key', 'request'] : ['code', 'credentialId', 'key']) || (withRequest && typeof v.request !== 'string')) return refuse(res, 400, 'bad-request', 'The owner is not in the form the page sends: {code, credentialId, key} and, where the page holds one, request.');
+    // The code is the executor's own, from Node.js's random source; only its hash is kept (X276).
+    const recovery = base32(randomBytes(RECOVERY_BYTES));
+    const read = readOwner({ credentialId: v.credentialId, key: v.key, recoveryHash: hashOf(recovery) });
+    if (read.problem) return refuse(res, 400, 'bad-request', `The owner is not in the form the page sends: ${read.problem}.`);
+    try {
+      store.setOwner({ ...read.owner, created: now() });
+    } catch {
+      // The state file could not be written: there is no owner, and the link still works.
+      return refuse(res, 500, 'not-written', 'The executor could not write its state, so no owner was set up. The link still works: try again.');
+    }
+    // The request the page sent with the setup, where it still waits, is approved by this setup: the page's form then needs no passkey. The note is under the request's seal, and names the owner it was made for. A request that has ended is not approved, and the owner is set up all the same: by now the passkey has been made.
+    const approved = withRequest ? withNote(v.request, { setup: read.owner.credentialId }) : null;
+    log({ event: 'owner-set', approves: approved !== null });
+    json(res, 200, { owner: 'set', recoveryCode: recovery.match(/.{4}/g).join('-'), ...(withRequest ? { request: approved } : {}) });
+  }
+
+  /** POST /oauth/owner/challenge (X273). */
+  function challengeFor(res, v) {
+    const owner = store.owner();
+    if (!owner) return refuse(res, 409, 'no-owner', 'No owner is set up on this executor yet.');
+    // The challenge: sealed into the request it is for, which the page puts in its form in place of the one it had. So a form holds one challenge. Nothing is kept here, so an earlier challenge given for the same request still passes until its two minutes end: each needs the passkey's signature, and the request is answered once (X221).
+    const challenge = randomBytes(32).toString('base64url');
+    const request = only(v, ['request']) && typeof v.request === 'string' ? withNote(v.request, { challenge, expires: now() + CHALLENGE_LIFE }) : null;
+    if (request === null) return refuse(res, 400, 'bad-request', 'Send {"request": "<the request of a page waiting for the owner, as its form holds it>"}.');
+    // With it, which passkey to ask: its identifier, which is no secret.
+    return json(res, 200, { challenge, request, credentialId: owner.credentialId });
+  }
+
+  return {
+    /** The authorisation page runs the script from the executor's own address, and fetches from there only (X224). */
+    scripts: true,
+    form: () =>
+      [
+        `<input type="hidden" name="${FIELD_CHALLENGE}" value="">`,
+        `<input type="hidden" name="${FIELD_AUTHENTICATOR_DATA}" value="">`,
+        `<input type="hidden" name="${FIELD_CLIENT_DATA}" value="">`,
+        `<input type="hidden" name="${FIELD_SIGNATURE}" value="">`,
+        ...(store.owner()
+          ? store.owner().recoverySpent === true
+            ? [
+                // No box: there is no code to type. Every authorisation page says so, so an owner who did not use the code learns of it without trying it (X282).
+                `<p id="owner-recovery-spent">Approve asks for the owner's passkey. This executor's recovery code has been used and is spent, so there is none to type. If you did not use it, someone else did: reset the owner. A new code comes from stopping the executor and running "${escape(RESET_COMMAND)}" on the server, which removes the owner and ends every connection.</p>`,
+              ]
+            : [
+                '<p>Approve asks for the owner\'s passkey. Without the passkey, type the recovery code here first. It approves one connection and is then spent:</p>',
+                `<p><label>Recovery code <input type="password" name="${FIELD_RECOVERY}" id="owner-recovery-code" autocomplete="off" spellcheck="false"></label></p>`,
+              ]
+          : [
+              // The page's script says more here, where this browser holds the setup link (X272).
+              '<p id="owner-first">This executor has no owner yet, so nothing can be approved here. Its owner is made by the setup link, which the command "provared-mcp-executor owner" prints on the server. If you have that link and began this connection yourself, press "Keep this connection for the setup link", then open the link in this browser within 10 minutes: it shows this connection again, and one passkey prompt then makes the owner and approves it.</p>',
+              // Shown by the page's script where this browser holds no setup link. Only a press of it keeps the request for the setup page: a page that merely opens keeps nothing (X272).
+              '<p><button type="button" id="owner-keep" hidden>Keep this connection for the setup link</button></p>',
+              '<pre id="owner-recovery" hidden></pre>',
+            ]),
+        '<p id="owner-status" role="status"></p>',
+        `<script type="module" src="${OWNER_PATH}/page.js"></script>`,
+      ].join('\n'),
+    /**
+     * Whether the form's fields prove the owner, for this request (X274):
+     * false, or which proof it was. "note" is what the request's seal
+     * holds of the check's. One of three things proves the owner: the
+     * request was approved by the setup that made this owner ("setup",
+     * X272); by the recovery code ("recovery", X276); or the passkey's
+     * signature over this executor's own challenge for this request, with
+     * the issuer as the origin and its host as the relying party, the user
+     * verified ("passkey", X273). The signature is checked before anything
+     * is kept, and a challenge passes once.
+     *
+     * A recovery code typed in the form does not approve at once. It is
+     * spent, by one write of the state, and no new one is made (X282). The
+     * answer is {pause}: a page that says so, and how a new code is to be
+     * had, whose Continue sends the same request with a note that the
+     * recovery code approved it. The code typed again, by anyone, in any
+     * request, gets {refusal}: the words that say it was already used.
+     */
+    async check(fields, { origin, note }) {
+      tidy();
+      const owner = store.owner();
+      if (!owner) return false;
+      if (isObject(note) && typeof note.setup === 'string') return sameText(note.setup, owner.credentialId) ? 'setup' : false;
+      if (isObject(note) && typeof note.recovery === 'string') return sameText(note.recovery, owner.credentialId) ? 'recovery' : false;
+      const typed = fields.get(FIELD_RECOVERY) ?? '';
+      if (typed.trim() !== '') {
+        if (!sameText(hashOf(recoveryText(typed)), owner.recoveryHash)) return false;
+        // The request the page will hold is made first: where there is none to make, nothing is spent. It has time of its own, so that a code typed late on its page is not spent for nothing (X283).
+        const text = fields.get('request') ?? '';
+        const request = withNote(text, { recovery: owner.credentialId }, { ownTime: true });
+        if (typeof request !== 'string') return false;
+        // The code is spent here, once: the store says whether this call spent it, and writes the state in the same step. Of two answers that hold the same code, at once or one after the other, one is told true; the other is told that the code was already used (X282).
+        let spent = false;
+        try {
+          spent = store.spendRecovery() === true;
+        } catch {
+          return { problem: 'The executor could not write its state, so the recovery code was not spent and nothing was approved. Try again.' };
+        }
+        if (!spent) {
+          log({ event: 'owner-recovery-refused', code: 'spent' });
+          return { refusal: RECOVERY_USED };
+        }
+        // The code is spent, and the page that says so follows, whether or not the log took its line: a log that throws here must not leave a spent code with a plain refusal and no Continue (X286).
+        try {
+          log({ event: 'owner-recovery-spent' });
+        } catch {
+          // Not logged. The state file holds the mark, and the approval's own line says "by": "recovery".
+        }
+        return {
+          pause: {
+            title: 'The recovery code is spent',
+            body: [
+              '<p id="owner-spent">The recovery code you typed is spent. It is good for this one connection, which Continue approves, and for nothing after it. No new code takes its place.</p>',
+              '<p>To have a recovery code again, stop the executor and run this on the server:</p>',
+              `<pre id="owner-reset">${escape(RESET_COMMAND)}</pre>`,
+              '<p>It removes the owner and ends every connection, and prints a setup link. The setup makes a new passkey and shows a new code. Until then the owner\'s passkey, where you still have it, approves connections as before.</p>',
+              `<p id="owner-continue">You have ${CONTINUE_LIFE / 60000} minutes to press Continue, once: the connection is approved when you do, and the browser goes back to ${escape(hostOf(clientOf(text) ?? ''))}. If the time runs out first, nothing is approved, and the code is spent all the same.</p>`,
+              '<p id="owner-status" role="status"></p>',
+              // The page's script lets Continue be pressed once (X282). The page holds no secret.
+              `<script type="module" src="${OWNER_PATH}/page.js"></script>`,
+            ].join('\n'),
+            request,
+          },
+        };
+      }
+      const text = fields.get(FIELD_CHALLENGE) ?? '';
+      if (!isObject(note) || typeof note.challenge !== 'string' || !sameText(text, note.challenge) || !(note.expires > now()) || used.has(text)) return false;
+      const signedBytes = bytesOf(text, 32);
+      const authenticatorData = bytesOf(fields.get(FIELD_AUTHENTICATOR_DATA) ?? '', 37, 1024);
+      const clientDataJSON = bytesOf(fields.get(FIELD_CLIENT_DATA) ?? '', 1, 4096);
+      const signature = bytesOf(fields.get(FIELD_SIGNATURE) ?? '', 1, 1024);
+      if (!signedBytes || !authenticatorData || !clientDataJSON || !signature) return false;
+      let checked;
+      try {
+        checked = await checkAssertion({ key: owner.key, rpId: hostname, origin, signedBytes, authenticatorData, clientDataJSON, signature });
+      } catch {
+        return false;
+      }
+      if (checked !== 'valid' || used.has(text)) return false;
+      used.set(text, note.expires);
+      return 'passkey';
+    },
+    owns: (path) => path === OWNER_PATH || path.startsWith(`${OWNER_PATH}/`),
+    async take(req, res, path) {
+      if (req.method === 'GET' || req.method === 'HEAD') {
+        req.resume();
+        if (path === OWNER_PATH) return page(res, 200, 'Set up the owner', setupPage);
+        const file = files.get(path);
+        if (!file) return json(res, 404, { error: 'not-found', message: 'Not one of the executor\'s files.' });
+        res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8', 'content-length': file.length, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
+        return res.end(req.method === 'HEAD' ? undefined : file);
+      }
+      if (req.method !== 'POST' || ![LINK_PATH, SETUP_PATH, CHALLENGE_PATH].includes(path)) {
+        req.resume();
+        return json(res, 405, { error: 'not-allowed', message: 'The owner\'s addresses take GET for the pages and their files, and POST for the three exchanges.' });
+      }
+      // As the owner's answer at the page (X212): only from the executor's own pages.
+      if (req.headers.origin !== issuer) {
+        req.resume();
+        return refuse(res, 403, 'origin-refused', 'Only the executor\'s own pages may send this.');
+      }
+      const v = await readJson(req);
+      if (v === undefined) return refuse(res, 400, 'bad-request', 'The body must be JSON (application/json), at most 16 KiB.');
+      if (path === LINK_PATH) return linkOpen(res, v);
+      if (path === SETUP_PATH) return setUp(res, v);
+      return challengeFor(res, v);
+    },
+  };
+}

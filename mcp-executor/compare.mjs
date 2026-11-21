@@ -10,7 +10,9 @@
 // ("differs"); a receipt in the book that names the executor but that the
 // executor's copy does not know ("notInCopy"); a denial the executor wrote
 // that the book lacks; a call the executor sent and never gave a receipt
-// ("unfinished"). Beside these it reports the executor's receipts and
+// ("unfinished"); a call the executor sent that the administrator set
+// aside, which has no receipt ("setAside": the copy and the book then do
+// not agree, since the book does not show a call that was sent). Beside these it reports the executor's receipts and
 // denials under a slip that states rules on content (an agent.software
 // entry named "Content rules of ...") that name no rules file
 // ("withoutRules"): records of an executor that ran without the rules the
@@ -83,12 +85,14 @@ export async function compareCopyWithBook({ copyPath, copyKey, name, service, bo
     missing: [],
     notWritten: [],
     unfinished: [],
+    setAside: [],
     refused: [],
     denialsMissing: [],
     notInCopy: [],
     withdrawn: 0,
     copy: { lines: copy.lines.length, checked: copy.checked, refused: copy.refused, cut: copy.cut !== null, sequence: copy.sequence },
-    book: { entries: checked.entries.length, problemFound: checked.summary.problemFound, fullyChecked: checked.summary.fullyChecked },
+    // "sealersExpected": the recorders a seal in the book had to be signed by (key-set fingerprints), or null where none was named and a seal's keys were compared with nothing.
+    book: { entries: checked.entries.length, problemFound: checked.summary.problemFound, fullyChecked: checked.summary.fullyChecked, seals: checked.entries.filter((e) => e.kind === 'seal').length, sealersExpected: Array.isArray(options.sealKeys) ? [...options.sealKeys] : null },
   };
   const seen = new Set();
   for (const c of calls.values()) {
@@ -107,6 +111,11 @@ export async function compareCopyWithBook({ copyPath, copyKey, name, service, bo
     const inBook = stubsByCall.get(key);
     if (inBook) seen.add(key);
     const about = { call: c.call, when: c.sending.when, tool: c.sending.tool, action: c.sending.action };
+    if (c['set-aside'] && typeof c.done?.stub !== 'string') {
+      // Sent, and set aside by the administrator: the executor wrote no receipt for it, and writes none.
+      result.setAside.push({ ...about, setAsideAt: c['set-aside'].when, inBook: inBook ? inBook.stub : null });
+      continue;
+    }
     if (!c.done) {
       result.unfinished.push({ ...about, inBook: inBook ? inBook.stub : null });
       continue;
@@ -130,9 +139,22 @@ export async function compareCopyWithBook({ copyPath, copyKey, name, service, bo
   // Receipts and denials of the executor under a slip that states rules on content, which name no rules file: the executor ran without rules the person approved.
   result.withoutRules = withoutRules;
   result.notInCopy.push(...stubsWithoutCall);
+  // Whether the copy and the book agree but for calls the administrator set aside.
+  const restAgrees =
+    result.missing.length === 0 &&
+    result.differs.length === 0 &&
+    result.notWritten.length === 0 &&
+    result.unfinished.length === 0 &&
+    result.notInCopy.length === 0 &&
+    result.denialsMissing.length === 0 &&
+    copy.refused === 0 &&
+    copy.cut === null &&
+    copy.sequence.ok &&
+    !checked.summary.problemFound;
   result.summary = {
-    sent: result.matched.length + result.differs.length + result.missing.length + result.notWritten.length + result.unfinished.length,
+    sent: result.matched.length + result.differs.length + result.missing.length + result.notWritten.length + result.unfinished.length + result.setAside.length,
     matched: result.matched.length,
+    setAside: result.setAside.length,
     missingFromBook: result.missing.length,
     notWrittenByExecutor: result.notWritten.length,
     differ: result.differs.length,
@@ -141,17 +163,10 @@ export async function compareCopyWithBook({ copyPath, copyKey, name, service, bo
     denialsMissingFromBook: result.denialsMissing.length,
     withoutRules: result.withoutRules.length,
     bookProblem: checked.summary.problemFound,
-    agree:
-      result.missing.length === 0 &&
-      result.differs.length === 0 &&
-      result.notWritten.length === 0 &&
-      result.unfinished.length === 0 &&
-      result.notInCopy.length === 0 &&
-      result.denialsMissing.length === 0 &&
-      copy.refused === 0 &&
-      copy.cut === null &&
-      copy.sequence.ok &&
-      !checked.summary.problemFound,
+    // A call set aside is a call the executor sent that the book does not show: the two never agree while there is one.
+    agree: restAgrees && result.setAside.length === 0,
+    // True where the calls set aside are the only disagreement, so that this known state can be told from a new one.
+    onlySetAside: restAgrees && result.setAside.length > 0,
   };
   result.notShown = [
     'A call that did not go through the executor.',
