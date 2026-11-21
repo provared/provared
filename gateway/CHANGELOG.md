@@ -119,7 +119,7 @@ These change what the entries above describe.
   tag, gives the checker's command as `npx --package=provared@0.9.0
   provared-check …` (the checker is the library's command), and says no
   more of the countersignature than the checker shows.
-- **Tests** (`test/review4.test.mjs`, 19; `test/countersign.test.mjs`
+- **Tests** (`test/review4.test.mjs`, 20; `test/countersign.test.mjs`
   changed to the gateway's own entry, and its test of a call noted
   `withdrawn` replaced): the copy deciding at a start, with the journal's
   line there, spoiled or gone; a call set aside; a journal line the copy
@@ -133,3 +133,11 @@ These change what the entries above describe.
   upstream's service; the gateway's id; unknown settings; key sets in
   another order; an agent's files that are one file; a copy taken away;
   `"unlisted": "forward"`; and the commands `keys --gateway` and `compare`.
+- **No test waits for ever** (`test/limits.mjs`, new). A call to the
+  gateway in a test fails after 120 seconds without a whole answer; a
+  command fails after 60; a gateway started as a program must listen, and
+  stop, within 30. A gateway a test opened, or a program it started, that
+  a failing test left running is closed or stopped when the file's tests
+  end; a start that should be refused and is not closes the gateway it
+  opened. Before, a test that failed while a gateway program it had
+  started was running left the test file waiting with no end.

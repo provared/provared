@@ -16,7 +16,8 @@ import { fileURLToPath } from 'node:url';
 const { checkBook, fingerprint, fromBase64url, generateKeySet, identifierFingerprint, keySetFingerprint, signerFromKey, thumbprint } = await import('provared');
 const { developmentPasskey } = await import('provared/dev');
 const { world, json, call, upstream, tempFolder, signSlip, SECRET, ADMIN_SECRET } = await import('./world.mjs');
-const { openGateway, checkConfig, secretHash } = await import('../gateway.mjs');
+const { checkConfig, secretHash } = await import('../gateway.mjs');
+const { START_LIMIT, keep, openGateway, refusedStart, runCommand, until, within } = await import('./limits.mjs');
 const { compareCopyWithBook } = await import('../compare.mjs');
 const { loadCopyKey, readCopy, openCopy } = await import('../copy.mjs');
 const { makeKeyFile } = await import('../files.mjs');
@@ -191,22 +192,22 @@ test('the gateway does not start where its own keys are the agent\'s, or where i
   }
   // The agent's keys given as the gateway's.
   const agentAsGateway = { ...w.config, gateway: { keySet: w.agentSet.keys, privateKeys: w.config.agents.patching.privateKeys } };
-  await assert.rejects(openGateway(agentAsGateway, { root: w.folder, log: () => {} }), /names the gateway's own keys \("gateway"\) as the agent's keys/);
+  await refusedStart(openGateway(agentAsGateway, { root: w.folder, log: () => {} }), /names the gateway's own keys \("gateway"\) as the agent's keys/);
   // A line of the copy changed.
   const original = readFileSync(copyAt.copy, 'utf8');
   writeFileSync(copyAt.copy, original.replace('"provared.data.read"', '"provared.data.delete"'));
-  await assert.rejects(openGateway(w.config, { root: w.folder, log: () => {} }), /its copy .* is not whole/);
+  await refusedStart(openGateway(w.config, { root: w.folder, log: () => {} }), /its copy .* is not whole/);
   // A copy cut part-way through a line.
   writeFileSync(copyAt.copy, original.slice(0, -5));
-  await assert.rejects(openGateway(w.config, { root: w.folder, log: () => {} }), /ends part-way through a line/);
+  await refusedStart(openGateway(w.config, { root: w.folder, log: () => {} }), /ends part-way through a line/);
   // A copy key that is not the one the copy was written with.
   writeFileSync(copyAt.copy, original);
   const keyText = readFileSync(copyAt.copyKey, 'utf8');
   writeFileSync(copyAt.copyKey, Buffer.alloc(32, 7).toString('base64url'));
-  await assert.rejects(openGateway(w.config, { root: w.folder, log: () => {} }), /no line of its copy .* checks/);
+  await refusedStart(openGateway(w.config, { root: w.folder, log: () => {} }), /no line of its copy .* checks/);
   // A copy that holds lines, and no key: no new key is made for it.
   renameSync(copyAt.copyKey, `${copyAt.copyKey}.moved`);
-  await assert.rejects(openGateway(w.config, { root: w.folder, log: () => {} }), /holds lines, and its copy key .* is missing/);
+  await refusedStart(openGateway(w.config, { root: w.folder, log: () => {} }), /holds lines, and its copy key .* is missing/);
   assert.equal(existsSync(copyAt.copyKey), false);
   renameSync(`${copyAt.copyKey}.moved`, copyAt.copyKey);
   writeFileSync(copyAt.copyKey, keyText);
@@ -247,14 +248,7 @@ test('check says that the gateway countersigns every call of an agent whose slip
 });
 
 function run(args, env = {}) {
-  return new Promise((done) => {
-    const child = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', BIN, ...args], { env: { ...process.env, ...env } });
-    let out = '';
-    let err = '';
-    child.stdout.on('data', (d) => (out += d));
-    child.stderr.on('data', (d) => (err += d));
-    child.on('close', (code) => done({ code, out, err }));
-  });
+  return runCommand(BIN, args, env);
 }
 
 function freePort() {
@@ -299,19 +293,20 @@ test('the commands: "keys --gateway" prints the slip\'s entries; a call cut off 
   writeFileSync(join(folder, 'slip.json'), JSON.stringify(slip));
 
   const start = () =>
-    new Promise((done, failed) => {
-      const child = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', BIN, 'start', '--config', configPath], { env: process.env });
+    within(new Promise((done, failed) => {
+      const child = keep(spawn(process.execPath, ['--disable-warning=ExperimentalWarning', BIN, 'start', '--config', configPath], { env: process.env }));
       let err = '';
       child.stderr.on('data', (d) => {
         err += d;
         if (err.includes('listening')) done({ child, log: () => err });
       });
       child.on('exit', () => failed(new Error(err)));
-    });
+    }), START_LIMIT, 'the gateway started as a program, until it listens');
   const stop = async (g, how) => {
     g.child.removeAllListeners('exit');
+    const gone = new Promise((d) => g.child.once('exit', d));
     g.child.kill(how);
-    await new Promise((d) => g.child.once('exit', d));
+    await within(gone, START_LIMIT, 'the gateway program, until it stops');
   };
   let g = await start();
   const first = await call(port, 'DELETE', '/tickets/x/0', { secret: SECRET });
@@ -319,7 +314,7 @@ test('the commands: "keys --gateway" prints the slip\'s entries; a call cut off 
   // The next call is with the upstream when the gateway is stopped without warning.
   hold = true;
   call(port, 'DELETE', '/tickets/x/1', { secret: SECRET }).catch(() => null);
-  while (up.calls.length < 2) await new Promise((d) => setTimeout(d, 20));
+  await until(() => up.calls.length >= 2, 'the second call, at the upstream');
   await stop(g, 'SIGKILL');
   hold = false;
   g = await start();

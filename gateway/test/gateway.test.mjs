@@ -457,7 +457,7 @@ test('the gateway starts again on the book it wrote, and carries it on', async (
   const w = await world();
   await w.call('GET', '/tickets/api/now/table/x');
   await w.gateway.close();
-  const { openGateway } = await import('../gateway.mjs');
+  const { openGateway } = await import('./limits.mjs');
   const again = await openGateway(w.config, { root: w.folder, log: () => {} });
   const at = await again.listen({ host: '127.0.0.1', port: 0 });
   try {

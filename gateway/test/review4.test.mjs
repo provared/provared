@@ -7,7 +7,6 @@
 
 import './local-library.mjs'; // first: "provared" is this repository's own library
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
 import { createHmac } from 'node:crypto';
 import { appendFileSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -17,7 +16,8 @@ import { fileURLToPath } from 'node:url';
 const { checkBook, countersign, entryLine, generateKeySet, identifierFingerprint, signerFromKey, thumbprint, writeStub } = await import('provared');
 const { developmentPasskey } = await import('provared/dev');
 const { world, json, call, upstream, tempFolder, signSlip, SECRET, ADMIN_SECRET } = await import('./world.mjs');
-const { openGateway, checkConfig, secretHash, CALL_DOCUMENT } = await import('../gateway.mjs');
+const { checkConfig, secretHash, CALL_DOCUMENT } = await import('../gateway.mjs');
+const { openGateway, refusedStart, runCommand } = await import('./limits.mjs');
 const { compareCopyWithBook } = await import('../compare.mjs');
 const { loadCopyKey, readCopy, openCopy, tagOf } = await import('../copy.mjs');
 const { makeKeyFile } = await import('../files.mjs');
@@ -337,7 +337,7 @@ test('compare does not agree where a line of the copy does not check, a line is 
     if (what === 'put twice' || what === 'taken out') assert.equal(result.copy.sequence.ok, false, what);
   }
   writeFileSync(w.at.copy, cases['put twice']);
-  await assert.rejects(openGateway(w.config, { root: w.folder, log: () => {} }), /its copy .* is not whole: line 2 carries number 1, which was used already/);
+  await refusedStart(openGateway(w.config, { root: w.folder, log: () => {} }), /its copy .* is not whole: line 2 carries number 1, which was used already/);
 });
 
 test("L4: the copy's tag is HMAC-SHA-256 under the copy key of the agent's name in UTF-8, one line feed, then the line's JSON text, in base64url without padding", () => {
@@ -417,7 +417,7 @@ test("H2: a slip that gives the gateway's keys under an upstream's service is no
     const [stub] = await stubsIn(v);
     assert.equal(stub.content.with, 'front-door');
     assert.equal(stub.countersignature.state, 'valid');
-    await assert.rejects(openGateway({ ...v.config, gateway: { ...v.config.gateway, id: 'tickets' } }, { root: v.folder, log: () => {} }), /its id "tickets" is also the service of upstream "tickets"/);
+    await refusedStart(openGateway({ ...v.config, gateway: { ...v.config.gateway, id: 'tickets' } }, { root: v.folder, log: () => {} }), /its id "tickets" is also the service of upstream "tickets"/);
   } finally {
     await v.close();
   }
@@ -435,11 +435,11 @@ test('L5: a setting the gateway does not know, or a copy that is not a path, sto
   }
   const { gateway, ...rest } = w.config;
   const misspelt = { ...rest, gatway: gateway };
-  await assert.rejects(openGateway(misspelt, { root: w.folder, log: () => {} }), /"gatway" is not a setting the gateway knows/);
+  await refusedStart(openGateway(misspelt, { root: w.folder, log: () => {} }), /"gatway" is not a setting the gateway knows/);
   assert.ok((await checkConfig(misspelt, { root: w.folder })).problems.some((p) => /"gatway" is not a setting/.test(p)));
   for (const [extra, wanted] of [[{ copykey: 'x' }, /"copykey" is not a setting/], [{ copy: 5 }, /"copy" must be the path of a file/], [{ copyKey: true }, /"copyKey" must be the path of a file/]]) {
     const config = { ...w.config, agents: { patching: { ...w.config.agents.patching, ...extra } } };
-    await assert.rejects(openGateway(config, { root: w.folder, log: () => {} }), wanted);
+    await refusedStart(openGateway(config, { root: w.folder, log: () => {} }), wanted);
     assert.ok((await checkConfig(config, { root: w.folder })).problems.some((p) => wanted.test(p)));
   }
 });
@@ -455,7 +455,7 @@ test("L3: an agent's copy may not be its own book or journal, nor its copy key i
   ]) {
     const config = { ...w.config, agents: { patching: { ...a, ...extra } } };
     assert.ok((await checkConfig(config, { root: w.folder })).problems.some((p) => wanted.test(p)), String(wanted));
-    await assert.rejects(openGateway(config, { root: w.folder, log: () => {} }), wanted);
+    await refusedStart(openGateway(config, { root: w.folder, log: () => {} }), wanted);
   }
 });
 
@@ -484,14 +484,7 @@ test('L1: "unlisted": "forward" with the gateway\'s own keys is warned of at sta
 });
 
 function run(args) {
-  return new Promise((done) => {
-    const child = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', BIN, ...args], { env: process.env });
-    let out = '';
-    let err = '';
-    child.stdout.on('data', (d) => (out += d));
-    child.stderr.on('data', (d) => (err += d));
-    child.on('close', (code) => done({ code, out, err }));
-  });
+  return runCommand(BIN, args);
 }
 
 test('L6 and the key file: "keys --gateway" refuses an agent\'s key file; "compare" reads no key file of the gateway, and refuses an option it does not know', { timeout: 120000 }, async () => {

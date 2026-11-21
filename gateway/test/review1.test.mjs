@@ -13,7 +13,8 @@ import { fileURLToPath } from 'node:url';
 const { checkBook, identifierFingerprint, thumbprint } = await import('provared');
 const { developmentPasskey } = await import('provared/dev');
 const { world, json, call, upstream, tempFolder, signSlip, SECRET, OTHER_SECRET, ADMIN_SECRET, TOKEN } = await import('./world.mjs');
-const { openGateway, checkConfig, secretHash, NOT_DELIVERED, OUTCOME_UNKNOWN } = await import('../gateway.mjs');
+const { checkConfig, secretHash, NOT_DELIVERED, OUTCOME_UNKNOWN } = await import('../gateway.mjs');
+const { START_LIMIT, keep, openGateway, refusedStart, until: waitUntil, within } = await import('./limits.mjs');
 const { makeKeyFile } = await import('../files.mjs');
 
 const JSONTYPE = { 'content-type': 'application/json' };
@@ -191,21 +192,25 @@ test('M3: a call sent when the gateway stops has no receipt; the next start find
   };
   writeFileSync(join(folder, 'gateway.json'), JSON.stringify(config));
   const start = () =>
-    new Promise((done, failed) => {
-      const child = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', BIN, 'start', '--config', join(folder, 'gateway.json')], { env: process.env });
+    within(new Promise((done, failed) => {
+      const child = keep(spawn(process.execPath, ['--disable-warning=ExperimentalWarning', BIN, 'start', '--config', join(folder, 'gateway.json')], { env: process.env }));
       let err = '';
       child.stderr.on('data', (d) => {
         err += d;
         if (err.includes('listening')) done({ child, log: () => err });
       });
       child.on('exit', () => failed(new Error(err)));
-    });
+    }), START_LIMIT, 'the gateway started as a program, until it listens');
+  const stop = async (how) => {
+    g.child.removeAllListeners('exit');
+    const gone = new Promise((d) => g.child.once('exit', d));
+    g.child.kill(how);
+    await within(gone, START_LIMIT, 'the gateway program, until it stops');
+  };
   let g = await start();
   call(port, 'DELETE', '/tickets/x/1', { secret: SECRET }).catch(() => null);
-  while (up.calls.length < 1) await new Promise((d) => setTimeout(d, 20));
-  g.child.removeAllListeners('exit');
-  g.child.kill('SIGKILL');
-  await new Promise((d) => g.child.once('exit', d));
+  await waitUntil(() => up.calls.length >= 1, 'the call, at the upstream');
+  await stop('SIGKILL');
   const journal = readFileSync(join(folder, 'book.jsonl.journal'), 'utf8');
   assert.match(journal, /"sending"/);
   hold = false;
@@ -225,9 +230,7 @@ test('M3: a call sent when the gateway stops has no receipt; the next start find
     const again = await call(port, 'POST', '/provared/acknowledge', { secret: ADMIN_SECRET, headers: JSONTYPE, body: { agent: 'patching' } });
     assert.equal(again.status, 409);
   } finally {
-    g.child.removeAllListeners('exit');
-    g.child.kill();
-    await new Promise((d) => g.child.once('exit', d));
+    await stop();
   }
   const result = await checkBook(readFileSync(join(folder, 'book.jsonl'), 'utf8'), { issuerKeys: config.agents.patching.issuerKeys });
   assert.equal(result.summary.intact, true);
@@ -237,9 +240,7 @@ test('M3: a call sent when the gateway stops has no receipt; the next start find
   assert.ok(docs(stubs[0])['provared.http-request']);
   // A clean start empties the journal.
   g = await start();
-  g.child.removeAllListeners('exit');
-  g.child.kill();
-  await new Promise((d) => g.child.once('exit', d));
+  await stop();
   assert.equal(readFileSync(join(folder, 'book.jsonl.journal'), 'utf8'), '');
   await up.close();
 });
@@ -323,7 +324,7 @@ test('L6: two agents with one secret, or one book file, are refused at start and
     [second({ secretHash: await secretHash(OTHER_SECRET), book: join(w.folder, 'BOOKS', 'PATCHING.jsonl') }), process.platform === 'win32' ? /share a file/ : null],
   ]) {
     if (!words) continue;
-    await assert.rejects(openGateway(config, { root: w.folder, log: () => {} }), words);
+    await refusedStart(openGateway(config, { root: w.folder, log: () => {} }), words);
     const checked = await checkConfig(config, { root: w.folder });
     assert.ok(checked.problems.some((p) => words.test(p)), JSON.stringify(checked.problems));
   }

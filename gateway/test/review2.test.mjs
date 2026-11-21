@@ -15,7 +15,8 @@ import { fileURLToPath } from 'node:url';
 
 const { checkBook, fingerprint, fromBase64url, identifierFingerprint } = await import('provared');
 const { world, call, SECRET, OTHER_SECRET, ADMIN_SECRET } = await import('./world.mjs');
-const { openGateway, checkConfig, secretHash, CALL_DOCUMENT, OUTCOME_UNKNOWN } = await import('../gateway.mjs');
+const { checkConfig, secretHash, CALL_DOCUMENT, OUTCOME_UNKNOWN } = await import('../gateway.mjs');
+const { RUN_LIMIT, openGateway, refusedStart } = await import('./limits.mjs');
 
 const JSONTYPE = { 'content-type': 'application/json' };
 const docs = (entry) => Object.fromEntries((entry.content.details ?? []).map((d) => [d.name, d.sha256]));
@@ -191,10 +192,10 @@ test('R2-L3: a book cut part-way through a line: "repair" shows the cut bytes, t
   await w.gateway.close();
   const whole = readFileSync(w.bookPath, 'utf8');
   writeFileSync(w.bookPath, whole.slice(0, whole.length - 40));
-  await assert.rejects(openGateway(w.config, { root: w.folder, log: silent }), /does not end with a whole line/);
+  await refusedStart(openGateway(w.config, { root: w.folder, log: silent }), /does not end with a whole line/);
   const settings = join(w.folder, 'repair.json');
   writeFileSync(settings, JSON.stringify({ agents: { patching: { book: w.bookPath } } }));
-  const run = (...args) => spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', BIN, ...args], { encoding: 'utf8', env: process.env });
+  const run = (...args) => spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', BIN, ...args], { encoding: 'utf8', env: process.env, timeout: RUN_LIMIT });
   const shown = run('repair', '--config', settings, '--agent', 'patching');
   assert.equal(shown.status, 1, shown.stderr);
   const partial = whole.slice(whole.lastIndexOf('\n', whole.length - 2) + 1, whole.length - 40);
@@ -237,7 +238,7 @@ test('R2-L5: two agents may not share a file, by any path that names it: a book,
   cases.push({ secretHash: hash, book: join(w.folder, 'links', 'books', 'patching.jsonl') });
   for (const more of cases) {
     const config = second(more);
-    await assert.rejects(openGateway(config, { root: w.folder, log: silent }), /share a file/, JSON.stringify(more));
+    await refusedStart(openGateway(config, { root: w.folder, log: silent }), /share a file/, JSON.stringify(more));
     const checked = await checkConfig(config, { root: w.folder });
     assert.ok(checked.problems.some((p) => /share a file/.test(p)), JSON.stringify(checked.problems));
   }
