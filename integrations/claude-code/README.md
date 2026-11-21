@@ -1,9 +1,13 @@
 # <img src="https://prova.red/favicon.svg" alt="" width="36"> Provared beside Claude Code
 
-A coding agent, Claude Code, recorded by Provared: every tool call it
-makes is checked against a permission the person signed with a passkey,
-refused if it is outside it, and receipted if it is taken. The result is
-a book that anyone can check with the free checker.
+A coding agent, Claude Code, recorded by Provared: its tool calls are
+checked against a permission the person signed with a passkey, refused
+if they are outside it, and receipted if they are taken. Eight tools are
+not recorded, because they only talk to the person or change what the
+model itself holds: AskUserQuestion, TodoWrite, TodoRead, EnterPlanMode,
+ExitPlanMode, Skill, ToolSearch and EndConversation ("How it works"
+below). The result is a book that anyone can check with the free
+checker.
 
 *Evidence, not a verdict.*
 
@@ -51,8 +55,8 @@ provared-claude-code check --issuer <your passkey's thumbprint>
 ```
 
 `use` puts the signed permission in place and starts the recorder.
-Every tool call Claude Code then makes in that project is checked and
-recorded. `check` gives the checker's answer for the book, trusting the
+From then on Claude Code's tool calls in that project, except the eight
+above, are checked and recorded. `check` gives the checker's answer for the book, trusting the
 passkey you name and no other.
 
 On Windows, if PowerShell refuses to run the command, write
@@ -85,7 +89,7 @@ Claude Code copies this folder into its plugin cache
   fetched from a git repository). Where it is there, it is used.
 - Where it is not, the plugin installs it itself the first time a session
   starts (or at the first command you run): `npm ci --ignore-scripts` from
-  the same `package-lock.json`, so exactly version 0.6.0: npm checks
+  the same `package-lock.json`, so exactly version 0.8.0: npm checks
   the package it fetches against the fingerprint the lockfile holds, and
   runs no install script. npm's own program is run by Node.js, with no
   shell, and stopped for certain at a time limit (20 seconds at the start
@@ -105,8 +109,9 @@ Claude Code copies this folder into its plugin cache
   it: `node <the plugin's folder>/plugin.mjs install-library`.
 
 A plugin is installed for you in every project unless you say otherwise
-(the scope "user"). From then on every tool call, in every session, is
-refused until you have signed a permission: no record, no action. To
+(the scope "user"). From then on every tool call that is recorded, in
+every session, is refused until you have signed a permission: no
+record, no action. To
 record one project only, install it from that project's folder with
 `claude plugin install provared-recorder@provared --scope local`, or
 choose that scope in `/plugin`.
@@ -123,7 +128,7 @@ call it refuses:
    save the file the page gives you.
 3. `node <the plugin's folder>/plugin.mjs use <the saved file>`
 
-Nothing signs for you. From then on each tool call is checked and
+Nothing signs for you. From then on the tool calls are checked and
 recorded, as with the hooks `init` writes. The other commands (`check`,
 `seal`, `status`, `renew` and the rest) run the same way:
 `node <the plugin's folder>/plugin.mjs <command>`. `plugin.mjs` is the
@@ -1341,9 +1346,12 @@ along with everything else. To keep the record on another disk:
 
 ## What the record shows, and what it does not
 
-- It shows every tool call that went through the hook, in order, signed
-  by the agent's keys, under the permissions the person signed, and
-  whether each call was within them; failed calls included.
+- It shows every recorded tool call that went through the hook, in
+  order, signed by the agent's keys, under the permissions the person
+  signed, and whether each call was within them; failed calls included.
+- It does not show the eight tools that are not recorded (AskUserQuestion,
+  TodoWrite, TodoRead, EnterPlanMode, ExitPlanMode, Skill, ToolSearch and
+  EndConversation): they run with no check and leave no entry.
 - It does not show a call that was refused before it was taken, by the
   hook, by the person at a permission prompt, or by Claude Code's own
   checks: a refused call leaves no entry, so the record does not show
@@ -1470,7 +1478,7 @@ the marketplace (`claude plugin marketplace add <the copy's folder>`).
 Claude Code may then load the plugin in place, from the copy; run
 `node integrations/claude-code/tools/use-repository-library.mjs` first,
 so that the plugin uses the repository's own library rather than install
-version 0.6.0, and run the commands through
+version 0.8.0, and run the commands through
 `node integrations/claude-code/plugin.mjs <command>` (or give `init`
 `--no-hooks`), so that `init` writes no hooks beside the plugin's.
 

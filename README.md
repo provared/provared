@@ -51,6 +51,13 @@ keys. People decide what it means.
 npm install -g provared-mcp-executor   # Node.js 24.7 or later
 ```
 
+**Use version 0.4.2 or later.** Every earlier version, 0.1.0 to 0.4.1,
+has two weaknesses: in front of some tool servers, an agent could have a
+tool run that the guard never checked. Version 0.4.2, published on
+15 November 2026, fixes both, and npm marks the earlier versions as
+deprecated. [The security advisory](https://github.com/provared/provared/security/advisories/GHSA-q53c-6wvv-gfj8)
+says which servers are affected and what to check.
+
 [Its README](mcp-executor/README.md) sets it up in five steps: write its
 settings, make its keys, sign the permission with a passkey at
 https://sign.prova.red, check the settings, and name the guard in the
@@ -90,8 +97,10 @@ checker:
   yourself: each action is checked against the permission first and
   receipted after (see "A first record of your own", below).
 - **[The recorder beside Claude Code](integrations/claude-code/README.md)**
-  (`provared-claude-code`, also a Claude Code plugin), which checks and
-  receipts every tool call Claude Code makes.
+  (`provared-claude-code`, also a Claude Code plugin), which checks
+  Claude Code's tool calls and receipts each one taken. Eight tools that
+  only talk to the person or change what the model itself holds, such as
+  AskUserQuestion and TodoWrite, are not recorded.
 - **Packages for two Python agent frameworks**, LangChain and Pydantic
   AI, and [an example](examples/frameworks/) for the Vercel AI SDK.
 - **[The gateway](gateway/README.md)**, for agents that act through web
@@ -236,8 +245,9 @@ each part protects against, is in
 - **Two programs beside an agent, each on npm with its own README:**
   [the recorder beside Claude Code](integrations/claude-code/README.md)
   (`npm install -g provared-claude-code`, also installable as a Claude
-  Code plugin), which checks and receipts every tool call Claude Code
-  makes; and [the executor for MCP tool servers](mcp-executor/README.md)
+  Code plugin), which checks and receipts Claude Code's tool calls,
+  except eight that only talk to the person or change what the model
+  itself holds; and [the executor for MCP tool servers](mcp-executor/README.md)
   (`npm install -g provared-mcp-executor`), which stands between agents and a tool server, holds the server's
   credential, and countersigns
   each receipt with keys of its own.
@@ -261,7 +271,8 @@ each part protects against, is in
 
 ## Status
 
-**Version 0.8.0, a draft.** Published as it is, by one author in their
+**The library at version 0.8.1 and the guard at 0.4.2, both drafts.**
+Published as they are, by one author in their
 own time, built with AI tools since 3 October 2026; fixes as time
 allows. The code has been through more than 80 rounds of review by AI
 reviewers, each a fresh session given the code, the documents and a

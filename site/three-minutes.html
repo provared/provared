@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; img-src 'self'; form-action 'none'; base-uri 'none'">
-<meta name="description" content="Provared in plain words, three minutes for a reader who does not write code: how to prove what an AI agent was allowed to do and what it then did, the four parts, the guard that stops a tool call that was not allowed, how a record is made and checked, why it is different, and what a record does not prove.">
+<meta name="description" content="Provared in plain words, three minutes for a reader who does not write code: how to prove what an AI agent was allowed to do and what it then did, the four parts, the guard that stops a tool call that was not allowed, how a record is made and checked, why it is different, every piece of Provared and where each stands, and what a record does not prove.">
 <link rel="canonical" href="https://prova.red/three-minutes.html">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <meta property="og:type" content="article">
@@ -48,8 +48,6 @@
 
 <p>When something goes wrong, the question is simple: who allowed that? Today the answer is a log file, written by the same software that is being questioned, which anyone could have edited.</p>
 
-<p>Think of a new hire with the company card, who works at machine speed, never sleeps and keeps no receipts.</p>
-
 <p>Suppose, in an invented example, a charity tells an agent: reorder office supplies, up to £500 a month. In June the agent pays a supplier £4,800. In December the auditor asks: who allowed that?</p>
 
 <p>The rules are arriving. From 2 December 2027, Europe's AI Act requires a high-risk AI system to record automatically what it does (Article 12), and whoever deploys one to keep those logs for at least six months (Article 26).</p>
@@ -66,8 +64,6 @@
 </ul>
 
 <p>And a free checker, which anyone can run on their own device. It answers one question in seconds: did the agent stay within what it was allowed? Yes, or no and where.</p>
-
-<p>Like an aircraft's black box: it records what happened, and it cannot be rewritten after the crash.</p>
 
 <p>It can also stop an action before it happens. The guard stands between an agent and the tools it uses, and holds the tools' credentials (the passwords and keys that open them) in place of the agent. It refuses any call the permission does not allow before the call reaches the tool, and writes a signed receipt for each call it lets through. It keeps the credentials from the agent only where the agent cannot read the guard's files: for example, when the guard runs under a separate user account that the agent cannot use, or when the agent cannot run commands or read files itself.</p>
 
@@ -196,18 +192,56 @@
   <li>The person can cancel at any time. The agent signs that it was told. The book shows if it carried on.</li>
   <li>A permission can be handed on to a helper agent, but never widened.</li>
   <li>The signatures are designed to stay valid for decades, even against quantum computers.</li>
-  <li>It is free and open, built on published standards. The core is already a draft at the IETF, the body that sets the internet's standards.</li>
+  <li>It is free and open, built on published standards. The core is already a draft at the Internet Engineering Task Force (IETF), the body that sets the internet's standards.</li>
 </ol>
 
 <p>At least four other open projects make signed, time-stamped receipts. Provared adds the permission the person signed, with limits a machine can check, and a checker that says whether each action stayed within it.</p>
 
+<h2>The whole of Provared</h2>
+
+<p>Every piece writes or reads the same kind of record, and the same free checker reads them all. In short: a person signs a permission at the signing page; the guard, or another recorder beside the agent, checks the agent's actions against it and writes a receipt for each; the sealer seals the book; an inspector checks it with the checker.</p>
+
+<h3>The format</h3>
+<ul>
+  <li><strong>The format description</strong>, open for anyone to use, says exactly what each part holds and how it is checked. Its core is an Internet-Draft at the IETF. Shared test files, and a kit that compares another program's answers with them, let anyone build their own version and show that it agrees.</li>
+</ul>
+
+<h3>For the person who gives the permission</h3>
+<ul>
+  <li><strong>The signing page</strong>, <a href="https://sign.prova.red/">sign.prova.red</a>. A person signs a permission, a renewal or a cancellation there with a passkey. That address serves nothing else.</li>
+</ul>
+
+<h3>Beside the agent: ways to record it</h3>
+<ul>
+  <li><strong>The guard</strong>, <a href="https://www.npmjs.com/package/provared-mcp-executor">provared-mcp-executor</a> 0.4.2, for agents that use MCP tool servers. It stands in front of the tools, refuses any call the permission does not allow, and signs a receipt for each call it lets through. It runs on the agent's computer, or over the network for several agents, each with its own permission and record. It can also check what a call asks for, for example which file names a file tool is given.</li>
+  <li><strong>The library</strong>, <a href="https://www.npmjs.com/package/provared">provared</a> 0.8.1, in JavaScript and <a href="https://pypi.org/project/provared/">Python</a>, for an agent a developer writes: each action is checked against the permission first and receipted after.</li>
+  <li><strong>The recorder beside Claude Code</strong>, <a href="https://www.npmjs.com/package/provared-claude-code">provared-claude-code</a> 0.1.0. Claude Code is an AI coding agent. The recorder checks Claude Code's tool calls against the permission before they run, and receipts each one taken. It leaves out eight tools that only ask the person something or change what the agent itself holds, such as its plan or its list of tasks. It keeps <a href="records/">the author's own record</a>, which is public.</li>
+  <li><strong>Add-ons for <a href="https://pypi.org/project/provared-langchain/">LangChain</a> and <a href="https://pypi.org/project/pydantic-ai-provared/">Pydantic AI</a></strong>, 0.2.0 each, two of the most-used toolkits for building agents.</li>
+  <li><strong>The gateway</strong>, for agents that act through web services: it stands in front of each service, holds its credential and receipts each call. In <a href="https://github.com/provared/provared/tree/main/gateway">the repository</a>, not yet a published package.</li>
+</ul>
+
+<h3>Keeping the book</h3>
+<ul>
+  <li><strong>The sealer</strong>, a small program run by someone other than whoever runs the agent. It holds the keys that seal the book, so they are not on the agent's computer, and, as long as its own state is kept, it never seals two different versions of one book. Of each book it sees the permission the book starts with, and of every later line only its fingerprint, not what it says. In <a href="https://github.com/provared/provared/tree/main/sealer">the repository</a>, not yet a published package.</li>
+</ul>
+
+<h3>Checking</h3>
+<ul>
+  <li><strong>The checker</strong>, free, on the command line or as the <a href="check/">checking page</a> in a browser, which also works as <a href="provared-check.html" download>one file</a> with no connection. It asks nobody. The browsers tried so far lack one of the three signature methods a seal uses, so in a browser a sealed book never passes; the command-line checker checks it in full.</li>
+</ul>
+
+<h3>Seeing and controlling the agents</h3>
+<ul>
+  <li><strong>The Provared application</strong>, a web application where a person reads each agent's book and, from it, renews or cancels a permission at the signing page. <a href="https://www.npmjs.com/package/provared-connect">provared-connect</a> 0.1.0 links the recorder beside an agent to it with one line copied from the book's page. Each line of the book reaches the application's server encrypted with the book's key, which the server is not given, so the server cannot read it. Not yet open to anyone but the author.</li>
+</ul>
+
 <h2>Where it is today</h2>
 
-<p>Version 0.8.0 is published, for anyone to install, on <a href="https://www.npmjs.com/package/provared">npm</a> and on the <a href="https://pypi.org/project/provared/">Python Package Index</a>. The core of the format is an <a href="https://datatracker.ietf.org/doc/draft-izmaylov-agent-permission-receipts/">Internet-Draft at the IETF</a>; an Internet-Draft is a working document, not a standard. Every line of code and every test is public on <a href="https://github.com/provared/provared">GitHub</a>, and the <a href="check/">checking page</a>, which also works as <a href="provared-check.html" download>one file</a> with no connection, has a sample record to try.</p>
+<p>The library, the guard, the recorder beside Claude Code and the two add-ons are published, for anyone to install, on <a href="https://www.npmjs.com/package/provared">npm</a> and on the <a href="https://pypi.org/project/provared/">Python Package Index</a>. The core of the format is an <a href="https://datatracker.ietf.org/doc/draft-izmaylov-agent-permission-receipts/">Internet-Draft at the IETF</a>; an Internet-Draft is a working document, not a standard. Every line of code and every test is public on <a href="https://github.com/provared/provared">GitHub</a>, and the <a href="check/">checking page</a>, which also works as <a href="provared-check.html" download>one file</a> with no connection, has a sample record to try.</p>
 
-<p>The library has no outside dependencies, sends nothing home, holds no money and starts no payment. It is held to more than 750 automated tests, and to more than 14,000 shared test cases that the JavaScript and Python versions must answer alike. It has been through more than 80 rounds of review by AI reviewers, each a fresh session given the code, the documents and a brief of what to look at. Until 7 November 2026 each reviewer likely also had the author's private planning notes loaded, so could see the author's reasoning; since then reviewers start without them. Every fault was fixed, or stated as a limit, and kept as a test. No person other than the author has reviewed it yet. That is an invitation. Add-ons for <a href="https://pypi.org/project/provared-langchain/">LangChain</a> and <a href="https://pypi.org/project/pydantic-ai-provared/">Pydantic AI</a>, two of the most-used toolkits for building agents, are published. So is a recorder beside Claude Code, an AI coding agent: it checks the agent's tool calls against the permission before they run, and writes a receipt for each one taken; it keeps <a href="records/">the author's own record</a>, which is public.</p>
+<p>The library depends on no outside code in JavaScript, and on one package in Python. It sends nothing home, holds no money and starts no payment. It is held to more than 750 automated tests, and to more than 14,000 shared test cases that the JavaScript and Python versions must answer alike. It has been through more than 80 rounds of review by AI reviewers, each a fresh session given the code, the documents and a brief of what to look at. Until 7 November 2026 each reviewer likely also had the author's private planning notes loaded, so could see the author's reasoning; since then reviewers start without them. Every fault was fixed, or stated as a limit, and kept as a test. No person other than the author has reviewed it yet. That is an invitation.</p>
 
-<p>The guard works with tool servers that speak the Model Context Protocol (MCP), the common way for AI agents to reach tools. It is published on npm as <a href="https://www.npmjs.com/package/provared-mcp-executor">provared-mcp-executor</a>, version 0.4.1, and is listed in the official MCP Registry. A <a href="https://github.com/provared/provared/blob/main/mcp-executor/README.md#quick-start">demonstration</a> runs it in front of a made-up tool server, with no passkey and no settings; its records prove nothing about anyone. Over the network, it has been tried only with every program on one computer, not yet on separate computers.</p>
+<p>The guard works with tool servers that speak the Model Context Protocol (MCP), the common way for AI agents to reach tools. It is published on npm as <a href="https://www.npmjs.com/package/provared-mcp-executor">provared-mcp-executor</a>, version 0.4.2, and is listed in the official MCP Registry. Version 0.4.2, published on 15 November 2026, fixes two weaknesses in every earlier version: in front of some tool servers, an agent could have a tool run that the guard never checked, with no receipt or with a receipt for a different tool. npm marks the earlier versions as out of date ("deprecated"), and <a href="https://github.com/provared/provared/security/advisories/GHSA-q53c-6wvv-gfj8">the security advisory</a> says which tool servers are affected. A <a href="https://github.com/provared/provared/blob/main/mcp-executor/README.md#quick-start">demonstration</a> runs it in front of a made-up tool server, with no passkey and no settings; its records prove nothing about anyone. Over the network, it has been tried only with every program on one computer, not yet on separate computers.</p>
 
 <p>It is one author, in their own time, on their own equipment. Building started on 3 October 2026, with AI tools.</p>
 
@@ -218,7 +252,7 @@
   <p><b>One person, in spare time?</b>Yes. That is why it is open, held to 750 tests, reviewed in more than 80 rounds by AI reviewers and not yet by anyone else, and published where anyone can check it. If the author vanishes, the records still check. The standard does not depend on one person.</p>
   <p><b>How long did it take?</b>Building started on 3 October 2026. Published on 6 October. Built with AI tools, reviewed in more than 80 rounds by AI reviewers, every fault fixed or stated as a limit, and kept as a test. Judge the code, not the calendar.</p>
   <p><b>Can it stop a bad agent?</b>The guard can, for the tools it stands in front of: it refuses any call outside the slip before the call reaches the tool, and the agent cannot go round it as long as the guard alone holds the tools' credentials and the agent has no other way to the tools. Without the guard, the check stops only an agent whose own software asks it. Neither can judge right from wrong. Evidence, not a verdict.</p>
-  <p><b>Does it hold my money or my data?</b>It holds no money, starts no payment, issues no token, and sends nothing home. The guard keeps your tools' credentials, and its own copy of each call, on the computer where you run it. The checker asks nobody.</p>
+  <p><b>Does it hold my money or my data?</b>It holds no money, starts no payment, issues no token, and sends nothing home. The guard keeps your tools' credentials, and its own copy of each call, on the computer where you run it. The application, when it opens to others, keeps each book on its server encrypted with the book's key, which the server is not given, so it cannot read the book. The checker asks nobody.</p>
   <p><b>Why bother with quantum computers?</b>A record must still check in ten years. Today's signatures may not. It costs the user nothing.</p>
   <p><b>Prove it.</b>The pages linked above are public. Or give a technical person thirty minutes to try to break it; a hole found is fixed in public. Found one? Open an <a href="https://github.com/provared/provared/issues">issue on GitHub</a>. It is fixed in public, and you are named in the change log if you wish.</p>
 </div>
@@ -246,6 +280,8 @@
   <p><b>Recorder:</b> whoever keeps the sealed book.</p>
   <p><b>Credential:</b> a password, key or token that lets software use a tool or a service.</p>
   <p><b>Guard:</b> software that stands between an agent and its tools, holds the tools' credentials in place of the agent (it keeps them from the agent only where the agent cannot read the guard's files), and refuses any call the permission does not allow. Provared's guard is the package provared-mcp-executor.</p>
+  <p><b>Sealer:</b> a program, run apart from the agent, that holds the keys that seal a book.</p>
+  <p><b>Gateway:</b> the guard's counterpart for web services: it stands in front of each service an agent uses, holds its credential and receipts each call.</p>
   <p><b>MCP, the Model Context Protocol:</b> the common way for AI agents to reach tools, such as reading files or searching the web.</p>
   <p><b>Checker:</b> the free program that reads a record and says whether it is intact, and whether the agent stayed within its permission.</p>
   <p><b>Quantum-safe signature:</b> a signature method that a future quantum computer is not expected to break. Provared uses two methods side by side, so that a record still checks in decades.</p>

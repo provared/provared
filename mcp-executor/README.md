@@ -126,8 +126,19 @@ npm install -g provared-mcp-executor
 Or from a copy of the repository: in `mcp-executor`, `npm pack`, then
 `npm install -g ./provared-mcp-executor-0.5.0.tgz`.
 
+Use version 0.4.2 or later. Every version from 0.1.0 to 0.4.1 has two
+weaknesses: in front of a tool server whose JSON reader ignores capitals
+in names, or, over stdio, one that ends a line at a bare carriage return,
+an agent could have a tool run that the executor never checked, with no
+receipt or with a receipt that names a different tool, or get a call past
+a rule on its content. npm marks those versions as deprecated. The security advisory,
+https://github.com/provared/provared/security/advisories/GHSA-q53c-6wvv-gfj8,
+says which servers are affected and what to check; `CHANGELOG.md` in the
+repository has the details.
+
 It needs Node.js 24.7 or later. It depends only on the `provared` library,
 at exactly version 0.7.0: its receipts name
+
 `provared.tool-name` and `provared.tool-result`, which the format reserved
 in 0.7.0 and which a checker of 0.5.0 or 0.6.0 refuses (0.4.0 and
 earlier read them as labels); and its owner's check uses two functions
@@ -1972,7 +1983,7 @@ secret. Its records prove nothing about anyone; see `demo/README.md`. Of
 that folder, only `server.mjs` (the made-up server) and
 `content-rules.json` (its one rule) are in the npm package, for the `demo`
 command. `server.json` describes the package for the official MCP
-Registry, which listed 0.4.0 on 11 November 2026. It is published there by the workflow
+Registry, which lists 0.4.2 since 15 November 2026. It is published there by the workflow
 `.github/workflows/mcp-registry.yml`, started by hand, which signs in
 with GitHub's identity token for the run. A version can be published to
 the registry only after the same version is on npm, because the registry
