@@ -544,7 +544,7 @@
   seconds after the recorder's clock; `admit-passkey` for a passkey never
   trusted needs the recorder running. Tests: `test/handover.test.mjs`.
 
-## 0.8.1 (22 November 2026)
+## 0.8.1 (21 November 2026)
 
 Version 0.8.1 changes how the library reads one kind of time and what the signing page will sign. A time in a time-stamp, or in its service's certificates, written in the long form with a year from 0000 to 0099, is now read as the year written; both libraries, JavaScript and Python, refused it before. What changes for a user: such a time-stamp now goes on to the later checks, so 0.8.1 refuses it as `stamp-invalid` (dated outside its service's certificate), where earlier versions refused it as `stamp-bad-data`; and five stored answers in the shared test files changed. The signing page, in this repository, now refuses to sign a permission, asked for by another page, that starts more than 300 seconds after the device's clock, and warns where the device's clock looks behind. No signed byte, label or field's meaning changes, and nothing else in the library changes. A reader in this repository of another project's receipts (not published) now reads such years in the same way, as its entry below says.
 
