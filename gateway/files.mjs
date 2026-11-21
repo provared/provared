@@ -51,7 +51,7 @@ export async function makeKeyFile(path, kind) {
     mkdirSync(dirname(path), { recursive: true });
     const jwks = [await newWebKey('Ed25519'), await newWebKey('ML-DSA-87')];
     if (kind === 'recorder') jwks.push({ ...nodeCrypto.generateKeyPairSync('slh-dsa-sha2-256s').privateKey.export({ format: 'jwk' }), alg: SLH });
-    const about = kind === 'recorder' ? 'The private keys with which the gateway seals its books. Never share this file.' : 'The private keys of an agent, held by the gateway. Never share this file.';
+    const about = kind === 'recorder' ? 'The private keys with which the gateway seals its books. Never share this file.' : kind === 'gateway' ? "The gateway's own private keys, with which it countersigns the calls it lets through. Never share this file." : 'The private keys of an agent, held by the gateway. Never share this file.';
     writeFileSync(path, JSON.stringify({ about, keys: jwks }), { mode: 0o600, flag: 'wx' });
   }
   return (await loadKeyFile(path, kind)).keys;
