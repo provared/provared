@@ -23,7 +23,38 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, statSync, writeFileSync, writeSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { fingerprint, fromBase64url } from 'provared';
 import { untilFree } from './files.mjs';
+
+const sameAmount = (a, b) => (a === undefined || b === undefined ? a === b : a !== null && b !== null && typeof a === 'object' && typeof b === 'object' && Object.keys(a).length === 2 && Object.keys(b).length === 2 && a.unit === b.unit && a.value === b.value);
+const sameDocuments = (a, b) => Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((d, i) => d?.name === b[i]?.name && d?.sha256 === b[i]?.sha256);
+
+/**
+ * Whether a stub's content is the call a "sending" line of the copy shows:
+ * the same slip, action, amount and service, and the line's documents
+ * first, in their order. After them come exactly the documents "after"
+ * gives, where it is a list (what the copy's "done" line holds of the
+ * outcome), or else only documents whose names "outcomes" lists.
+ */
+export function stubIsSending(content, sending, { after, outcomes }) {
+  if (content === null || typeof content !== 'object') return false;
+  if (content.slip !== sending.slip || content.action !== sending.action || content.with !== sending.with || !sameAmount(content.amount, sending.amount)) return false;
+  const d = Array.isArray(content.details) ? content.details : [];
+  const sent = Array.isArray(sending.details) ? sending.details : [];
+  if (!sameDocuments(d.slice(0, sent.length), sent)) return false;
+  const rest = d.slice(sent.length);
+  return Array.isArray(after) ? sameDocuments(rest, after) : rest.every((x) => outcomes.includes(x?.name));
+}
+
+/** The fingerprint of the countersignature a line of a book carries (of its signed content, as the copy records it), or null where it carries none. */
+export async function countersignatureFingerprint(line) {
+  try {
+    const value = JSON.parse(line);
+    return typeof value?.countersignature?.payload === 'string' ? await fingerprint(fromBase64url(value.countersignature.payload)) : null;
+  } catch {
+    return null;
+  }
+}
 
 /** HMAC-SHA-256 of a line, under the copy key, with the executor's name, in base64url. */
 export function tagOf(key, name, text) {

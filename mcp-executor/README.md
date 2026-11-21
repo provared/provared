@@ -1239,6 +1239,19 @@ permission than the one now in force, the executor writes no receipt by
 itself: the call waits for the administrator (see "A call sent under a
 permission no longer in force").
 
+Where the book already holds a receipt for such a call (the executor
+stopped after the book took it and before the copy said so), that receipt
+settles the call only where it is the only receipt naming the call, it is
+the call the copy's `sending` line shows (the same permission, action,
+amount and service; the line's documents first, then only the result, the
+error or the fixed texts of a receipt written later), and, where the
+permission names the executor with keys, it carries a valid countersignature.
+The copy then notes it `found-in-book`, with its countersignature's
+fingerprint. Any other such receipt is not taken as the executor's: the log
+says `receipt-not-matching`, the executor does not start over stdio (over
+HTTP, that agent's calls are refused), and the call waits for the
+administrator, who can only set it aside (`acknowledge --set-aside`).
+
 **The copy cannot be read** (its key is missing while it holds lines; no
 line checks under the key; a last line was cut by a stop; a line was taken
 out, put twice or moved, which the number each line carries shows): the
@@ -1255,7 +1268,11 @@ provared-mcp-executor compare --config executor-http.json --agent <name> [--book
 For every call the copy shows as sent, the book is searched for the stub
 that names the executor and the same `executor.call`. The answer lists the
 calls that match, those whose receipt in the book is not the one the
-executor wrote (`differs`), those with no receipt in the book (`missing`:
+executor wrote, or is not the call the copy's `sending` line shows (its
+permission, action, amount, service, or documents differ: `differs`, with
+`why`), those whose receipt lacks the countersignature the copy says the
+executor gave it, or carries another (`countersignatures`), those with more
+than one receipt in the book (`moreThanOne`), those with no receipt in the book (`missing`:
 whoever keeps the book left it out, or the book is older than the copy),
 those whose receipt the executor itself could not write to the book
 (`notWritten`: its own stop, told apart from an omission), those the

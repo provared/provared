@@ -251,7 +251,9 @@ executor in `with` and the same `executor.call` fingerprint.
 | It finds | Meaning |
 |---|---|
 | matched | the receipt is in the book, and is the one the executor wrote |
-| differs | the book holds a receipt for the call, but not the one the executor wrote |
+| differs | the book holds a receipt for the call, but not the one the executor wrote, or one that is not the call the copy's `sending` line shows (`why`; added after review 3.4 of the gateway) |
+| countersignatures | the receipt the copy says the executor countersigned lacks the countersignature, or carries one that does not check or is another than the one the copy records (added after review 3.4 of the gateway) |
+| more than one | the book holds more than one receipt for the call (added after review 3.4 of the gateway) |
 | missing | the executor sent the call and wrote its receipt, and the book has no receipt for it: whoever keeps the book left it out, or the book is older than the copy |
 | not written | the executor sent the call and could not write its receipt to the book (its own stop): told apart from an omission by the book's keeper; the next start of the executor writes it |
 | unfinished | the executor sent the call and stopped before the receipt; the next start writes it, or, where the permission has changed since, the administrator acknowledges it |
@@ -283,7 +285,12 @@ itself has a problem.
   known. Such a receipt names `executor.written-late`, so that the book
   itself says so: its `when` is the time the call was sent, and its
   countersignature is dated at the restart, so a reader sees both times.
-  The founder has kept this automatic late receipt (F-158).
+  The founder has kept this automatic late receipt (F-158). A receipt the
+  book already holds for the call settles it only where it is the only one,
+  it is the call the `sending` line shows, and, where the permission names
+  the executor's keys, it carries a valid countersignature; any other waits
+  for the administrator, to be set aside (added after review 3.4 of the
+  gateway, which found the same gap in the executor).
 - **The same, where the permission has changed since.** The executor
   writes no receipt by itself under a permission that is no longer the
   one in force: the call waits for the administrator, who acknowledges it

@@ -185,6 +185,47 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
   only where the book is fully checked and within its slips. Unknown
   settings are refused. Details in `gateway/CHANGELOG.md`. The library does
   not change.
+- **The MCP executor, after the same review** (`mcp-executor/`, not
+  released; the version stays 0.5.0). Review 3.4 of the gateway's
+  countersignature found the same gaps in the executor.
+  - **A receipt found in the book at a start** settles a call the copy
+    shows as sent and not finished only where it is the only receipt naming
+    the call, it is the call the copy's `sending` line shows (the same
+    permission, action, amount and service; the line's documents first,
+    then only `provared.tool-result`, `provared.error`,
+    `executor.written-late` or `executor.acknowledged`), and, where the
+    permission names the executor with keys, it carries a valid
+    countersignature. It was taken on its `executor.call` document alone.
+    Any other receipt is not written into the copy as the executor's: the
+    log says `receipt-not-matching`; over stdio the executor does not
+    start, and says so; over HTTP that agent's calls are refused; the call
+    is listed for the administrator (`receiptsMissing`, with `inBook`) and
+    can only be set aside. The same holds when the administrator
+    acknowledges a call whose receipt has reached the book since the start.
+    A `found-in-book` line now records whether the receipt was
+    countersigned and the countersignature's fingerprint. (`executor.mjs`,
+    `copy.mjs`.)
+  - **`compare`** holds each receipt it matches against the copy's
+    `sending` line (and the documents its `done` line holds), and against
+    the countersignature the copy records: a receipt that is not the call
+    sent goes to `differs` (each entry now says `why`: `another stub` or
+    `not the call sent`); a countersignature missing, not valid, or another
+    than the one recorded goes to the new list `countersignatures`; more
+    than one receipt for a call goes to the new list `moreThanOne`. The
+    summary gains `countersignatureProblems` and `moreThanOneReceipt`, and
+    `agree` is false where either is found. (`compare.mjs`.)
+  - **Tests** (`mcp-executor/test/review5.test.mjs`, 5): a receipt found at
+    a start with other arguments, one-sided, or one of two; one that is the
+    call, countersigned; a countersignature taken off or swapped; a receipt
+    that is not the call sent; and two receipts for one call, with and
+    without another fault.
+  - **Documents.** The executor's README ("A call the executor was sending
+    when it stopped"; "The copy, and comparing it with the book") and
+    DESIGN.md (sections 7 and 8) say so.
+  - **`files.mjs` is the gateway's again, byte for byte**, as
+    `test/same-files.test.mjs` requires: it takes the gateway's line that
+    describes a key file of the gateway's own, which the executor never
+    makes. The test failed from the gateway's countersignature commit on.
 - **The home page for businesses.** https://prova.red now opens for businesses that use AI agents a lot: what the guard does, how it works with claude.ai, when it keeps the tools' credentials from the agent, what a record does not prove, and how to try it. The developers' material follows, under "For developers". No code changes.
 - **The pages and READMEs name the guard 0.5.0 as current.** The README, the
   home page and the three-minutes page say the guard is at 0.5.0, and the
