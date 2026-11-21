@@ -13,7 +13,7 @@ The folder `compose/` runs the guard with Docker Compose, beside Caddy,
 which gives it HTTPS (secure HTTP) with a certificate it gets itself. One
 command starts both.
 
-It describes only what is built, in version 0.5.0 (not yet released). It
+It describes only what is built, in version 0.5.0 (published on 21 November 2026). It
 has been tried by the package's own tests, on one computer, with a
 stand-in client, and by the Docker check described under "What has been
 tried". The recipe has not been tried on a real server, with a publicly
@@ -98,7 +98,7 @@ tag's signature before using it. The repository's release tags are named
 `v` and the version of the Provared library, such as `v0.8.0`; the guard
 has no tags of its own. Use the newest release tag whose
 `mcp-executor/recipes/claude-ai/compose/package.json` names the guard's
-version you want (none does yet: 0.5.0 is not released). On the server,
+version you want (`v0.9.0` is the first; 0.5.0 was published on 21 November 2026). On the server,
 with git, for the tag `<tag>`:
 
 ```
@@ -441,7 +441,7 @@ Not tried: a real server, a publicly signed certificate, DNS, a firewall,
 a reboot of the server or a restart of Docker itself (and so the order in
 which Docker starts the two then), the boot unit under systemd, the
 weekly timer, `npm ci` against 0.5.0 on npm
-(not yet published), a shallow clone of a tag (the `git tag -v` command
+(published on 21 November 2026), a shallow clone of a tag (the `git tag -v` command
 was run on a full clone, against `v0.8.0`), and claude.ai with this
 recipe (the guard on its own was tried with claude.ai; see the start of
 this README).

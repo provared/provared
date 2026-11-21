@@ -3555,7 +3555,7 @@ not kept, and the seal goes in without it (X300).
 `check` loads `provared/net/timestamp` as a start does, and says plainly
 where the library installed has none. The README names the release that
 has it: `provared` 0.9.0. The dependency ranges now ask for 0.9.0
-(not yet published).
+(published on 21 November 2026).
 
 **X310. A sealer's words are cut and made plain.** A problem's words
 that came from a central sealer are printed with control and format
