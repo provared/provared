@@ -1,6 +1,6 @@
 # Changelog: provared-shopify
 
-## 0.1.0 (not yet released)
+## 0.1.0 (21 November 2026)
 
 The first version. It has been run only against a made-up Shopify, in
 its tests; it has not been tried against a real store.
