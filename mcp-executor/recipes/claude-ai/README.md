@@ -422,12 +422,19 @@ user's with mode 600 (folders 700; the start's mark a socket, 600),
 Caddy's folders Caddy's user's, the image's own files 644 from copies of
 mode 600, Caddy's 404 for `/provared` and under it, `owner` refused while
 the guard runs and `owner --reset` done with it stopped, `check` run
-through `docker compose run`, and the guard answering again 20 to 37
-seconds after Caddy was restarted on its own (four runs), with
+through `docker compose run`, a second start beside the running guard
+refused (code 2) with `owner --reset` refused by the running guard's mark
+after it, and the guard answering again 20 to 50 seconds after Caddy was
+restarted on its own (five runs), with
 `owner --reset` refused by the start's mark in that time. It stopped both
 containers and started them with `docker start`: Caddy first, both came
 back; the guard first, the guard stayed stopped until the boot unit's
-command ran, and then answered. Its last run passed 42 checks of 42.
+command ran, and then answered. It stopped Caddy for 45 seconds: the
+guard stopped, Docker's one try to start it again failed ("cannot join
+network namespace of a non running container"), and once Caddy was
+started again the guard stayed stopped for the 60 seconds looked at, until
+`docker compose up -d` started it. Its last run, on 20 November 2026,
+passed 45 checks of 45.
 
 Not tried: a real server, a publicly signed certificate, DNS, a firewall,
 a reboot of the server or a restart of Docker itself (and so the order in
@@ -460,7 +467,7 @@ was run on a full clone, against `v0.8.0`), and claude.ai itself.
   is left in the old one, where nothing reaches it. The start looks for
   Caddy's port every 5 seconds; after three misses it stops the guard,
   and Docker starts it again in Caddy's new network. Until then, about
-  15 to 40 seconds (20 to 37 in the check's runs), claude.ai gets an
+  15 to 50 seconds (20 to 50 in the check's runs), claude.ai gets an
   error (502). A command that writes
   is refused in that time by the start's mark (above, "Commands, and the
   owner's reset"), not by the guard's lock, which it cannot see.
@@ -468,7 +475,8 @@ was run on a full clone, against `v0.8.0`), and claude.ai itself.
   the guard again (Caddy stopped for more than about 15 seconds, or ending
   again and again on a mistake in its Caddyfile), the guard cannot join
   Caddy's network, and Docker does not try again: the guard stays stopped
-  after Caddy is back. Run `docker compose up -d` in the folder of
+  after Caddy is back (the check below found this, with Caddy stopped for
+  45 seconds). Run `docker compose up -d` in the folder of
   `compose.yaml` once Caddy runs.
 - **Any passkey that verifies its user.** The guard asks nothing more of
   the passkey than a fingerprint, a face or a PIN at each use. The browser

@@ -646,6 +646,16 @@ test('the Caddyfile: the guard\'s administrator\'s addresses (/provared and unde
   assert.match(readFileSync(new URL('../http.mjs', import.meta.url), 'utf8'), /export const ADMIN_PATH = '\/provared';/);
 });
 
+test('the README: what the boot unit does not cover, and Caddy away for longer (X366, X368)', () => {
+  const readme = readFileSync(new URL('../recipes/claude-ai/README.md', import.meta.url), 'utf8').replace(/\s+/g, ' ');
+  // The unit is a oneshot of the server's start: a restart of Docker alone does not run it again.
+  assert.match(read('boot/provared-guard-boot.service'), /^Type=oneshot$/m);
+  assert.ok(readme.includes('The unit runs once, at each start of the server, and not again until the next. Where Docker alone is restarted'));
+  assert.ok(readme.includes('The unit also starts a guard that was stopped on purpose (`docker compose stop guard`)'));
+  assert.ok(readme.includes('**Caddy away for longer.** Where Caddy is not running when Docker starts the guard again'));
+  assert.ok(readme.includes('the guard stays stopped after Caddy is back'));
+});
+
 test('the README: the recipe from a signed release tag, checked with git tag -v against the repository\'s release signers; a patch not tried, and the way back', () => {
   const readme = readFileSync(new URL('../recipes/claude-ai/README.md', import.meta.url), 'utf8');
   assert.ok(readme.includes('git clone --depth 1 --branch <tag> https://github.com/provared/provared.git provared'));

@@ -1494,7 +1494,10 @@
       no folder.
     - **Caddy away for longer (X368).** The recipe's README says that where
       Caddy is not running when Docker starts the guard again, the guard
-      stays stopped until `docker compose up -d`; the Docker check tries it.
+      stays stopped until `docker compose up -d`. The Docker check found
+      this with Caddy stopped for 45 seconds, and holds that
+      `docker compose up -d` brings the guard back; it also holds that a
+      second start beside the running guard is refused.
 
 - **`provared-mcp-executor` 0.4.2 (15 November 2026): a security fix for
   two weaknesses. In front of a tool server whose JSON reader ignores
