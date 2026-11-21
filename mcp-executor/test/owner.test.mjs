@@ -1027,10 +1027,10 @@ test('the library\'s passkey checks are found where the executor looks for them,
   assert.equal(LIBRARY_PROBLEM, 'ERR_PROVARED_LIBRARY');
   // The package names one exact version of the library: the one these checks were read in.
   const named = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).dependencies;
-  assert.deepEqual(named, { provared: '0.8.1' });
+  assert.deepEqual(named, { provared: '0.9.0' });
   const locked = JSON.parse(readFileSync(new URL('../package-lock.json', import.meta.url), 'utf8')).packages;
-  assert.equal(locked[''].dependencies.provared, '0.8.1');
-  assert.equal(locked['node_modules/provared'].version, '0.8.1');
+  assert.equal(locked[''].dependencies.provared, '0.9.0');
+  assert.equal(locked['node_modules/provared'].version, '0.9.0');
 });
 
 test('installed beside a library without the passkey checks, every command prints the executor\'s own message, and nothing round it, and ends with 1', () => {

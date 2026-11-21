@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.9.0 (21 November 2026)
+
+Version 0.9.0 adds a new, separate module to the library and changes how the central sealer in the library asks a time-stamp hook. What changes for a user: `provared/net/timestamp` (`net/timestamp.js`, with `net/timestamp.d.ts`; a new export of the package) asks a time-stamp service that follows RFC 3161 for a time-stamp over a seal's fingerprint, and checks what it gets back with the library's own `checkStamp`. It is a separate module: `src/` still makes no network request, and no other entry of the package loads it. A program that does not import it is unchanged. In `src/sealer.js`, the `stamp` hook of `openSealer` is now given a second argument, `{when, after}`, the seal's own time and the latest time that a service's time-stamp gave the seal before it (read with `checkStamp`, which asks nobody), and a hook that gives no answer within `signWithin`, or throws something other than a `Refusal`, is now `stamp-not-given`, where it was `check-failed`. `src/types.d.ts` shows the new argument. The Python library has no change of its own in 0.9.0: its version is raised to match, and nothing in `python/` differs from 0.8.1. No signed byte, label or field's meaning changes, and nothing else in the library changes.
+
+- **Versions.** The library is 0.9.0, in `package.json` and `python/pyproject.toml`. `examples/frameworks/package-lock.json` gives the library's version as 0.9.0. The Hermes plugin's bound on the library is raised from `provared>=0.4.0,<0.9` to `provared>=0.4.0,<0.10`, so that it takes 0.9.0, and the test workflow's comment on that bound agrees; the workflow's check of the bound passes. The README, the guide, the Python README, the plugin's README and three pages say 0.9.0. The checker in the checking page has not changed since 0.8.1, so the guide's fingerprint stays `486471a5b8f3108d08acaacb96d7c27ceeecf95b93bce8e47721b8872a9b1bbc`. The guard, the gateway and the central sealer ask for 0.9.0 (see "Not yet released"), and 0.9.0 is not yet published.
+
+- **The library: `provared/net/timestamp`** (`net/timestamp.js`, with
+  `net/timestamp.d.ts`; part of `provared` 0.9.0, not yet published). A
+  new entry of the package, kept apart from the library as `net/`
+  is: `src/` still makes no network request, and none of the library's
+  other entries loads it. `askForStamp(fingerprintBytes, {address,
+  timeout, clock})` sends the request of RFC 3161, section 2.4.1, by
+  HTTP POST (`application/timestamp-query`): version 1, SHA-256 written
+  with no parameters (RFC 5754, section 2), the 32 bytes of the seal's
+  fingerprint, a random 64-bit number used once (X290), and the
+  service's certificate asked for, which the format needs the
+  time-stamp to carry. `http:` and `https:` addresses are both taken,
+  with no user name, password, query or fragment (X291, X311). A redirect is not
+  followed, as the sealer's client follows none (X288); the answer is
+  read up to 12,544 bytes, a time-stamp of the largest size the format
+  allows and 256 bytes for the status beside it, and the whole request
+  is given up after its time limit, 10 seconds unless given, from 100
+  milliseconds to 60 seconds (X292). A status of 0 or 1 gives the
+  time-stamp; any other is said with the service's own text and
+  reasons (X293). The time-stamp is kept only if the library's
+  `checkStamp` passes it for this fingerprint, the device can check
+  its signing method, and it carries the number used once that was
+  sent (X294), and only if the time it states is within 300 seconds of
+  this device's clock, since a book holding one further off would fail
+  rule 7 of section 21.2 or rule 4 of section 21.1 under a checker who
+  trusts the service (X295). Every failure is a `Refusal`:
+  `stamp-not-given` for the request itself, or the code `checkStamp`
+  gave (X296). `stampService({address, timeout, clock})` gives the
+  `stamp` that `openSealer` takes. The package's exports gain
+  `./net/timestamp` (X297).
+- **`src/sealer.js` and `src/types.d.ts`.** The `stamp` hook of `openSealer` takes a second argument, `{when, after}`: `when` is the seal's time as a checker reads it, and `after` the latest time that a time-stamp from a service gave the seal before it, where the sealer holds that seal, or `null`. The sealer reads those times with `checkStamp`, which asks nobody, so `src/` still makes no request. A hook that gives no answer within `signWithin`, or throws something other than a `Refusal`, is `stamp-not-given` (it was `check-failed`), and the answer says why (`stampProblem`). A hook that takes one argument works as before.
+
 ## 0.8.1 (21 November 2026)
 
 Version 0.8.1 changes how the library reads one kind of time and what the signing page will sign. A time in a time-stamp, or in its service's certificates, written in the long form with a year from 0000 to 0099, is now read as the year written; both libraries, JavaScript and Python, refused it before. What changes for a user: such a time-stamp now goes on to the later checks, so 0.8.1 refuses it as `stamp-invalid` (dated outside its service's certificate), where earlier versions refused it as `stamp-bad-data`; and five stored answers in the shared test files changed. The signing page, in this repository, now refuses to sign a permission, asked for by another page, that starts more than 300 seconds after the device's clock, and warns where the device's clock looks behind. No signed byte, label or field's meaning changes, and nothing else in the library changes. A reader in this repository of another project's receipts (not published) now reads such years in the same way, as its entry below says.
@@ -137,35 +174,8 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
   the examples, the documents or the tests. Left out of the settings,
   nothing is asked and nothing changes. No signed byte, label or field's
   meaning changes; a checker answers as before.
-  - **The library: `provared/net/timestamp`** (`net/timestamp.js`, with
-    `net/timestamp.d.ts`; part of `provared` 0.8.1, not yet released). A
-    new entry of the package, kept apart from the library as `net/`
-    is: `src/` still makes no network request, and none of the library's
-    other entries loads it. `askForStamp(fingerprintBytes, {address,
-    timeout, clock})` sends the request of RFC 3161, section 2.4.1, by
-    HTTP POST (`application/timestamp-query`): version 1, SHA-256 written
-    with no parameters (RFC 5754, section 2), the 32 bytes of the seal's
-    fingerprint, a random 64-bit number used once (X290), and the
-    service's certificate asked for, which the format needs the
-    time-stamp to carry. `http:` and `https:` addresses are both taken,
-    with no user name, password, query or fragment (X291, X311). A redirect is not
-    followed, as the sealer's client follows none (X288); the answer is
-    read up to 12,544 bytes, a time-stamp of the largest size the format
-    allows and 256 bytes for the status beside it, and the whole request
-    is given up after its time limit, 10 seconds unless given, from 100
-    milliseconds to 60 seconds (X292). A status of 0 or 1 gives the
-    time-stamp; any other is said with the service's own text and
-    reasons (X293). The time-stamp is kept only if the library's
-    `checkStamp` passes it for this fingerprint, the device can check
-    its signing method, and it carries the number used once that was
-    sent (X294), and only if the time it states is within 300 seconds of
-    this device's clock, since a book holding one further off would fail
-    rule 7 of section 21.2 or rule 4 of section 21.1 under a checker who
-    trusts the service (X295). Every failure is a `Refusal`:
-    `stamp-not-given` for the request itself, or the code `checkStamp`
-    gave (X296). `stampService({address, timeout, clock})` gives the
-    `stamp` that `openSealer` takes. The package's exports gain
-    `./net/timestamp` (X297).
+  - **The library: `provared/net/timestamp`** is part of `provared` 0.9.0 (not yet
+    published), and its entry is under 0.9.0 above.
   - **The executor** (`mcp-executor/`, part of 0.5.0, not yet released):
     `recorder.stamp`, `{address, timeout}`, with the same rules, any
     other member refused (X298). Each seal the executor signs is sent to
@@ -193,8 +203,9 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
     the book without one, logged as `stamp-not-given` and answered as
     `stampProblem` (X303).
   - **Versions.** The sealer and the gateway ask for `provared`
-    `>=0.8.1 <0.9.0`, and the executor for `0.8.1` exactly, the first
-    version with `provared/net/timestamp` (0.8.1 is published). Installed
+    `>=0.9.0 <0.10.0`, and the executor for `0.9.0` exactly, the first
+    version with `provared/net/timestamp` (0.9.0 is not yet published; the
+    lockfiles' entries for it have no hash until it is). Installed
     with an earlier version, a program whose settings give `stamp` is
     refused at its start, in words that say so: the refusal looks for the
     client, not for a version number.
@@ -1472,8 +1483,8 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
       does; a time-stamp signed by any other is not kept
       (`stamp-not-given`, naming who signed it), and the seal goes in
       without it. The library's `askForStamp` and `stampService`
-      (`provared/net/timestamp`, part of `provared` 0.8.1, not yet
-      released) take `authority` and pass it to `checkStamp` as `trusted`;
+      (`provared/net/timestamp`, part of `provared` 0.9.0, not yet
+      published) take `authority` and pass it to `checkStamp` as `trusted`;
       `stampAuthority` reads it. Whether or not it is given, a seal that
       carries a time-stamp answers `stampedBy`, the fingerprint of the
       certificate that signed it, in the `seal` answer (executor,

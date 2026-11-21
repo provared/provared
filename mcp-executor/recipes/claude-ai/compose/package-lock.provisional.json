@@ -1,6 +1,8 @@
 {
-  "about": "The entry for provared-mcp-executor in package-lock.json beside this file was made from a pack of the working tree, before that version was on npm, and its hash is not npm's. Before a release tag carries this recipe: publish the executor, make the lockfile again from npm (npm install --package-lock-only --ignore-scripts, in this folder), take this file away, and run node tools/release/check-recipe-lock.mjs --registry. That check fails while this file is here.",
+  "about": "The entry for provared-mcp-executor in package-lock.json beside this file was made from a pack of the working tree, before that version was on npm, and its hash is not npm's. The entry for provared 0.9.0 is provisional too: it has no integrity line, since 0.9.0 is not on npm yet. Before a release tag carries this recipe: publish provared 0.9.0 and the executor, make the lockfile again from npm (npm install --package-lock-only --ignore-scripts, in this folder), take this file away, and run node tools/release/check-recipe-lock.mjs --registry. That check fails while this file is here.",
   "package": "provared-mcp-executor",
   "version": "0.5.0",
+  "libraryPackage": "provared",
+  "libraryVersion": "0.9.0",
   "integrity": "sha512-lBf7W9qXcNemW3F18PS7TyIgeh8701uZYSjdPzdSArvv/IqZSCtmXlowV2BXiHwqpgl70jYiCdrhk15MFEvhAA=="
 }

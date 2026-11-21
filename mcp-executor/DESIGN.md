@@ -3554,8 +3554,8 @@ not kept, and the seal goes in without it (X300).
 **X309. `check` loads the client.** Where `recorder.stamp` is given,
 `check` loads `provared/net/timestamp` as a start does, and says plainly
 where the library installed has none. The README names the release that
-has it: `provared` 0.8.1. The dependency ranges now ask for 0.8.1
-(published 21 November 2026).
+has it: `provared` 0.9.0. The dependency ranges now ask for 0.9.0
+(not yet published).
 
 **X310. A sealer's words are cut and made plain.** A problem's words
 that came from a central sealer are printed with control and format

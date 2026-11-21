@@ -377,7 +377,7 @@ made again from npm, `npm ci` stops on it (`E404` now, `EINTEGRITY` once
 0.5.0 is published): it installs nothing it cannot check. The release
 rule, in this order:
 
-1. Publish `provared-mcp-executor` 0.5.0.
+1. Publish `provared` 0.9.0 (the lockfile's entry for it has no hash yet), then `provared-mcp-executor` 0.5.0.
 2. In this folder, `npm install --package-lock-only --ignore-scripts`,
    and take `package-lock.provisional.json` away; commit both.
 3. `node tools/release/check-recipe-lock.mjs --registry`, from the top of

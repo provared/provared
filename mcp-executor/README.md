@@ -137,7 +137,7 @@ says which servers are affected and what to check; `CHANGELOG.md` in the
 repository has the details.
 
 It needs Node.js 24.7 or later. It depends only on the `provared` library,
-at exactly version 0.8.1: its receipts name
+at exactly version 0.9.0: its receipts name
 `provared.tool-name` and `provared.tool-result`, which the format reserved
 in 0.7.0 and which a checker of 0.5.0 or 0.6.0 refuses (0.4.0 and
 earlier read them as labels); and its owner's check uses two functions
@@ -1335,7 +1335,7 @@ gives goes beside the seal in the book, in `stamps`. `address` begins
 fragment; `timeout` is from 100 to 20,000 milliseconds, 5,000 if left
 out. No service is named by this package: the address is yours to
 choose. The request and the check are the library's
-(`provared/net/timestamp`, in `provared` 0.8.1 or later; with an earlier
+(`provared/net/timestamp`, in `provared` 0.9.0 or later; with an earlier
 release `check` says so and the executor does not start): the answer is
 read up to 12,544 bytes and within the time limit, a redirect is not
 followed, and the time-stamp is kept only if the library's `checkStamp`

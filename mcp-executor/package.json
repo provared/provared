@@ -75,6 +75,6 @@
     "test": "node --disable-warning=ExperimentalWarning --test --test-timeout=60000 --test-force-exit test/*.test.mjs"
   },
   "dependencies": {
-    "provared": "0.8.1"
+    "provared": "0.9.0"
   }
 }

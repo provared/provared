@@ -455,7 +455,7 @@ fragment; `timeout` is from 100 to 20,000 milliseconds, 5,000 if left
 out. Given, it must be such an object: `null`, `""` or `false` is
 refused, as by `check`. No service is named by this package: the address
 is yours to choose. The request and the check are the library's
-(`provared/net/timestamp`, in `provared` 0.8.1 or later; with an earlier
+(`provared/net/timestamp`, in `provared` 0.9.0 or later; with an earlier
 release `check` says so and the gateway does not start): the answer is
 read up to 12,544 bytes and within the time limit, a redirect is not
 followed, and the time-stamp is kept only if the library's `checkStamp`

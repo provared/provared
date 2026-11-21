@@ -271,7 +271,7 @@ each part protects against, is in
 
 ## Status
 
-**The library at version 0.8.1 and the guard at 0.4.2, both drafts.**
+**The library at version 0.9.0 and the guard at 0.4.2, both drafts.**
 Published as they are, by one author in their
 own time, built with AI tools since 3 October 2026; fixes as time
 allows. The code has been through more than 80 rounds of review by AI
