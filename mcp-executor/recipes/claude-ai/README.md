@@ -98,7 +98,7 @@ tag's signature before using it. The repository's release tags are named
 `v` and the version of the Provared library, such as `v0.8.0`; the guard
 has no tags of its own. Use the newest release tag whose
 `mcp-executor/recipes/claude-ai/compose/package.json` names the guard's
-version you want (`v0.9.0` is the first; 0.5.0 was published on 21 November 2026). On the server,
+version you want (none installs yet: `v0.9.0` names 0.5.0, but its lockfile was made before 0.5.0 was on npm, so `npm ci` stops on it; use the next release tag). On the server,
 with git, for the tag `<tag>`:
 
 ```
