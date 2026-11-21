@@ -4,10 +4,10 @@
 
 Version 0.9.0 adds a new, separate module to the library and changes how the central sealer in the library asks a time-stamp hook. What changes for a user: `provared/net/timestamp` (`net/timestamp.js`, with `net/timestamp.d.ts`; a new export of the package) asks a time-stamp service that follows RFC 3161 for a time-stamp over a seal's fingerprint, and checks what it gets back with the library's own `checkStamp`. It is a separate module: `src/` still makes no network request, and no other entry of the package loads it. A program that does not import it is unchanged. In `src/sealer.js`, the `stamp` hook of `openSealer` is now given a second argument, `{when, after}`, the seal's own time and the latest time that a service's time-stamp gave the seal before it (read with `checkStamp`, which asks nobody), and a hook that gives no answer within `signWithin`, or throws something other than a `Refusal`, is now `stamp-not-given`, where it was `check-failed`. `src/types.d.ts` shows the new argument. The Python library has no change of its own in 0.9.0: its version is raised to match, the Hermes plugin's bound is raised, and nothing else in `python/` differs from 0.8.1 but the version its READMEs name. No signed byte, label or field's meaning changes, and nothing else in the library changes.
 
-- **Versions.** The library is 0.9.0, in `package.json` and `python/pyproject.toml`. `examples/frameworks/package-lock.json` gives the library's version as 0.9.0. The Hermes plugin's bound on the library is raised from `provared>=0.4.0,<0.9` to `provared>=0.4.0,<0.10`, so that it takes 0.9.0, and the test workflow's comment on that bound agrees; the workflow's check of the bound passes. The README, the guide, the Python README, the plugin's README and three pages say 0.9.0. The checker in the checking page has not changed since 0.8.1, so the guide's fingerprint stays `486471a5b8f3108d08acaacb96d7c27ceeecf95b93bce8e47721b8872a9b1bbc`. The guard, the gateway and the central sealer ask for 0.9.0 (see "Not yet released"), and 0.9.0 is not yet published.
+- **Versions.** The library is 0.9.0, in `package.json` and `python/pyproject.toml`. `examples/frameworks/package-lock.json` gives the library's version as 0.9.0. The Hermes plugin's bound on the library is raised from `provared>=0.4.0,<0.9` to `provared>=0.4.0,<0.10`, so that it takes 0.9.0, and the test workflow's comment on that bound agrees; the workflow's check of the bound passes. The README, the guide, the Python README, the plugin's README and three pages say 0.9.0. The checker in the checking page has not changed since 0.8.1, so the guide's fingerprint stays `486471a5b8f3108d08acaacb96d7c27ceeecf95b93bce8e47721b8872a9b1bbc`. The guard, the gateway and the central sealer ask for 0.9.0 (see "Not yet released"), and 0.9.0 was published on 21 November 2026, through the workflow.
 
 - **The library: `provared/net/timestamp`** (`net/timestamp.js`, with
-  `net/timestamp.d.ts`; part of `provared` 0.9.0, not yet published). A
+  `net/timestamp.d.ts`; part of `provared` 0.9.0, published on 21 November 2026 through the workflow). A
   new entry of the package, kept apart from the library as `net/`
   is: `src/` still makes no network request, and none of the library's
   other entries loads it. `askForStamp(fingerprintBytes, {address,
@@ -160,6 +160,25 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
 
 ## Not yet released
 
+- **The pages and READMEs name the guard 0.5.0 as current.** The README, the
+  home page and the three-minutes page say the guard is at 0.5.0, and the
+  home page's "What is new" has an entry for it. The guard's README says the
+  MCP Registry lists 0.5.0 since 21 November 2026, and the recipe's README, the
+  design notes and this change log say that 0.5.0 (by hand to npm) and 0.9.0
+  (through the workflow) were published on 21 November 2026. Text only.
+
+- **The lockfiles carry what npm published.** The guard's lockfile
+  (`mcp-executor/package-lock.json`) and the recipe's
+  (`mcp-executor/recipes/claude-ai/compose/package-lock.json`) now give
+  `provared` 0.9.0 and, in the recipe's, `provared-mcp-executor` 0.5.0, as
+  published on npm on 21 November 2026, each with the hash npm gives:
+  `sha512-rLql7z1btN6FL+bDIkv1TwCp+ARm98FAU6q2+Exz7hCYvecw/ir3qGU/CPACoNrfXTEYKCY7W3SYyBgs+f1yqA==`
+  for the library and
+  `sha512-0qIyZIUEDLrjTRlFIpemqKBPLBBXQ4uyC6Kg4W74zgU4yzdFPEkAk9LmUbQu56pSftUmEQQCJei2fGB43OUtDQ==`
+  for the executor. The provisional mark (`package-lock.provisional.json`)
+  is gone, and `node tools/release/check-recipe-lock.mjs --registry` passes.
+  The recipe's tests now expect no mark and a hash on every entry.
+
 - **Static analysis passes again on the executor.** Nine warnings in
   `mcp-executor` were checked and found to be false alarms: two loops whose
   condition changes in a callback, six patterns that cannot match the same
@@ -174,9 +193,9 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
   the examples, the documents or the tests. Left out of the settings,
   nothing is asked and nothing changes. No signed byte, label or field's
   meaning changes; a checker answers as before.
-  - **The library: `provared/net/timestamp`** is part of `provared` 0.9.0 (not yet
-    published), and its entry is under 0.9.0 above.
-  - **The executor** (`mcp-executor/`, part of 0.5.0, not yet released):
+  - **The library: `provared/net/timestamp`** is part of `provared` 0.9.0 (published on 21 November 2026 through the
+    workflow), and its entry is under 0.9.0 above.
+  - **The executor** (`mcp-executor/`, part of 0.5.0, published by hand to npm on 21 November 2026):
     `recorder.stamp`, `{address, timeout}`, with the same rules, any
     other member refused (X298). Each seal the executor signs is sent to
     it. Not beside `recorder.sealer`: a central sealer asks for its own
@@ -204,8 +223,8 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
     `stampProblem` (X303).
   - **Versions.** The sealer and the gateway ask for `provared`
     `>=0.9.0 <0.10.0`, and the executor for `0.9.0` exactly, the first
-    version with `provared/net/timestamp` (0.9.0 is not yet published; the
-    lockfiles' entries for it have no hash until it is). Installed
+    version with `provared/net/timestamp` (0.9.0 was published on 21 November 2026 through the workflow; the
+    lockfiles now carry npm's hash, as the first entry above says). Installed
     with an earlier version, a program whose settings give `stamp` is
     refused at its start, in words that say so: the refusal looks for the
     client, not for a version number.
@@ -295,7 +314,7 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
   - **Not tested:** a seal the book does not take with its time-stamp,
     since the time-stamp is checked before it is offered.
 
-- **`provared-mcp-executor` 0.5.0 (not yet released).** Six pieces of
+- **`provared-mcp-executor` 0.5.0 (published by hand to npm on 21 November 2026).** Six pieces of
   work on the executor, each below with its own choices: the fixes of
   0.4.2 carried over to every transport, with a re-check of the local
   program; the findings of an independent review of the local program;
@@ -1483,8 +1502,8 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
       does; a time-stamp signed by any other is not kept
       (`stamp-not-given`, naming who signed it), and the seal goes in
       without it. The library's `askForStamp` and `stampService`
-      (`provared/net/timestamp`, part of `provared` 0.9.0, not yet
-      published) take `authority` and pass it to `checkStamp` as `trusted`;
+      (`provared/net/timestamp`, part of `provared` 0.9.0, published on 21 November 2026
+      through the workflow) take `authority` and pass it to `checkStamp` as `trusted`;
       `stampAuthority` reads it. Whether or not it is given, a seal that
       carries a time-stamp answers `stampedBy`, the fingerprint of the
       certificate that signed it, in the `seal` answer (executor,

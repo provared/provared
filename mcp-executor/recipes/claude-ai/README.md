@@ -13,7 +13,7 @@ The folder `compose/` runs the guard with Docker Compose, beside Caddy,
 which gives it HTTPS (secure HTTP) with a certificate it gets itself. One
 command starts both.
 
-It describes only what is built, in version 0.5.0 (not yet released). It
+It describes only what is built, in version 0.5.0 (published on 21 November 2026). It
 has been tried by the package's own tests, on one computer, with a
 stand-in client, and by the Docker check described under "What has been
 tried". The recipe has not been tried on a real server, with a publicly
@@ -98,7 +98,7 @@ tag's signature before using it. The repository's release tags are named
 `v` and the version of the Provared library, such as `v0.8.0`; the guard
 has no tags of its own. Use the newest release tag whose
 `mcp-executor/recipes/claude-ai/compose/package.json` names the guard's
-version you want (none does yet: 0.5.0 is not released). On the server,
+version you want (none installs yet: `v0.9.0` names 0.5.0, but its lockfile was made before 0.5.0 was on npm, so `npm ci` stops on it; use the next release tag). On the server,
 with git, for the tag `<tag>`:
 
 ```
@@ -368,22 +368,17 @@ writes the executor's entry in the image's lockfile afresh, for the packed
 file and its hash, and keeps the library's entry, whose hash is still
 checked. The lockfile beside `compose.yaml` is not changed.
 
-**The lockfile's entry for the executor is provisional.** It was made from
-a pack of a working folder, before 0.5.0 is on npm, and its hash is known
-not to be npm's: a pack of a clean checkout gives another, since the file
-modes recorded in the pack differ. The file
-`package-lock.provisional.json` beside it says so. Until the lockfile is
-made again from npm, `npm ci` stops on it (`E404` now, `EINTEGRITY` once
-0.5.0 is published): it installs nothing it cannot check. The release
-rule, in this order:
+**The lockfile's entries are npm's.** Both were made from npm after
+`provared` 0.9.0 and `provared-mcp-executor` 0.5.0 were published, with the
+hashes npm gives, and `npm ci` checks them. The release rule, in this order:
 
-1. Publish `provared` 0.9.0 (the lockfile's entry for it has no hash yet), then `provared-mcp-executor` 0.5.0.
-2. In this folder, `npm install --package-lock-only --ignore-scripts`,
-   and take `package-lock.provisional.json` away; commit both.
+1. Publish `provared`, then `provared-mcp-executor`.
+2. In this folder, `npm install --package-lock-only --ignore-scripts`;
+   commit the lockfile.
 3. `node tools/release/check-recipe-lock.mjs --registry`, from the top of
-   the repository: it stops while the provisional file is there, or where
-   the lockfile's hash for the executor is not the one
-   `npm view provared-mcp-executor@0.5.0 dist.integrity` gives.
+   the repository: it stops where a `package-lock.provisional.json` is
+   beside the lockfile, or where the lockfile's hash for the executor is not
+   the one `npm view provared-mcp-executor@0.5.0 dist.integrity` gives.
 4. Only then cut the release tag that "Getting the recipe" points at.
 
 ### How the containers are held in
@@ -446,7 +441,7 @@ Not tried: a real server, a publicly signed certificate, DNS, a firewall,
 a reboot of the server or a restart of Docker itself (and so the order in
 which Docker starts the two then), the boot unit under systemd, the
 weekly timer, `npm ci` against 0.5.0 on npm
-(not yet published), a shallow clone of a tag (the `git tag -v` command
+(published on 21 November 2026), a shallow clone of a tag (the `git tag -v` command
 was run on a full clone, against `v0.8.0`), and claude.ai with this
 recipe (the guard on its own was tried with claude.ai; see the start of
 this README).

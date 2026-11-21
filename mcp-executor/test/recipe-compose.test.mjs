@@ -573,7 +573,6 @@ test('the images: Node.js and Caddy official, each following its release line by
 test('package-lock.json: version 3, the same dependencies as package.json, every package from npm at an exact version with a SHA-512 hash, and nothing else', () => {
   const pkg = JSON.parse(read('package.json'));
   const lock = JSON.parse(read('package-lock.json'));
-  const mark = JSON.parse(read('package-lock.provisional.json'));
   assert.equal(lock.lockfileVersion, 3);
   assert.equal(lock.name, pkg.name);
   assert.deepEqual(lock.packages[''].dependencies, pkg.dependencies);
@@ -583,8 +582,6 @@ test('package-lock.json: version 3, the same dependencies as package.json, every
     const name = path.slice('node_modules/'.length);
     assert.equal(e.version, pkg.dependencies[name], path);
     assert.equal(e.resolved, `https://registry.npmjs.org/${name}/-/${name}-${e.version}.tgz`, path);
-    // The library's 0.9.0 is not on npm yet: its entry has no hash while the provisional mark names it (and says so).
-    if (e.integrity === undefined && name === mark.libraryPackage && e.version === mark.libraryVersion) continue;
     assert.match(e.integrity, /^sha512-[A-Za-z0-9+/]{86}==$/, path);
     assert.equal(e.dev, undefined, path);
     for (const [dep, range] of Object.entries(e.dependencies ?? {})) assert.equal(range, lock.packages[`node_modules/${dep}`]?.version, `${path} needs ${dep} at the exact version locked`);
@@ -601,20 +598,21 @@ test('the Caddyfile: the domain from the environment, the guard\'s local address
   assert.match(read('example.env'), /^PROVARED_DOMAIN=$/m);
 });
 
-test('package-lock.json: the executor\'s provisional entry is marked, and the release check stops on the mark until the lockfile is made from npm (X352)', () => {
+test('package-lock.json: the lockfile is made from npm, with no provisional mark beside it, and the release check stops on a mark (X352)', () => {
   const CHECK = fileURLToPath(new URL('../../tools/release/check-recipe-lock.mjs', import.meta.url));
-  const lock = JSON.parse(read('package-lock.json')).packages['node_modules/provared-mcp-executor'];
-  const mark = JSON.parse(read('package-lock.provisional.json'));
-  // The mark names the entry as it stands: an entry made again from npm with the mark left in place is caught here.
-  assert.deepEqual([mark.package, mark.version, mark.integrity], ['provared-mcp-executor', lock.version, lock.integrity]);
+  assert.equal(existsSync(join(RECIPE, 'package-lock.provisional.json')), false, 'the mark is taken away once the lockfile is made from npm');
   const run = (...args) => spawnSync(process.execPath, [CHECK, ...args], { encoding: 'utf8' });
   const shipped = run();
-  assert.equal(shipped.status, 1, shipped.stdout + shipped.stderr);
-  assert.match(shipped.stderr, /Stopped: the recipe's lockfile is provisional: its entry for provared-mcp-executor 0\.5\.0 was made from a pack/);
-  // A copy with the mark taken away passes the check of the files; one whose versions differ does not.
+  assert.equal(shipped.status, 0, shipped.stdout + shipped.stderr);
+  // A copy with a mark put beside the lockfile is stopped; without it, the check of the files passes; one whose versions differ does not.
   const copy = folder();
   try {
     for (const f of ['package.json', 'package-lock.json']) writeFileSync(join(copy, f), read(f));
+    writeFileSync(join(copy, 'package-lock.provisional.json'), '{}');
+    const marked = run('--recipe', copy);
+    assert.equal(marked.status, 1, marked.stdout + marked.stderr);
+    assert.match(marked.stderr, /Stopped: the recipe's lockfile is provisional: its entry for provared-mcp-executor 0\.5\.0 was made from a pack/);
+    rmSync(join(copy, 'package-lock.provisional.json'));
     const unmarked = run('--recipe', copy);
     assert.equal(unmarked.status, 0, unmarked.stdout + unmarked.stderr);
     assert.match(unmarked.stdout, /from npm \(its hash not compared with npm: --registry does that\)/);
