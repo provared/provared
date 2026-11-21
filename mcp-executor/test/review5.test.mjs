@@ -7,12 +7,12 @@
 
 import './local-library.mjs'; // first: "provared" is this repository's own library
 import assert from 'node:assert/strict';
-import { appendFileSync, readFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync, renameSync, rmdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
 const { argumentsFingerprint, checkBook, countersign, entryLine, identifierFingerprint, keySetFingerprint, writeStub } = await import('provared');
-const { world, openWorld, pause } = await import('./world.mjs');
+const { world, openWorld, pause, signSlip } = await import('./world.mjs');
 const { CALL_DOCUMENT, TOOL_DOCUMENT, openExecutor } = await import('../executor.mjs');
 const { readCopy, loadCopyKey, openCopy } = await import('../copy.mjs');
 const { compareCopyWithBook } = await import('../compare.mjs');
@@ -134,6 +134,85 @@ test('M2 and L7: compare reports a receipt the copy names that is not the call s
   assert.equal(twice.summary.moreThanOneReceipt, 1);
   assert.equal(twice.moreThanOne[0].call, first.call);
   assert.equal(twice.summary.agree, false);
+});
+
+/**
+ * A world that made one call, stopped with another in flight, and was then
+ * given a new permission: the call waits for the administrator. The
+ * executor is opened offline, with the clock given.
+ */
+async function waitingUnderOldSlip(now) {
+  const w = await afterOneCall();
+  const s = await leaveCall(w, 'late-call');
+  const signed = await signSlip({ passkey: w.passkey, agentKeys: w.agentKeys, executorKeys: w.executorKeys, until: Date.now() + 7200000 });
+  writeFileSync(join(w.folder, 'slip.json'), JSON.stringify(signed));
+  const ex = await openExecutor(w.settings, { root: w.folder, log: (e) => w.logs.push(e), offline: true, now });
+  return { w, s, ex };
+}
+
+/** The first "acknowledge" writes the receipt into the book, and the copy cannot say so: the call still waits, its receipt in the book. */
+async function receiptInBookCallWaiting(w, ex) {
+  const at = join(w.folder, 'copy.jsonl');
+  renameSync(at, `${at}.away`);
+  mkdirSync(at);
+  const first = await ex.acknowledge();
+  rmdirSync(at);
+  renameSync(`${at}.away`, at);
+  assert.deepEqual(first.written, []);
+  assert.deepEqual(first.failed.map((f) => f.call), ['late-call']);
+  const call = await identifierFingerprint('late-call');
+  const inBook = (await checkBook(readFileSync(bookPath(w), 'utf8'), options(w))).entries.filter((e) => e.kind === 'stub' && e.content.details.some((d) => d.name === CALL_DOCUMENT && d.sha256 === call));
+  assert.equal(inBook.length, 1, 'the receipt is in the book');
+  return inBook[0];
+}
+
+test('acknowledge: a receipt that reached the book after the start, and is the call sent, countersigned, settles the call and is noted "found-in-book" with its countersignature', async () => {
+  const { w, ex } = await waitingUnderOldSlip(Date.now);
+  try {
+    const receipt = await receiptInBookCallWaiting(w, ex);
+    assert.equal(receipt.countersignature?.state, 'valid');
+    const again = await ex.acknowledge();
+    assert.deepEqual(again.written.map((x) => [x.call, x.found ?? false, x.stub]), [['late-call', true, receipt.fingerprint]]);
+    assert.deepEqual(again.failed, []);
+    assert.equal((await ex.report()).agent.receiptsMissing.length, 0);
+  } finally {
+    await ex.close();
+  }
+  const last = copyLines(w).at(-1);
+  assert.deepEqual([last.call, last.outcome, last.countersigned, typeof last.countersignature], ['late-call', 'found-in-book', true, 'string']);
+  const result = await compareOf(w);
+  assert.equal(result.summary.agree, true, JSON.stringify(result.summary));
+});
+
+test('acknowledge: a receipt that reached the book after the start without the countersignature the permission names does not settle the call; it waits to be set aside', async () => {
+  // A clock an hour ahead while the countersignature is dated, and right
+  // again when the library checks it: the countersignature is refused, and
+  // the receipt goes into the book one-sided. (The arrow the executor hands
+  // the library is named "countersign" in a stack trace.)
+  let skewed = true;
+  const now = () => (skewed && /\bcountersign \(/.test(new Error().stack) ? Date.now() + 3600000 : Date.now());
+  const { w, ex } = await waitingUnderOldSlip(now);
+  try {
+    const receipt = await receiptInBookCallWaiting(w, ex);
+    assert.notEqual(receipt.countersignature?.state, 'valid', 'the receipt is one-sided');
+    skewed = false;
+    const again = await ex.acknowledge();
+    assert.deepEqual(again.written, []);
+    assert.deepEqual(again.failed.map((f) => f.call), ['late-call']);
+    assert.match(again.failed[0].problem, /without a valid countersignature of the executor/);
+    assert.ok(w.logs.some((e) => e.event === 'receipt-not-matching' && e.call === 'late-call'));
+    const waiting = (await ex.report()).agent.receiptsMissing.find((p) => p.call === 'late-call');
+    assert.equal(waiting.usable, false);
+    assert.deepEqual(waiting.inBook, [receipt.fingerprint]);
+    assert.ok(!copyLines(w).some((l) => l.outcome === 'found-in-book'));
+    await assert.rejects(ex.acknowledge(), /No call waiting can have a receipt written/);
+    const aside = await ex.acknowledge({ setAside: ['late-call'] });
+    assert.deepEqual(aside.setAside.map((x) => x.call), ['late-call']);
+    assert.equal(aside.written.length, 0);
+  } finally {
+    await ex.close();
+  }
+  assert.equal((await compareOf(w)).summary.agree, false);
 });
 
 test('L7: two receipts for one call are no agreement, even where the copy matches one of them', async () => {

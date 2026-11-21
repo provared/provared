@@ -218,7 +218,11 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
     a start with other arguments, one-sided, or one of two; one that is the
     call, countersigned; a countersignature taken off or swapped; a receipt
     that is not the call sent; and two receipts for one call, with and
-    without another fault.
+    without another fault. Two more for the administrator's acknowledgement:
+    a receipt that reached the book after the start (the executor wrote it,
+    and its copy could not say so) settles the call where it is the call
+    sent, countersigned; one without the countersignature the permission
+    names does not, and the call waits to be set aside.
   - **Documents.** The executor's README ("A call the executor was sending
     when it stopped"; "The copy, and comparing it with the book") and
     DESIGN.md (sections 7 and 8) say so.
