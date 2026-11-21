@@ -160,6 +160,7 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
 
 ## Not yet released
 
+- **The home page for businesses.** https://prova.red now opens for businesses that use AI agents a lot: what the guard does, how it works with claude.ai, when it keeps the tools' credentials from the agent, what a record does not prove, and how to try it. The developers' material follows, under "For developers". No code changes.
 - **The pages and READMEs name the guard 0.5.0 as current.** The README, the
   home page and the three-minutes page say the guard is at 0.5.0, and the
   home page's "What is new" has an entry for it. The guard's README says the

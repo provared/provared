@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; img-src 'self'; form-action 'none'; base-uri 'none'">
-<meta name="description" content="Provared: a free, open format for proving what an AI agent was allowed to do, and what it then did. A person signs a permission with a passkey; the agent signs a receipt for each action; a free checker says whether the agent stayed within its permission, and where it did not.">
+<meta name="description" content="Provared: a way to prove what an AI agent was allowed to do, and what it then did. A guard in front of an agent's tools holds the tools' credentials in place of the agent, checks each tool call against a permission a person signed with a passkey, refuses what it does not allow, and writes a signed receipt. Free and open source.">
 <title>Provared</title>
 <link rel="canonical" href="https://prova.red/">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
@@ -26,12 +26,13 @@
 <body>
 <header>
   <h1><svg class="mark" viewBox="0 0 64 64" width="36" height="36" aria-hidden="true"><circle cx="32" cy="32" r="32" fill="#8f000f"/><path d="M20 15 H37 L45 23 V49 H20 Z" fill="#ffffff"/><path d="M37 15 V23 H45" fill="none" stroke="#8f000f" stroke-width="2.5" stroke-linejoin="round"/><path d="M25 29 H40 M25 35 H36" stroke="#8f000f" stroke-width="2.5" stroke-linecap="round"/><path d="M24.5 43 C27 39, 29 46, 31.5 42.5 C34 39, 36 46, 40.5 41.5" fill="none" stroke="#8f000f" stroke-width="3" stroke-linecap="round"/></svg>Provared</h1>
-  <p class="lead">A guard for an AI agent's tools: it holds the tools' credentials in place of the agent, and stops any tool call that you did not allow in a permission signed with your passkey.</p>
-  <p>The guard stands between the agent and a tool server that speaks the Model Context Protocol (MCP), the common way for AI agents to reach tools. It holds the tool server's credential in place of the agent, and refuses a call the permission does not allow before the call reaches the tool. It can also test what a call would change, for example which paths a file tool may touch. It starts a tool server itself on the same computer, for one agent (MCP's "stdio" transport), or, from version 0.3.0, stands in front of one reached over the network (MCP over HTTP, the protocol of the web), for several agents, each with its own secret, permission and record.</p>
-  <p>The record follows from it. For each call it lets through, the guard writes a signed receipt and countersigns it with keys of its own; for a call the permission does not allow, a signed note of the refusal. Anyone can check these records later, on their own computer, with the free checker.</p>
-  <p class="motto">For anyone who runs an agent for other people, or has to check one. Evidence, not a verdict.</p>
+  <p class="lead">A way to prove what an AI agent was allowed to do, and what it then did.</p>
+  <p>An AI agent that orders, sends or changes things for your business leaves a trail of logs, and whoever runs the agent can edit a log. Provared adds signed records that anyone can check later, with a free checker.</p>
+  <p>At its centre is a guard for the agent's tools. It holds the tools' credentials in place of the agent, and stops any tool call that you did not allow in a permission signed with your passkey. For each call it lets through, it writes a signed receipt.</p>
+  <p class="motto">For businesses that use AI agents, and for whoever has to check them. Evidence, not a verdict.</p>
   <nav class="buttons" aria-label="Pages">
     <a class="primary" href="https://github.com/provared/provared/blob/main/mcp-executor/README.md">Set up the guard</a>
+    <a href="https://github.com/provared/provared/blob/main/mcp-executor/recipes/claude-ai/README.md">Use it with claude.ai</a>
     <a href="try/">Try a record in your browser</a>
     <a href="three-minutes.html">In plain words</a>
     <a href="over-the-limit.html">For developers</a>
@@ -39,17 +40,87 @@
     <a href="https://claude.ai/artifact/VPk1ZoT36y8op1r6x9KqgS">The draft, explained</a>
   </nav>
   <nav class="buttons jumps" aria-label="On this page">
-    <a href="#other">Other ways to record an agent</a>
+    <a href="#what">What it does</a>
+    <a href="#claude">With claude.ai</a>
+    <a href="#credentials">Keeping the credentials from the agent</a>
+    <a href="#not">What a record does not prove</a>
+    <a href="#try">How to try it</a>
+    <a href="#developers">For developers</a>
     <a href="#new">What is new</a>
-    <a href="#first">A first record</a>
-    <a href="#checker">What the checker says</a>
-    <a href="#only">What is only here</a>
     <a href="#contact">Write to the author</a>
   </nav>
 </header>
 <main>
 
-<p><strong>What it does not do yet.</strong> One guard stands in front of one tool server, and over the network the credential it holds is a bearer token read from a file. Over HTTP it has been tried with the official MCP software on protocol version 2025-11-25 only, with every program on one computer; on the newer 2026-07-28 it has met only a test server of its own. The agents' secrets travel in the clear unless something else encrypts the connection to the guard, and so does the tool server's credential if the tool server is reached by plain HTTP. Sealing the record and keys held in a key service are designed but not built. And it proves nothing about a tool the agent can reach without it: the tool's credential must be taken away from the agent. It keeps the credential, and its own keys, from the agent only where the agent cannot read the guard's files: an agent with a shell or file tools that runs as the same computer user can read them. So run the guard under a separate user account that the agent cannot use, or give the agent no shell or file tools. Over HTTP the guard can also run apart from the agent, where the agent cannot read the guard's files: <a href="https://github.com/provared/provared/tree/main/mcp-executor/recipes/agent-with-a-shell">an example</a> puts them in separate Docker containers on one computer, and its seven checks passed with Docker Desktop on Windows; on separate computers it has not been tried.</p>
+<h2 id="what">What it does</h2>
+
+<ul class="parts">
+  <li class="slip"><strong>You sign a short permission</strong>With a passkey: the sign-in on your phone or computer that asks for your fingerprint, face or PIN. The permission says which agent, which actions, what limits, with whom, until when, and for what purpose.</li>
+  <li><strong>The guard checks every tool call</strong>The guard sits between the agent and its tools. It holds the tools' credentials (the secret a tool asks for before it acts, such as an access key) in place of the agent. It checks each tool call against your permission, and refuses a call the permission does not allow before the call reaches the tool.</li>
+  <li class="stub"><strong>It writes a signed receipt</strong>For each call it lets through, a signed receipt that points back to the permission. For each call it refuses, a signed note of the refusal.</li>
+  <li class="seal"><strong>The receipts can be sealed</strong>Where you turn sealing on, the guard chains the receipts under one fingerprint and signs it, so that a later change to one of them shows when it is checked. Where you set one up, the guard asks an outside time-stamp service to date each seal.</li>
+  <li class="show"><strong>Anyone can check them</strong>Later, on their own computer, with the free checker. With the library, one page can show a checker the proof for one entry, with the parts they do not need kept covered.</li>
+</ul>
+
+<p>The guard works with tools that use the Model Context Protocol (MCP), the common way for AI agents to reach tools. It is the npm package provared-mcp-executor, version 0.5.0, published on 21 November 2026.</p>
+
+<h2 id="claude">With claude.ai</h2>
+
+<p>A business can run the guard on its own server and add it to claude.ai as a custom connector. The owner approves each new connection with a passkey.</p>
+
+<p>Tried so far: on 15 November 2026 an earlier build of version 0.5.0 ran on a server on the internet. claude.ai connected to it after one passkey prompt. The guard let two tool calls through, with a receipt for each, and refused a third before the tool saw it.</p>
+
+<p>A recipe in the repository starts the guard, with a web server that gives it a secure (HTTPS) address, in one command. That recipe has been tried only in a test on one computer: not on a real server, and not with claude.ai.</p>
+
+<p>Limits: one guard stands in front of one tool server. A tool server reached over the network must accept a fixed access key; one that only accepts its own sign-in (OAuth) is not served yet.</p>
+
+<h2 id="credentials">Keeping the credentials from the agent</h2>
+
+<p>The record counts only if the agent has no other way to the tools. So take the tools' credentials away from the agent, and give them to the guard alone. An agent with a shell (a command line) or file tools, running as the same computer user as the guard, can read the guard's files, and the credentials with them. The guard keeps the credentials from the agent when:</p>
+<ul>
+  <li>the guard runs under a separate user account that the agent cannot use; or</li>
+  <li>the agent has no shell and no file tools; or</li>
+  <li>the guard runs over HTTP (the protocol of the web), apart from the agent, where the agent cannot read the guard's files. <a href="https://github.com/provared/provared/tree/main/mcp-executor/recipes/agent-with-a-shell">An example</a> does this with separate containers on one computer. On separate computers it has not been tried.</li>
+</ul>
+
+<h2 id="not">What a record does not prove</h2>
+
+<p>Evidence, not a verdict.</p>
+<ul class="answers">
+  <li class="no">A record shows what was allowed, and what the guard saw and did. It does not show that an action was wise, lawful or wanted.</li>
+  <li class="no">It proves nothing about a tool the agent can reach without the guard.</li>
+  <li class="no">Unless a central sealer holds the sealing keys, whoever can read the guard's files can write and seal a book of their own.</li>
+  <li class="no">It shows what was recorded, not what was left out.</li>
+  <li class="no">The guard knows a call by the tool's name and your rule for it. A tool that does more than its name says is recorded as what the rule says.</li>
+  <li class="no">It does not show who was holding the device when the passkey signed.</li>
+</ul>
+
+<h2 id="terms">Cost, data and review</h2>
+
+<div class="qa">
+  <p><b>Cost.</b>Free and open source, under the Apache License 2.0. Nothing is sold here. There is no hosted service: you run the guard yourself.</p>
+  <p><b>Your data.</b>Nothing is sent home to the author (no telemetry). The guard keeps your tools' credentials, and its own copy of each call, on the computer where you run it. The Provared library itself sends nothing anywhere. The guard sends each allowed call on to your tool server and, where you set one up, asks the time-stamp service to date each seal.</p>
+  <p><b>Who has reviewed it.</b>One author built it, in their own time, with AI tools, since 3 October 2026. The code has been through more than 80 rounds of review by AI reviewers. No person other than the author has reviewed it yet.</p>
+  <p><b>Status.</b>Draft software. The format may still change.</p>
+</div>
+
+<h2 id="try">How to try it</h2>
+
+<ol>
+  <li>With nothing to install: <a href="try/">try a record in your browser</a>. An agent orders under a limit, and the checker finds where it went over.</li>
+  <li>See the guard work, with no passkey and no settings, on a computer with Node.js 24.7 or later:
+<pre>npm install -g provared-mcp-executor
+provared-mcp-executor demo</pre>
+  It runs the guard in front of a made-up tool. Its records prove nothing about anyone.</li>
+  <li>To run it for real: <a href="https://github.com/provared/provared/blob/main/mcp-executor/README.md">the guard's README</a> sets it up in five steps, and <a href="https://github.com/provared/provared/blob/main/mcp-executor/recipes/claude-ai/README.md">the claude.ai recipe</a> adds it to claude.ai.</li>
+  <li>Questions: <a href="mailto:hello@prova.red?subject=Provared">hello@prova.red</a>.</li>
+</ol>
+
+<h2 id="developers">For developers: the guard in detail</h2>
+
+<p>The guard stands between the agent and a tool server that speaks MCP. It holds the tool server's credential in place of the agent, and refuses a call the permission does not allow before the call reaches the tool. It can also test what a call would change, for example which paths a file tool may touch. It starts a tool server itself on the same computer, for one agent (MCP's "stdio" transport), or, from version 0.3.0, stands in front of one reached over the network (MCP over HTTP), for several agents, each with its own secret, permission and record. For each call it lets through, the guard writes a signed receipt and countersigns it with keys of its own; for a call the permission does not allow, a signed note of the refusal.</p>
+
+<p><strong>What it does not do yet.</strong> One guard stands in front of one tool server, and over the network the credential it holds is a bearer token read from a file. Over HTTP it has been tried with the official MCP software on protocol version 2025-11-25 only, with every program on one computer, and, on 15 November 2026, an earlier build of 0.5.0 with claude.ai on a server on the internet; on the newer 2026-07-28 it has met only a test server of its own. The agents' secrets travel in the clear unless something else encrypts the connection to the guard, and so does the tool server's credential if the tool server is reached by plain HTTP. Keys held in a key service are designed but not built. And it proves nothing about a tool the agent can reach without it: the tool's credential must be taken away from the agent. It keeps the credential, and its own keys, from the agent only where the agent cannot read the guard's files: an agent with a shell or file tools that runs as the same computer user can read them. So run the guard under a separate user account that the agent cannot use, or give the agent no shell or file tools. Over HTTP the guard can also run apart from the agent, where the agent cannot read the guard's files: <a href="https://github.com/provared/provared/tree/main/mcp-executor/recipes/agent-with-a-shell">an example</a> puts them in separate Docker containers on one computer, and its seven checks passed with Docker Desktop on Windows; on separate computers it has not been tried.</p>
 
 <pre>npm install -g provared-mcp-executor</pre>
 
@@ -267,7 +338,7 @@ agent = create_agent(model, tools=[order_supplies, send_message],
 
 <h2 id="contact">Write to the author</h2>
 
-<p>Nothing is sold here. A hosted service that keeps, seals and time-stamps records for you is planned, and not yet built. If you run an agent and would want such a record of it, if you would like to be told when the service exists, or if you have a question, send an email to <a href="mailto:hello@prova.red?subject=Provared">hello@prova.red</a>. Say in a line what your agent does and what you would want kept. Every email is read by the author and answered within a few days. Faults and suggestions are also welcome as <a href="https://github.com/provared/provared/issues">issues on GitHub</a>.</p>
+<p>Nothing is sold here, and there is no hosted service. If you run an agent and have a question, or are thinking of recording it with Provared, send an email to <a href="mailto:hello@prova.red?subject=Provared">hello@prova.red</a>. Say in a line what your agent does and what you would want kept. Every email is read by the author and answered within a few days. Faults and suggestions are also welcome as <a href="https://github.com/provared/provared/issues">issues on GitHub</a>.</p>
 
 </main>
 <footer>
