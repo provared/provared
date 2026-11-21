@@ -16,8 +16,14 @@ command starts both.
 It describes only what is built, in version 0.5.0 (not yet released). It
 has been tried by the package's own tests, on one computer, with a
 stand-in client, and by the Docker check described under "What has been
-tried". It has not been tried on a real server, with a publicly signed
-certificate, or with claude.ai itself.
+tried". The recipe has not been tried on a real server, with a publicly
+signed certificate, or with claude.ai. The guard itself has been, without
+Docker or this recipe: on 15 November 2026 an earlier build of this
+version ran on a server on the internet, behind Caddy with a Let's
+Encrypt certificate. claude.ai connected to it after one passkey prompt
+(Windows Hello, in Chrome on Windows); the guard took two tool calls,
+saving a countersigned receipt for each, and refused a third under its
+content rule before the tool saw it.
 
 ## What claude.ai needs, and what the guard gives
 
@@ -441,7 +447,9 @@ a reboot of the server or a restart of Docker itself (and so the order in
 which Docker starts the two then), the boot unit under systemd, the
 weekly timer, `npm ci` against 0.5.0 on npm
 (not yet published), a shallow clone of a tag (the `git tag -v` command
-was run on a full clone, against `v0.8.0`), and claude.ai itself.
+was run on a full clone, against `v0.8.0`), and claude.ai with this
+recipe (the guard on its own was tried with claude.ai; see the start of
+this README).
 
 ## The limits
 
@@ -488,9 +496,11 @@ was run on a full clone, against `v0.8.0`), and claude.ai itself.
   run in headless Chromium 153 with a virtual authenticator, at
   `http://localhost`: the setup and the first approval in one prompt, a
   later approval, and one by the recovery code, each through to a tool
-  call. No passkey on a device (a computer's own, a phone, a security key)
-  has been tried, and neither has claude.ai itself. The steps below try
-  the real thing by hand.
+  call. With this recipe, no passkey on a device (a computer's own, a
+  phone, a security key) has been tried, and neither has claude.ai. The
+  guard on its own was tried with both: a computer's own passkey and
+  claude.ai (see the start of this README). The steps below try the real
+  thing by hand.
 - **An approval is not in the book.** The guard's log says when a
   connection was approved and for which client; the agent's book holds
   only the receipts of its calls.

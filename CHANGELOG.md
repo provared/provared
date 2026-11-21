@@ -1498,6 +1498,11 @@
       this with Caddy stopped for 45 seconds, and holds that
       `docker compose up -d` brings the guard back; it also holds that a
       second start beside the running guard is refused.
+    - **What was tried with claude.ai, corrected.** The recipe's README
+      said claude.ai had not been tried. It now says that the recipe has
+      not been, and that the guard on its own was, on 15 November 2026: an
+      earlier build of this version, on a server with a Let's Encrypt
+      certificate, connected to claude.ai after one passkey prompt.
 
 - **`provared-mcp-executor` 0.4.2 (15 November 2026): a security fix for
   two weaknesses. In front of a tool server whose JSON reader ignores
