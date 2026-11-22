@@ -120,7 +120,7 @@ test('while the last stub is dated ahead of the clock, no call is allowed', asyn
   const { folder } = await world([{ action: 'provared.code.run', count: 2, per: 3600 }]);
   const service = await startService({ folder, port: 0 });
   try {
-    const post = (path, body) => fetch(`http://127.0.0.1:${service.port}${path}`, { method: 'POST', body: JSON.stringify(body) }).then((r) => r.json());
+    const post = (path, body) => fetch(`http://127.0.0.1:${service.port}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json());
     const run = (id) => ({ action: 'provared.code.run', details: [{ name: 'Bash', sha256: `${id}${'A'.repeat(43 - id.length)}` }], toolUseId: id });
     assert.ok(!(await post('/record', { ...run('ahead'), when: Date.now() + 200000 })).error);
     const a = await post('/before', run('a'));
@@ -243,7 +243,7 @@ test('a new book begins after a seal or a renewal that fills the book, through t
     try {
       await runHook(service.port, 'PostToolUse', 'Read', { file_path: 'x' });
       assert.deepEqual(keptBooks(folder), [], `${how}: two entries`);
-      const post = (path, body) => fetch(`http://127.0.0.1:${service.port}${path}`, { method: 'POST', body: JSON.stringify(body) }).then((r) => r.json());
+      const post = (path, body) => fetch(`http://127.0.0.1:${service.port}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json());
       const slip = how.endsWith('renew') ? await signSlip({ agentKeys: agent.keys, passkey, purpose: 'renewed' }) : null;
       if (how === 'seal') await service.seal();
       if (how === 'renew') await service.renew(slip);
@@ -395,7 +395,7 @@ test('a new book and a renewal at the same moment: no line is lost or doubled, a
     const service = await startService({ folder, port: 0 });
     try {
       const sealer = (await status(service.port)).sealer;
-      const post = (path, body) => fetch(`http://127.0.0.1:${service.port}${path}`, { method: 'POST', body: JSON.stringify(body) }).then((r) => r.json());
+      const post = (path, body) => fetch(`http://127.0.0.1:${service.port}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json());
       const second = await signSlip({ agentKeys: agent.keys, passkey, purpose: 'renewed' });
       const calls = Array.from({ length: 10 }, (_, i) => ({ action: 'provared.code.read', details: [{ name: 'Read', sha256: `${String(i).padStart(2, '0')}${'A'.repeat(41)}` }], toolUseId: `m${i}` }));
       const asked = await Promise.all(calls.slice(0, 5).map((c) => post('/before', c)));
@@ -512,7 +512,7 @@ test('a kept book is found only by its exact name', () => {
 
 const RELEASE = 'provared.code.release';
 const asker = (port) => {
-  const post = (path, body) => fetch(`http://127.0.0.1:${port}${path}`, { method: 'POST', body: JSON.stringify(body) }).then((r) => r.json());
+  const post = (path, body) => fetch(`http://127.0.0.1:${port}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json());
   let n = 0;
   const call = (action = RELEASE, more = {}) => ({ action, details: [{ name: 'Bash', sha256: `${String(++n).padStart(3, '0')}${'A'.repeat(40)}` }], toolUseId: `c${n}`, ...more });
   // Ask, and where allowed, record: what the hook does before and after a call.

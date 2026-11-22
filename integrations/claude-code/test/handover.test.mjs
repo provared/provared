@@ -180,7 +180,7 @@ test('a cancellation of the permission in force stops the agent, and the agent\'
     const answer = await checkBook(read(w.folder, 'book.jsonl'));
     assert.equal(answer.summary.problemFound, false);
     // No new book while the permission in force is cancelled: it would begin with that permission alone.
-    const r = await fetch(`http://127.0.0.1:${w.port}/new-book`, { method: 'POST', body: '{}' });
+    const r = await fetch(`http://127.0.0.1:${w.port}/new-book`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
     assert.equal(r.status, 409);
     assert.match((await r.json()).error, /cancelled, so no new book is started/);
     // A renewal signed after it, starting five minutes after it: taken; the agent acts again under it from then.
@@ -371,7 +371,7 @@ test('a cancellation dated ahead of the clock is held, kept on the disk, and sti
     assert.equal((await pre(again.port, 'after-restart')).decision.permissionDecision, 'deny', 'the held cancellation was not lost');
     assert.equal((await status(again.port)).cancelled, true);
     // No new book while it is held: it goes into this book first.
-    const r = await fetch(`http://127.0.0.1:${again.port}/new-book`, { method: 'POST', body: '{}' });
+    const r = await fetch(`http://127.0.0.1:${again.port}/new-book`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
     assert.equal(r.status, 409);
   } finally {
     await again.close();
@@ -406,7 +406,7 @@ test('while a cancellation is held, a renewal that starts before its date is ref
     assert.ok(kept[0].acknowledgements?.length, 'with the acknowledgement signed for it');
     // No new book while it is held, though the permission in force is not the one it cancels.
     assert.equal((await status(w.port)).cancelled, false);
-    const r = await fetch(`http://127.0.0.1:${w.port}/new-book`, { method: 'POST', body: '{}' });
+    const r = await fetch(`http://127.0.0.1:${w.port}/new-book`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
     assert.equal(r.status, 409);
     assert.match((await r.json()).error, /held beside the book/);
   } finally {
@@ -602,7 +602,7 @@ test('"admit-passkey" shows only what that passkey signed, by the permission its
     assert.match(shown.out, new RegExp(`Passkey \\(thumbprint\\)\\s+${S}`));
     assert.match(shown.out, /The stranger's/);
     // And the service itself takes nothing for one passkey that another signed.
-    const said = await (await fetch(`http://127.0.0.1:${w.port}/admit`, { method: 'POST', body: JSON.stringify({ slip: list.permissions[0].slip, thumbprint: T, take: true }) })).json();
+    const said = await (await fetch(`http://127.0.0.1:${w.port}/admit`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slip: list.permissions[0].slip, thumbprint: T, take: true }) })).json();
     assert.equal(said.code, 'other-passkey');
     assert.deepEqual(kinds(w.folder), ['slip']);
   } finally {

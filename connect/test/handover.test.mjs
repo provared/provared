@@ -81,9 +81,9 @@ async function recorder() {
     folder, port, passkey, first, slip, command, answered, status,
     feed: () => feedClient({ address: base, token: readFileSync(join(folder, 'feed-token'), 'utf8').trim() }),
     book: () => readFileSync(join(folder, 'book.jsonl'), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)),
-    before: async (id) => (await fetch(`${base}/before`, { method: 'POST', body: JSON.stringify({ action: 'provared.code.run', toolUseId: id }) })).json(),
+    before: async (id) => (await fetch(`${base}/before`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'provared.code.run', toolUseId: id }) })).json(),
     async stop() {
-      try { await fetch(`${base}/stop`, { method: 'POST', body: '{}' }); } catch { /* stopped */ }
+      try { await fetch(`${base}/stop`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }); } catch { /* stopped */ }
       await new Promise((ok) => { if (child.exitCode !== null) ok(); else child.once('exit', ok); });
     },
   };

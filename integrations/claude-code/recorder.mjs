@@ -1973,6 +1973,8 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
   // is always written, whether or not the hook still waits for it: the
   // hook has said that it was not confirmed, not that it was not written.
   class Gone extends Error {}
+  // A Content-Type of application/json, with or without parameters such as charset.
+  const isJson = (type) => typeof type === 'string' && type.split(';')[0].trim().toLowerCase() === 'application/json';
   const server = createServer(async (req, res) => {
     let gone = false;
     res.on('close', () => {
@@ -1990,6 +1992,17 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
     try {
       // The feed's own requests (GET /books and /lines), with its token.
       if (await feed.handle(req, res)) return undefined;
+      // Every other route answers a program on this computer, not a web page.
+      // A browser names the page that sends a request (Origin, Sec-Fetch-Site),
+      // and names the website it meant to reach (Host): a website's name may
+      // be made to lead to this computer, but its Host is not 127.0.0.1. A web
+      // page cannot send a body as application/json to another website
+      // without asking first, and this port never says yes. Refused before
+      // anything is read, and nothing is written.
+      if (req.headers.origin !== undefined) return send(403, { error: 'the recorder does not answer a web page (the request names an Origin)' });
+      if (req.headers['sec-fetch-site'] !== undefined && req.headers['sec-fetch-site'] !== 'none') return send(403, { error: 'the recorder does not answer a web page (Sec-Fetch-Site)' });
+      if (req.headers.host !== `127.0.0.1:${server.address().port}`) return send(403, { error: `the recorder answers at 127.0.0.1:${server.address().port} only (Host)` });
+      if (req.method === 'POST' && !isJson(req.headers['content-type'])) return send(415, { error: 'the recorder takes a body as application/json only (Content-Type)' });
       if (req.method === 'GET' && req.url === '/status') {
         const witnessed = await witnessing.status();
         return send(200, {

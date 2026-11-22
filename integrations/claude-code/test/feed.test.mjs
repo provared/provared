@@ -408,7 +408,7 @@ test('at most 500 lines in one answer', async () => {
   // A book of 520 lines: the slip and 519 stubs written by the recorder itself.
   const service = await startService({ folder: w.folder, port: 0 });
   try {
-    for (let i = 0; i < 519; i++) await fetch(`http://127.0.0.1:${service.port}/record`, { method: 'POST', body: JSON.stringify({ action: 'provared.code.read', details: [{ name: 'Read', sha256: sha(String(i)) }] }) });
+    for (let i = 0; i < 519; i++) await fetch(`http://127.0.0.1:${service.port}/record`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'provared.code.read', details: [{ name: 'Read', sha256: sha(String(i)) }] }) });
     const r = await ask(service.port, '/lines?from=0&wait=0', { folder: w.folder });
     assert.equal(r.body.lines.length, FEED_MAX_LINES);
     assert.equal(r.body.size, 520);

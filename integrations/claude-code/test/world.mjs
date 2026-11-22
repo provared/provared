@@ -163,7 +163,7 @@ export const status = async (port) => (await fetch(`http://127.0.0.1:${port}/sta
 export async function stopService(port) {
   if (port === LIVE_PORT) return;
   try {
-    await fetch(`http://127.0.0.1:${port}/stop`, { method: 'POST', body: '{}', signal: AbortSignal.timeout(5000) });
+    await fetch(`http://127.0.0.1:${port}/stop`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}', signal: AbortSignal.timeout(5000) });
   } catch {
     // Nothing was running.
   }
