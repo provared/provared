@@ -1,5 +1,14 @@
 # Changelog: provared-connect
 
+## Not yet released
+
+- **A record the recorder refuses while it is still starting is handed
+  over again.** The refusal code `not-started` joins the codes for which
+  the uploader hands a record over again in its next round
+  (`handover.mjs`, `AGAIN`), instead of taking the refusal as final until
+  the uploader is started again. Test: one new, in
+  `test/handover.test.mjs`.
+
 ## 0.1.0
 
 - **The connection by one line.** `npx provared-connect <line>` takes the
