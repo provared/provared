@@ -90,6 +90,20 @@ export async function waitingHandler({ folder, owner, clock = Date.now, signingO
       }
     }
     if (req.url === '/stop') {
+      const bytes = await bodyOf(req);
+      if (bytes === null) return send(413, { error: 'too large' });
+      let given = null;
+      try {
+        given = bytes.length > 0 ? JSON.parse(bytes.toString('utf8')) : null;
+      } catch {
+        // Not JSON: a stop as before.
+      }
+      // {"waiting": true}: stopped only while it still waits and takes no permission ("use"). Any other body
+      // stops it, as before.
+      if (given && given.waiting === true) {
+        if (owner.handler !== self) return send(409, { stopped: false, code: 'not-waiting', error: 'The recorder no longer waits for a first permission: one is in force, so it was not stopped.' });
+        if (admitting) return send(409, { stopped: false, code: 'busy', error: 'A permission is being taken now (admit-passkey), so the recorder was not stopped. Ask again in a moment.' });
+      }
       send(200, { stopped: true });
       owner.stop();
       return undefined;

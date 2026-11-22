@@ -2309,6 +2309,9 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
         }
       }
       if (req.url === '/stop') {
+        // {"waiting": true}: stop only a recorder that waits for its first permission ("use"). This one has a
+        // permission in force, so it is not stopped. Any other body stops it, as before.
+        if (given && given.waiting === true) return send(409, { stopped: false, code: 'not-waiting', error: 'This recorder has a permission in force and does not wait for a first one, so it was not stopped.' });
         send(200, { stopped: true });
         owner.stop();
         return undefined;
@@ -2618,12 +2621,22 @@ async function running(port, waitMs = 60000) {
  * said, with how to restart it; it is not stopped here.
  */
 async function ensure(folder, port, say = (words) => console.error(words), until = Infinity) {
+  return (await ensureStatus(folder, port, say, until)).code;
+}
+
+/**
+ * "ensure", giving back with its code the status of what answered (null
+ * where nothing did), so that "use" decides from the answer "ensure" was
+ * given, not from a question asked later that may go unanswered.
+ * @returns {Promise<{code: 0|1|'starting', status: object|null}>}
+ */
+async function ensureStatus(folder, port, say = (words) => console.error(words), until = Infinity) {
   const left = () => Math.max(250, Math.min(60000, Math.round(until - Date.now())));
   const answering = await running(port, left());
   if (answering) {
     if (answering.version !== VERSION) say(`The recorder that is running is ${typeof answering.version === 'string' ? `version ${answering.version.slice(0, 40)}` : 'an earlier version, which does not give its version'}, not ${VERSION ?? 'this one'}, the one installed here: it keeps the code it started with until it is restarted. Restart it once, with both commands on one line so that no tool call falls between them: ${RUN} stop; ${RUN} ensure`);
     if (answering.waiting === true) say(waitingWords());
-    return 0;
+    return { code: 0, status: answering };
   }
   // Without a permission the recorder starts only in a fresh folder, where it waits for the first one.
   const fresh = freshFolder(folder);
@@ -2632,46 +2645,75 @@ async function ensure(folder, port, say = (words) => console.error(words), until
     say(fresh.found.length > 0
       ? `The recorder has no signed permission yet (${files(folder).slip}), and the folder holds ${fresh.found.join(', ')}, so it is not fresh: the recorder was not started, and it does not wait there for a first permission (a permission may have been taken here, or its taking stopped part way). Save the signed permission from the signing window and put it in place: ${RUN} use <the saved file>`
       : `The recorder has no signed permission yet (${files(folder).slip}), so it was not started. Sign one and put it in place: ${RUN} use <the saved file>`);
-    return 1;
+    return { code: 1, status: null };
   }
   const child = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', SELF, 'start'], { detached: true, stdio: 'ignore', env: process.env });
   child.unref();
   for (let i = 0; i < 80; i++) {
-    if (Date.now() + 250 > until) return 'starting';
+    if (Date.now() + 250 > until) return { code: 'starting', status: null };
     await new Promise((r) => setTimeout(r, 250));
     const started = await running(port, left());
     if (started) {
       if (started.waiting === true) say(waitingWords());
-      return 0;
+      return { code: 0, status: started };
     }
   }
   say(`The recorder did not start. Run "${RUN} start" to see why.`);
-  return 1;
+  return { code: 1, status: null };
 }
 
 // What "ensure" says where the recorder that answers waits for its first permission (waiting.mjs).
 const waitingWords = () => `The recorder is running and waits for its first permission: every tool call is refused until one is taken, and nothing is recorded. When you have signed it, run "${RUN} admit-passkey <the thumbprint>" here, pasting the thumbprint from the signing window; or save the signed file from the signing window and run "${RUN} use <the saved file>".`;
 
 /**
- * Stop the waiting recorder that answers on the port, and wait until the
- * port is free: for 10 seconds at most, measured on the monotonic clock.
- * The port is free only where two questions in a row go unanswered: one
- * alone may be a busy computer. Gives back whether it is free.
+ * Stop the recorder that answers on the port, only if it waits for its first
+ * permission, and wait until the port is free. The stop is asked as
+ * {"waiting": true}, which the recorder decides in one step: the full
+ * recorder refuses it ("not-waiting"), and the waiting one refuses it while
+ * it takes a permission ("busy"). After a refusal the status is read again:
+ * where what answers no longer waits, that is given back; where it is still
+ * taking a permission, the stop is asked again. Each wait is measured on the
+ * monotonic clock: 10 seconds at most for the port to be free, and 10 for an
+ * admit to end. The port is free, and what answers is not known, only where
+ * two questions in a row go unanswered: one alone may be a busy computer.
+ * @returns {Promise<{free: boolean, status: object|null, busy?: boolean}>} free: it stopped and the port is
+ *   free; else status: what answers now (null where it is not known), and busy: it was still taking a permission
  */
 async function stopWaiting(port) {
-  try {
-    await ask(port, '/stop', 'POST', {}, 5000);
-  } catch {
-    // It may have stopped before it answered: whether the port is free is what counts.
+  const pause = () => new Promise((r) => setTimeout(r, 100));
+  // The status, asked again where it goes unanswered: null only where two questions in a row go unanswered.
+  const statusNow = async () => (await running(port, 1000)) ?? (await running(port, 1000));
+  for (const until = performance.now() + 10000; ;) {
+    let said = null;
+    try {
+      said = await ask(port, '/stop', 'POST', { waiting: true }, 5000);
+    } catch {
+      // It may have stopped before it answered: whether the port is free is what counts.
+    }
+    if (said && said.stopped !== true) {
+      // Refused: what answers is read again, and goes on as a recorder that runs where it no longer waits.
+      const now = await statusNow();
+      if (!now || now.waiting !== true) return { free: false, status: now };
+      if (said.code !== 'busy' || performance.now() >= until) return { free: false, status: now, busy: said.code === 'busy' };
+      await new Promise((r) => setTimeout(r, 250));
+      continue;
+    }
+    let unanswered = 0;
+    let last = null;
+    for (const freeBy = performance.now() + 10000; performance.now() < freeBy;) {
+      const now = await running(port, 1000);
+      if (now) {
+        unanswered = 0;
+        last = now;
+      } else if (++unanswered >= 2) return { free: true, status: null };
+      await pause();
+    }
+    return { free: false, status: last };
   }
-  let unanswered = 0;
-  for (const until = performance.now() + 10000; performance.now() < until;) {
-    unanswered = (await running(port, 1000)) ? 0 : unanswered + 1;
-    if (unanswered >= 2) return true;
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  return false;
 }
+
+// What "use" says where it is not known what answers on the port, and nothing more is done.
+const notKnownWords = (port, taken) => `It is not known whether the recorder on 127.0.0.1:${port} still waits for its first permission: it was asked to stop, did not, and then gave no answer twice. ${taken ? 'The permission is in place, but until the recorder runs with it every tool call is refused.' : 'Nothing was taken.'} Run "${RUN} status" to see what answers, then run use again.`;
 
 // What the person must do before anything is recorded: nothing signs for them.
 const firstRunWords = () => `Provared: no permission has been signed for this agent yet, so the recorder is not running and every tool call is refused: no record, no action. To set it up, in a terminal:
@@ -3079,14 +3121,22 @@ export async function main(argv) {
     };
     // A recorder that waits for its first permission is not one that runs with a permission: once the file
     // passed its checks it is stopped, and once the port is free the file is taken as it is where nothing runs.
-    // A file that is refused leaves it running.
+    // A file that is refused leaves it running. Where a permission was taken meanwhile, the recorder that
+    // answers refuses the stop, and the file goes to it as to any recorder that runs.
     if (command === 'use' && (await running(port, 5000))?.waiting === true) {
       if (!existsSync(f.book)) await checkFirst();
-      if (!(await stopWaiting(port))) {
-        console.log(`The recorder that waits for its first permission on 127.0.0.1:${port} did not let go of its port within 10 seconds, so nothing was taken. Run "${RUN} stop", then run use again.`);
+      const stop = await stopWaiting(port);
+      if (!stop.free && !stop.status) {
+        console.log(notKnownWords(port, false));
         return 1;
       }
-      console.log('The recorder that waited for its first permission was stopped, to take this one.');
+      if (!stop.free && stop.status.waiting === true) {
+        console.log(stop.busy
+          ? `The recorder that waits for its first permission on 127.0.0.1:${port} was taking a permission (admit-passkey) throughout the 10 seconds, so it was not stopped and nothing was taken. Run use again in a moment.`
+          : `The recorder that waits for its first permission on 127.0.0.1:${port} did not let go of its port within 10 seconds, so nothing was taken. Run "${RUN} stop", then run use again.`);
+        return 1;
+      }
+      if (stop.free) console.log('The recorder that waited for its first permission was stopped, to take this one.');
     }
     if (command === 'renew' || existsSync(f.book)) {
       await renewFrom(file, folder, port, newPasskey);
@@ -3101,13 +3151,20 @@ export async function main(argv) {
     }
     if (command === 'renew') return 0;
     const said = [];
-    let code = await ensure(folder, port, (words) => said.push(words));
-    // What answers may still be the waiting recorder (it was not seen in time, or did not stop): never told as
-    // running. It is stopped, and the full recorder started under the permission now in place.
-    if (code === 0 && (await running(port, 5000))?.waiting === true) {
+    // Decided from the status "ensure" was given. What answers may still be the waiting recorder (it was not
+    // seen in time, or did not stop): never told as running. It is stopped, and the full recorder started
+    // under the permission now in place.
+    let { code, status: answering } = await ensureStatus(folder, port, (words) => said.push(words));
+    if (code === 0 && answering?.waiting === true) {
       said.length = 0;
-      if (await stopWaiting(port)) code = await ensure(folder, port, (words) => said.push(words));
-      if ((await running(port, 5000))?.waiting === true) {
+      const stop = await stopWaiting(port);
+      if (stop.free) ({ code, status: answering } = await ensureStatus(folder, port, (words) => said.push(words)));
+      else answering = stop.status;
+      if (code === 0 && !answering) {
+        console.log(notKnownWords(port, true));
+        return 1;
+      }
+      if (code === 0 && answering.waiting === true) {
         console.log(`The permission is in place, but the recorder that answers on 127.0.0.1:${port} still waits for its first permission, so every tool call is refused. Restart it once, with both commands on one line: ${RUN} stop; ${RUN} ensure`);
         return 1;
       }

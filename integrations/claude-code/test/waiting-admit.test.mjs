@@ -20,7 +20,7 @@ const { developmentPasskey } = await import('provared/dev');
 const { feedReader } = await import('../feed.mjs');
 const { admitWaiting, readTrusted, readWaitingPermissions } = await import('../recorder.mjs');
 const { startWaiting } = await import('../waiting.mjs');
-const { freshWorld, runHook, signSlip, status, tempFolder } = await import('./world.mjs');
+const { freshWorld, runCommand, runHook, signSlip, status, tempFolder } = await import('./world.mjs');
 
 const LOCAL = { signingOrigins: ['http://localhost'] };
 const read = (folder, name) => readFileSync(join(folder, name), 'utf8');
@@ -346,6 +346,96 @@ test('in the waiting recorder, a declined permission no longer waits and is refu
     assert.equal(readWaitingPermissions(w.folder).length, 0);
     assert.equal((await status(w.port)).waiting, true);
   } finally {
+    await w.waiting.close();
+  }
+});
+
+/** POST /stop with "body" as it is, and "headers" beside the usual ones: the code and the body of the answer. */
+async function askToStop(port, body, headers = {}) {
+  const r = await fetch(`http://127.0.0.1:${port}/stop`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body, signal: AbortSignal.timeout(10000) });
+  return { code: r.status, body: await r.json() };
+}
+
+test('a stop asked only of a waiting recorder ({"waiting": true}): refused "busy" while an admit runs, which then completes; the full recorder then refuses it with "not-waiting" and keeps running; the port\'s checks still come first', async () => {
+  const gate = gateAt('checked');
+  const w = await waitingWorld({ faults: gate.faults });
+  try {
+    const mine = await w.handed();
+    const taking = w.reader.post('/admit', { fingerprint: mine.fp, thumbprint: mine.T, take: true });
+    await within(gate.reached, 20000, 'the admit at its checks');
+    const busy = await askToStop(w.port, '{"waiting":true}');
+    assert.equal(busy.code, 409, JSON.stringify(busy.body));
+    assert.equal(busy.body.code, 'busy');
+    assert.equal(busy.body.stopped, false);
+    assert.equal((await status(w.port)).waiting, true, 'it still runs, and waits');
+    gate.open();
+    const took = await within(taking, 30000, 'the admit');
+    assert.equal(took.body.outcome, 'taken', JSON.stringify(took.body));
+    assert.equal((await status(w.port)).slip, mine.fp, 'the full recorder runs');
+    // The full recorder has a permission in force: asked to stop only if it waits, it is not stopped.
+    const refused = await askToStop(w.port, '{"waiting":true}');
+    assert.equal(refused.code, 409, JSON.stringify(refused.body));
+    assert.equal(refused.body.code, 'not-waiting');
+    assert.equal(refused.body.stopped, false);
+    // The port's checks of 0.1.1, before the body is read.
+    assert.equal((await askToStop(w.port, '{"waiting":true}', { Origin: 'https://example.org' })).code, 403);
+    assert.equal((await askToStop(w.port, '{"waiting":true}', { 'Content-Type': 'text/plain' })).code, 415);
+    assert.equal((await status(w.port)).slip, mine.fp, 'the full recorder still runs');
+    const pre = await runHook(w.port, 'PreToolUse', 'Read', { file_path: 'README.md' });
+    assert.equal(pre.out, '', 'a call inside the permission is allowed');
+  } finally {
+    gate.open();
+    await w.waiting.close();
+  }
+});
+
+test('a stop asked only of a waiting recorder stops it where no admit runs; the port\'s checks still come first', async () => {
+  const w = await waitingWorld();
+  try {
+    assert.equal((await askToStop(w.port, '{"waiting":true}', { 'Sec-Fetch-Site': 'cross-site' })).code, 403);
+    assert.equal((await askToStop(w.port, '{"waiting":true}', { 'Content-Type': 'text/plain' })).code, 415);
+    assert.equal((await status(w.port)).waiting, true, 'refused by the checks: it still runs');
+    const stopped = await askToStop(w.port, '{"waiting":true}');
+    assert.equal(stopped.code, 200, JSON.stringify(stopped.body));
+    assert.equal(stopped.body.stopped, true);
+    let gone = false;
+    for (const until = performance.now() + 5000; !gone && performance.now() < until;) {
+      gone = await status(w.port).then(() => false, () => true);
+      if (!gone) await new Promise((r) => setTimeout(r, 100));
+    }
+    assert.equal(gone, true, 'nothing answers within 5 seconds');
+  } finally {
+    await w.waiting.close();
+  }
+});
+
+test('"use <file>" while an admit is being answered: the waiting recorder refuses its stop ("busy") and keeps running; once the admit is done, "use" goes on with the full recorder', async () => {
+  const gate = gateAt('checked');
+  const w = await waitingWorld({ faults: gate.faults });
+  let stopAsked;
+  const stopSeen = new Promise((r) => (stopAsked = r));
+  w.waiting.owner.server.on('request', (req) => { if (req.url === '/stop') stopAsked(); });
+  try {
+    const mine = await w.handed();
+    const taking = w.reader.post('/admit', { fingerprint: mine.fp, thumbprint: mine.T, take: true });
+    await within(gate.reached, 20000, 'the admit at its checks');
+    const file = join(tempFolder('provared-cc-use-'), 'slip.json');
+    writeFileSync(file, JSON.stringify(mine.slip));
+    const using = runCommand(['use', file], { folder: w.folder, port: w.port });
+    await within(stopSeen, 30000, 'the stop that "use" asks');
+    await new Promise((r) => setTimeout(r, 300));
+    gate.open();
+    const took = await within(taking, 30000, 'the admit');
+    assert.equal(took.body.outcome, 'taken', JSON.stringify(took.body));
+    const r = await within(using, 60000, '"use"');
+    assert.equal(r.code, 0, `${r.out} ${r.err}`);
+    assert.doesNotMatch(r.out, /was stopped/);
+    assert.match(r.out, /The recorder is running/);
+    const st = await status(w.port);
+    assert.equal(st.slip, mine.fp, 'the full recorder runs, under the permission taken');
+    assert.deepEqual(readTrusted(w.folder), [mine.T]);
+  } finally {
+    gate.open();
     await w.waiting.close();
   }
 });

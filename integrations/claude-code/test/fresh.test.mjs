@@ -15,9 +15,9 @@ import { performance } from 'node:perf_hooks';
 import { test } from 'node:test';
 
 const { fingerprint, fromBase64url } = await import('provared');
-const { freshFolder } = await import('../recorder.mjs');
+const { freshFolder, startService } = await import('../recorder.mjs');
 const { startWaiting } = await import('../waiting.mjs');
-const { freePort, freshWorld, refusedStart, runCommand, signSlip, status, stopService, tempFolder } = await import('./world.mjs');
+const { freePort, freshWorld, refusedStart, runCommand, signSlip, status, stopService, tempFolder, world } = await import('./world.mjs');
 
 /** Whether anything answers on the port, asked again until "ms" have passed on the monotonic clock. */
 async function answersWithin(port, ms) {
@@ -145,18 +145,19 @@ async function standIn(port, { silentFirst = 0, silentAfterStop = 0, silentMs = 
  * A stand-in on the port for a waiting recorder that follows a plan: each
  * GET /status in turn is answered as one that waits ("waiting"), or left
  * unanswered for that many milliseconds (a number); after the plan, it
- * answers as one that waits. Every /stop is answered "stopped", and it goes
- * on. "asked" lists what it was asked, in order.
+ * answers as one that waits. Every /stop is answered with "stop" (by
+ * default "stopped"), and it goes on. "asked" lists what it was asked, in
+ * order.
  */
-async function plannedStandIn(port, plan) {
+async function plannedStandIn(port, plan, { stop = { code: 200, body: { stopped: true } } } = {}) {
   const { createServer } = await import('node:http');
   const asked = [];
   let questions = 0;
   const server = createServer((req, res) => {
-    const answer = (body) => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(body)); };
+    const answer = (body, code = 200) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(body)); };
     if (req.url === '/stop') {
       asked.push('stop');
-      answer({ stopped: true });
+      answer(stop.body, stop.code);
       return;
     }
     const step = plan[questions++] ?? 'waiting';
@@ -182,6 +183,88 @@ test('"use <file>" ends with 1 and says every tool call is still refused where w
     assert.doesNotMatch(r.out, /The recorder is running/);
   } finally {
     stand.close();
+  }
+});
+
+test('"use <file>" decides from the status "ensure" was given: its first question and the one after "ensure" both unanswered, while "ensure" is answered by one that waits, it does not say the recorder runs', async () => {
+  const w = await freshWorld();
+  const port = await freePort();
+  // The first question and the third go unanswered for 6 seconds; the second (the one "ensure" asks) is answered as one that waits.
+  const stand = await plannedStandIn(port, [6000, 'waiting', 6000]);
+  try {
+    const file = join(tempFolder('provared-cc-use-'), 'slip.json');
+    writeFileSync(file, JSON.stringify(await signSlip({ agentKeys: w.agent.keys, passkey: w.passkey })));
+    const r = await runCommand(['use', file], { folder: w.folder, port });
+    assert.equal(r.code, 1, `${r.out} ${r.err} ${stand.asked.join(' ')}`);
+    assert.doesNotMatch(r.out, /The recorder is running/);
+    assert.match(r.out, /still waits for its first permission, so every tool call is refused/);
+  } finally {
+    stand.close();
+  }
+});
+
+test('"use <file>" ends with 1 and says the state is not known where the stop is refused and what answers then gives no answer, twice', async () => {
+  const w = await freshWorld();
+  const port = await freePort();
+  const stand = await plannedStandIn(port, ['waiting', 1500, 1500], { stop: { code: 409, body: { stopped: false, code: 'busy', error: 'An admit-passkey is being answered.' } } });
+  try {
+    const file = join(tempFolder('provared-cc-use-'), 'slip.json');
+    writeFileSync(file, JSON.stringify(await signSlip({ agentKeys: w.agent.keys, passkey: w.passkey })));
+    const r = await runCommand(['use', file], { folder: w.folder, port });
+    assert.equal(r.code, 1, `${r.out} ${r.err} ${stand.asked.join(' ')}`);
+    assert.match(r.out, /not known/);
+    assert.match(r.out, /status/);
+    assert.doesNotMatch(r.out, /was stopped|The recorder is running/);
+    assert.equal(existsSync(join(w.folder, 'slip.json')), false, 'nothing was taken');
+  } finally {
+    stand.close();
+  }
+});
+
+/**
+ * A stand-in on the port that answers the first GET /status as a waiting
+ * recorder, and passes every other request on to the recorder on "target",
+ * as it was sent: as if a permission was taken just after "use" asked.
+ */
+async function waitingOnceBefore(port, target) {
+  const { createServer, request } = await import('node:http');
+  let first = true;
+  const server = createServer((req, res) => {
+    if (first && req.method === 'GET' && req.url === '/status') {
+      first = false;
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ waiting: true, version: 'stand-in' }));
+      return;
+    }
+    const on = request({ host: '127.0.0.1', port: target, method: req.method, path: req.url, headers: { ...req.headers, host: `127.0.0.1:${target}` } }, (answer) => {
+      res.writeHead(answer.statusCode, answer.headers);
+      answer.pipe(res);
+    });
+    on.on('error', () => res.destroy());
+    req.pipe(on);
+  });
+  await new Promise((ok) => server.listen(port, '127.0.0.1', ok));
+  return { close: () => { server.close(); server.closeAllConnections(); } };
+}
+
+test('"use <file>" seen a waiting recorder, but a permission was taken before its stop: the full recorder refuses the stop and keeps running, and "use" goes on with it', async () => {
+  const w = await world([]);
+  const service = await startService({ folder: w.folder, port: 0 });
+  const port = await freePort();
+  const stand = await waitingOnceBefore(port, service.port);
+  try {
+    const file = join(tempFolder('provared-cc-use-'), 'slip.json');
+    writeFileSync(file, JSON.stringify(w.slip));
+    const r = await runCommand(['use', file], { folder: w.folder, port });
+    assert.equal(r.code, 0, `${r.out} ${r.err}`);
+    assert.doesNotMatch(r.out, /was stopped/);
+    assert.match(r.out, /already acts under this permission/);
+    assert.match(r.out, /The recorder is running/);
+    const st = await status(service.port);
+    assert.equal(st.slip, await fingerprint(fromBase64url(w.slip.payload)), 'the full recorder still runs');
+  } finally {
+    stand.close();
+    await service.close();
   }
 });
 
