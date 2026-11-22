@@ -171,6 +171,27 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
         return result(res, id, r);
       }
       // Tasks (2025-11-25), in one store for whoever presents its token, with no sessions: a tools/call that asks for a task is answered with its handle, and tasks/list, tasks/get, tasks/result and tasks/cancel serve any task to any caller.
+      // Tasks of the 2026-07-28 revision (the extension io.modelcontextprotocol/tasks), as the review of 0.5.2 describes them: a client that declares the extension in its _meta's client capabilities asks for nothing, and the server decides; here, a call to "order" is made a task, answered with the flat handle {resultType: "task", taskId}. tasks/get and tasks/update name it by params.taskId; subscriptions/listen gives notifications/tasks for the tasks in params.notifications.taskIds, or for every task it holds where none are named (one store for its one caller).
+      const extensions = params._meta?.['io.modelcontextprotocol/clientCapabilities']?.extensions;
+      const declares = extensions !== null && typeof extensions === 'object' && Object.hasOwn(params._meta['io.modelcontextprotocol/clientCapabilities'].extensions, 'io.modelcontextprotocol/tasks');
+      if (method === 'tools/call' && declares && params.name === 'order') {
+        const taskId = `task-${tasks.size + 1}-${Math.random().toString(36).slice(2, 10)}`;
+        tasks.set(taskId, { taskId, status: 'completed', result: { resultType: 'complete', content: [{ type: 'text', text: `Ordered for ${params.arguments?.total}. Delivery code 4471.` }] } });
+        return result(res, id, { resultType: 'task', taskId, status: 'working', ttlMs: 60000 });
+      }
+      // An answer that gives back, as a task's flat handle, the id the client named: a server whose answer an agent can shape.
+      if (method === 'claim') return result(res, id, { resultType: 'task', taskId: params.taskId });
+      if (method === 'tasks/update') {
+        if (!tasks.has(params.taskId)) return failure(res, id, -32602, 'No such task.');
+        return result(res, id, { resultType: 'complete' });
+      }
+      if (method === 'subscriptions/listen') {
+        const named = params.notifications?.taskIds;
+        const send = sse(res);
+        for (const t of Array.isArray(named) ? named.filter((x) => tasks.has(x)) : [...tasks.keys()]) send({ jsonrpc: '2.0', method: 'notifications/tasks', params: { ...tasks.get(t) } });
+        send({ jsonrpc: '2.0', id, result: { resultType: 'complete' } });
+        return res.end();
+      }
       if (method === 'tools/call' && params.task) {
         const taskId = `task-${tasks.size + 1}-${Math.random().toString(36).slice(2, 10)}`;
         tasks.set(taskId, { taskId, status: 'completed', result: { content: [{ type: 'text', text: `Ordered for ${params.arguments?.total}.` }] } });
@@ -254,6 +275,12 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
           // Both in one write, so that they arrive in one chunk.
           send(`${JSON.stringify({ jsonrpc: '2.0', id, result: { resultType: 'complete', content: [{ type: 'text', text: 'first' }] } })}\n\nid: ev-2\ndata: ${JSON.stringify({ jsonrpc: '2.0', id, result: { resultType: 'complete', content: [{ type: 'text', text: 'second' }] } })}`, 'id: ev-1\n');
           return res.end();
+        }
+        // A task's flat handle (2026-07-28) whether or not the client declared the extension: a server that does not keep to it.
+        if (how === 'task-anyway') {
+          const taskId = args.taskId ?? `task-${tasks.size + 1}-${Math.random().toString(36).slice(2, 10)}`;
+          tasks.set(taskId, { taskId, status: 'completed', result: { resultType: 'complete', content: [{ type: 'text', text: 'made anyway' }] } });
+          return result(res, id, { resultType: 'task', taskId, status: 'working', ttlMs: 60000 });
         }
         if (how === 'ask') {
           // A request of the server's own on the call's stream (elicitation), under an id it numbers itself; the call is answered with whatever answer comes under that id, from whichever client.

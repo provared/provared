@@ -333,23 +333,37 @@ What the executor does with each request:
   and only once (the last 1,000 unanswered for each agent); any other is
   refused with 400 and does not reach the upstream. A task it keeps for its
   caller could be read or cancelled by any agent. Tasks are therefore
-  refused unless the settings allow them (`allowTasks`): every `tasks/`
-  request is answered with JSON-RPC error -32601, and a request that asks
-  for a task (`params.task`) with -32602, each under the request's id with
-  200, as the executor's other refusals of a request it has read, and
-  nothing reaches the upstream. With `allowTasks`, a call that asks for a task is
-  checked and receipted as any call (its receipt's result is the task's
-  handle; the later `tasks/result` passes with no receipt), and the task
-  its answer names is held to the agent whose call made it (the last 1,000
-  for each agent): `tasks/get`, `tasks/result` and `tasks/cancel` that
-  name another agent's task, or one the executor did not see made, are
-  refused (-32602) and not sent; `tasks/list` comes back with that
-  agent's tasks alone; any other `tasks/` method is refused; and an event
-  of the upstream's that names another agent's task (its
-  `notifications/tasks/status`, or a message whose `_meta` ties it to that
-  task) is dropped from this agent's streams. After a restart the executor
-  knows no task, so the tasks made before it are refused. The methods and
-  fields are those of the 2025-11-25 revision.
+  refused unless the settings allow them (`allowTasks`). Then every
+  `tasks/` request is answered with JSON-RPC error -32601, and a request
+  that asks for a task (`params.task`, 2025-11-25) or a subscription that
+  names tasks (`params.notifications.taskIds` of `subscriptions/listen`,
+  2026-07-28) with -32602, each under the request's id with 200, as the
+  executor's other refusals of a request it has read; none of these
+  reaches the upstream. In the 2026-07-28 revision tasks are an extension
+  (`io.modelcontextprotocol/tasks`) that a client declares in the client
+  capabilities of its request's `_meta`, and the server decides whether
+  to make a task: the executor takes the extension out of every request
+  it sends on, so the upstream answers at once, with the result. A call
+  that the upstream answers with a task all the same is recorded with its
+  outcome not known, and the agent is told so. With `allowTasks`, the
+  extension goes on, and a call that becomes a task is checked and
+  receipted as any call (its receipt's result is the task's handle; a
+  later `tasks/result` or `tasks/get` passes with no receipt). The task an
+  answer names (`result.task.taskId` where the request asked for one;
+  `result.taskId` where `result.resultType` is `"task"`, in any answer) is
+  held to the agent the answer went to (the last 1,000 for each agent),
+  and a task named in answers to two agents is neither's. `tasks/get`,
+  `tasks/result`, `tasks/cancel` and `tasks/update` that name another
+  agent's task, or one the executor did not see made, are refused (-32602)
+  and not sent, and so is a subscription that names one in
+  `notifications.taskIds`; `tasks/list` comes back with that agent's tasks
+  alone; any other `tasks/` method is refused; and an event of the
+  upstream's that names another agent's task (`notifications/tasks/status`,
+  `notifications/tasks`, or a message whose `_meta` ties it to that task)
+  is dropped from this agent's streams. After a restart the executor knows
+  no task, so the tasks made before it are refused. The methods and fields
+  covered are those of the 2025-11-25 revision and, for 2026-07-28, those
+  named here.
 - Cancellation follows the era. On the 2026-07-28 revision, closing the
   response stream is the cancellation: the executor then closes its stream
   to the upstream, the outcome is recorded as not known, as on stdio, and

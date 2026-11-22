@@ -273,6 +273,21 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
     for each agent); any other is refused with 400. Tests:
     `test/upstream-streams.test.mjs`; the tests that opened GET streams
     with two agents now open them under a session.
+  - Tasks of the 2026-07-28 revision, an extension the client declares and
+    the server decides on, were not covered: with the default settings a
+    call became a task that its own agent could then not fetch, and
+    another agent could subscribe to it (`subscriptions/listen` with
+    `notifications.taskIds`) and be given its result. Now, without
+    `allowTasks`, the extension is taken out of what is sent on, so the
+    upstream answers at once; a subscription that names tasks is refused
+    and not sent; and a call answered with a task all the same has its
+    outcome not known. With `allowTasks`, the flat handle
+    (`result.resultType` `"task"`, `result.taskId`) is learnt from any
+    answer, `tasks/update` is served to the task's agent alone, a
+    subscription goes on only where every task it names is the agent's,
+    `notifications/tasks` of another agent's task is dropped, and a task
+    named in answers to two agents is neither's. The README now says
+    which revisions are covered. Tests: `test/tasks.test.mjs`.
   - A tool server's answer of many small elements (15 MiB of one-item
     lists) ended the executor at the claude.ai recipe's heap, once read:
     the limit of 100,000 elements held only for the agent's messages. Now

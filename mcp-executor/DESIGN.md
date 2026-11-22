@@ -466,29 +466,47 @@ one, answered with `{task: {taskId, …}}`; `tasks/get`, `tasks/result`
 and `tasks/cancel` name it by `params.taskId`; `tasks/list` gives
 `{tasks: [{taskId, …}]}`; `notifications/tasks/status` carries its
 `taskId`; and `_meta["io.modelcontextprotocol/related-task"].taskId` ties
-another message to it). So, unless `allowTasks` is true, every request
-whose method is `tasks/…` (in any capitals) is refused with -32601, and
-every request with a `task` member in its `params` with -32602, each
-under the request's id with 200 as X112 says of the executor's other
-refusals of a request it has read, before anything reaches the upstream. With `allowTasks`, the task id
-in the answer to a request that asked for a task (for a call, its outcome)
-is held for the agent that sent it, up to `MAX_TASKS`
-(1,000) for each agent, its oldest forgotten first; `tasks/get`,
-`tasks/result` and `tasks/cancel` go on only where `params.taskId` is one
-of that agent's; `tasks/list` comes back with that agent's tasks alone (a
-list that cannot be read is not handed on, as for `tools/list`); another
-`tasks/…` method is refused; a message of the agent's that names another
-agent's task is refused; and an event of the upstream's that names
-another agent's task is dropped from this agent's streams. A task the
-executor did not see made (before a restart, or by another caller of the
-upstream) is refused to every agent, and an event that names one is not
-held back. The `Last-Event-ID` header, by which a client asks for a stream
-to be replayed after an event, goes on only where it names one of the last
+another message to it). The 2026-07-28 revision's tasks are taken as the
+review of 0.5.2 describes them, the specification not being within reach
+here: an extension, `io.modelcontextprotocol/tasks`, declared in
+`_meta["io.modelcontextprotocol/clientCapabilities"].extensions` of a
+request; the server decides whether a request becomes a task, answered
+with the flat handle `{resultType: "task", taskId, …}`; `tasks/get`,
+`tasks/update` and `tasks/cancel` name it by `params.taskId`; and
+`notifications/tasks`, carrying `params.taskId`, come through
+`subscriptions/listen`, which names tasks in
+`params.notifications.taskIds`. So, unless `allowTasks` is true, every
+request whose method is `tasks/…` (in any capitals) is refused with
+-32601; every request with a `task` member in its `params`, and every
+`subscriptions/listen` that names `taskIds`, with -32602, each under the
+request's id with 200 as X112 says of the executor's other refusals of a
+request it has read, before anything reaches the upstream; and the
+extension is taken out of the client capabilities of every request sent
+on (names in other capitals counted as themselves), so that the upstream,
+which decides, makes no task (X454). A call the upstream answers with a
+task all the same has its outcome not known, since its result is where
+the executor does not reach it. With `allowTasks`, the extension goes on;
+the task id in the answer to a request that asked for a task, and in any
+answer that is a flat handle (for a call, its outcome), is held for the
+agent that sent the request, up to `MAX_TASKS` (1,000) for each agent,
+its oldest forgotten first, and a task named in answers to two agents is
+neither's (X456); `tasks/get`, `tasks/result`, `tasks/cancel` and
+`tasks/update` go on only where `params.taskId` is one of that agent's,
+and `subscriptions/listen` only where every task it names is (X455);
+`tasks/list` comes back with that agent's tasks alone (a list that cannot
+be read is not handed on, as for `tools/list`); another `tasks/…` method
+is refused; a message of the agent's that names another agent's task is
+refused; and an event of the upstream's that names another agent's task
+is dropped from this agent's streams. A task the executor did not see
+made (before a restart, or by another caller of the upstream) is refused
+to every agent, and an event that names one is not held back. The
+`Last-Event-ID` header, by which a client asks for a stream to be
+replayed after an event, goes on only where it names one of the last
 `MAX_EVENT_IDS` (1,000) events the executor gave that agent: an upstream
 that replays by event id alone would otherwise replay one agent's stream
-to another that names its id. A GET with no session id still passes: it
-opens a new stream, and what the upstream sends on it is for its one
-caller.
+to another that names its id. A GET with no session id is refused with
+405 where the settings name more than one agent (X450, above); with one
+agent it passes, and what the upstream sends on it is for that agent.
 
 What it does not do: it speaks plain HTTP, so the agents' secrets and the
 upstream's token are only as safe as the connection (encryption is

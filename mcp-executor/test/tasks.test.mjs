@@ -161,3 +161,90 @@ test('Last-Event-ID goes on to the upstream only for an event the executor gave 
     await w.close();
   }
 });
+
+// Tasks of the 2026-07-28 revision, as the review of 0.5.2 describes them: an extension (io.modelcontextprotocol/tasks) a client declares in its _meta's client capabilities; the server decides whether a call becomes a task, answered with a flat handle ({resultType: "task", taskId}); tasks/get, tasks/update and tasks/cancel name it by params.taskId; notifications/tasks come through subscriptions/listen, which names tasks in params.notifications.taskIds.
+const TASKS_EXTENSION = 'io.modelcontextprotocol/tasks';
+const OTHER_EXTENSION = 'example.org/other';
+const META_TASKS = { ...META, 'io.modelcontextprotocol/clientCapabilities': { extensions: { [TASKS_EXTENSION]: {}, [OTHER_EXTENSION]: {} } } };
+const ask = (w, agent, method, params, id) => request(w, agent, method, { ...params, _meta: META_TASKS }, { id });
+const lastSent = (w, method) => w.upstream.seen.filter((s) => s.method === 'POST' && s.body?.method === method).at(-1)?.body;
+
+test('tasks of 2026-07-28, by default: the extension is taken out of what an agent declares, so a call is answered at once with its result; tasks/update and a subscription to tasks are refused and not sent; a call answered with a task anyway has its outcome not known', async () => {
+  const w = await httpWorld({ slips: SLIPS });
+  try {
+    const made = await call(w, 'alpha', 'order', { total: 5, item: 'payroll run' }, { id: 'o', meta: META_TASKS });
+    assert.equal(made.status, 200);
+    assert.notEqual(made.json.result.resultType, 'task', 'not a task');
+    assert.match(made.json.result.content[0].text, /Ordered for 5/);
+    const sent = lastSent(w, 'tools/call').params._meta['io.modelcontextprotocol/clientCapabilities'].extensions;
+    assert.equal(Object.hasOwn(sent, TASKS_EXTENSION), false, 'the extension was not sent on');
+    assert.equal(Object.hasOwn(sent, OTHER_EXTENSION), true, 'another extension was');
+    assert.equal((await stubs(w, 'alpha')).length, 1);
+    // tasks/update, and a subscription that names tasks: refused, and not sent.
+    const before = methodsSeen(w).length;
+    const update = await ask(w, 'alpha', 'tasks/update', { taskId: 'task-1', inputResponses: {} }, 'u');
+    assert.equal(update.json.error.code, CODES.methodNotFound);
+    const listen = await ask(w, 'beta', 'subscriptions/listen', { notifications: { taskIds: ['task-1'] } }, 'l');
+    assert.equal(listen.status, 200);
+    assert.equal(listen.json.error.code, CODES.invalidParams);
+    assert.equal(methodsSeen(w).length, before, 'neither reached the upstream');
+    // An upstream that makes a task all the same: the call's outcome is not known, and its receipt says so.
+    const anyway = await call(w, 'alpha', 'odd', { how: 'task-anyway' }, { id: 'a' });
+    assert.equal(anyway.json.error.code, CODES.noAnswer);
+    assert.match(anyway.json.error.message, /task/);
+    assert.ok((await stubs(w, 'alpha')).at(-1).content.details.some((d) => d.name === 'provared.error'));
+  } finally {
+    await w.close();
+  }
+});
+
+test('tasks of 2026-07-28, with allowTasks: the task a call is answered with is its agent\'s, who may get and update it; another agent may not get, update, cancel or subscribe to it, and is not given its notifications', async () => {
+  const w = await httpWorld({ slips: SLIPS, config: { allowTasks: true } });
+  try {
+    const made = await call(w, 'alpha', 'order', { total: 5, item: 'payroll run' }, { id: 'o', meta: META_TASKS });
+    assert.equal(made.json.result.resultType, 'task');
+    const { taskId } = made.json.result;
+    assert.equal(typeof taskId, 'string');
+    assert.equal(Object.hasOwn(lastSent(w, 'tools/call').params._meta['io.modelcontextprotocol/clientCapabilities'].extensions, TASKS_EXTENSION), true, 'the extension goes on');
+    // alpha's own.
+    assert.equal((await ask(w, 'alpha', 'tasks/get', { taskId }, 'g')).json.result.taskId, taskId);
+    assert.deepEqual((await ask(w, 'alpha', 'tasks/update', { taskId, inputResponses: {} }, 'u')).json.result, { resultType: 'complete' });
+    // beta, by every route: refused, and not sent.
+    const before = methodsSeen(w).length;
+    for (const method of ['tasks/get', 'tasks/update', 'tasks/cancel']) {
+      const r = await ask(w, 'beta', method, { taskId, inputResponses: {} }, method);
+      assert.equal(r.json.error.code, CODES.invalidParams, method);
+    }
+    assert.equal((await ask(w, 'beta', 'subscriptions/listen', { notifications: { taskIds: [taskId] } }, 'l')).json.error.code, CODES.invalidParams);
+    assert.equal((await ask(w, 'beta', 'subscriptions/listen', { notifications: { TaskIds: [taskId] } }, 'l2')).json.error.code, CODES.invalidParams, 'in other capitals too');
+    assert.equal(methodsSeen(w).length, before, 'none of them reached the upstream');
+    // A subscription of beta's that names no task: alpha's task's notification is not given to beta.
+    const betas = await ask(w, 'beta', 'subscriptions/listen', { notifications: {} }, 'l3');
+    assert.equal(betas.status, 200);
+    assert.doesNotMatch(betas.body, new RegExp(taskId));
+    assert.doesNotMatch(betas.body, /4471/);
+    // alpha's subscription to its own task: its notification comes.
+    const alphas = await ask(w, 'alpha', 'subscriptions/listen', { notifications: { taskIds: [taskId] } }, 'l4');
+    assert.ok(alphas.events.some((e) => e.method === 'notifications/tasks' && e.params.taskId === taskId));
+  } finally {
+    await w.close();
+  }
+});
+
+test('tasks of 2026-07-28, with allowTasks: a task named in answers to two agents is neither\'s, so an agent that has an id named to it first does not get the other\'s task', async () => {
+  const w = await httpWorld({ slips: SLIPS, config: { allowTasks: true } });
+  try {
+    // beta has the id "task-shared" named to it, in the answer to a request of its own.
+    assert.equal((await ask(w, 'beta', 'claim', { taskId: 'task-shared' }, 'c')).json.result.taskId, 'task-shared');
+    // The upstream then makes that task for alpha's call.
+    const made = await call(w, 'alpha', 'odd', { how: 'task-anyway', taskId: 'task-shared' }, { id: 'o', meta: META_TASKS });
+    assert.equal(made.json.result.taskId, 'task-shared');
+    // Neither may reach it now: not beta, who would have alpha's task, and not alpha, since the executor cannot tell which agent's it is.
+    const before = methodsSeen(w).length;
+    for (const agent of ['beta', 'alpha']) assert.equal((await ask(w, agent, 'tasks/get', { taskId: 'task-shared' }, `g-${agent}`)).json.error.code, CODES.invalidParams, agent);
+    assert.equal(methodsSeen(w).length, before);
+    assert.ok(w.logs.some((e) => e.event === 'task-disputed'));
+  } finally {
+    await w.close();
+  }
+});

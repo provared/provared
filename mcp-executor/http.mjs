@@ -84,11 +84,22 @@ export const HELLO_AT_ONCE = 8;
 export const HELLO_PER_CALLER = 4;
 
 /**
- * The methods of tasks (MCP 2025-11-25) the executor serves in front of an
- * upstream, where the settings allow tasks (allowTasks): each names one
- * task by params.taskId, but tasks/list, whose answer is filtered.
+ * The methods of tasks the executor serves in front of an upstream, where
+ * the settings allow tasks (allowTasks): those of MCP 2025-11-25, and
+ * tasks/update of the 2026-07-28 revision's extension. Each names one task
+ * by params.taskId, but tasks/list, whose answer is filtered.
  */
-const TASK_METHODS = ['tasks/get', 'tasks/result', 'tasks/cancel', 'tasks/list'];
+const TASK_METHODS = ['tasks/get', 'tasks/result', 'tasks/cancel', 'tasks/list', 'tasks/update'];
+/**
+ * Tasks of MCP 2026-07-28 are an extension, which a client declares in the
+ * client capabilities of its request's _meta, under "extensions"; the
+ * server then decides whether a request becomes a task, and answers with a
+ * flat handle ({resultType: "task", taskId}). Their notifications come
+ * through subscriptions/listen, which names tasks in
+ * params.notifications.taskIds. (As the review of 0.5.2 describes them.)
+ */
+const TASKS_EXTENSION = 'io.modelcontextprotocol/tasks';
+const CLIENT_CAPABILITIES = 'io.modelcontextprotocol/clientCapabilities';
 /** The _meta member that ties a message to a task (MCP 2025-11-25). */
 const RELATED_TASK = 'io.modelcontextprotocol/related-task';
 /** The answer, under the agent's id, where the upstream's list of tasks could not be read. */
@@ -596,8 +607,20 @@ export async function openHttpExecutor(config, more = {}) {
 
   // Tasks the upstream made for an agent's call (allowTasks), each held to that agent: to the upstream every agent is one caller, so nothing there keeps one agent's tasks from another. An agent past its cap loses its own oldest, never another's.
   const taskOwners = new Map();
+  /** The owner of a task two agents' answers named: no agent. */
+  const DISPUTED = Symbol('disputed');
   const ownTask = (taskId, agent) => {
-    if (typeof taskId !== 'string' || taskId === '' || taskId.length > 512 || taskOwners.has(taskId)) return;
+    if (typeof taskId !== 'string' || taskId === '' || taskId.length > 512) return;
+    if (taskOwners.has(taskId)) {
+      // A task an answer to another agent named before: neither agent's from now on (X456). Else an agent that got an id named in an answer of its own, before the upstream made that task for another agent's call, would have the other agent's task.
+      const owner = taskOwners.get(taskId);
+      if (owner !== agent.name && owner !== DISPUTED) {
+        agents.get(owner)?.tasks.delete(taskId);
+        taskOwners.set(taskId, DISPUTED);
+        agent.log({ event: 'task-disputed' });
+      }
+      return;
+    }
     taskOwners.set(taskId, agent.name);
     agent.tasks.add(taskId);
     if (agent.tasks.size > MAX_TASKS) {
@@ -606,14 +629,53 @@ export async function openHttpExecutor(config, more = {}) {
       taskOwners.delete(oldest);
     }
   };
-  /** A result that is a task's handle (CreateTaskResult: {task: {taskId, ...}}): the task is the agent's. */
-  const learnTask = (result, agent) => {
-    if (isObject(result) && isObject(result.task)) ownTask(result.task.taskId, agent);
+  /** Whether a result is a task's flat handle (2026-07-28: {resultType: "task", taskId}). */
+  const flatHandle = (result) => isObject(result) && result.resultType === 'task';
+  /** A result that is a task's handle (2025-11-25, CreateTaskResult: {task: {taskId, ...}}, where "asked"; 2026-07-28, the flat handle, in any answer): the task is the agent's. */
+  const learnTask = (result, agent, asked = true) => {
+    if (asked && isObject(result) && isObject(result.task)) ownTask(result.task.taskId, agent);
+    if (flatHandle(result)) ownTask(result.taskId, agent);
   };
-  /** The task a message of the upstream's names: the taskId of notifications/tasks/status, or of its _meta's related task; undefined where none. */
+  /**
+   * The message with the extension of tasks (2026-07-28) taken out of the
+   * client capabilities its _meta declares, names in other capitals counted
+   * as themselves (an upstream that reads without regard to capitals would
+   * take them so); null where it declares none. Without allowTasks, what an
+   * agent sends on declares no tasks, so the upstream, which decides, makes
+   * none and answers at once (X454).
+   */
+  const withoutTasksExtension = (m) => {
+    const meta = isObject(m) && isObject(m.params) && isObject(m.params._meta) ? m.params._meta : null;
+    if (!meta) return null;
+    let changed = false;
+    const out = { ...meta };
+    for (const [k, caps] of Object.entries(meta)) {
+      if (foldName(k) !== foldName(CLIENT_CAPABILITIES) || !isObject(caps)) continue;
+      const kept = { ...caps };
+      for (const [e, extensions] of Object.entries(caps)) {
+        if (foldName(e) !== foldName('extensions') || !isObject(extensions)) continue;
+        const names = Object.keys(extensions).filter((name) => foldName(name) !== foldName(TASKS_EXTENSION));
+        if (names.length === Object.keys(extensions).length) continue;
+        kept[e] = Object.fromEntries(names.map((name) => [name, extensions[name]]));
+        changed = true;
+      }
+      out[k] = kept;
+    }
+    return changed ? { ...m, params: { ...m.params, _meta: out } } : null;
+  };
+  /** The text to send on for an agent's message under the upstream's id "serverId": without allowTasks, with the extension of tasks taken out where it declares it; else its text with the id spliced in. */
+  const sentText = (m, text, serverId, agent) => {
+    const without = settings.allowTasks ? null : withoutTasksExtension(m);
+    if (without) {
+      agent.log({ event: 'tasks-extension-removed' });
+      return JSON.stringify({ ...without, id: serverId });
+    }
+    return spliceId(text, serverId) ?? JSON.stringify({ ...m, id: serverId });
+  };
+  /** The task a message of the upstream's names: the taskId of notifications/tasks/status or notifications/tasks, or of its _meta's related task; undefined where none. */
   const taskNamed = (m) => {
     if (!isObject(m)) return undefined;
-    if (m.method === 'notifications/tasks/status' && isObject(m.params)) return m.params.taskId;
+    if ((m.method === 'notifications/tasks/status' || m.method === 'notifications/tasks') && isObject(m.params)) return m.params.taskId;
     const meta = isObject(m.params?._meta) ? m.params._meta : (isObject(m.result?._meta) ? m.result._meta : null);
     return isObject(meta?.[RELATED_TASK]) ? meta[RELATED_TASK].taskId : undefined;
   };
@@ -634,8 +696,18 @@ export async function openHttpExecutor(config, more = {}) {
     const params = isObject(m.params) ? m.params : {};
     const tasksMethod = foldName(m.method).startsWith('tasks/');
     const asks = Object.keys(params).some((k) => foldName(k) === 'task');
+    const why = 'In front of an upstream every agent reaches it with the executor\'s one credential, as one caller, so one agent\'s task could be read or cancelled by another; the settings do not allow tasks (allowTasks).';
+    // A subscription (2026-07-28) that names tasks, in params.notifications.taskIds: without allowTasks, refused; with it, only where every task it names is this agent's (X455).
+    if (foldName(m.method) === foldName('subscriptions/listen')) {
+      if (misspelt(params, ['notifications']) !== null) return { rpc: CODES.invalidParams, message: 'The params name "notifications" in other capitals, which two readers may read differently.' };
+      const n = isObject(params.notifications) ? params.notifications : {};
+      if (Object.keys(n).some((k) => foldName(k) === foldName('taskIds'))) {
+        if (!settings.allowTasks) return { rpc: CODES.invalidParams, message: `This subscription names tasks (notifications.taskIds), which the executor does not send on. ${why}` };
+        if (misspelt(n, ['taskIds']) !== null) return { rpc: CODES.invalidParams, message: 'The notifications name "taskIds" in other capitals, which two readers may read differently.' };
+        if (!Array.isArray(n.taskIds) || n.taskIds.some((t) => taskOwners.get(t) !== agent.name)) return { rpc: CODES.invalidParams, message: 'The subscription names a task that is not known to the executor, or is not this agent\'s.' };
+      }
+    }
     if (!settings.allowTasks) {
-      const why = 'In front of an upstream every agent reaches it with the executor\'s one credential, as one caller, so one agent\'s task could be read or cancelled by another; the settings do not allow tasks (allowTasks).';
       if (tasksMethod) return { rpc: CODES.methodNotFound, message: `The executor does not send ${m.method.slice(0, 80)} on. ${why}` };
       if (asks) return { rpc: CODES.invalidParams, message: `This request asks for a task (params.task), which the executor does not send on. ${why}` };
       return null;
@@ -808,7 +880,7 @@ export async function openHttpExecutor(config, more = {}) {
     /** What the response under the executor's id teaches: the upstream's annotations, from a tools/list; the task it made for this agent, from a request that asked for one. */
     const learnFrom = (m) => {
       if (learn) learnAnnotations(m);
-      if (task && Object.hasOwn(m, 'result')) learnTask(m.result, agent);
+      if (settings.allowTasks && Object.hasOwn(m, 'result')) learnTask(m.result, agent, task);
     };
     let finished = false;
     let settledOutcome = false;
@@ -1651,8 +1723,13 @@ export async function openHttpExecutor(config, more = {}) {
           },
           unavailable: () => (stopping ? 'The executor is stopping, so this call was not sent.' : null),
           send: (call, forwarded) => {
-            const ex = exchange(ctx, { method: 'POST', headers: h.headers, body: JSON.stringify(forwarded), kind: 'call', serverId: call.serverId, onOutcome: (o) => {
-              if (asksTask && o.kind === 'answer') learnTask(o.result, agent);
+            const ex = exchange(ctx, { method: 'POST', headers: h.headers, body: sentText(forwarded, JSON.stringify(forwarded), call.serverId, agent), kind: 'call', serverId: call.serverId, onOutcome: (o) => {
+              if (settings.allowTasks && o.kind === 'answer') learnTask(o.result, agent, asksTask);
+              // Without allowTasks no task was asked for, nor declared: a call answered with a task all the same is one whose outcome is not known, since its result is with the upstream, where the executor does not reach it (X454).
+              else if (o.kind === 'answer' && (flatHandle(o.result) || (isObject(o.result) && isObject(o.result.task)))) {
+                agent.log({ event: 'upstream-made-task' });
+                return call.settle?.({ kind: 'error', text: 'The tool server answered this call with a task, which the executor does not take (allowTasks is false), so the call\'s outcome is not known.', code: CODES.noAnswer });
+              }
               call.settle?.(o);
             } });
             ctx.exchange = ex;
@@ -1662,7 +1739,7 @@ export async function openHttpExecutor(config, more = {}) {
           },
           cancel: (call) => call.cancelUpstream?.(),
           forward: (id, serverId, text) => {
-            const ex = exchange(ctx, { method: 'POST', headers: h.headers, body: spliceId(text, serverId) ?? text, kind: 'request', clientId: id, serverId, task: asksTask });
+            const ex = exchange(ctx, { method: 'POST', headers: h.headers, body: sentText(m, text, serverId, agent), kind: 'request', clientId: id, serverId, task: asksTask });
             ctx.exchange = ex;
             ctx.forwarded = ex.end;
             // As a request that only passes through: its text, as sent, is all the exchange needs, and the message as read, which may cost many times its bytes, is let go while the upstream answers.
@@ -1697,7 +1774,7 @@ export async function openHttpExecutor(config, more = {}) {
       }
       // Every other request goes under an id of the executor's own, and its answer comes back under the agent's.
       const serverId = newServerId();
-      const ex = exchange(ctx, { method: 'POST', headers: h.headers, body: spliceId(read.text, serverId) ?? JSON.stringify({ ...m, id: serverId }), kind: 'request', clientId: m.id, serverId, list: m.method === 'tools/list' && settings.hideUnlisted ? 'tools' : (m.method === 'tasks/list' ? 'tasks' : null), learn: m.method === 'tools/list', task: asksTask });
+      const ex = exchange(ctx, { method: 'POST', headers: h.headers, body: sentText(m, read.text, serverId, agent), kind: 'request', clientId: m.id, serverId, list: m.method === 'tools/list' && settings.hideUnlisted ? 'tools' : (m.method === 'tasks/list' ? 'tasks' : null), learn: m.method === 'tools/list', task: asksTask });
       // Its text, as sent, is all the exchange needs: the message as read, which may cost many times its bytes, is let go while the upstream answers.
       read = null;
       m = null;
