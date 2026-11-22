@@ -555,6 +555,8 @@ export async function openHttpExecutor(config, more = {}) {
     sessions.delete(id);
     agent.sessions.delete(id);
   };
+  /** The key a call in flight is held by, in front of an upstream: its session and its id where a session id is given, since an id is unique only within its session (as in front of a local program, X236); its id alone where none is. */
+  const callKey = (sessionId, id) => (sessionId === undefined ? idKey(id) : `session\n${sessionId}\n${idKey(id)}`);
 
   // Tasks the upstream made for an agent's call (allowTasks), each held to that agent: to the upstream every agent is one caller, so nothing there keeps one agent's tasks from another. An agent past its cap loses its own oldest, never another's.
   const taskOwners = new Map();
@@ -1546,6 +1548,7 @@ export async function openHttpExecutor(config, more = {}) {
       if (m.method === 'tools/call') {
         const link = ctx.session ? localLink(ctx, ctx.session) : {
           newServerId,
+          key: (id) => callKey(sessionId, id),
           answer: (text) => {
             if (ctx.streaming) {
               if (!res.writableEnded && !res.destroyed) res.end(scrub(sseEvent(ctx.finalEvent ?? [], text)));
@@ -1611,7 +1614,8 @@ export async function openHttpExecutor(config, more = {}) {
       if (!m.method.startsWith('notifications/')) return notANotification(ctx, m);
       let text = read.text;
       if (m.method === 'notifications/cancelled' && isId(m.params?.requestId)) {
-        const call = agent.calls.get(idKey(m.params.requestId));
+        // The call of this session under that id: a cancellation under another session, or none, names another call.
+        const call = agent.calls.get(callKey(sessionId, m.params.requestId));
         if (call && !call.cancelled) {
           call.cancelled = true;
           const cancelled = () => {

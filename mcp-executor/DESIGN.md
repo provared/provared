@@ -622,8 +622,11 @@ agent that asked. The numbers are the builder's: no source gives them.
 session and its id, so two sessions of one agent may each have a call
 under the same id at once (`link.key`). By the specification: a request's
 id is unique within a session, and a client numbers each session from the
-start. In front of an upstream HTTP server the calls are still held by
-the agent and the id alone, as before.
+start. In front of an upstream HTTP server the same holds where the
+request names a session (`Mcp-Session-Id`): a call is held by that
+session and its id, and the agent's `notifications/cancelled` under a
+session names a call of that session only. A request with no session id
+(the 2026-07-28 revision) is held by the agent and the id alone.
 
 **X237. Cancellation and time, as on stdio.** The agent's
 `notifications/cancelled` for a call is written to the program under the
