@@ -116,6 +116,8 @@ export const DEFAULT_FEED_TOKEN = join(DEFAULT_FOLDER, 'feed-token');
 
 const POLL_MS = 2000;
 const RETRY_MS = 30000;
+/** How long the uploader waits after a round through the feed that found no book in force: as long as a round with nothing new waits at the recorder. */
+export const NO_BOOK_PAUSE_MS = 25000;
 // A read or a rename of the state that fails is tried this many times, this
 // far apart, in all: a scanner or a backup holds a file for moments.
 const STATE_TRIES = 5;
@@ -563,6 +565,8 @@ export function createUploader({ connection, book, log = console, stateFile = `$
   let socket = null;
   let keyPromise = null;
   let busy = null;
+  // Through the feed: whether the last list of books named a book in force (bookInForce).
+  let inForceSeen = null;
   let state = null;
   // A save of the state that failed: the disk is behind this run. Nothing is
   // sent until it has worked, so the disk is never more than the one line
@@ -1231,6 +1235,7 @@ export function createUploader({ connection, book, log = console, stateFile = `$
   async function syncFeedOnce(wait) {
     savePending();
     const listing = await feed.books();
+    inForceSeen = Boolean(inForceOf(listing));
     loadFeed(listing);
     let sent = 0;
     for (let i = 0; i < state.parts.length - 1; i++) sent += await followFeed(i, listing);
@@ -1285,7 +1290,31 @@ export function createUploader({ connection, book, log = console, stateFile = `$
     if (socket) { try { socket.close(); } catch { /* gone */ } socket = null; }
   }
 
-  return Object.freeze({ sync, close, connect, parts, key });
+  /** Through the feed: whether the last list of books the recorder gave named a book in force; null before any. */
+  function bookInForce() {
+    return inForceSeen;
+  }
+
+  return Object.freeze({ sync, close, connect, parts, key, bookInForce });
+}
+
+/**
+ * The rounds of lines through the feed, one after another, until one fails
+ * for good (resolves with false), or stop() says so (true).
+ *   round(wait)    one round: true, done; "again", failed for now; false, refused for good
+ *   bookInForce()  whether the last round found a book in force
+ *   pause(ms)      the wait after a round that found no book in force, which the hand-over loop's wake ends early
+ *   sleep(ms)      the wait after a round that failed for now
+ */
+export async function feedRounds({ round, bookInForce, pause, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), stop = () => false }) {
+  while (!stop()) {
+    const alive = await round(25);
+    if (alive === false) return false;
+    if (alive === 'again') await sleep(RETRY_MS);
+    // No book in force (the recorder waits for its first permission): the round came back at once.
+    else if (bookInForce() === false) await pause(NO_BOOK_PAUSE_MS);
+  }
+  return true;
 }
 
 // --- one uploader at a time for a book ---
@@ -1421,21 +1450,23 @@ export async function main(argv = process.argv.slice(2)) {
     // changes (the engine says so to whoever watches its shelf), and once a
     // minute besides.
     let wake = null;
+    // The pause of the rounds of lines where the recorder has no book in force; the same wake ends it.
+    let wakeRounds = null;
     (async () => {
       for (;;) {
         await handOverOnce();
-        try { await side.watch(() => { if (wake) wake(); }); } catch { /* watched again at the next round */ }
+        try { await side.watch(() => { if (wake) wake(); if (wakeRounds) wakeRounds(); }); } catch { /* watched again at the next round */ }
         await new Promise((r) => { const t = setTimeout(r, HAND_OVER_AGAIN_MS); wake = () => { clearTimeout(t); wake = null; r(); }; });
       }
     })();
     // One round after another: a round that finds nothing new waits up to
-    // 25 seconds at the recorder for something new. A round that failed for
-    // now is tried again 30 seconds later.
-    for (;;) {
-      const alive = await attempt(25);
-      if (alive === false) return 1;
-      if (alive === 'again') await new Promise((r) => setTimeout(r, RETRY_MS));
-    }
+    // 25 seconds at the recorder for something new. A round that finds no
+    // book in force comes back at once, and the next waits 25 seconds, or
+    // until the book's content changes. A round that failed for now is
+    // tried again 30 seconds later.
+    const pause = (ms) => new Promise((r) => { const t = setTimeout(() => { wakeRounds = null; r(); }, ms); wakeRounds = () => { clearTimeout(t); wakeRounds = null; r(); }; });
+    const ended = await feedRounds({ round: attempt, bookInForce: uploader.bookInForce, pause });
+    return ended === false ? 1 : 0;
   }
   console.log(`provared-connect: watching ${base} and the files the recorder keeps beside it; press Ctrl and C to stop.`);
   let alive = await attempt();

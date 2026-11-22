@@ -2,6 +2,17 @@
 
 ## Not yet released
 
+- **A pause where the recorder has no book.** Through the feed, a round
+  that finds no book in force (the recorder waits for its first
+  permission) comes back at once; the uploader now waits 25 seconds
+  (`NO_BOOK_PAUSE_MS`) before the next, or less where the book's content
+  changes on the server first, instead of asking the recorder for its
+  books again at once and without end. The rounds are in a new function,
+  `feedRounds`, which `main` runs; the uploader gives `bookInForce()`, for
+  whether the last list of books named a book in force. Tests: five, in
+  `test/pause.test.mjs`. Before the change, three of them failed: the
+  uploader asked 50 times, where the test stops it, in 30 seconds of the
+  test's own time.
 - **A record the recorder refuses while it is still starting is handed
   over again.** The refusal code `not-started` joins the codes for which
   the uploader hands a record over again in its next round
