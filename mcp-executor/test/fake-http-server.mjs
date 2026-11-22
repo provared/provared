@@ -144,9 +144,9 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
         return res.end();
       }
       const { id, method, params = {} } = m;
-      // With "offerTasks", the server says it takes tasks (2025-11-25: capabilities.tasks).
+      // With "offerTasks", the server says it takes tasks (2025-11-25: capabilities.tasks; 2026-07-28: the tasks extension in capabilities.extensions of server/discover, beside another extension).
       const capabilities = { tools: {}, ...(state.offerTasks ? { tasks: { list: {}, cancel: {}, requests: { tools: { call: {} } } } } : {}) };
-      if (method === 'server/discover') return result(res, id, { resultType: 'complete', supportedVersions: ['2026-07-28'], capabilities });
+      if (method === 'server/discover') return result(res, id, { resultType: 'complete', supportedVersions: ['2026-07-28'], capabilities: { ...capabilities, ...(state.offerTasks ? { extensions: { 'io.modelcontextprotocol/tasks': {}, 'example.org/other': {} } } : {}) } });
       if (method === 'initialize') {
         const session = `sess-${nextSession++}`;
         sessions.add(session);

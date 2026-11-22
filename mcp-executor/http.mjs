@@ -740,7 +740,8 @@ export async function openHttpExecutor(config, more = {}) {
    * that a client is not asked to use what the executor refuses (X457): a
    * tools/list answer (filtered as hideUnlisted says, too) loses each tool's
    * execution.taskSupport, and the answer to initialize or server/discover
-   * loses capabilities.tasks; names in other capitals count as themselves.
+   * loses capabilities.tasks and the tasks extension of
+   * capabilities.extensions; names in other capitals count as themselves.
    * Gives {text, hidden} under the agent's id, or null where it cannot be
    * read.
    */
@@ -756,7 +757,9 @@ export async function openHttpExecutor(config, more = {}) {
   const capabilitiesOffered = (text, m, clientId) => {
     if (!Object.hasOwn(m, 'result') || !isObject(m.result)) return null;
     const exact = exactly(text, m);
-    const result = Object.fromEntries(Object.entries(exact.result).map(([k, v]) => [k, foldName(k) === foldName('capabilities') && isObject(v) ? without(v, 'tasks') : v]));
+    // capabilities.tasks (2025-11-25), and the tasks extension in capabilities.extensions (2026-07-28); other extensions are kept.
+    const offered = (caps) => Object.fromEntries(Object.entries(without(caps, 'tasks')).map(([k, v]) => [k, foldName(k) === foldName('extensions') && isObject(v) ? without(v, TASKS_EXTENSION) : v]));
+    const result = Object.fromEntries(Object.entries(exact.result).map(([k, v]) => [k, foldName(k) === foldName('capabilities') && isObject(v) ? offered(v) : v]));
     return { text: JSON.stringify({ ...exact, id: clientId, result }), hidden: 0 };
   };
   /** A tasks/list answer with only this agent's tasks in it, under the agent's id; null where it cannot be read. */

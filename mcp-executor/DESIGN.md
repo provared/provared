@@ -488,7 +488,8 @@ which decides, makes no task (X454). A call the upstream answers with a
 task all the same has its outcome not known, since its result is where
 the executor does not reach it. Nor is the upstream's offer of tasks
 handed on: the answer to `initialize` or `server/discover` loses
-`capabilities.tasks`, and each tool of a `tools/list` loses
+`capabilities.tasks` and `capabilities.extensions["io.modelcontextprotocol/tasks"]`
+(other extensions kept), and each tool of a `tools/list` loses
 `execution.taskSupport`, in any capitals, every number kept as the
 upstream wrote it; an answer that cannot be read for this is not handed on
 (X457). `allowTasks` is a settings error unless the settings name

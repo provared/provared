@@ -443,7 +443,9 @@ The settings (`executor-http.example.json` is a start): `name`, `service`,
   the upstream all agents are one caller", above). With `false`, the upstream's offer of tasks is not
   handed on either, so that a client is not asked to use what is refused:
   the answer to `initialize` or `server/discover` loses
-  `capabilities.tasks`, and each tool in a `tools/list` loses
+  `capabilities.tasks` and the 2026-07-28 tasks extension
+  (`capabilities.extensions["io.modelcontextprotocol/tasks"]`), and each
+  tool in a `tools/list` loses
   `execution.taskSupport`. A tool the upstream marks as one that must be
   called as a task may then fail when called.
 - `server`, in place of `upstream` and never beside it: a local program,

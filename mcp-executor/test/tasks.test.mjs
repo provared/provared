@@ -170,7 +170,7 @@ test('Last-Event-ID goes on to the upstream only for an event the executor gave 
   }
 });
 
-test('tasks: without allowTasks, the upstream\'s offer of tasks does not reach the agent (capabilities.tasks, a tool\'s execution.taskSupport), so a client is not asked to use what is refused; with it, the offer passes', async () => {
+test('tasks: without allowTasks, the upstream\'s offer of tasks does not reach the agent (capabilities.tasks, the 2026-07-28 extension in capabilities.extensions, a tool\'s execution.taskSupport), so a client is not asked to use what is refused; with it, the offer passes', async () => {
   const offered = async (w) => {
     const init = await request(w, 'alpha', 'initialize', { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'test', version: '0' } }, { id: 'i' });
     const discover = await request(w, 'alpha', 'server/discover', {}, { id: 'd' });
@@ -184,7 +184,7 @@ test('tasks: without allowTasks, the upstream\'s offer of tasks does not reach t
       w.upstream.offerTasks();
       const o = await offered(w);
       assert.deepEqual(o.init, { tools: {} }, `initialize, hideUnlisted ${hideUnlisted}`);
-      assert.deepEqual(o.discover, { tools: {} }, 'server/discover');
+      assert.deepEqual(o.discover, { tools: {}, extensions: { 'example.org/other': {} } }, 'server/discover: neither capabilities.tasks nor the 2026-07-28 tasks extension, and another extension kept');
       for (const order of o.order) assert.equal(order.execution?.taskSupport, undefined, 'tools/list');
     } finally {
       await w.close();
@@ -195,6 +195,7 @@ test('tasks: without allowTasks, the upstream\'s offer of tasks does not reach t
     w.upstream.offerTasks();
     const o = await offered(w);
     assert.ok(o.init.tasks && o.discover.tasks);
+    assert.ok(Object.hasOwn(o.discover.extensions, 'io.modelcontextprotocol/tasks'));
     for (const order of o.order) assert.equal(order.execution.taskSupport, 'optional');
   } finally {
     await w.close();
