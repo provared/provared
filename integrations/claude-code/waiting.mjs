@@ -11,7 +11,7 @@ import { entryLine, fingerprint, fromBase64url, keySetFingerprint } from 'provar
 import { portOwner, sendJson } from './port.mjs';
 import {
   DEFAULT_FOLDER, DEFAULT_PORT, VERSION, addWaitingPermission, admitRequest, checkNewSlip, declineAsked, freshFolder, handOverChecks, loadAgentKeys, makeRecorderKeys,
-  placeSlip, readDeclined, readRetired, readWaitingPermissions, signingOriginsFrom, startService, takeOutWaiting, untilFree, waitingByFingerprint, writeTrusted,
+  placeSlip, readDeclined, readRetired, readWaitingPermissions, signingOriginsFrom, startService, takeOutWaiting, untilFreeLater, waitingByFingerprint, writeTrusted,
 } from './recorder.mjs';
 
 const MAX_BODY = 1024 * 1024;
@@ -215,7 +215,7 @@ export async function waitingHandler({ folder, owner, clock = Date.now, signingO
       // The options for tests first, so that they never change the folder, the port's owner, the addresses or the clock.
       service = await startService({ ...serviceOptions, folder, on: owner, signingOrigins, clock });
     } catch (e) {
-      const left = putBack(written, next.slip);
+      const left = await putBack(written, next.slip);
       return refused('not-started', `The permission passed every check, but the recorder could not start with it (${e.message}), so it is not taken${left.length ? `; ${left.join('; ')}` : ', and what was written for it was put back'}. The permission waits: put right what stands in the way, then run admit-passkey again.`);
     }
     // The full recorder, in place in one step: the next request goes to it, on the same port and feed.
@@ -232,25 +232,28 @@ export async function waitingHandler({ folder, owner, clock = Date.now, signingO
   // fresh, so the list of trusted passkeys and slip.json go, and a book that
   // holds only this permission's line (no uploader has seen it: the waiting
   // recorder's feed lists no book). Each removal is tried again for up to ten
-  // seconds while another program holds the file open (untilFree, as the
-  // recorder writes its files). Gives back what could not be put back.
-  function putBack(written, slip) {
+  // seconds while another program holds the file open (untilFreeLater, as the
+  // recorder writes its files, but with the waits awaited, so that /status
+  // is still answered meanwhile). Gives back what could not be put back.
+  async function putBack(written, slip) {
     const left = [];
-    const remove = (name) => {
+    const remove = async (name) => {
       try {
-        untilFree(() => unlink(join(folder, name)));
+        await untilFreeLater(() => unlink(join(folder, name)));
       } catch (e) {
         if (e.code !== 'ENOENT') left.push(`${join(folder, name)} could not be removed (${e.message}): remove it before you run admit-passkey again`);
       }
     };
-    if (written.slip) remove('slip.json');
-    if (written.trusted) remove('trusted-passkeys.json');
+    if (written.slip) await remove('slip.json');
+    if (written.trusted) await remove('trusted-passkeys.json');
     const book = join(folder, 'book.jsonl');
+    let only = false;
     try {
-      if (existsSync(book) && readFileSync(book, 'utf8') === `${entryLine({ slip })}\n`) remove('book.jsonl');
+      only = existsSync(book) && readFileSync(book, 'utf8') === `${entryLine({ slip })}\n`;
     } catch (e) {
       left.push(`${book} could not be read (${e.message})`);
     }
+    if (only) await remove('book.jsonl');
     return left;
   }
 

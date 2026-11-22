@@ -174,6 +174,42 @@ test('after a failed start, a file another program holds for a moment (removal r
   }
 });
 
+test('while a removal after a failed start is held (EBUSY for 2 seconds), /status is still answered at once; the file is then put back', async () => {
+  let firstRefusal = null;
+  let refusals = 0;
+  let reached;
+  const held = new Promise((r) => (reached = r));
+  const unlink = (path) => {
+    if (path.endsWith('slip.json')) {
+      firstRefusal ??= performance.now();
+      if (performance.now() - firstRefusal < 2000) {
+        refusals++;
+        reached();
+        throw Object.assign(new Error('resource busy or locked'), { code: 'EBUSY' });
+      }
+    }
+    return unlinkSync(path);
+  };
+  const w = await waitingWorld({ unlink });
+  try {
+    const mine = await w.handed();
+    mkdirSync(join(w.folder, 'book.jsonl.tmp'));
+    const taking = w.reader.post('/admit', { fingerprint: mine.fp, thumbprint: mine.T, take: true });
+    await within(held, 20000, 'the removal held');
+    const st = await within(status(w.port), 5000, '/status');
+    const answeredAt = performance.now();
+    assert.equal(st.waiting, true);
+    assert.ok(answeredAt - firstRefusal < 1000, `/status was answered ${Math.round(answeredAt - firstRefusal)} ms after the removal was first refused`);
+    const r = await within(taking, 30000, 'the admit');
+    assert.equal(r.body.code, 'not-started', JSON.stringify(r.body));
+    assert.ok(refusals > 1, `${refusals} refusals`);
+    assert.doesNotMatch(r.body.message, /could not be removed/);
+    for (const name of ['slip.json', 'trusted-passkeys.json', 'book.jsonl']) assert.equal(existsSync(join(w.folder, name)), false, `${name} is put back`);
+  } finally {
+    await w.waiting.close();
+  }
+});
+
 test('the options for tests cannot change the folder or the port the full recorder starts on', async () => {
   const elsewhere = tempFolder('provared-cc-elsewhere-');
   const w = await waitingWorld({ serviceOptions: { folder: elsewhere, on: null, port: 0 } });

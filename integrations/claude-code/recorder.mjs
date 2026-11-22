@@ -799,6 +799,18 @@ export function untilFree(step) {
     }
   }
 }
+// The same, for a step taken while the recorder answers other questions: the
+// wait between tries is a timer awaited, so the recorder's one thread is not
+// held, and /status is still answered.
+export async function untilFreeLater(step) {
+  const deadline = Date.now() + 10000;
+  for (let wait = 10; ; wait = Math.min(wait * 2, 200)) {
+    try { return step(); } catch (e) {
+      if (!BUSY.includes(e.code) || Date.now() >= deadline) throw e;
+      await new Promise((r) => setTimeout(r, wait));
+    }
+  }
+}
 // A temporary file left by a write or a replacement that failed for the last
 // time (perhaps after part of it was written) is removed. The two ways of
 // writing can be handed in, for the tests. "temporary" names the temporary
