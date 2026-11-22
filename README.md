@@ -252,6 +252,11 @@ each part protects against, is in
   (`npm install -g provared-mcp-executor`), which stands between agents and a tool server, holds the server's
   credential, and countersigns
   each receipt with keys of its own.
+- **A tool server behind the guard, on npm with its own README:**
+  [provared-shopify](integrations/shopify/README.md) (version 0.1.0, on
+  npm since 21 November 2026), a small MCP server for one Shopify store's
+  Admin API, made to run behind the guard. It has been run only against a
+  made-up Shopify, in its tests.
 - **[The pages at prova.red](https://prova.red/)**: the checker's answer
   for the sample record, a worked example for developers, and the same
   in plain words for a reader who does not write code.
