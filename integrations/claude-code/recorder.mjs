@@ -95,6 +95,7 @@ import { performance } from 'node:perf_hooks';
 import { checkBook, checkSlip, entryLine, fingerprint, fromBase64url, inclusionPath, keySetFingerprint, openRecorder, thumbprint, toBase64url, utf8, verifyInclusion, writeSeal } from 'provared';
 import { FEED_TOKEN, feedReader, isRandom } from './feed.mjs';
 import { portOwner } from './port.mjs';
+import { startWaiting } from './waiting.mjs';
 import { claudeFolder, doubledWords, filesOf, recorderHooksInSettings, removeInitHooks, within } from './settings-hooks.mjs';
 import { firstLineOfFile, replaceDurably, witnessClient } from './witness.mjs';
 import { MAX_RECORDER_WITNESSES, WITNESS_RETRY_MS, WITNESS_WAIT_MS, createWitnessing, heldSealFiles, keepStatement, readWitnessSettings, validAddress, writeWitnessSettings } from './witnessed.mjs';
@@ -2619,9 +2620,11 @@ async function ensure(folder, port, say = (words) => console.error(words), until
   const answering = await running(port, left());
   if (answering) {
     if (answering.version !== VERSION) say(`The recorder that is running is ${typeof answering.version === 'string' ? `version ${answering.version.slice(0, 40)}` : 'an earlier version, which does not give its version'}, not ${VERSION ?? 'this one'}, the one installed here: it keeps the code it started with until it is restarted. Restart it once, with both commands on one line so that no tool call falls between them: ${RUN} stop; ${RUN} ensure`);
+    if (answering.waiting === true) say(waitingWords());
     return 0;
   }
-  if (!existsSync(files(folder).slip)) {
+  // Without a permission the recorder starts only in a fresh folder, where it waits for the first one.
+  if (!existsSync(files(folder).slip) && !freshFolder(folder).fresh) {
     say(`The recorder has no signed permission yet (${files(folder).slip}), so it was not started. Sign one and put it in place: ${RUN} use <the saved file>`);
     return 1;
   }
@@ -2630,10 +2633,35 @@ async function ensure(folder, port, say = (words) => console.error(words), until
   for (let i = 0; i < 80; i++) {
     if (Date.now() + 250 > until) return 'starting';
     await new Promise((r) => setTimeout(r, 250));
-    if (await running(port, left())) return 0;
+    const started = await running(port, left());
+    if (started) {
+      if (started.waiting === true) say(waitingWords());
+      return 0;
+    }
   }
   say(`The recorder did not start. Run "${RUN} start" to see why.`);
   return 1;
+}
+
+// What "ensure" says where the recorder that answers waits for its first permission (waiting.mjs).
+const waitingWords = () => `The recorder is running and waits for its first permission: every tool call is refused until one is taken, and nothing is recorded. When you have signed it, run "${RUN} admit-passkey <the thumbprint>" here, pasting the thumbprint from the signing window; or save the signed file from the signing window and run "${RUN} use <the saved file>".`;
+
+/**
+ * Stop the waiting recorder that answers on the port, and wait until the
+ * port is free: for 10 seconds at most, measured on the monotonic clock.
+ * Gives back whether it is free.
+ */
+async function stopWaiting(port) {
+  try {
+    await ask(port, '/stop', 'POST', {}, 5000);
+  } catch {
+    // It may have stopped before it answered: whether the port is free is what counts.
+  }
+  for (const until = performance.now() + 10000; performance.now() < until;) {
+    if (!(await running(port, 1000))) return true;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  return false;
 }
 
 // What the person must do before anything is recorded: nothing signs for them.
@@ -3011,6 +3039,15 @@ export async function main(argv) {
       return 2;
     }
     const file = resolve(named[0]);
+    // A recorder that waits for its first permission is not one that runs with a permission: it is stopped, and
+    // once the port is free the file is taken as it is where nothing runs.
+    if (command === 'use' && (await running(port, 5000))?.waiting === true) {
+      if (!(await stopWaiting(port))) {
+        console.log(`The recorder that waits for its first permission on 127.0.0.1:${port} did not let go of its port within 10 seconds, so nothing was taken. Run "${RUN} stop", then run use again.`);
+        return 1;
+      }
+      console.log('The recorder that waited for its first permission was stopped, to take this one.');
+    }
     if (command === 'renew' || existsSync(f.book)) {
       await renewFrom(file, folder, port, newPasskey);
     } else {
@@ -3064,6 +3101,13 @@ export async function main(argv) {
     return 0;
   }
   if (command === 'start') {
+    // A fresh folder, as "init" leaves it: the recorder waits for its first permission (waiting.mjs).
+    if (!existsSync(f.slip) && freshFolder(folder).fresh) {
+      const waiting = await startWaiting({ folder, port });
+      console.log(`The Provared recorder beside Claude Code is running on http://127.0.0.1:${waiting.port}, and waits for its first permission.`);
+      console.log('  Until one is taken, every tool call Claude Code makes is refused, and nothing is recorded. Press Ctrl and C to stop.');
+      return null;
+    }
     const service = await startService({ folder, port });
     const status = await ask(service.port, '/status');
     console.log(`The Provared recorder beside Claude Code is running on http://127.0.0.1:${service.port}`);

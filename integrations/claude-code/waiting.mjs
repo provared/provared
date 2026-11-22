@@ -244,6 +244,13 @@ export async function waitingHandler({ folder, owner, clock = Date.now, signingO
  * @returns {Promise<{port: number, owner: object, close: () => Promise<void>}>}
  */
 export async function startWaiting({ folder = DEFAULT_FOLDER, port = DEFAULT_PORT, handOverReadMs, ...options } = {}) {
+  // Only in a fresh folder: anywhere a permission was ever taken, the full recorder starts, or nothing does.
+  const { fresh, found } = freshFolder(folder);
+  if (!fresh) {
+    throw new Error(found.length > 0
+      ? `The folder ${folder} holds ${found.join(', ')}, so it is not fresh, and the recorder does not wait there for a first permission.`
+      : `The folder ${folder} holds no agent keys, so it is not fresh, and the recorder does not wait there: run init first.`);
+  }
   const owner = portOwner({ folder, handOverReadMs });
   owner.use(await waitingHandler({ folder, owner, ...options }));
   await owner.listen(port);
