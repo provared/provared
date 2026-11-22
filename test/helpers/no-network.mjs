@@ -31,18 +31,23 @@
 // still ends with 1. So node:test marks the test file as failed even where
 // the library catches the error. The same --import is added to
 // NODE_OPTIONS, so that a program a test starts with Node.js (the checker,
-// for one) is watched too, and a worker is watched as well. Each such
-// program and worker also writes what it found to a file named in
-// PROVARED_TEST_NO_NETWORK_INBOX by the process that started it, which
-// reads the file as it ends and then ends with 1 itself: a test that
-// expects the checker to end with 1 still fails.
+// for one) is watched too, and a worker started from a file is watched as
+// well. Each such program and worker also writes what it finds, as it
+// finds it, to a file named in PROVARED_TEST_NO_NETWORK_INBOX by the
+// process that started it, which reads the file as it ends, passes it on
+// to its own starter, and then ends with 1 itself: a test that expects the
+// checker to end with 1 still fails.
 //
-// Not watched, as stated limits: a child Node.js run with code in a string
-// (node -e), or with an environment that leaves out NODE_OPTIONS; a
-// network function bound, wrapped or handed to any other scheduler (an
-// event listener, for one) before it runs; any other built-in binding; a
-// program that is not Node.js; and a program or worker stopped by force
-// before it ends, whose findings are lost (its exit code is not 0).
+// Not watched, as stated limits: code that a child Node.js runs from a
+// string (node -e), whose frames name no file of the repository; a child
+// Node.js started with an environment that leaves out NODE_OPTIONS; code
+// inside a worker run from a string, which Node.js starts without the
+// watch (one that library code starts is stopped, above); a network
+// function bound, wrapped or handed to any other scheduler (an event
+// listener, for one) before it runs; any other built-in binding; a program
+// that is not Node.js; and what the programs of a program found, where
+// that program is stopped by force and so does not pass it on (its own
+// exit code is then not 0).
 
 import { randomUUID } from 'node:crypto';
 import dgram from 'node:dgram';

@@ -125,7 +125,7 @@ test('no test file imports the watch, which is loaded only by --import', () => {
   const folder = join(root, 'test');
   const importing = readdirSync(folder, { recursive: true })
     .filter((name) => /\.(mjs|cjs|js)$/.test(name) && !name.endsWith('no-network.mjs'))
-    .filter((name) => /(?:from\s*|import\s*\(\s*)['"][^'"]*\/no-network\.mjs['"]/.test(readFileSync(join(folder, name), 'utf8')));
+    .filter((name) => /\b(?:from|import|require)\s*\(?\s*['"][^'"]*\/no-network\.mjs['"]/.test(readFileSync(join(folder, name), 'utf8')));
   assert.deepEqual(importing, []);
 });
 
