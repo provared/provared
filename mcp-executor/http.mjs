@@ -468,6 +468,8 @@ export async function openHttpExecutor(config, more = {}) {
       agent.eventIds = new Set();
       /** In front of an upstream: the requests of the upstream's own handed on to this agent and not yet answered, by session and id, oldest first. */
       agent.asks = new Set();
+      /** The end of this agent's queue of messages to read (readInTurn). */
+      agent.reading = Promise.resolve();
       agents.set(name, agent);
     }
     // The front door's state file is read only now, with the locks held, its own among them: the command "owner" works on it under the same locks, so what it wrote is what is read, and nothing it writes later is undone. "ownerCheck" is the owner's check at its page: left out (as the command "http" leaves it), the one by the owner's passkey (owner.mjs); null, none.
@@ -673,6 +675,20 @@ export async function openHttpExecutor(config, more = {}) {
     agent.eventIds.delete(id);
     agent.eventIds.add(id);
     if (agent.eventIds.size > MAX_EVENT_IDS) agent.eventIds.delete(agent.eventIds.values().next().value);
+  };
+  /**
+   * Read one of an agent's messages in its turn: an agent's messages are read
+   * one at a time, each in a turn of the event loop of its own. Reading takes
+   * time in proportion to a message's member names (a message of 1 MiB with
+   * 95,000 of them, about 150 ms), and the agent's budget lets it have about
+   * 30 such in flight; read back to back, they held the one thread for
+   * seconds while another agent's request waited. Now another agent's
+   * request waits for the message being read and little more (X452).
+   */
+  const readInTurn = (agent, body) => {
+    const turn = agent.reading.then(() => new Promise((done) => setImmediate(done))).then(() => readMessage(body));
+    agent.reading = turn.then(() => {}, () => {});
+    return turn;
   };
   /** A request of the upstream's own handed on to this agent, on a stream of a request of its, or of its session: its answer may come from this agent alone, under the same session, once. */
   const askedOf = (ctx, m) => {
@@ -1589,7 +1605,7 @@ export async function openHttpExecutor(config, more = {}) {
     }
     // One message, read strictly: a batch, a repeated name or a shape that is not a message goes no further.
     // "let": a request that only passes through lets go of its message, read and as bytes, once it has been sent on (below).
-    let read = readMessage(body);
+    let read = await readInTurn(agent, body);
     if (read.refused) {
       agent.log({ event: 'client-message-refused', code: read.refused.code });
       return refuse(res, 400, read.id, read.refused.code, read.refused.message);

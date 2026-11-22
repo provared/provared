@@ -2453,7 +2453,10 @@ names of every object, counted in one walk of the text before it is read),
 past which it is refused before anything of it is built, since a message
 of many small elements costs many times its bytes once read; a request
 that only passes through lets go of the message as read once it has been
-sent on, keeping its text alone; an
+sent on, keeping its text alone; one agent's messages read one at a time,
+each in a turn of the event loop of its own (X452), so that another
+agent's request waits for about one of them for each step of its own
+exchange, not for all of them in flight; an
 upstream JSON body, or one event, up to 16 MiB (`ANSWER_LIMIT`, the stdio
 line limit), past which the exchange is cut and a call gets "no answer";
 the executor's `timeout` on every POST exchange, and on the reading of a

@@ -237,3 +237,55 @@ test('limits: a body of exactly bodyLimit is taken by default; one byte more is 
     await w.close();
   }
 });
+
+test('limits: one agent\'s messages, costly to read, do not stall another agent: its ping waits for a few of them at most, not for all those in flight', async (t) => {
+  const w = await httpWorld({ config: { timeout: 30000 } });
+  const IN_FLIGHT = 30;
+  // A message of about 1 MiB with 95,000 member names, each costly to read, refused once read (tasks are not allowed), so the upstream, in this process too, does nothing with it.
+  const bodyOf = (id) => {
+    const names = [];
+    for (let i = 0; i < 95000; i++) names.push(`"k${i}":0`);
+    return Buffer.from(`{"jsonrpc":"2.0","id":"${id}","method":"tasks/get","params":{${names.join(',')}}}`);
+  };
+  const bodies = Array.from({ length: IN_FLIGHT }, (_, i) => bodyOf(`a${i}`));
+  // What reading one of them costs here: the measure of the limit, so that a slower computer has a longer one.
+  const costs = [];
+  for (let i = 0; i < 3; i++) {
+    const t = performance.now();
+    readMessage(bodies[0]);
+    costs.push(performance.now() - t);
+  }
+  const oneRead = costs.sort((a, b) => a - b)[1];
+  let going = true;
+  let answered = 0;
+  const loops = bodies.map(async (body) => {
+    while (going) {
+      const r = await rawRequest(w, { headers: { 'content-type': 'application/json', ...auth(w, 'alpha') }, body }).catch(() => null);
+      if (r && r.status !== 200) throw new Error(`alpha was answered ${r.status}`);
+      if (r) answered += 1;
+    }
+  });
+  try {
+    await new Promise((d) => setTimeout(d, 1500));
+    const before = answered;
+    // Before the fix, beta waited for every message alpha had in flight to be read: here 9 to 11 seconds, about 60 reads. Now it waits for about one of alpha's reads for each turn of the event loop its own exchange takes (to the executor, to the upstream and back): about 5 reads here. The limit is twice that and a second more, for a busy computer.
+    const limit = 10 * oneRead + 1000;
+    const waits = [];
+    for (let i = 0; i < 8 && !(waits.at(-1) >= limit); i++) {
+      const t = performance.now();
+      const r = await post(w, 'beta', { jsonrpc: '2.0', id: `b${i}`, method: 'ping' });
+      waits.push(performance.now() - t);
+      assert.equal(r.status, 200);
+      await new Promise((d) => setTimeout(d, 50));
+    }
+    // alpha was served meanwhile, as many messages as it keeps in flight at least.
+    assert.ok(answered - before >= IN_FLIGHT, `alpha was answered ${answered - before} times while beta pinged`);
+    const worst = Math.max(...waits);
+    t.diagnostic(`beta's pings: ${waits.map(Math.round).join(', ')} ms; one read ${Math.round(oneRead)} ms; limit ${Math.round(limit)} ms; alpha answered ${answered - before} times`);
+    assert.ok(worst < limit, `beta's ping took up to ${Math.round(worst)} ms (${waits.map(Math.round).join(', ')}); one of alpha's messages takes ${Math.round(oneRead)} ms to read, and the limit is ${Math.round(limit)} ms`);
+  } finally {
+    going = false;
+    await Promise.allSettled(loops);
+    await w.close();
+  }
+});

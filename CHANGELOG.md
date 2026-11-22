@@ -196,7 +196,12 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
     it has been sent on (measured: a held request of 383 KiB of small
     objects kept about 850 KiB of the heap in place of 3.1 MiB); and `bodyLimit` is
     4 MiB by default, the SDK's, in place of 10 MiB. The claude.ai recipe's
-    settings take bodies of 1 MiB. Tests: `test/limits.test.mjs`.
+    settings take bodies of 1 MiB. One agent's messages are read one at a
+    time, each in a turn of the event loop of its own: read back to back,
+    30 messages of 1 MiB with 95,000 member names each held the thread for
+    9 to 11 seconds while another agent's ping waited; now that ping waits
+    for about one of them for each step of its own exchange (measured: 0.6
+    to 0.9 seconds, each read 0.16 seconds). Tests: `test/limits.test.mjs`.
   - **Tasks in front of an upstream (F2).** With 0.5.1 every request but a
     tool call passed through unchecked, under the executor's one
     credential, so an upstream that keeps tasks for its caller rather than
