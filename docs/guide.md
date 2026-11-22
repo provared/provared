@@ -771,8 +771,8 @@ a small sum), take its fingerprint over exactly 16 random bytes, fresh
 for each document, followed by the document, and keep those bytes beside
 the document, not in the record. The length is fixed so that what was
 fingerprinted splits into bytes and document only one way: were it free,
-16 bytes followed by the document "no" would give the same fingerprint as
-those bytes and "n" followed by the document "o". Whoever holds the
+the 16 bytes followed by the document "no" would be the same bytes as 17
+bytes (those 16 and "n") followed by the document "o". Whoever holds the
 document and its bytes can work the fingerprint out again; whoever holds
 only the record cannot find the document by trying likely values. Where
 the action needs the person's approval, the approval's `details` must
