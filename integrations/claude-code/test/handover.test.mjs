@@ -264,7 +264,7 @@ test('the hand-over is proved like every question of the feed: over the body, wi
       const timer = setTimeout(() => { socket.destroy(); done('no answer'); }, 3000);
       socket.on('data', (d) => { got += d; if (got.includes('\r\n')) { clearTimeout(timer); socket.destroy(); done(got.split('\r\n')[0]); } });
       socket.on('error', fail);
-      socket.write(['POST /hand-over HTTP/1.1', 'Host: 127.0.0.1', 'Content-Length: 100', 'Provared-Feed-Session: x', '', '{'].join('\r\n'));
+      socket.write(['POST /hand-over HTTP/1.1', `Host: 127.0.0.1:${w.port}`, 'Content-Length: 100', 'Provared-Feed-Session: x', '', '{'].join('\r\n'));
     });
     assert.match(early, /^HTTP\/1\.1 401/);
     // A body that does not state its length (sent in pieces): refused before it is read.
@@ -302,7 +302,7 @@ test(`at most ${FEED_MAX_HANDING} records are taken on at once, counted before t
       const headers = await provedHeaders(w.port, tokenOf(w.folder), Buffer.from('{}'));
       const socket = connect(w.port, '127.0.0.1');
       await new Promise((done) => socket.once('connect', done));
-      socket.write([`POST /hand-over HTTP/1.1`, 'Host: 127.0.0.1', 'Content-Length: 100', ...Object.entries(headers).map(([k, v]) => `${k}: ${v}`), '', '{'].join('\r\n'));
+      socket.write([`POST /hand-over HTTP/1.1`, `Host: 127.0.0.1:${w.port}`, 'Content-Length: 100', ...Object.entries(headers).map(([k, v]) => `${k}: ${v}`), '', '{'].join('\r\n'));
       slow.push(socket);
     }
     await delay(300);
@@ -656,7 +656,7 @@ test('a body of a record handed over that does not arrive in time is let go, and
       const socket = connect(service.port, '127.0.0.1');
       socket.on('error', () => {});
       await new Promise((done) => socket.once('connect', done));
-      socket.write(['POST /hand-over HTTP/1.1', 'Host: 127.0.0.1', 'Content-Length: 100', ...Object.entries(headers).map(([k, v]) => `${k}: ${v}`), '', '{'].join('\r\n'));
+      socket.write(['POST /hand-over HTTP/1.1', `Host: 127.0.0.1:${service.port}`, 'Content-Length: 100', ...Object.entries(headers).map(([k, v]) => `${k}: ${v}`), '', '{'].join('\r\n'));
       slow.push(socket);
     }
     const body = Buffer.from(JSON.stringify({ kind: 'renewal', slip: await signSlip({ agentKeys: w.agent.keys, passkey: w.passkey }) }));
