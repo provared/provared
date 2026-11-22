@@ -6,6 +6,7 @@
 // so nothing is downloaded. And the guard it installs is the current one,
 // from a lockfile, with npm ci.
 
+import './local-library.mjs'; // first: "provared" is this repository's own library
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -13,7 +14,8 @@ import http from 'node:http';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { tempFolder } from './world.mjs';
+
+const { tempFolder } = await import('./world.mjs');
 
 const RECIPE = join(dirname(fileURLToPath(import.meta.url)), '..', 'recipes', 'agent-with-a-shell');
 const TOKEN = 'made-up-token-for-the-recipe-test';
