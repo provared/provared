@@ -202,6 +202,34 @@ test('tasks: without allowTasks, the upstream\'s offer of tasks does not reach t
   }
 });
 
+test('tasks: without allowTasks, an answer that holds no result, to server/discover, initialize or (hideUnlisted false) tools/list, is handed on as it came, with its status: a page that is not JSON, an empty body, a JSON-RPC error', async () => {
+  const page = { status: 404, headers: { 'content-type': 'text/html' }, body: '<html><body>Not found</body></html>' };
+  const w = await httpWorld({ config: { hideUnlisted: false } });
+  try {
+    for (const method of ['server/discover', 'initialize']) {
+      w.upstream.rawAnswer(method, page);
+      const got = await request(w, 'alpha', method, {}, { id: 'd' });
+      assert.equal(got.status, 404, method);
+      assert.equal(got.type, 'text/html', method);
+      assert.equal(got.body, page.body, method);
+    }
+    w.upstream.rawList(page);
+    const listed = await request(w, 'alpha', 'tools/list', {}, { id: 'l' });
+    assert.equal(listed.status, 404);
+    assert.equal(listed.body, page.body, 'tools/list');
+    w.upstream.rawAnswer('server/discover', { status: 404, headers: {}, body: '' });
+    const empty = await request(w, 'alpha', 'server/discover', {}, { id: 'e' });
+    assert.equal(empty.status, 404);
+    assert.equal(empty.body, '');
+    w.upstream.rawAnswer('server/discover', { status: 404, headers: { 'content-type': 'application/json' }, body: '{"jsonrpc":"2.0","id":null,"error":{"code":-32601,"message":"Method not found"}}' });
+    const error = await request(w, 'alpha', 'server/discover', {}, { id: 'r' });
+    assert.equal(error.status, 404);
+    assert.equal(error.json.error.code, -32601);
+  } finally {
+    await w.close();
+  }
+});
+
 // Tasks of the 2026-07-28 revision, as the review of 0.5.2 describes them: an extension (io.modelcontextprotocol/tasks) a client declares in its _meta's client capabilities; the server decides whether a call becomes a task, answered with a flat handle ({resultType: "task", taskId}); tasks/get, tasks/update and tasks/cancel name it by params.taskId; notifications/tasks come through subscriptions/listen, which names tasks in params.notifications.taskIds.
 const TASKS_EXTENSION = 'io.modelcontextprotocol/tasks';
 const OTHER_EXTENSION = 'example.org/other';

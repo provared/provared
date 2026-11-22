@@ -183,7 +183,14 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
     - A message of more than 100,000 elements is refused (400), on every
       transport, and no setting changes the number. A tool server's
       answer of more is not read: it is handed on as it came, and the
-      call's receipt says the answer could not be read.
+      call's receipt says the answer could not be read. But a `tools/list`
+      answer of more is answered with an error (-32603), unless
+      `hideUnlisted` is false and `allowTasks` true: a list of many tools
+      may pass that limit.
+    - Without `allowTasks`, an answer to `initialize`, `server/discover` or
+      `tools/list` that holds a result is read and written out afresh, to
+      take the offer of tasks out of it; one that holds no result is
+      handed on as it came.
     - In front of an upstream, tasks are refused until `allowTasks` is
       true: every `tasks/` request, a request with `params.task`, and a
       subscription that names tasks. The upstream's offer of tasks is not
@@ -384,6 +391,13 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
     out of the answer to `server/discover` or `initialize`, as
     `capabilities.tasks` already was; other extensions are kept. Test:
     `test/tasks.test.mjs`.
+  - Taking the offer of tasks out made the executor answer with its own
+    error (-32603) where the upstream's answer to `server/discover`,
+    `initialize` or (with `hideUnlisted` false) `tools/list` was a page
+    that is not JSON, such as an older server's 404. Now an answer that
+    holds no result is handed on as it came, with its status, as before.
+    A `tools/list` that `hideUnlisted` filters is answered with the error
+    as before. Test: `test/tasks.test.mjs`.
 
 - **The recorder beside Claude Code, `provared-claude-code` 0.1.1: a web page cannot use its port.** With 0.1.0, a web page open in a browser on the same computer could ask the recorder to take a permission, trust a passkey, write a receipt for a call that never happened, or stop. 0.1.1 refuses what a browser sends for a web page, or under another website's name, on every route of the recorder's port, and for it reads and writes nothing. 0.1.0 is affected, and updating is not enough on its own: a recorder already running keeps the code it started with until it is restarted. After updating, restart it once, with both commands on one line so that no tool call falls between them: `provared-claude-code stop; provared-claude-code ensure`. With the Claude Code plugin, they are `node <the plugin's folder>/plugin.mjs stop; node <the plugin's folder>/plugin.mjs ensure`. A tool call does not start the recorder: while it is stopped, tool calls are refused, until `ensure` or the start of the next Claude Code session (with the plugin) starts it. From 0.1.1, `ensure` and the start of a session say so where the recorder that answers is not the version installed, with these commands; they do not stop it.
   In `integrations/claude-code/recorder.mjs`, every route, the feed's four (`/hello`, `/books`, `/lines` and `/hand-over`) among them, first refuses, before it reads the body, a request with an `Origin` header, with a `Sec-Fetch-Site` header other than `none`, or with a `Host` other than `127.0.0.1:<port>` (on port 80, `127.0.0.1` alone as well, as a client sends it there), and answers 403. Every route but the feed's then refuses, with 415, a POST whose `Content-Type`, read before the first `;`, trimmed and in any case, is not `application/json`. The port is kept once the recorder listens, so a request that came before the port closed (`close()`, or `POST /stop`) is still answered and its call recorded. Where the file `feed-token` holds no token, the feed's answer no longer names the folder, whose path names the person's account; the recorder's status still gives it. The status gives the package's version, from its `package.json`, as `version`. The hook, the recorder's commands, the feed's reader in `feed.mjs` and the uploader in `connect/upload.mjs` already sent all of this; the tests that ask the recorder directly, in `integrations/claude-code/test/` and `connect/test/`, now send `Content-Type: application/json` too, and three requests that `test/handover.test.mjs` writes by hand now name the port in `Host`. Any program on the computer can still use the port, as before; the README says so, in "What the record shows, and what it does not". `package.json`, its lockfile and `.claude-plugin/plugin.json` say 0.1.1, and the README names 0.1.1 where it names the version. New tests, in `test/local-port.test.mjs`: each route, with each of those headers wrong in turn (`Sec-Fetch-Site` of `same-site` or any value but `none`, a `Content-Type` that only names `application/json` after a `;`), is refused, the trusted passkeys, the permission in force and every file in the folder are unchanged, and the recorder still runs; a POST is refused with its body never sent; the feed's four routes refuse such a request and give it no session and no proof, and the feed's reader is still answered; a call whose request came before `close()` or `POST /stop` is answered and recorded; on port 80, `Host: 127.0.0.1` is taken (where port 80 can be taken); `ensure`, with an earlier recorder answering, says so and stops nothing. In `test/feed.test.mjs`, the feed's answer where its token file holds no token names no folder; in `test/plugin.test.mjs`, the start of a session says so where the recorder that answers is an earlier version. With any one of the checks taken out, a test fails. Published on npm on 22 November 2026, with the advisory GHSA-cj2m-rqh6-5984.

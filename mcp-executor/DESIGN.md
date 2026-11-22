@@ -491,8 +491,11 @@ handed on: the answer to `initialize` or `server/discover` loses
 `capabilities.tasks` and `capabilities.extensions["io.modelcontextprotocol/tasks"]`
 (other extensions kept), and each tool of a `tools/list` loses
 `execution.taskSupport`, in any capitals, every number kept as the
-upstream wrote it; an answer that cannot be read for this is not handed on
-(X457). `allowTasks` is a settings error unless the settings name
+upstream wrote it; an answer with a result that cannot be read for this is
+not handed on (X457), and one that holds no result (a JSON-RPC error, an
+empty body, or a page that is not JSON) goes on as it came, with its
+status, unless it answers a `tools/list` that `hideUnlisted` filters
+(X463). `allowTasks` is a settings error unless the settings name
 exactly one agent: several agents share one caller at the tool server, so
 one agent could reach another's task (X461). With `allowTasks`, the
 extension goes on; the task id in the answer to a request that asked for

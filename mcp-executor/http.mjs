@@ -918,8 +918,10 @@ export async function openHttpExecutor(config, more = {}) {
     const list = listKind === 'tasks'
       ? { filter: (text, m) => filteredTasks(text, m, clientId, agent), notRead: 'tasks-list-not-read', hidden: 'tasks-hidden', answer: () => responseText(clientId, { error: { code: CODES.internal, message: TASKS_NOT_READ } }) }
       : listKind === 'capabilities'
-        ? { filter: (text, m) => capabilitiesOffered(text, m, clientId), notRead: 'capabilities-not-read', hidden: 'tasks-offer-hidden', answer: () => responseText(clientId, { error: { code: CODES.internal, message: CAPABILITIES_NOT_READ } }) }
-        : (listKind ? { filter: (text, m) => toolsOffered(text, m, clientId), notRead: 'tools-list-not-read', hidden: 'tools-hidden', answer: () => listNotRead(clientId) } : null);
+        ? { filter: (text, m) => capabilitiesOffered(text, m, clientId), notRead: 'capabilities-not-read', hidden: 'tasks-offer-hidden', answer: () => responseText(clientId, { error: { code: CODES.internal, message: CAPABILITIES_NOT_READ } }), noResultGoesOn: true }
+        : (listKind ? { filter: (text, m) => toolsOffered(text, m, clientId), notRead: 'tools-list-not-read', hidden: 'tools-hidden', answer: () => listNotRead(clientId), noResultGoesOn: !settings.hideUnlisted } : null);
+    /** Where only the offer of tasks is taken out (not a list kept to what the agent may see): an answer that holds no result, a message without one or a text that is not JSON, goes on as it came, as before the offer was taken out (K2 of the re-check of 0.5.2). */
+    const passes = (read, m) => list.noResultGoesOn === true && (m ? !Object.hasOwn(m, 'result') : read.refused?.code === CODES.parse);
     /** What the response under the executor's id teaches: the upstream's annotations, from a tools/list; the task it made for this agent, from a request that asked for one. */
     const learnFrom = (m) => {
       if (learn) learnAnnotations(m);
@@ -1083,7 +1085,7 @@ export async function openHttpExecutor(config, more = {}) {
                   const filtered = list && m ? list.filter(read.text, m) : null;
                   if (filtered?.hidden) agent.log({ event: list.hidden, hidden: filtered.hidden });
                   // A list that is to be filtered and cannot be read is not handed on: the agent is answered with an error under its id (X250). The upstream's own error goes on as it is.
-                  if (list && !filtered && !(m && Object.hasOwn(m, 'error'))) {
+                  if (list && !filtered && !(m && Object.hasOwn(m, 'error')) && !passes(read, m)) {
                     agent.log({ event: list.notRead });
                     return toAgent(sseEvent(event.others, list.answer()));
                   }
@@ -1186,7 +1188,7 @@ export async function openHttpExecutor(config, more = {}) {
           }
           // A list that is to be filtered and cannot be read (or is under another id, or is no message) is not handed on: the agent is answered with an error under its id (X250). The upstream's own error goes on as it is, with its status: under the request's id; or, under any id or a null one, where it is an error answer and nothing more, which holds no result for any reader and so no list (X260).
           let own = false;
-          if (list && !filtered && !(m && read.kind === 'response' && foundId === serverId && Object.hasOwn(m, 'error')) && !errorAnswer(text)) {
+          if (list && !filtered && !(m && read.kind === 'response' && foundId === serverId && Object.hasOwn(m, 'error')) && !errorAnswer(text) && !passes(read, m)) {
             agent.log({ event: list.notRead });
             out = list.answer();
             own = true;

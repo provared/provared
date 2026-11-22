@@ -447,7 +447,9 @@ The settings (`executor-http.example.json` is a start): `name`, `service`,
   (`capabilities.extensions["io.modelcontextprotocol/tasks"]`), and each
   tool in a `tools/list` loses
   `execution.taskSupport`. A tool the upstream marks as one that must be
-  called as a task may then fail when called.
+  called as a task may then fail when called. An answer that holds no
+  result (a JSON-RPC error, an empty body, or a page that is not JSON) is
+  handed on as it came, with its status.
 - `server`, in place of `upstream` and never beside it: a local program,
   with `shutdownWait` and `sessions` (below).
 - `agents`: one member for each agent, by name (1 to 64 lower-case letters,
