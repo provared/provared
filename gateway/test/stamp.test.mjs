@@ -14,7 +14,8 @@ import { test } from 'node:test';
 
 const { checkBook } = await import('provared');
 const { world, call, ADMIN_SECRET } = await import('./world.mjs');
-const { checkConfig, openGateway } = await import('../gateway.mjs');
+const { checkConfig } = await import('../gateway.mjs');
+const { RUN_LIMIT, openGateway, refusedStart } = await import('./limits.mjs');
 const { NO_OPENSSL, findOpenssl, startTestTsa } = await import('../../test/helpers/tsa.mjs');
 
 /** An address on this computer that nothing listens on: a port that was free a moment ago. */
@@ -92,7 +93,7 @@ test('recorder.stamp: given, it is an address on the web and a time limit in ran
       [{ address: 'http://127.0.0.1/', policy: '1.2.3' }, /recorder\.stamp\.policy/],
     ]) {
       const config = { ...w.config, recorder: { ...w.config.recorder, stamp } };
-      await assert.rejects(openGateway(config, { root: w.folder }), words, JSON.stringify(stamp));
+      await refusedStart(openGateway(config, { root: w.folder }), words, JSON.stringify(stamp));
       assert.ok((await checkConfig(config, { root: w.folder })).problems.some((p) => words.test(p)), JSON.stringify(stamp));
     }
     assert.ok(!(await checkConfig({ ...w.config, recorder: { ...w.config.recorder, stamp: { address: 'https://127.0.0.1:8443/tsa' } } }, { root: w.folder })).problems.some((p) => /stamp/.test(p)));
@@ -182,7 +183,7 @@ test('check: a library without the time-stamp client (provared/net/timestamp) is
     const file = join(w.folder, 'check-settings.json');
     writeFileSync(file, JSON.stringify(config));
     const code = `const { checkConfig } = await import(${JSON.stringify(gateway)}); const c = JSON.parse(require('node:fs').readFileSync(process.argv[1], 'utf8')); process.stdout.write(JSON.stringify((await checkConfig(c, { root: process.argv[2] })).problems));`;
-    const run = (more) => spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', '--input-type=commonjs', '-e', `(async () => { ${code} })()`, file, w.folder], { encoding: 'utf8', env: { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} ${more}`.trim() }, windowsHide: true });
+    const run = (more) => spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', '--input-type=commonjs', '-e', `(async () => { ${code} })()`, file, w.folder], { encoding: 'utf8', env: { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} ${more}`.trim() }, windowsHide: true, timeout: RUN_LIMIT });
     // (Its other problems, if any, come of the signers in the test's settings, which a file cannot hold.)
     const fine = run('');
     const found = JSON.parse(fine.stdout || 'null');

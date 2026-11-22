@@ -13,8 +13,11 @@
 //                                                     show, and with --cut take off, a last line of a book
 //                                                     that a stop left part-written (the gateway stopped)
 //   provared-gateway status --config gateway.json     what the running gateway says about each agent
-//   provared-gateway keys   --config gateway.json (--agent <name> | --recorder)
+//   provared-gateway keys   --config gateway.json (--agent <name> | --recorder | --gateway)
 //                                                     make a key file, if there is none, and print its public keys
+//                                                     (for --gateway, the slip's "with" entries that name them)
+//   provared-gateway compare --config gateway.json --agent <name> [--book <file>] [--sealer <fingerprint>]
+//                                                     hold the gateway's own copy of an agent's calls against its book
 //   provared-gateway secret                           make a new secret, and print it with its hash
 //
 // "seal" and "status" ask the running gateway, with the administrator's
@@ -22,12 +25,14 @@
 // --offline" opens the book itself, for a gateway that is not running.
 
 import { randomBytes } from 'node:crypto';
-import { appendFileSync, readFileSync, truncateSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, readFileSync, truncateSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import { dirname, isAbsolute, resolve } from 'node:path';
-import { toBase64url } from 'provared';
-import { checkConfig, journalKeyPath, loadJournalKey, openGateway, plainText, secretHash } from './gateway.mjs';
-import { makeKeyFile } from './files.mjs';
+import { keySetFingerprint, toBase64url } from 'provared';
+import { compareCopyWithBook } from './compare.mjs';
+import { loadCopyKey } from './copy.mjs';
+import { GATEWAY_ID, GATEWAY_NAME, checkConfig, copyPaths, journalKeyPath, loadJournalKey, openGateway, plainText, secretHash } from './gateway.mjs';
+import { loadKeyFile, makeKeyFile } from './files.mjs';
 
 const USAGE = `provared-gateway: a reverse proxy that writes a Provared receipt for each call an agent makes through it.
 
@@ -37,12 +42,15 @@ const USAGE = `provared-gateway: a reverse proxy that writes a Provared receipt 
   provared-gateway acknowledge --config gateway.json --agent <name> [--set-aside <call,…>] [--offline]
   provared-gateway repair --config gateway.json --agent <name> [--cut <bytes> | --end-line]
   provared-gateway status --config gateway.json
-  provared-gateway keys   --config gateway.json (--agent <name> | --recorder)
+  provared-gateway keys   --config gateway.json (--agent <name> | --recorder | --gateway)
+  provared-gateway compare --config gateway.json --agent <name> [--book <file>] [--sealer <fingerprint>]
   provared-gateway secret
 
 "seal", "acknowledge" and "status" ask the running gateway, with the administrator's secret in
 PROVARED_GATEWAY_ADMIN_SECRET; "seal --offline", "acknowledge --offline" and "repair" work on the files
-of a stopped gateway, and need no secret.`;
+of a stopped gateway, and need no secret. "compare" reads the files, and asks nobody: it ends with 0
+where the copy and the book agree, 3 where the calls set aside are the only disagreement, and 1
+otherwise.`;
 
 /** What "Sealed: ..." adds where the seal carries a time-stamp, with the fingerprint of the certificate that signed it (X344). */
 const stampWords = (sealed) => {
@@ -117,11 +125,61 @@ async function main(args) {
     console.log(problems.length ? `${problems.length} problem(s): the gateway does not start with these settings.` : 'No problem found in the settings.');
     return problems.length ? 2 : 0;
   }
+  if (command === 'keys' && rest.includes('--gateway')) {
+    const { config, root } = readConfig(rest);
+    if (option(rest, '--agent') !== undefined || rest.includes('--recorder')) throw new Error('Name one of --agent <name>, --recorder or --gateway.');
+    const entry = config.gateway;
+    if (!entry || typeof entry.keys !== 'string') throw new Error('The settings name no key file of the gateway\'s own ("gateway": {"keys": …}).');
+    const path = isAbsolute(entry.keys) ? entry.keys : resolve(root, entry.keys);
+    const others = [config.recorder?.keys, ...Object.values(config.agents ?? {}).map((a) => a?.keys)].filter((p) => typeof p === 'string').map((p) => (isAbsolute(p) ? p : resolve(root, p)));
+    if (others.some((p) => p.toLowerCase() === path.toLowerCase())) throw new Error(`Nothing was written: gateway.keys (${path}) is also the key file of the recorder or of an agent. The gateway has a key file of its own.`);
+    const id = entry.id ?? GATEWAY_ID;
+    if (typeof id !== 'string' || !/^[a-z0-9][a-z0-9._-]{0,63}$/.test(id)) throw new Error('Nothing was written: gateway.id must be 1 to 64 lower-case letters, digits, full stops, hyphens or underscores, beginning with a letter or digit.');
+    const keys = await makeKeyFile(path, 'gateway');
+    const name = typeof entry.name === 'string' ? entry.name : GATEWAY_NAME;
+    // The gateway's own "with" entry, with its keys: the slip gives it, and requires the countersignature.
+    const out = { with: [{ id, name, keys }], requires: [{ need: 'countersignature' }] };
+    console.log(`The gateway's own public keys are in ${path}. The slip's "with" names the gateway in an entry of its own, which every receipt of the agent then names, and "requires" asks for the countersignature:`);
+    console.log(JSON.stringify(out, null, 2));
+    return 0;
+  }
+  if (command === 'compare') {
+    // Only these options: a mistyped one would otherwise compare the default book, say, without a word.
+    for (let i = 0; i < rest.length; i += 2) if (!['--config', '--agent', '--book', '--sealer'].includes(rest[i])) throw new Error(`"compare" takes --config, --agent, --book and --sealer, each with a value; "${rest[i]}" is not one of them.`);
+    const { config, root } = readConfig(rest);
+    const agent = option(rest, '--agent');
+    const entry = agent ? config.agents?.[agent] : undefined;
+    if (!entry || typeof entry.book !== 'string') throw new Error(`Name the agent whose copy and book to compare: --agent <name> (one of ${Object.keys(config.agents ?? {}).join(', ')}).`);
+    if (!config.gateway || typeof config.gateway !== 'object') throw new Error('The settings give the gateway no keys of its own ("gateway"), so the gateway keeps no copy to compare.');
+    // The gateway's id in a slip's "with": no key file is read, since the book's own check holds each countersignature against the keys the slip gives.
+    const service = config.gateway.id ?? GATEWAY_ID;
+    const paths = copyPaths(entry, agent, root);
+    const bookPath = option(rest, '--book');
+    const bookAt = bookPath ? (isAbsolute(bookPath) ? bookPath : resolve(bookPath)) : isAbsolute(entry.book) ? entry.book : resolve(root, entry.book);
+    if (!existsSync(bookAt)) throw new Error(`The book ${bookAt} does not exist.`);
+    const copyKey = loadCopyKey(paths.copyKey, { create: false });
+    if (!copyKey) throw new Error(`The copy key ${paths.copyKey} does not exist: the gateway has not run yet with its own keys, or the key was moved. Nothing to compare.`);
+    // The recorder a seal in the book must be signed by: the one --sealer names (several with commas), or else the recorder of the settings, where its key file is here.
+    const named = option(rest, '--sealer');
+    let sealKeys = null;
+    if (named !== undefined) {
+      sealKeys = named.split(',').map((s) => s.trim()).filter(Boolean);
+      if (sealKeys.length === 0 || !sealKeys.every((f) => /^[A-Za-z0-9_-]{43}$/.test(f))) throw new Error('--sealer must be the fingerprint of a recorder\'s key set (43 characters of base64url), or several with commas between them.');
+    } else if (typeof config.recorder?.keys === 'string') {
+      const at = isAbsolute(config.recorder.keys) ? config.recorder.keys : resolve(root, config.recorder.keys);
+      if (existsSync(at)) sealKeys = [await keySetFingerprint((await loadKeyFile(at, 'recorder')).keys)];
+    }
+    const issuerKeys = Array.isArray(entry.issuerKeys) ? entry.issuerKeys : [];
+    const result = await compareCopyWithBook({ copyPath: paths.copy, copyKey, name: agent, service, book: readFileSync(bookAt, 'utf8'), options: { issuerKeys, ...(sealKeys ? { sealKeys } : {}) } });
+    console.log(JSON.stringify(result, null, 2));
+    // 0: they agree. 3: they agree but for calls the administrator set aside, which is all that is known to be wrong. 1: anything else.
+    return result.summary.agree ? 0 : result.summary.onlySetAside ? 3 : 1;
+  }
   if (command === 'keys') {
     const { config, root } = readConfig(rest);
     const agent = option(rest, '--agent');
     const forRecorder = rest.includes('--recorder');
-    if (!agent === !forRecorder) throw new Error('Name one of --agent <name> or --recorder.');
+    if (!agent === !forRecorder) throw new Error('Name one of --agent <name>, --recorder or --gateway.');
     const entry = forRecorder ? config.recorder : config.agents?.[agent];
     if (!entry || typeof entry.keys !== 'string') throw new Error(`The settings name no key file ("keys") for ${forRecorder ? 'the recorder' : `agent "${agent}"`}.`);
     const path = isAbsolute(entry.keys) ? entry.keys : resolve(root, entry.keys);

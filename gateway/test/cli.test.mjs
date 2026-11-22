@@ -15,19 +15,13 @@ import { fileURLToPath } from 'node:url';
 const { checkBook, keySetFingerprint, thumbprint } = await import('provared');
 const { developmentPasskey } = await import('provared/dev');
 const { tempFolder, upstream, call, signSlip } = await import('./world.mjs');
-const { secretHash, openGateway } = await import('../gateway.mjs');
+const { secretHash } = await import('../gateway.mjs');
+const { START_LIMIT, keep, openGateway, refusedStart, runCommand, within } = await import('./limits.mjs');
 
 const BIN = fileURLToPath(new URL('../bin.mjs', import.meta.url));
 
 function run(args, env = {}) {
-  return new Promise((done) => {
-    const child = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', BIN, ...args], { env: { ...process.env, ...env } });
-    let out = '';
-    let err = '';
-    child.stdout.on('data', (d) => (out += d));
-    child.stderr.on('data', (d) => (err += d));
-    child.on('close', (code) => done({ code, out, err }));
-  });
+  return runCommand(BIN, args, env);
 }
 
 function freePort() {
@@ -90,15 +84,15 @@ test('the commands: secret, keys, check, start, status, seal, and seal --offline
   assert.match(noEnv.out, /PROVARED_GW_CLI_TOKEN is empty/);
 
   // Start it, and use it.
-  const gateway = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', BIN, 'start', '--config', configPath], { env: { ...process.env, ...env } });
+  const gateway = keep(spawn(process.execPath, ['--disable-warning=ExperimentalWarning', BIN, 'start', '--config', configPath], { env: { ...process.env, ...env } }));
   let started = '';
-  await new Promise((done, failed) => {
+  await within(new Promise((done, failed) => {
     gateway.stderr.on('data', (d) => {
       started += d;
       if (started.includes('listening')) done();
     });
     gateway.on('close', () => failed(new Error(`the gateway ended: ${started}`)));
-  });
+  }), START_LIMIT, 'the gateway started as a program, until it listens');
   try {
     const r = await call(port, 'GET', '/tickets/api/now/table/incident', { secret });
     assert.equal(r.status, 200);
@@ -113,7 +107,7 @@ test('the commands: secret, keys, check, start, status, seal, and seal --offline
     assert.equal(wrongAdmin.code, 1);
   } finally {
     gateway.kill();
-    await new Promise((done) => (gateway.exitCode !== null ? done() : gateway.on('close', done)));
+    await within(new Promise((done) => (gateway.exitCode !== null ? done() : gateway.on('close', done))), START_LIMIT, 'the gateway program, until it stops');
   }
   const stopped = await run(['seal', '--config', configPath, '--agent', 'patching'], env);
   assert.equal(stopped.code, 2);
@@ -180,7 +174,7 @@ test('the gateway does not start where the settings, the slip, the keys or the b
     ...more,
   });
   const fails = async (config, words) => {
-    await assert.rejects(openGateway(config, { root: folder, log: () => {} }), (e) => words.test(e.message) || assert.fail(e.message));
+    await refusedStart(openGateway(config, { root: folder, log: () => {} }), (e) => words.test(e.message) || assert.fail(e.message));
   };
   await fails(base({ keys: 'b.jwk' }), /bad-key|keys|signer/i);
   await fails(base({ issuerKeys: ['B'.repeat(43)] }), /passkey that "issuerKeys" does not name/);

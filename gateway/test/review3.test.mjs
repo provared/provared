@@ -13,7 +13,8 @@ import { test } from 'node:test';
 
 const { checkBook, fingerprint, fromBase64url, identifierFingerprint } = await import('provared');
 const { world, signSlip, OTHER_SECRET, RULES } = await import('./world.mjs');
-const { openGateway, checkConfig, secretHash, CALL_DOCUMENT } = await import('../gateway.mjs');
+const { checkConfig, secretHash, CALL_DOCUMENT } = await import('../gateway.mjs');
+const { RUN_LIMIT, openGateway, refusedStart } = await import('./limits.mjs');
 
 const silent = () => {};
 const docs = (entry) => Object.fromEntries((entry.content.details ?? []).map((d) => [d.name, d.sha256]));
@@ -116,7 +117,7 @@ test('R3-L1: a hard link, or a link to the file, is the same file to the shared-
   }
   for (const book of books) {
     const config = { ...w.config, agents: { ...w.config.agents, other: { ...w.config.agents.patching, secretHash: hash, book } } };
-    await assert.rejects(openGateway(config, { root: w.folder, log: silent }), /share a file/, book);
+    await refusedStart(openGateway(config, { root: w.folder, log: silent }), /share a file/, book);
     assert.ok((await checkConfig(config, { root: w.folder })).problems.some((p) => /share a file/.test(p)));
   }
 });
@@ -125,7 +126,7 @@ test('R3-L1: the list of calls set aside is among the files two agents may not s
   const w = await world();
   await w.close();
   const config = { ...w.config, agents: { ...w.config.agents, other: { ...w.config.agents.patching, secretHash: await secretHash(OTHER_SECRET), book: `${w.bookPath}.journal-set-aside` } } };
-  await assert.rejects(openGateway(config, { root: w.folder, log: silent }), /share a file: the list of calls set aside of one is the book file of the other/);
+  await refusedStart(openGateway(config, { root: w.folder, log: silent }), /share a file: the list of calls set aside of one is the book file of the other/);
 });
 
 test('R4-L1: a journal none of whose lines checks under the key stops the start; one where some check starts, showing the others', async () => {
@@ -134,7 +135,7 @@ test('R4-L1: a journal none of whose lines checks under the key stops the start;
   const honest = tagged(w, await readLine(w, 'honest-1', Date.now() - 5000));
   writeFileSync(`${w.bookPath}.journal-key`, `${Buffer.alloc(32, 9).toString('base64url')}\n`);
   writeFileSync(`${w.bookPath}.journal`, `${honest}\n`);
-  await assert.rejects(openGateway(w.config, { root: w.folder, log: silent }), /no line of its journal .* checks under its journal key .* leaves the calls they stand for with no receipt/);
+  await refusedStart(openGateway(w.config, { root: w.folder, log: silent }), /no line of its journal .* checks under its journal key .* leaves the calls they stand for with no receipt/);
   // A line that checks under the key in place, beside the other: the gateway starts, and shows the one that does not.
   writeFileSync(`${w.bookPath}.journal`, `${honest}\n${tagged(w, { done: 'other' })}\n`);
   const g = await openGateway(w.config, { root: w.folder, log: silent });
@@ -158,7 +159,7 @@ test('R3-L2: a journal that holds lines and has lost its key stops the start, wi
   await w.gateway.close();
   writeFileSync(`${w.bookPath}.journal`, `${tagged(w, await readLine(w, 'a', Date.now() - 5000))}\n`);
   renameSync(`${w.bookPath}.journal-key`, `${w.bookPath}.journal-key.moved`);
-  await assert.rejects(openGateway(w.config, { root: w.folder, log: silent }), /holds lines, and its journal key .* is missing/);
+  await refusedStart(openGateway(w.config, { root: w.folder, log: silent }), /holds lines, and its journal key .* is missing/);
   writeFileSync(`${w.bookPath}.journal`, '');
   const g = await openGateway(w.config, { root: w.folder, log: silent });
   await g.close();
@@ -264,7 +265,7 @@ test('R3 (probe 13): repair takes --cut only as the digits shown, and puts back 
   writeFileSync(w.bookPath, whole.slice(0, -1));
   const settings = join(w.folder, 'repair.json');
   writeFileSync(settings, JSON.stringify({ agents: { patching: { book: w.bookPath } } }));
-  const run = (...args) => spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', BIN, 'repair', '--config', settings, '--agent', 'patching', ...args], { encoding: 'utf8', env: process.env });
+  const run = (...args) => spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', BIN, 'repair', '--config', settings, '--agent', 'patching', ...args], { encoding: 'utf8', env: process.env, timeout: RUN_LIMIT });
   const lastLine = whole.slice(whole.lastIndexOf('\n', whole.length - 2) + 1, -1);
   const n = Buffer.byteLength(lastLine);
   const shown = run();

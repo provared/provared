@@ -36,8 +36,13 @@ export function tempFolder() {
 
 export const ACTIONS = ['provared.data.read', 'supplies.order', 'slow.work', 'tool.run'];
 
-/** A slip for the agent's keys that names the executor in "with" with its keys, signed with the development stand-in for a passkey. */
-export async function signSlip({ passkey, agentKeys, executorKeys, service = 'executor', actions = ACTIONS, limits = [], never = [], requires = [{ need: 'countersignature' }], with: services, software, from = Date.now() - 60000, until = Date.now() + 3600000 }) {
+/**
+ * A slip for the agent's keys that names the executor in "with" with its
+ * keys, signed with the development stand-in for a passkey. It lasts a day
+ * unless "until" says otherwise, so that a system clock put forward while
+ * a test runs does not end it under the test.
+ */
+export async function signSlip({ passkey, agentKeys, executorKeys, service = 'executor', actions = ACTIONS, limits = [], never = [], requires = [{ need: 'countersignature' }], with: services, software, from = Date.now() - 60000, until = Date.now() + 24 * 3600000 }) {
   const prepared = await prepareSlip({
     issuer: { name: 'Sam (development)', key: passkey.key, rpId: passkey.rpId, origin: passkey.origin },
     agent: { name: 'An agent, through the MCP executor', keys: agentKeys, ...(software ? { software } : {}) },
@@ -211,13 +216,17 @@ export async function pause(ms) {
   await new Promise((d) => setTimeout(d, ms));
 }
 
-/** Wait until a condition holds, polling. */
+/**
+ * Wait until a condition holds, polling. The limit is measured on the
+ * monotonic clock, not the system clock, which may be put forward or back
+ * while a test runs.
+ */
 export async function until(check, { timeout = 5000, every = 20 } = {}) {
-  const deadline = Date.now() + timeout;
+  const deadline = performance.now() + timeout;
   for (;;) {
     const v = await check();
     if (v) return v;
-    if (Date.now() > deadline) throw new Error('The condition did not come true in time.');
+    if (performance.now() > deadline) throw new Error('The condition did not come true in time.');
     await pause(every);
   }
 }

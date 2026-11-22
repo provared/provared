@@ -352,12 +352,22 @@ test('central sealer: a sealer that refuses to sign leaves the book without a se
 test('central sealer: a seal the sealer signed whose answer never came is added before any other line; meanwhile no call is taken and no line is written', async () => {
   const w = await centralWorld({ open: false });
   let lose = true;
+  // After the lost answer, every question the executor asks the sealer waits here until the test has seen that no
+  // call is taken and no line written: the executor asks again two seconds after a failure, and a test slower than
+  // that (a busy computer) would otherwise find the seal already added.
+  let letGo;
+  const held = new Promise((done) => (letGo = done));
   const fake = await standIn({
     token: w.sealer.token,
     real: w.settings.recorder.sealer.address,
     answer: async (path, body, forward) => {
-      if (!lose || path !== '/seal') return forward();
+      if (!lose) {
+        await held;
+        return forward();
+      }
+      if (path !== '/seal') return forward();
       await forward();
+      lose = false;
       return null;
     },
   });
@@ -366,7 +376,6 @@ test('central sealer: a seal the sealer signed whose answer never came is added 
     await openWorld(w);
     await w.client.call('echo', {});
     await assert.rejects(w.executor.seal(), /The book was not sealed: a seal was asked for, and whether the central sealer signed one is not known/);
-    lose = false;
     assert.match(w.executor.stopped(), /No line is written until the sealer has said|signed a seal that the book does not hold yet/);
     const lines = w.lines().length;
     const answer = await w.client.call('echo', {});
@@ -376,7 +385,8 @@ test('central sealer: a seal the sealer signed whose answer never came is added 
     assert.equal(unlisted.denial, null, 'no denial is written before the seal');
     assert.equal(w.lines().length, lines, 'no line was written');
     // The executor asks the sealer again, is handed the seal, and adds it in the agent's turn.
-    await until(() => w.executor.stopped() === null, { timeout: 15000 });
+    letGo();
+    await until(() => w.executor.stopped() === null, { timeout: 30000 });
     const c = await w.checked();
     assert.equal(c.summary.problemFound, false);
     assert.deepEqual(c.entries.map((e) => e.kind), ['slip', 'stub', 'seal']);

@@ -163,6 +163,126 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
 - **The recorder beside Claude Code, `provared-claude-code` 0.1.1: a web page cannot use its port.** With 0.1.0, a web page open in a browser on the same computer could ask the recorder to take a permission, trust a passkey, write a receipt for a call that never happened, or stop. 0.1.1 refuses what a browser sends for a web page, or under another website's name, on every route of the recorder's port, and for it reads and writes nothing. 0.1.0 is affected, and updating is not enough on its own: a recorder already running keeps the code it started with until it is restarted. After updating, restart it once, with both commands on one line so that no tool call falls between them: `provared-claude-code stop; provared-claude-code ensure`. With the Claude Code plugin, they are `node <the plugin's folder>/plugin.mjs stop; node <the plugin's folder>/plugin.mjs ensure`. A tool call does not start the recorder: while it is stopped, tool calls are refused, until `ensure` or the start of the next Claude Code session (with the plugin) starts it. From 0.1.1, `ensure` and the start of a session say so where the recorder that answers is not the version installed, with these commands; they do not stop it.
   In `integrations/claude-code/recorder.mjs`, every route, the feed's four (`/hello`, `/books`, `/lines` and `/hand-over`) among them, first refuses, before it reads the body, a request with an `Origin` header, with a `Sec-Fetch-Site` header other than `none`, or with a `Host` other than `127.0.0.1:<port>` (on port 80, `127.0.0.1` alone as well, as a client sends it there), and answers 403. Every route but the feed's then refuses, with 415, a POST whose `Content-Type`, read before the first `;`, trimmed and in any case, is not `application/json`. The port is kept once the recorder listens, so a request that came before the port closed (`close()`, or `POST /stop`) is still answered and its call recorded. Where the file `feed-token` holds no token, the feed's answer no longer names the folder, whose path names the person's account; the recorder's status still gives it. The status gives the package's version, from its `package.json`, as `version`. The hook, the recorder's commands, the feed's reader in `feed.mjs` and the uploader in `connect/upload.mjs` already sent all of this; the tests that ask the recorder directly, in `integrations/claude-code/test/` and `connect/test/`, now send `Content-Type: application/json` too, and three requests that `test/handover.test.mjs` writes by hand now name the port in `Host`. Any program on the computer can still use the port, as before; the README says so, in "What the record shows, and what it does not". `package.json`, its lockfile and `.claude-plugin/plugin.json` say 0.1.1, and the README names 0.1.1 where it names the version. New tests, in `test/local-port.test.mjs`: each route, with each of those headers wrong in turn (`Sec-Fetch-Site` of `same-site` or any value but `none`, a `Content-Type` that only names `application/json` after a `;`), is refused, the trusted passkeys, the permission in force and every file in the folder are unchanged, and the recorder still runs; a POST is refused with its body never sent; the feed's four routes refuse such a request and give it no session and no proof, and the feed's reader is still answered; a call whose request came before `close()` or `POST /stop` is answered and recorded; on port 80, `Host: 127.0.0.1` is taken (where port 80 can be taken); `ensure`, with an earlier recorder answering, says so and stops nothing. In `test/feed.test.mjs`, the feed's answer where its token file holds no token names no folder; in `test/plugin.test.mjs`, the start of a session says so where the recorder that answers is an earlier version. With any one of the checks taken out, a test fails. Not published.
 
+- **The gateway countersigns with a key set of its own** (`gateway/`,
+  `provared-gateway` 0.1.0, not yet published). Where the settings give the
+  gateway its own keys (`gateway`) and an agent's slip names them in `with`
+  for an upstream's service, the gateway countersigns each call to it that
+  it lets through, with the library's `countersign` (format description,
+  section 6), keeps its own tagged copy of the agent's calls apart from the
+  book (`gateway/copy.mjs`), and `provared-gateway compare` holds the copy
+  against the book, as the MCP executor's does. `provared-gateway keys
+  --gateway` makes the key file and prints the slip's `with` entries. The
+  package lists its new files, asks for `provared` 0.9.0 exactly, and has a
+  change log of its own (`gateway/CHANGELOG.md`). The library does not
+  change.
+- **The gateway after the review of its countersignature** (`gateway/`,
+  not yet published). The gateway has a `with` entry of its own (`gateway`
+  by default), which every receipt of an agent whose slip names it then
+  names, so that its countersignature no longer reads as an upstream's. Its
+  own copy, not the journal, decides at a start what happened to a call: a
+  call the copy shows as sent and not finished waits for the administrator,
+  a journal line the copy does not hold is never given a stub, and a stub
+  found in the book settles a call only where it is the call the copy shows,
+  countersigned. `compare` holds each receipt's content and countersignature
+  against the copy, reports more than one receipt for a call, and agrees
+  only where the book is fully checked and within its slips. Unknown
+  settings are refused. Details in `gateway/CHANGELOG.md`. The library does
+  not change.
+- **The gateway after a re-check of those fixes** (`gateway/`, not yet
+  published). With a copy, only the copy's own `set-aside` line sets a call
+  aside: a call that the file beside the journal names and the copy shows
+  open stops the agent and is listed (`set-aside-not-in-copy`). A journal
+  line the copy lacks is passed over where the book holds the stub that is
+  that call, so a gateway first given keys, or one whose copy was lost, is
+  not stopped by calls whose receipts are sound. `compare` checks the
+  countersignature of a stub written at a later start. A found stub needs
+  the gateway's countersignature wherever its slip names the gateway's id
+  with keys, not only its present keys. `acknowledge` looks at the book
+  again before each stub, so trying again writes none twice. After a second
+  re-check, `acknowledge` first makes sure the book file holds the book in
+  memory, as the guard does, so a failed write of that file is never
+  followed by a call settled from a stub only in memory; the README says to
+  settle open calls before changing the gateway's `id`, and that a call
+  whose `set-aside` line the copy could not take comes back at the next
+  start. Details in `gateway/CHANGELOG.md`.
+- **The MCP executor, after the same review** (`mcp-executor/`, not
+  released; the version stays 0.5.0). Review 3.4 of the gateway's
+  countersignature found the same gaps in the executor.
+  - **A receipt found in the book at a start** settles a call the copy
+    shows as sent and not finished only where it is the only receipt naming
+    the call, it is the call the copy's `sending` line shows (the same
+    permission, action, amount and service; the line's documents first,
+    then only `provared.tool-result`, `provared.error`,
+    `executor.written-late` or `executor.acknowledged`), and, where the
+    permission names the executor with keys, it carries a valid
+    countersignature. It was taken on its `executor.call` document alone.
+    Any other receipt is not written into the copy as the executor's: the
+    log says `receipt-not-matching`; over stdio the executor does not
+    start, and says so; over HTTP that agent's calls are refused; the call
+    is listed for the administrator (`receiptsMissing`, with `inBook`) and
+    can only be set aside. The same holds when the administrator
+    acknowledges a call whose receipt has reached the book since the start.
+    A `found-in-book` line now records whether the receipt was
+    countersigned and the countersignature's fingerprint. (`executor.mjs`,
+    `copy.mjs`.)
+  - **`compare`** holds each receipt it matches against the copy's
+    `sending` line (and the documents its `done` line holds), and against
+    the countersignature the copy records: a receipt that is not the call
+    sent goes to `differs` (each entry now says `why`: `another stub` or
+    `not the call sent`); a countersignature missing, not valid, or another
+    than the one recorded goes to the new list `countersignatures`; more
+    than one receipt for a call goes to the new list `moreThanOne`. The
+    summary gains `countersignatureProblems` and `moreThanOneReceipt`, and
+    `agree` is false where either is found. (`compare.mjs`.)
+  - **`compare`, a receipt written at a later start** (found by a re-check
+    of these fixes). Where the copy's `done` line names no receipt and says
+    it was countersigned, the receipt in the book must carry a valid
+    countersignature; otherwise it goes to `countersignatures` and `agree`
+    is false. Before, that branch checked none, so a one-sided receipt put
+    into the book for such a call was `matched` and `compare` agreed.
+    (`compare.mjs`; the README's "The copy, and comparing it with the
+    book"; a test in `test/review5.test.mjs`, with and without the
+    countersignature.)
+  - **`compare` is stricter in 0.5.1 than in 0.5.0.** `agree` is now true
+    only where the book was also fully checked and is within its slips, as
+    the gateway's `compare` asks; before, a book outside its slips (a
+    receipt under another service, say) or one this computer could not
+    fully check still agreed where the copy matched. Such a book now ends
+    `compare` with code 1, and `onlySetAside` is false for it, as in the
+    gateway. The summary gains `bookFullyChecked` and `bookWithinSlips`,
+    and `book` gains `withinSlips`. (`compare.mjs`; the README's "The copy,
+    and comparing it with the book"; two tests in `test/review5.test.mjs`.)
+  - **Tests** (`mcp-executor/test/review5.test.mjs`, 5): a receipt found at
+    a start with other arguments, one-sided, or one of two; one that is the
+    call, countersigned; a countersignature taken off or swapped; a receipt
+    that is not the call sent; and two receipts for one call, with and
+    without another fault. Two more for the administrator's acknowledgement:
+    a receipt that reached the book after the start (the executor wrote it,
+    and its copy could not say so) settles the call where it is the call
+    sent, countersigned; one without the countersignature the permission
+    names does not, and the call waits to be set aside.
+  - **Three tests that failed now and then** no longer rest on timing they
+    do not control. "A seal the sealer signed whose answer never came"
+    (`test/central-sealer.test.mjs`) raced the executor's own retry two
+    seconds after a failure: on a busy computer the seal was added before
+    the test had looked, and it found calls taken. The stand-in sealer now
+    holds the executor's questions until the test has looked. "A program
+    that is not reading" (`test/http-local-faults.test.mjs`) measured
+    "refused at once" on the system clock with a bound of two seconds
+    against a timeout of three; it now measures on the monotonic clock,
+    with a bound of ten seconds against a timeout of twenty. "An answer of
+    the program to nothing in flight" waited five seconds; it now waits up
+    to thirty. In every test, `until` (`test/world.mjs`) measures its limit
+    on the monotonic clock, so a system clock put forward no longer ends a
+    wait at once; and a test's slip lasts a day, not an hour, so a clock put
+    forward by more than an hour no longer ends it under a running test.
+  - **Documents.** The executor's README ("A call the executor was sending
+    when it stopped"; "The copy, and comparing it with the book") and
+    DESIGN.md (sections 7 and 8) say so.
+  - **`files.mjs` is the gateway's again, byte for byte**, as
+    `test/same-files.test.mjs` requires: it takes the gateway's line that
+    describes a key file of the gateway's own, which the executor never
+    makes. The test failed from the gateway's countersignature commit on.
 - **The home page for businesses.** https://prova.red now opens for businesses that use AI agents a lot: what the guard does, how it works with claude.ai, when it keeps the tools' credentials from the agent, what a record does not prove, and how to try it. The developers' material follows, under "For developers". No code changes.
 - **The pages and READMEs name the guard 0.5.0 as current.** The README, the
   home page and the three-minutes page say the guard is at 0.5.0, and the

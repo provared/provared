@@ -11,7 +11,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { assembleSlip, formatTime, generateKeySet, generateSealKeySet, prepareSlip, signerFromKey, thumbprint } from 'provared';
 import { developmentPasskey } from 'provared/dev';
-import { openGateway, secretHash } from '../gateway.mjs';
+import { secretHash } from '../gateway.mjs';
+import { ANSWER_LIMIT, CLOSE_LIMIT, openGateway, within } from './limits.mjs';
 
 // A temporary folder for a test file, removed when the test process ends.
 const made = [];
@@ -49,7 +50,7 @@ export async function upstream(answer = (call, res) => json(res, 200, { ok: true
   server.answer = answer;
   await new Promise((done) => server.listen(0, '127.0.0.1', done));
   server.unref();
-  return { server, calls, base: `http://127.0.0.1:${server.address().port}`, close: () => new Promise((d) => server.close(() => d())) };
+  return { server, calls, base: `http://127.0.0.1:${server.address().port}`, close: () => within(new Promise((d) => { server.close(() => d()); server.closeAllConnections(); }), CLOSE_LIMIT, 'closing a made-up upstream') };
 }
 
 export function json(res, status, value, headers = {}) {
@@ -58,9 +59,15 @@ export function json(res, status, value, headers = {}) {
   res.end(body);
 }
 
-/** A call from the made-up agent: the address is sent exactly as given. */
-export function call(port, method, path, { secret, headers = {}, body, rawHeaders } = {}) {
+/** A call from the made-up agent: the address is sent exactly as given. It fails where no whole answer has come within the limit. */
+export function call(port, method, path, { secret, headers = {}, body, rawHeaders, limit = ANSWER_LIMIT } = {}) {
   return new Promise((done, failed) => {
+    const timer = setTimeout(() => req.destroy(new Error(`${method} ${path}: no whole answer from the gateway after ${limit / 1000} seconds`)), limit);
+    timer.unref();
+    const finish = (value) => {
+      clearTimeout(timer);
+      done(value);
+    };
     const all = { ...(secret ? { authorization: `Bearer ${secret}` } : {}), ...headers };
     const data = body === undefined ? undefined : Buffer.isBuffer(body) ? body : Buffer.from(typeof body === 'string' ? body : JSON.stringify(body));
     if (data && all['content-length'] === undefined && all['transfer-encoding'] === undefined) all['content-length'] = data.length;
@@ -75,18 +82,22 @@ export function call(port, method, path, { secret, headers = {}, body, rawHeader
         } catch {
           value = undefined;
         }
-        done({ status: res.statusCode, headers: res.headers, text, json: value });
+        finish({ status: res.statusCode, headers: res.headers, text, json: value });
       });
+      res.on('error', failed);
     });
-    req.on('error', failed);
+    req.on('error', (e) => {
+      clearTimeout(timer);
+      failed(e);
+    });
     req.end(data);
   });
 }
 
 export const ACTIONS = ['provared.data.read', 'ticket.update', 'patch.apply', 'host.reboot', 'provared.data.delete'];
 
-/** A slip for an agent's keys, signed with the development stand-in for a passkey. */
-export async function signSlip({ passkey, agentKeys, actions = ACTIONS, limits = [], never = [], requires = [], with: services = [{ id: 'tickets', name: 'The ticket system' }, { id: 'patch', name: 'The patch service' }], from = Date.now() - 60000, until = Date.now() + 3600000 }) {
+/** A slip for an agent's keys, signed with the development stand-in for a passkey. It lasts a day unless "until" says otherwise, so that a system clock put forward while a test runs does not end it under the test. */
+export async function signSlip({ passkey, agentKeys, actions = ACTIONS, limits = [], never = [], requires = [], with: services = [{ id: 'tickets', name: 'The ticket system' }, { id: 'patch', name: 'The patch service' }], from = Date.now() - 60000, until = Date.now() + 24 * 3600000 }) {
   const prepared = await prepareSlip({
     issuer: { name: 'Sam (development)', key: passkey.key, rpId: passkey.rpId, origin: passkey.origin },
     agent: { name: 'A patching agent, through the gateway at 127.0.0.1', keys: agentKeys },

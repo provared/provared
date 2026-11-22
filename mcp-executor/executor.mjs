@@ -28,7 +28,7 @@ import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { basename, delimiter, dirname, isAbsolute, resolve } from 'node:path';
 import { argumentsFingerprint, checkBook, countersign, denialCodes, entryLine, fingerprint, fromBase64url, identifierFingerprint, openRecorder, randomId, thumbprint } from 'provared';
-import { loadCopyKey, openCopy, readCopy, unfinished } from './copy.mjs';
+import { countersignatureFingerprint, loadCopyKey, openCopy, readCopy, stubIsSending, unfinished } from './copy.mjs';
 import { aboutSlip, bookFile, loadKeyFile, readIfThere, slipFrom, untilFree } from './files.mjs';
 import { CODES, MAX_LINE_BYTES, foldName, idKey, isId, misspelt, notificationLine, oneLine, readLines, readMessage, repeatedName, responseLine, responseText, spliceId, topLevelId, unsafeInteger } from './jsonrpc.mjs';
 import { LOCK_WAIT_MS, lockFiles } from './lock.mjs';
@@ -1081,7 +1081,12 @@ export async function openAgent(prepared, { settings, executorKeys, now, log, na
   const open = unfinished(prepared.read);
   if (open.length) {
     const sorted = await sortUnfinished(open, await writer.check(), { settings, about, agentKeys: prepared.agentKeys.keys, executorKeys: executorKeys.keys, formerKeys: formerKeys.map((k) => k.keys), startedAt: now() });
-    for (const f of sorted.found) copy.note({ kind: 'done', call: f.call, when: new Date(now()).toISOString(), outcome: 'found-in-book', stub: f.stub });
+    for (const f of sorted.found) {
+      // With its countersignature's fingerprint, as a "done" line of the executor's own holds it, for "compare".
+      const cs = f.countersigned ? await countersignatureFingerprint(writer.book().split('\n')[f.entry] ?? '') : null;
+      copy.note({ kind: 'done', call: f.call, when: new Date(now()).toISOString(), outcome: 'found-in-book', stub: f.stub, countersigned: cs !== null, ...(cs ? { countersignature: cs } : {}) });
+    }
+    for (const p of sorted.pending) if (p.inBook) agentLog({ event: 'receipt-not-matching', call: p.call, stubs: p.inBook, problem: p.problem });
     // Sent under a permission that is no longer the one in force: these wait for the administrator.
     pending = sorted.pending;
     if (pending.length) agentLog({ event: 'receipt-missing', calls: pending.map(shownCall) });
@@ -1255,9 +1260,21 @@ export async function openAgent(prepared, { settings, executorKeys, now, log, na
         const s = p.sending;
         try {
           // Never two receipts for one call: the book is looked at again before each is written.
-          const inBook = stubsByCall(await writer.check()).get(await identifierFingerprint(p.call));
-          if (inBook) {
-            note({ kind: 'done', call: p.call, when: at(), outcome: 'found-in-book', stub: inBook });
+          const checkedNow = await writer.check();
+          const found = stubEntriesByCall(checkedNow).get(await identifierFingerprint(p.call)) ?? [];
+          if (found.length) {
+            // Only a receipt that is the call the copy shows, countersigned where the permission names the executor's keys, settles it.
+            const slipNow = checkedNow.entries.find((e) => e.kind === 'slip' && e.fingerprint === s.slip)?.content;
+            const problem = foundProblem(found, s, slipNow, settings.service);
+            if (problem !== null) {
+              p.problem = `${problem} It is never given a receipt of the executor's: set it aside.`;
+              p.inBook = found.map((e) => e.fingerprint);
+              agentLog({ event: 'receipt-not-matching', call: p.call, stubs: p.inBook, problem });
+              throw new Error(p.problem);
+            }
+            const inBook = found[0].fingerprint;
+            const cs = found[0].countersignature?.state === 'valid' ? await countersignatureFingerprint(writer.book().split('\n')[found[0].index] ?? '') : null;
+            note({ kind: 'done', call: p.call, when: at(), outcome: 'found-in-book', stub: inBook, countersigned: cs !== null, ...(cs ? { countersignature: cs } : {}) });
             pending = pending.filter((x) => x !== p);
             written.push({ call: p.call, when: s.when, tool: s.tool, action: s.action, slip: s.slip, stub: inBook, found: true });
             continue;
@@ -1368,14 +1385,37 @@ const SENT_DOCUMENTS = ['provared.arguments', TOOL_DOCUMENT, CALL_DOCUMENT, RULE
 const OUTCOME_DOCUMENTS = [RESULT_DOCUMENT, 'provared.error'];
 const isDocument = (d, names) => isObject(d) && Object.keys(d).length === 2 && names.includes(d.name) && typeof d.sha256 === 'string' && FINGERPRINT.test(d.sha256);
 
-/** The book's stubs that name a call of the executor's: the fingerprint of each "executor.call" document, with its stub's. */
-function stubsByCall(checked) {
+/** The documents an executor's receipt names after those of its "sending" line: what came back or the error, and the fixed texts of a receipt written later. */
+export const AFTER_DOCUMENTS = [...OUTCOME_DOCUMENTS, WRITTEN_LATE_DOCUMENT, ACKNOWLEDGED_DOCUMENT];
+
+/**
+ * The book's stubs that name a call of the executor's, every one: the
+ * fingerprint of each "executor.call" document, with the entries of its
+ * stubs.
+ */
+function stubEntriesByCall(checked) {
   const held = new Map();
   for (const e of checked.entries) {
     if (e.kind !== 'stub' || !Array.isArray(e.content?.details)) continue;
-    for (const d of e.content.details) if (d.name === CALL_DOCUMENT) held.set(d.sha256, e.fingerprint);
+    for (const d of e.content.details) if (d.name === CALL_DOCUMENT) held.set(d.sha256, [...(held.get(d.sha256) ?? []), e]);
   }
   return held;
+}
+
+/**
+ * Why receipts the book holds for a call the copy shows as sent and not
+ * finished do not settle it, or null where they do: one receipt only; the
+ * call the "sending" line shows, followed only by documents of an outcome
+ * or of a receipt written later; and, where the permission the call was
+ * sent under names the executor with keys, a valid countersignature.
+ */
+function foundProblem(found, sending, slip, service) {
+  if (found.length > 1) return `The book holds ${found.length} receipts for this call, where the executor writes one.`;
+  const e = found[0];
+  if (!stubIsSending(e.content, sending, { outcomes: AFTER_DOCUMENTS })) return "The book holds a receipt for this call that is not the call the executor's copy shows as sent: its permission, action, amount, service or documents differ.";
+  const named = Array.isArray(slip?.with) ? slip.with.find((w) => w?.id === service) : undefined;
+  if (named?.keys !== undefined && e.countersignature?.state !== 'valid') return "The book holds a receipt for this call without a valid countersignature of the executor, which the permission names.";
+  return null;
 }
 
 /**
@@ -1410,14 +1450,18 @@ function bookSummary(result) {
  * receipt can be written from its line (lineProblem).
  */
 export async function sortUnfinished(open, checked, { settings, about, agentKeys, executorKeys, formerKeys = [], startedAt }) {
-  const held = stubsByCall(checked);
+  const held = stubEntriesByCall(checked);
   // The slips the book holds, sound: a call may be acknowledged under any of them.
   const slips = new Map(checked.entries.filter((e) => e.kind === 'slip' && e.problems.length === 0).map((e) => [e.fingerprint, e.content]));
   const out = { found: [], late: [], pending: [] };
   for (const { sending, done } of open) {
-    const stub = held.get(await identifierFingerprint(sending.call));
-    if (stub) out.found.push({ call: sending.call, stub });
-    else if (sending.slip === about.fingerprint) out.late.push({ sending, done });
+    const found = held.get(await identifierFingerprint(sending.call)) ?? [];
+    if (found.length) {
+      // A receipt in the book settles the call only where it is the call the copy shows, countersigned where the permission names the executor's keys.
+      const problem = foundProblem(found, sending, slips.get(sending.slip), settings.service);
+      if (problem === null) out.found.push({ call: sending.call, stub: found[0].fingerprint, entry: found[0].index, countersigned: found[0].countersignature?.state === 'valid' });
+      else out.pending.push({ call: sending.call, sending, done, problem: `${problem} It is never given a receipt of the executor's: set it aside.`, warning: null, known: null, former: null, inBook: found.map((e) => e.fingerprint) });
+    } else if (sending.slip === about.fingerprint) out.late.push({ sending, done });
     else out.pending.push({ call: sending.call, sending, done, ...(await lineProblem(sending, done, { settings, slips, agentKeys, executorKeys, formerKeys, startedAt })) });
   }
   return out;
@@ -1492,10 +1536,13 @@ async function lineProblem(s, done, { settings, slips, agentKeys, executorKeys, 
 /** A waiting call as the administrator is shown it: names, times and fingerprints from its line of the copy. */
 function shownCall(p) {
   const s = p.sending;
-  return { call: p.call, usable: p.problem === null, problem: p.problem, warning: p.warning, when: s.when, slip: s.slip, tool: s.tool, action: s.action, ...(s.amount !== undefined ? { amount: s.amount } : {}), outcomeKnown: p.known !== null, ...(p.former === null ? {} : { formerKeys: true }) };
+  return { call: p.call, usable: p.problem === null, problem: p.problem, warning: p.warning, when: s.when, slip: s.slip, tool: s.tool, action: s.action, ...(s.amount !== undefined ? { amount: s.amount } : {}), outcomeKnown: p.known !== null, ...(p.former === null ? {} : { formerKeys: true }), ...(p.inBook ? { inBook: p.inBook } : {}) };
 }
 
 function waitingWords(pending) {
+  // A call whose receipt in the book is not the one the executor would write is said first: it can only be set aside.
+  const odd = pending.find((p) => p.inBook);
+  if (odd) return `The copy shows call ${odd.call} as sent (${String(odd.sending.when).slice(0, 40)}, ${String(odd.sending.tool).slice(0, 128)}), and the book holds a receipt for it that does not settle it: ${odd.problem} The administrator sets it aside with "provared-mcp-executor acknowledge --set-aside" (over HTTP, also POST /provared/acknowledge, "setAside").${pending.length > 1 ? ` ${pending.length - 1} other call(s) wait too.` : ''}`;
   const first = pending[0].sending;
   return `${pending.length} call(s) sent before the executor last stopped, under a permission that is not the one in force, have no receipt in the book (the first: ${String(first.when).slice(0, 40)}, ${String(first.tool).slice(0, 128)}). The administrator acknowledges them with "provared-mcp-executor acknowledge" (over HTTP, also POST /provared/acknowledge), and sets aside any that cannot have a receipt ("--set-aside", "setAside"); a receipt is written for each call acknowledged, under the permission it was sent under.`;
 }
@@ -1932,6 +1979,9 @@ export async function openExecutor(config, more = {}) {
     // Over stdio there is no address at which a running executor could be asked to acknowledge, so it does not start with a call waiting.
     const waiting = agent.pending();
     await agent.release();
+    // A call whose receipt in the book is not the one the executor would write can only be set aside.
+    const odd = waiting.find((x) => x.inBook);
+    if (odd) throw new Error(`The copy ${p.agent.paths.copy} shows call ${odd.call} as sent (at ${odd.when}), and the book holds a receipt for it that does not settle it: ${odd.problem} The executor does not start until it has been set aside: run "provared-mcp-executor acknowledge --config <settings> --offline --set-aside ${odd.call}".`);
     throw new Error(`The copy ${p.agent.paths.copy} shows ${waiting.length} call(s) sent under a permission that is not the one in force (${about.fingerprint}), with no receipt in the book (the first: call ${waiting[0].call}, sent at ${waiting[0].when} under permission ${waiting[0].slip}). The executor does not start until each has been acknowledged or set aside: run "provared-mcp-executor acknowledge --config <settings> --offline", which writes each receipt under the permission its call was sent under (README, "A call sent under a permission no longer in force").`);
   }
   const core = callCore({ settings, content, executorKeys: p.executorKeys, now });
