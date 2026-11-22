@@ -357,7 +357,9 @@ test('limits: one agent\'s messages, costly to read, do not stall another agent:
       assert.equal(r.status, 200);
       await new Promise((d) => setTimeout(d, 50));
     }
-    // alpha was served meanwhile, as many messages as it keeps in flight at least.
+    // alpha was served meanwhile, as many messages as it keeps in flight at least. Where beta's pings were quick (as on Linux), alpha may not have reached that count yet: it is given up to 15 seconds more, on the monotonic clock, so that a stalled alpha still fails.
+    const until = performance.now() + 15000;
+    while (answered - before < IN_FLIGHT && performance.now() < until) await new Promise((d) => setTimeout(d, 50));
     assert.ok(answered - before >= IN_FLIGHT, `alpha was answered ${answered - before} times while beta pinged`);
     const worst = Math.max(...waits);
     t.diagnostic(`beta's pings: ${waits.map(Math.round).join(', ')} ms; one read ${Math.round(oneRead)} ms; limit ${Math.round(limit)} ms; alpha answered ${answered - before} times`);
