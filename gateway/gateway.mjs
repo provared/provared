@@ -257,14 +257,13 @@ function lineOf(s) {
  * Why a stub the book holds for a call the copy shows as sent and not
  * finished does not settle it, or null where it does: one stub only; the
  * call the "sending" line shows, followed only by documents of an outcome;
- * and, where the gateway countersigns under the call's slip, a valid
- * countersignature.
+ * and, where countersignatureRequired says so, a valid countersignature.
  */
 function foundProblem(found, sending, countersigned) {
   if (found.length > 1) return `The book holds ${found.length} stubs for this call, where the gateway writes one.`;
   const e = found[0];
   if (!stubIsSending(e.content, sending, { outcomes: OUTCOME_DOCUMENTS })) return "The book holds a stub for this call that is not the call the gateway's copy shows as sent: its slip, action, amount, service or documents differ.";
-  if (countersigned && e.countersignature?.state !== 'valid') return "The book holds a stub for this call without a valid countersignature of the gateway, which countersigns every call under this slip.";
+  if (countersigned && e.countersignature?.state !== 'valid') return "The book holds a stub for this call without a valid countersignature of the gateway, which the slip the call was sent under names with keys.";
   return null;
 }
 

@@ -181,7 +181,9 @@ These change what the entries above describe.
   id with keys, its present keys or others, as the guard asks. Before, only
   a slip naming the present keys asked for it, so after a change of the
   gateway's keys a one-sided stub settled a call sent under the earlier
-  slip.
+  slip. The reason shown for such a stub now says the slip names the
+  gateway with keys, not that the gateway countersigns every call under
+  it, which after a change of keys it does not.
 - **`acknowledge` looks at the book again** (F5) before each stub. Where
   the book already holds a stub for the call (the journal could not take
   the line saying it was acknowledged), no second stub is written; with a
