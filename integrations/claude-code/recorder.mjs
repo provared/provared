@@ -2226,7 +2226,9 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
         if (!reply) return undefined;
       }
       const given = bytes.length > 0 ? JSON.parse(bytes.toString('utf8')) : {};
-      if (req.url === '/renew' && given && given.newPasskey === true) {
+      // One test decides both whether the proof is asked for and whether a new passkey is taken (below).
+      const newPasskey = req.url === '/renew' && Boolean(given) && given.newPasskey === true;
+      if (newPasskey) {
         reply = provedAnswer();
         if (!reply) return undefined;
       }
@@ -2297,7 +2299,7 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
         try {
           return reply(200, await unlessGone(async () => {
             if (req.url === '/new-book') return newBook();
-            const renewed = await renew(given.slip, given.newPasskey === true);
+            const renewed = await renew(given.slip, newPasskey);
             await whenFull();
             return renewed;
           }));
@@ -2892,7 +2894,12 @@ async function renewFrom(file, folder, port, newPasskey = false) {
 }
 
 async function renewWith(slip, folder, port, newPasskey = false) {
-  if (await running(port)) {
+  const answering = await running(port);
+  // The waiting recorder holds no permission to renew: said so, before any question that needs the feed's proof.
+  if (answering?.waiting === true) {
+    throw new Error(`No permission has been signed for this agent yet: the recorder on 127.0.0.1:${port} waits for its first one, so there is nothing to renew, and nothing was changed. Take this permission as the first one instead: save it from the signing window and run "${RUN} use <the saved file>", or run "${RUN} admit-passkey <the thumbprint>" here, pasting the thumbprint from the signing window.`);
+  }
+  if (answering) {
     // A new passkey: with the feed's proof, from the token in the folder.
     const answer = newPasskey ? await askProved(folder, port, '/renew', { slip, newPasskey }) : await ask(port, '/renew', 'POST', { slip, newPasskey });
     if (answer.error === 'not found') {

@@ -94,6 +94,27 @@ test('"ensure" in a folder that holds a trusted list and no permission (an admit
   assert.equal(await answersWithin(port, 1000), null, 'nothing was started');
 });
 
+test('"renew <file>", with or without --new-passkey, against the waiting recorder says that it waits for its first permission, and what to do; nothing is taken', async () => {
+  const w = await freshWorld();
+  const waiting = await startWaiting({ folder: w.folder, port: 0, signingOrigins: ['http://localhost'] });
+  try {
+    const file = join(tempFolder('provared-cc-renew-'), 'slip.json');
+    writeFileSync(file, JSON.stringify(await signSlip({ agentKeys: w.agent.keys, passkey: w.passkey })));
+    for (const args of [['renew', file, '--new-passkey'], ['renew', file]]) {
+      const r = await runCommand(args, { folder: w.folder, port: waiting.port });
+      const said = `${r.out} ${r.err}`;
+      assert.notEqual(r.code, 0, said);
+      assert.match(said, /waits for (its|the) first/, said);
+      assert.match(said, /use <the saved file>/, said);
+      assert.doesNotMatch(said, /did not prove/, said);
+      assert.equal(existsSync(join(w.folder, 'slip.json')), false, `${args.join(' ')}: nothing is taken`);
+    }
+    assert.equal((await status(waiting.port)).waiting, true);
+  } finally {
+    await waiting.close();
+  }
+});
+
 /**
  * A stand-in on the port for a waiting recorder: it answers /status as one
  * that waits, with the first "silent" questions left unanswered for
