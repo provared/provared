@@ -224,3 +224,28 @@ test('L7: two receipts for one call are no agreement, even where the copy matche
   assert.equal(result.summary.moreThanOneReceipt, 1);
   assert.equal(result.summary.agree, false);
 });
+
+test('M2 (re-check F3): compare checks the countersignature of a receipt written at a later start, where the copy\'s "done" line says it was countersigned', async () => {
+  for (const countersigned of [false, true]) {
+    const w = await afterOneCall();
+    const call = `late-call-${countersigned}`;
+    const s = await leaveCall(w, call);
+    // The executor could not write the book file: the copy's "done" line names no stub, and says the receipt was countersigned.
+    openCopy(join(w.folder, 'copy.jsonl'), copyKeyOf(w), w.settings.name, readCopy(join(w.folder, 'copy.jsonl'), copyKeyOf(w), w.settings.name).next).note({ kind: 'done', call, when: new Date().toISOString(), outcome: 'error', countersigned: true, countersignature: 'B'.repeat(43), documents: [{ name: 'provared.error', sha256: await identifierFingerprint('what the executor saw') }] });
+    const made = await forge(w, { slip: s.slip, action: s.action, with: 'executor', when: Date.parse(s.when), details: [...s.details, { name: 'provared.error', sha256: await identifierFingerprint('the outcome is not known') }] });
+    let book = readFileSync(bookPath(w), 'utf8');
+    if (countersigned) {
+      const lines = book.trim().split('\n');
+      book = `${[...lines.slice(0, -1), entryLine({ stub: made.record, countersignature: await countersign(made.record, await w.executorPrivateKeys()) })].join('\n')}\n`;
+    }
+    const result = await compareOf(w, book);
+    if (countersigned) {
+      assert.deepEqual(result.matched.filter((m) => m.call === call).map((m) => [m.countersignature, m.note]), [['valid', 'written at a later start']]);
+      assert.equal(result.summary.agree, true, JSON.stringify(result.summary));
+    } else {
+      assert.deepEqual(result.countersignatures.map((c) => [c.call, c.problem]), [[call, 'missing']]);
+      assert.equal(result.matched.filter((m) => m.call === call).length, 0);
+      assert.equal(result.summary.agree, false);
+    }
+  }
+});

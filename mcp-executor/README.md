@@ -1271,8 +1271,10 @@ calls that match, those whose receipt in the book is not the one the
 executor wrote, or is not the call the copy's `sending` line shows (its
 permission, action, amount, service, or documents differ: `differs`, with
 `why`), those whose receipt lacks the countersignature the copy says the
-executor gave it, or carries another (`countersignatures`), those with more
-than one receipt in the book (`moreThanOne`), those with no receipt in the book (`missing`:
+executor gave it, or carries another (`countersignatures`; for a receipt
+written at a later start, whose `done` line names no stub, one missing or
+not checking), those with more than one receipt in the book
+(`moreThanOne`), those with no receipt in the book (`missing`:
 whoever keeps the book left it out, or the book is older than the copy),
 those whose receipt the executor itself could not write to the book
 (`notWritten`: its own stop, told apart from an omission), those the

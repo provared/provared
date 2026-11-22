@@ -149,9 +149,11 @@ export async function compareCopyWithBook({ copyPath, copyKey, name, service, bo
       result.differs.push({ ...about, inCopy: late ? null : c.done.stub, inBook: inBook.stub, entry: inBook.entry, why: 'not the call sent' });
       continue;
     }
-    // The countersignature the copy says the executor gave: there, valid, and, where the copy records it, the same.
-    if (!late && c.done.countersigned === true) {
-      const wanted = typeof c.done.countersignature === 'string' ? c.done.countersignature : null;
+    // The countersignature the copy says the executor gave: there, valid, and, where the copy records it, the same; for
+    // a receipt written at a later start, there and valid (the "done" line names no stub, so not the countersignature
+    // of the one in the book).
+    if (c.done.countersigned === true) {
+      const wanted = !late && typeof c.done.countersignature === 'string' ? c.done.countersignature : null;
       const problem = inBook.countersignature !== 'valid' ? (inBook.countersignature === 'absent' ? 'missing' : inBook.countersignature) : wanted !== null && inBook.countersignedBy !== wanted ? 'another' : null;
       if (problem) {
         result.countersignatures.push({ ...about, entry: inBook.entry, stub: inBook.stub, inCopy: wanted, inBook: inBook.countersignature === 'absent' ? null : inBook.countersignedBy, problem });

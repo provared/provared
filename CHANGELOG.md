@@ -226,6 +226,15 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
     than one receipt for a call goes to the new list `moreThanOne`. The
     summary gains `countersignatureProblems` and `moreThanOneReceipt`, and
     `agree` is false where either is found. (`compare.mjs`.)
+  - **`compare`, a receipt written at a later start** (found by a re-check
+    of these fixes). Where the copy's `done` line names no receipt and says
+    it was countersigned, the receipt in the book must carry a valid
+    countersignature; otherwise it goes to `countersignatures` and `agree`
+    is false. Before, that branch checked none, so a one-sided receipt put
+    into the book for such a call was `matched` and `compare` agreed.
+    (`compare.mjs`; the README's "The copy, and comparing it with the
+    book"; a test in `test/review5.test.mjs`, with and without the
+    countersignature.)
   - **Tests** (`mcp-executor/test/review5.test.mjs`, 5): a receipt found at
     a start with other arguments, one-sided, or one of two; one that is the
     call, countersigned; a countersignature taken off or swapped; a receipt
