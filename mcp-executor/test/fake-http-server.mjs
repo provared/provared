@@ -127,7 +127,7 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
       } catch {
         return json(res, 400, { jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } });
       }
-      seen.push({ method: 'POST', headers: req.headers, body: m });
+      seen.push({ method: 'POST', headers: req.headers, body: m, text: Buffer.concat(chunks).toString('utf8') });
       if (state.fold && !Array.isArray(m)) {
         m = fold(m);
         if (m.params) m.params = { ...fold(m.params), arguments: fold(fold(m.params).arguments) };
@@ -145,9 +145,10 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
       }
       const { id, method, params = {} } = m;
       if (state.raw?.[method]) {
-        // An answer to this method exactly as the test gives it: {status, headers, body}.
-        res.writeHead(state.raw[method].status, state.raw[method].headers);
-        return res.end(state.raw[method].body);
+        // An answer to this method exactly as the test gives it: {status, headers, body (text, or a function of the request's id that gives it)}.
+        const { status, headers, body } = state.raw[method];
+        res.writeHead(status, headers);
+        return res.end(typeof body === 'function' ? body(id) : body);
       }
       // With "offerTasks", the server says it takes tasks (2025-11-25: capabilities.tasks; 2026-07-28: the tasks extension in capabilities.extensions of server/discover, beside another extension).
       const capabilities = { tools: {}, ...(state.offerTasks ? { tasks: { list: {}, cancel: {}, requests: { tools: { call: {} } } } } : {}) };
@@ -416,7 +417,7 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
         rawList: (answer) => {
           state.rawList = answer;
         },
-        /** Answer this method (initialize, server/discover), from now on, with exactly this: {status, headers, body}; null: as usual. */
+        /** Answer this method (initialize, server/discover), from now on, with exactly this: {status, headers, body (text, or a function of the request's id)}; null: as usual. */
         rawAnswer: (method, answer) => {
           state.raw = { ...state.raw, [method]: answer };
         },

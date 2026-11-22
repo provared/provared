@@ -633,6 +633,8 @@ export async function openHttpExecutor(config, more = {}) {
       taskOwners.delete(oldest);
     }
   };
+  /** Whether a value is a JSON object, and not a number kept as written (JSON.rawJSON, which is an object too): only such a value's members are walked. */
+  const members = (v) => isObject(v) && !JSON.isRawJSON(v);
   /** Whether a result is a task's flat handle (2026-07-28: {resultType: "task", taskId}). */
   const flatHandle = (result) => isObject(result) && result.resultType === 'task';
   /** A result that is a task's handle (2025-11-25, CreateTaskResult: {task: {taskId, ...}}, where "asked"; 2026-07-28, the flat handle, in any answer): the task is the agent's. */
@@ -649,15 +651,15 @@ export async function openHttpExecutor(config, more = {}) {
    * none and answers at once (X454).
    */
   const withoutTasksExtension = (m) => {
-    const meta = isObject(m) && isObject(m.params) && isObject(m.params._meta) ? m.params._meta : null;
+    const meta = isObject(m) && isObject(m.params) && members(m.params._meta) ? m.params._meta : null;
     if (!meta) return null;
     let changed = false;
     const out = { ...meta };
     for (const [k, caps] of Object.entries(meta)) {
-      if (foldName(k) !== foldName(CLIENT_CAPABILITIES) || !isObject(caps)) continue;
+      if (foldName(k) !== foldName(CLIENT_CAPABILITIES) || !members(caps)) continue;
       const kept = { ...caps };
       for (const [e, extensions] of Object.entries(caps)) {
-        if (foldName(e) !== foldName('extensions') || !isObject(extensions)) continue;
+        if (foldName(e) !== foldName('extensions') || !members(extensions)) continue;
         const names = Object.keys(extensions).filter((name) => foldName(name) !== foldName(TASKS_EXTENSION));
         if (names.length === Object.keys(extensions).length) continue;
         kept[e] = Object.fromEntries(names.map((name) => [name, extensions[name]]));
@@ -667,9 +669,9 @@ export async function openHttpExecutor(config, more = {}) {
     }
     return changed ? { ...m, params: { ...m.params, _meta: out } } : null;
   };
-  /** The text to send on for an agent's message under the upstream's id "serverId": without allowTasks, with the extension of tasks taken out where it declares it; else its text with the id spliced in. */
+  /** The text to send on for an agent's message under the upstream's id "serverId": without allowTasks, with the extension of tasks taken out where it declares it, every number kept as the agent wrote it; else its text with the id spliced in. */
   const sentText = (m, text, serverId, agent) => {
-    const without = settings.allowTasks ? null : withoutTasksExtension(m);
+    const without = settings.allowTasks || !withoutTasksExtension(m) ? null : withoutTasksExtension(exactly(text, m));
     if (without) {
       agent.log({ event: 'tasks-extension-removed' });
       return JSON.stringify({ ...without, id: serverId });
@@ -751,15 +753,15 @@ export async function openHttpExecutor(config, more = {}) {
     if (settings.allowTasks) return listed;
     if (!Object.hasOwn(m, 'result') || !isObject(m.result) || !Array.isArray(m.result.tools)) return null;
     const exact = listed ? exactly(listed.text, m) : exactly(text, m);
-    const tools = exact.result.tools.map((t) => (isObject(t) ? Object.fromEntries(Object.entries(t).map(([k, v]) => [k, foldName(k) === foldName('execution') && isObject(v) ? without(v, 'taskSupport') : v])) : t));
+    const tools = exact.result.tools.map((t) => (members(t) ? Object.fromEntries(Object.entries(t).map(([k, v]) => [k, foldName(k) === foldName('execution') && members(v) ? without(v, 'taskSupport') : v])) : t));
     return { text: JSON.stringify({ ...exact, id: clientId, result: { ...exact.result, tools } }), hidden: listed?.hidden ?? 0 };
   };
   const capabilitiesOffered = (text, m, clientId) => {
     if (!Object.hasOwn(m, 'result') || !isObject(m.result)) return null;
     const exact = exactly(text, m);
     // capabilities.tasks (2025-11-25), and the tasks extension in capabilities.extensions (2026-07-28); other extensions are kept.
-    const offered = (caps) => Object.fromEntries(Object.entries(without(caps, 'tasks')).map(([k, v]) => [k, foldName(k) === foldName('extensions') && isObject(v) ? without(v, TASKS_EXTENSION) : v]));
-    const result = Object.fromEntries(Object.entries(exact.result).map(([k, v]) => [k, foldName(k) === foldName('capabilities') && isObject(v) ? offered(v) : v]));
+    const offered = (caps) => Object.fromEntries(Object.entries(without(caps, 'tasks')).map(([k, v]) => [k, foldName(k) === foldName('extensions') && members(v) ? without(v, TASKS_EXTENSION) : v]));
+    const result = Object.fromEntries(Object.entries(exact.result).map(([k, v]) => [k, foldName(k) === foldName('capabilities') && members(v) ? offered(v) : v]));
     return { text: JSON.stringify({ ...exact, id: clientId, result }), hidden: 0 };
   };
   /** A tasks/list answer with only this agent's tasks in it, under the agent's id; null where it cannot be read. */

@@ -483,7 +483,8 @@ request whose method is `tasks/…` (in any capitals) is refused with
 request's id with 200 as X112 says of the executor's other refusals of a
 request it has read, before anything reaches the upstream; and the
 extension is taken out of the client capabilities of every request sent
-on (names in other capitals counted as themselves), so that the upstream,
+on (names in other capitals counted as themselves, every number kept as
+the agent wrote it), so that the upstream,
 which decides, makes no task (X454). A call the upstream answers with a
 task all the same has its outcome not known, since its result is where
 the executor does not reach it. Nor is the upstream's offer of tasks

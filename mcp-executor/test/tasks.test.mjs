@@ -266,6 +266,35 @@ test('tasks of 2026-07-28, by default: the extension is taken out of what an age
   }
 });
 
+test('tasks of 2026-07-28, by default: where the extension is taken out of a request that is not a call, its numbers go on as the agent wrote them', async () => {
+  const w = await httpWorld();
+  try {
+    const numbers = '[1.0,1e2,0.1000000000000000055,-0,1e400]';
+    const raw = `{"jsonrpc":"2.0","id":"n","method":"ping","params":{"numbers":${numbers},"_meta":${JSON.stringify(META_TASKS)}}}`;
+    const got = await post(w, 'alpha', null, { raw });
+    assert.equal(got.status, 200);
+    const sent = w.upstream.seen.filter((s) => s.method === 'POST' && s.body?.method === 'ping').at(-1);
+    assert.equal(Object.hasOwn(sent.body.params._meta['io.modelcontextprotocol/clientCapabilities'].extensions, TASKS_EXTENSION), false, 'the extension was taken out');
+    assert.ok(sent.text.includes(`"numbers":${numbers}`), sent.text);
+  } finally {
+    await w.close();
+  }
+  // And where the offer is taken out of an answer: a number where an object was looked for stays that number, as written.
+  const v = await httpWorld({ config: { hideUnlisted: false } });
+  try {
+    const json = { 'content-type': 'application/json' };
+    v.upstream.rawAnswer('server/discover', { status: 200, headers: json, body: (id) => `{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"capabilities":{"tasks":{},"extensions":7.0,"n":1.0}}}` });
+    const discover = await request(v, 'alpha', 'server/discover', {}, { id: 'd' });
+    v.upstream.rawAnswer('initialize', { status: 200, headers: json, body: (id) => `{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"capabilities":2.50}}` });
+    const init = (await request(v, 'alpha', 'initialize', {}, { id: 'i' })).body;
+    v.upstream.rawList({ status: 200, headers: json, body: (id) => `{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"tools":[{"name":"echo","execution":3.0}]}}` });
+    const listed = (await request(v, 'alpha', 'tools/list', {}, { id: 'l' })).body;
+    assert.deepEqual([discover.body, init, listed], ['{"jsonrpc":"2.0","id":"d","result":{"capabilities":{"extensions":7.0,"n":1.0}}}', '{"jsonrpc":"2.0","id":"i","result":{"capabilities":2.50}}', '{"jsonrpc":"2.0","id":"l","result":{"tools":[{"name":"echo","execution":3.0}]}}']);
+  } finally {
+    await v.close();
+  }
+});
+
 test('tasks of 2026-07-28, with allowTasks and one agent: the task a call is answered with is the agent\'s, which may get, update and subscribe to it; a task the executor did not see made may not be got, updated, cancelled or subscribed to', async () => {
   const w = await httpWorld({ agents: ['alpha'], config: { allowTasks: true } });
   try {
