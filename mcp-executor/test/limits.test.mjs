@@ -358,7 +358,7 @@ test('limits: one agent\'s messages, costly to read, do not stall another agent:
       assert.equal(r.status, 200);
       await new Promise((d) => setTimeout(d, 50));
     }
-    // alpha was served meanwhile, as many messages as it keeps in flight at least. Where beta's pings were quick (as on Linux), alpha may not have reached that count yet: it is given up to 15 seconds more, on the monotonic clock, so that a stalled alpha still fails.
+    // alpha was served meanwhile, as many messages as it keeps in flight at least. Where beta's pings were quick, alpha may not have reached that count yet: it is given up to 15 seconds more, on the monotonic clock, so that a stalled alpha still fails.
     const until = performance.now() + 15000;
     // eslint-disable-next-line no-unmodified-loop-condition -- answered is raised by alpha's loops while this one waits.
     while (answered - before < IN_FLIGHT && performance.now() < until) await new Promise((d) => setTimeout(d, 50));

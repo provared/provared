@@ -484,8 +484,8 @@ The settings (`executor-http.example.json` is a start): `name`, `service`,
   more of the executor's memory, 542 MiB at its peak). Lower
   `waitingBytes` and `bodyLimit` where memory is short, as the claude.ai
   recipe does with `bodyLimit`. One agent's messages are read one at a
-  time, so that another agent need not wait for all of them; but this
-  holds on Windows only so far (in a test, under a second there, and 7.3
+  time, so that another agent need not wait for all of them; but in a
+  test this held on Windows only (under a second there, and 7.3
   seconds on Linux, with one agent sending 30 costly messages of 1 MiB at
   once). Where agents must not slow each other, give each a guard of its
   own.

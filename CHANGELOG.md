@@ -243,7 +243,7 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
     9 to 11 seconds while another agent's ping waited; now that ping waits
     for about one of them for each step of its own exchange (measured on
     Windows: 0.6 to 0.9 seconds, each read 0.16 seconds). On Linux this
-    does not hold yet: in the same test another agent still waited 7.3
+    does not hold: in the same test another agent still waited 7.3
     seconds. That is a known limit; the test runs on Windows only. Tests: `test/limits.test.mjs`.
   - **Tasks in front of an upstream (F2).** With 0.5.1 every request but a
     tool call passed through unchecked, under the executor's one
