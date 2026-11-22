@@ -32,7 +32,8 @@ own. The agents' secrets travel in the clear unless something else
 encrypts the connection to the guard, and so does the tool server's
 credential if the tool server is reached by plain HTTP. Keys held in a
 key service are designed but not built; sealing the record is built, in
-the guard from version 0.5.0. And it
+the guard from version 0.5.0, with the limits [its README](mcp-executor/README.md)
+lists: seals held elsewhere and witnesses are not. And it
 proves nothing about a tool the agent can reach without
 it: the tool's credential must be taken away from the agent. It keeps
 the credential, and its own keys, from the agent only where the agent

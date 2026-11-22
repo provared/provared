@@ -767,11 +767,18 @@ A document of your own, under a name that does not begin `provared.`,
 is fingerprinted as you choose: the checker checks only that its
 `sha256` has the form of a SHA-256 fingerprint in base64url. Where such
 a document is short or easy to guess (a yes or a no, an account number,
-a small sum), take its fingerprint over at least 16 random bytes
-followed by the document, and keep those bytes beside the document, not
-in the record. Whoever holds the document and its bytes can work the
-fingerprint out again; whoever holds only the record cannot find the
-document by trying likely values. This is guidance, not a rule of the
+a small sum), take its fingerprint over exactly 16 random bytes, fresh
+for each document, followed by the document, and keep those bytes beside
+the document, not in the record. The length is fixed so that what was
+fingerprinted splits into bytes and document only one way: were it free,
+16 bytes followed by the document "no" would give the same fingerprint as
+those bytes and "n" followed by the document "o". Whoever holds the
+document and its bytes can work the fingerprint out again; whoever holds
+only the record cannot find the document by trying likely values. Where
+the action needs the person's approval, the approval's `details` must
+carry the same salted fingerprint as the stub's, since the checker
+requires the two to be the same (format description, section 17). This
+is guidance, not a rule of the
 format, and a checker cannot see whether it was followed. It does not
 apply to the reserved names (below, and format description, section
 27), whose text is fixed so that another system's log can be matched.
