@@ -12,7 +12,8 @@ import { test } from 'node:test';
 import { setFlagsFromString } from 'node:v8';
 import { runInNewContext } from 'node:vm';
 
-const { checkBook } = await import('provared');
+const { checkBook, identifierFingerprint } = await import('provared');
+const { RESULT_DOCUMENT, UNREADABLE_ANSWER } = await import('../executor.mjs');
 const { httpWorld, post, rawRequest, auth, call, request } = await import('./http-world.mjs');
 const { BODY_LIMIT, WAITING_BYTES, readHttpSettings } = await import('../http.mjs');
 const { MAX_ELEMENTS, CODES, readMessage } = await import('../jsonrpc.mjs');
@@ -144,8 +145,9 @@ test('limits: a message of more than MAX_ELEMENTS elements (list items and membe
   // Empty lists and objects, and text that holds commas and brackets, count as they are.
   assert.equal(readMessage(Buffer.from(`{"jsonrpc":"2.0","id":1,"method":"ping","params":{"x":[${new Array(MAX_ELEMENTS - 5).fill('[]').join(',')}],"t":"${',['.repeat(1000)}"}}`)).refused.code, CODES.invalidRequest, 'one name more than the limit');
   assert.equal(readMessage(Buffer.from(`{"jsonrpc":"2.0","id":1,"method":"ping","params":{"x":[${new Array(MAX_ELEMENTS - 6).fill('{}').join(',')}],"t":"${',['.repeat(1000)}"}}`)).refused, undefined, 'at the limit');
-  // A server's answer is not held to it: an upstream's list may be long.
-  assert.equal(readMessage(Buffer.from(`{"jsonrpc":"2.0","id":1,"result":{"x":[${new Array(MAX_ELEMENTS).fill('0').join(',')}]}}`), { strictNumbers: false }).refused, undefined);
+  // A server's message is held to it too, and is then not read: an answer of many small elements costs as much once read as a request does.
+  assert.equal(readMessage(Buffer.from(`{"jsonrpc":"2.0","id":1,"result":{"x":[${new Array(MAX_ELEMENTS - 3).fill('0').join(',')}]}}`), { strictNumbers: false }).refused.code, CODES.invalidRequest);
+  assert.equal(readMessage(Buffer.from(`{"jsonrpc":"2.0","id":1,"result":{"x":[${new Array(MAX_ELEMENTS - 4).fill('0').join(',')}]}}`), { strictNumbers: false }).refused, undefined);
 
   const w = await httpWorld();
   try {
@@ -225,6 +227,64 @@ test('limits: what the executor holds of the upstream\'s answers for an agent co
     await until(() => { const h = w.executor.agent('alpha').held(); return h.bodies === 0 && h.answers === 0; }, { timeout: 5000 });
   } finally {
     await w.close();
+  }
+});
+
+test('limits: an answer of the upstream\'s of more than MAX_ELEMENTS elements is not read: a call\'s is handed on as it is, its receipt saying it could not be read; one within it is read and fingerprinted', async () => {
+  const w = await httpWorld({ config: { timeout: 10000 } });
+  try {
+    const unreadable = await identifierFingerprint(UNREADABLE_ANSWER);
+    const lastStub = async () => (await checkBook(w.executor.agent('alpha').writer.book(), { issuerKeys: w.settings.agents.alpha.issuerKeys })).entries.filter((e) => e.kind === 'stub').at(-1);
+    const details = (stub) => Object.fromEntries(stub.content.details.map((d) => [d.name, d.sha256]));
+    // Within the limit: read, and its result fingerprinted.
+    const small = await call(w, 'alpha', 'odd', { how: 'dense', count: 1000 }, { id: 'small' });
+    assert.equal(small.json.result.structuredContent.rows.length, 1000);
+    assert.ok(details(await lastStub())[RESULT_DOCUMENT]);
+    // Past it, as a JSON body and as an event: not read, handed on as it came, under the agent's id; the receipt says it could not be read.
+    for (const sse of [false, true]) {
+      const id = `dense-${sse}`;
+      const dense = await call(w, 'alpha', 'odd', { how: 'dense', count: 200000, sse }, { id });
+      assert.equal(dense.status, 200);
+      assert.match(dense.body, new RegExp(`"id":"${id}"`));
+      assert.match(dense.body, /"rows":\[\[0\],\[0\]/);
+      const d = details(await lastStub());
+      assert.equal(d['provared.error'], unreadable, `sse: ${sse}`);
+      assert.equal(d[RESULT_DOCUMENT], undefined);
+    }
+    // Another request's answer past it is handed on as it came too.
+    const listed = await request(w, 'alpha', 'dense', { count: 200000 }, { id: 'r' });
+    assert.equal(listed.status, 200);
+    assert.equal(listed.json.id, 'r');
+  } finally {
+    await w.close();
+  }
+});
+
+test('limits: a call sent on unchecked ("unlisted": "forward") lets go of its message, as read, while the upstream answers: it holds about its text, not many times it', async () => {
+  setFlagsFromString('--expose-gc');
+  const gc = runInNewContext('gc');
+  const heap = () => {
+    gc();
+    gc();
+    return process.memoryUsage().heapUsed;
+  };
+  const w = await httpWorld({ config: { timeout: 30000, unlisted: 'forward' } });
+  const n = 16;
+  // A call to a tool no rule names, which the made-up upstream never answers, with 49,000 small objects as arguments (98,000 elements and more): about 380 KiB of text, some 3 MiB once read.
+  const text = (i) => `{"jsonrpc":"2.0","id":${i},"method":"tools/call","params":{"name":"hang","arguments":{"x":[${new Array(49000).fill('{"a":0}').join(',')}]}}}`;
+  const pending = [];
+  try {
+    const before = heap();
+    for (let i = 0; i < n; i++) pending.push(post(w, 'alpha', null, { raw: text(i) }).catch(() => {}));
+    await until(() => w.upstream.seen.filter((s) => s.body?.params?.name === 'hang').length === n, { timeout: 20000 });
+    // What the made-up upstream keeps of each call (the message, and the arguments it ran with) is let go, so that only the executor's part is measured.
+    for (const s of w.upstream.seen) delete s.body;
+    w.upstream.ran.length = 0;
+    const each = (heap() - before) / n;
+    assert.ok(each < 4 * text(0).length, `each call held ${Math.round(each / 1024)} KiB for ${Math.round(text(0).length / 1024)} KiB of text`);
+  } finally {
+    await w.close();
+    await Promise.all(pending);
   }
 });
 

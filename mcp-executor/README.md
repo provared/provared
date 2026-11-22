@@ -367,7 +367,12 @@ What the executor does with each request:
   (408); a body that would take the bodies of one agent's requests in
   flight past `waitingBytes` (32 MiB) is refused (503); a message of more
   than 100,000 elements (list items and member names together) is
-  refused (400) before it is read, on stdio as over HTTP; an answer or an event of the upstream over 16 MiB is cut off; a
+  refused (400) before it is read, on stdio as over HTTP; a message of the
+  tool server's of more than 100,000 elements is not read either: a call's
+  answer is handed on as it came and its receipt says the answer could not
+  be read (no fingerprint of the result), another answer is handed on as
+  it came, and a `tools/list` that is to be filtered is answered with an
+  error; an answer or an event of the upstream over 16 MiB is cut off; a
   call the upstream does not answer within `timeout` is cancelled and gets
   a receipt that says its outcome is not known; an agent whose connection
   does not take what the executor has waiting within `timeout` has that

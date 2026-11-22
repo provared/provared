@@ -1665,6 +1665,10 @@ export async function openHttpExecutor(config, more = {}) {
             const ex = exchange(ctx, { method: 'POST', headers: h.headers, body: spliceId(text, serverId) ?? text, kind: 'request', clientId: id, serverId, task: asksTask });
             ctx.exchange = ex;
             ctx.forwarded = ex.end;
+            // As a request that only passes through: its text, as sent, is all the exchange needs, and the message as read, which may cost many times its bytes, is let go while the upstream answers.
+            read = null;
+            m = null;
+            body = null;
           },
           track: () => {},
           untrack: () => {},

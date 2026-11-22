@@ -2451,9 +2451,14 @@ and a stream is closed; one message of the agent's, on stdio as over HTTP, up
 to 100,000 elements (`MAX_ELEMENTS`: the items of every list and the
 names of every object, counted in one walk of the text before it is read),
 past which it is refused before anything of it is built, since a message
-of many small elements costs many times its bytes once read; a request
-that only passes through lets go of the message as read once it has been
-sent on, keeping its text alone; one agent's messages read one at a time,
+of many small elements costs many times its bytes once read; a message
+of the tool server's held to the same number, past which it is not read
+(X453): a call's answer is handed on as it came, its receipt naming the
+unreadable answer, as for any answer the executor cannot read, and a list
+to be filtered is answered with an error (X250); a request, or a call sent
+on unchecked (`"unlisted": "forward"`), that only passes through lets go
+of the message as read once it has been sent on, keeping its text alone;
+one agent's messages read one at a time,
 each in a turn of the event loop of its own (X452), so that another
 agent's request waits for about one of them for each step of its own
 exchange, not for all of them in flight; an

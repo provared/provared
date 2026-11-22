@@ -273,6 +273,17 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
     for each agent); any other is refused with 400. Tests:
     `test/upstream-streams.test.mjs`; the tests that opened GET streams
     with two agents now open them under a session.
+  - A tool server's answer of many small elements (15 MiB of one-item
+    lists) ended the executor at the claude.ai recipe's heap, once read:
+    the limit of 100,000 elements held only for the agent's messages. Now
+    it holds for the server's too, on every transport: past it, the answer
+    is not read; a call's is handed on as it came, its receipt saying the
+    answer could not be read; and a `tools/list` that is to be filtered is
+    answered with an error. And a call sent on unchecked
+    (`"unlisted": "forward"`) kept its message as read until the upstream
+    answered, as requests did before F1 (measured: 3.1 MiB held for
+    383 KiB of text); now it lets go of it once sent. Tests:
+    `test/limits.test.mjs`.
   - `test/recipe-shell.test.mjs` did not load on a clean checkout, where
     nothing is installed: it named the library before `local-library.mjs`
     was loaded. It now loads that file first. A new test,

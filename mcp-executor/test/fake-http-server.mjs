@@ -151,6 +151,16 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
         return result(res, id, { protocolVersion: params.protocolVersion ?? '2025-11-25', capabilities: { tools: {} }, serverInfo: { name: 'fake-http-server', version: '0.0.1' } }, { 'mcp-session-id': session });
       }
       if (method === 'ping') return result(res, id, {});
+      // An answer of "count" one-item lists, as a JSON body, or (params.sse) as one event.
+      if (method === 'dense') {
+        const r = `{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"rows":[${new Array(params.count ?? 10).fill('[0]').join(',')}]}}`;
+        if (params.sse) {
+          sse(res)(r);
+          return res.end();
+        }
+        res.writeHead(200, { 'content-type': 'application/json' });
+        return res.end(r);
+      }
       // An answer of "size" bytes of text, as a JSON body, or (params.sse) as one event.
       if (method === 'big') {
         const r = { text: 'x'.repeat(params.size ?? 100) };
@@ -210,6 +220,7 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
       const args = params.arguments ?? {};
       state.ran.push({ name, args });
       const text = (t) => result(res, id, { resultType: 'complete', content: [{ type: 'text', text: t }] });
+      if (name === 'hang') return; // a call never answered
       if (name === 'echo') return result(res, id, { resultType: 'complete', content: [{ type: 'text', text: JSON.stringify(args) }], structuredContent: { args, meta: params._meta ?? null, headers: req.headers } });
       if (name === 'order') return text(`Ordered for ${args.total}.`);
       if (name === 'fail') return result(res, id, { resultType: 'complete', content: [{ type: 'text', text: 'It did not work.' }], isError: true });
@@ -272,6 +283,16 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
           return res.end();
         }
         if (how === 'big-json') return text('x'.repeat(args.size ?? 100));
+        // A result of "count" one-item lists, which costs many times its bytes once read; as one event with "sse".
+        if (how === 'dense') {
+          const r = `{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"resultType":"complete","content":[{"type":"text","text":"dense"}],"structuredContent":{"rows":[${new Array(args.count ?? 10).fill('[0]').join(',')}]}}}`;
+          if (args.sse) {
+            sse(res)(r);
+            return res.end();
+          }
+          res.writeHead(200, { 'content-type': 'application/json' });
+          return res.end(r);
+        }
         if (how === 'redirect') {
           res.writeHead(302, { location: `http://127.0.0.1:${server.address().port}/elsewhere` });
           return res.end();

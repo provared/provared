@@ -272,8 +272,8 @@ export function idKey(id) {
  * once folded but is not written as the executor reads it ("Arguments").
  * The server's lines are read without those three, and handed on as raw
  * bytes. "elements" is the most elements a message may hold (MAX_ELEMENTS
- * for the agent's lines, by default; no limit with "strictNumbers" false):
- * a message past it is refused before it is read.
+ * by default, for the agent's lines and the server's alike): a message past
+ * it is refused before it is read.
  */
 export function readMessage(line, options) {
   try {
@@ -294,11 +294,13 @@ export const MAX_DEPTH = 256;
 
 /**
  * The most elements, list items and member names together at every depth,
- * in one message of an agent's. A message of many small elements costs far
- * more memory once read than its bytes, so the count is taken from the
- * text, before it is read. 100,000 is well past what a tool's arguments
- * hold, and keeps what one message can cost when read to a few tens of MiB.
- * A server's message is not held to it: a list a server gives may be long.
+ * in one message, an agent's or a server's. A message of many small
+ * elements costs far more memory once read than its bytes, so the count is
+ * taken from the text, before it is read. 100,000 is well past what a tool's
+ * arguments hold, and keeps what one message can cost when read to a few
+ * tens of MiB. A server's message past it is not read: a call's answer is
+ * then handed on as it came, its receipt saying it could not be read; a
+ * tools/list that is to be filtered is answered with an error (X453).
  */
 export const MAX_ELEMENTS = 100_000;
 
@@ -348,7 +350,7 @@ function answerableId(text) {
   return at.value;
 }
 
-function readStrictly(line, { strictNumbers = true, elements = strictNumbers ? MAX_ELEMENTS : Infinity } = {}) {
+function readStrictly(line, { strictNumbers = true, elements = MAX_ELEMENTS } = {}) {
   let text;
   try {
     text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(line);
