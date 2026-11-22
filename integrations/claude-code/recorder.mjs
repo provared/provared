@@ -150,6 +150,31 @@ const files = (folder) => ({
 const keptSlip = (folder, slipFingerprint) => join(folder, `slip-${slipFingerprint}.json`);
 const THUMBPRINT = /^[A-Za-z0-9_-]{43}$/;
 
+/**
+ * Whether the folder is fresh, as "init" leaves it, so that the recorder
+ * waits there for its first permission: the agent's keys are there, and none
+ * of slip.json, book.jsonl, a kept book (book-<n>.jsonl), a kept slip
+ * (slip-<fingerprint>.json), trusted-passkeys.json or
+ * held-cancellations.json. waiting-permissions.json may be there: the
+ * waiting recorder writes it itself, and keeps it across a restart (each
+ * permission in it is checked again before it is taken). Gives back
+ * {fresh, found}: "found" names what stands in the way.
+ * @param {string} folder
+ * @returns {{fresh: boolean, found: string[]}}
+ */
+export function freshFolder(folder) {
+  const f = files(folder);
+  if (!existsSync(f.agentKeys)) return { fresh: false, found: [] };
+  let names = [];
+  try {
+    names = readdirSync(folder);
+  } catch {
+    return { fresh: false, found: [] };
+  }
+  const found = names.filter((n) => ['slip.json', 'book.jsonl', 'trusted-passkeys.json', 'held-cancellations.json'].includes(n.toLowerCase()) || /^book-[1-9][0-9]{0,8}\.jsonl$/i.test(n) || /^slip-.+\.json$/i.test(n)).sort();
+  return { fresh: found.length === 0, found };
+}
+
 // --- records handed over from the application ---
 //
 // The address a record handed over must have been signed at (the
@@ -341,7 +366,7 @@ function declineWaiting(folder, fp) {
  * The permission the waiting list holds under a fingerprint, worked out from
  * the permission itself (never the list's own note of it): {slip, fingerprint}, or null.
  */
-async function waitingByFingerprint(folder, fp) {
+export async function waitingByFingerprint(folder, fp) {
   for (const p of readWaitingPermissions(folder)) {
     try {
       if ((await fingerprint(fromBase64url(p.slip.payload))) === fp) return { slip: p.slip, fingerprint: fp };
@@ -358,7 +383,7 @@ async function waitingByFingerprint(folder, fp) {
  * named by its fingerprint and taken from the recorder's own waiting list:
  * a request that carries a permission itself is not understood.
  */
-function admitRequest(given) {
+export function admitRequest(given) {
   const names = given && typeof given === 'object' && !Array.isArray(given) ? Object.keys(given) : null;
   const ok = names !== null
     && names.every((n) => ['fingerprint', 'thumbprint', 'take', 'decline'].includes(n))
@@ -972,13 +997,16 @@ export function readRetired(folder) {
  * @param {string} folder
  * @param {string[]} [add] passkeys to have on the list
  * @param {{retire?: string, admit?: string}|null} [change] one passkey to retire, or to admit again
- * @param {{beforeRead?: () => void}} [o] for the tests: run just before the file is read again
+ * With "replace", the list is written as exactly the passkeys given, none
+ * retired, and the file is not read: for the first passkey the waiting
+ * recorder takes, so that a list someone left in the folder is not kept.
+ * @param {{beforeRead?: () => void, replace?: boolean}} [o] beforeRead: for the tests, run just before the file is read again
  * @returns {{passkeys: string[], retired: string[]}} the lists written
  */
-export function writeTrusted(folder, add = [], change = null, { beforeRead } = {}) {
+export function writeTrusted(folder, add = [], change = null, { beforeRead, replace = false } = {}) {
   mkdirSync(folder, { recursive: true });
   beforeRead?.();
-  const held = readTrustedFile(folder);
+  const held = replace ? null : readTrustedFile(folder);
   const passkeys = [...new Set([...(held?.passkeys ?? []), ...add])];
   // A list with no passkey is one the recorder refuses to start with: write nothing.
   if (passkeys.length === 0) {
@@ -1111,7 +1139,7 @@ export async function checkNewSlip(slip, { agentKeys, previous = null, trusted =
  * there before beside it, named by its fingerprint. The book is not
  * touched: the service takes the slip into the book when it next opens it.
  */
-async function placeSlip(folder, next) {
+export async function placeSlip(folder, next) {
   mkdirSync(folder, { recursive: true });
   const path = files(folder).slip;
   let before = null;

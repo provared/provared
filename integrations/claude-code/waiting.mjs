@@ -5,9 +5,14 @@
 // permission in force throughout, and it answers on the same port and with
 // the same feed (port.mjs), behind the same checks.
 
-import { fingerprint, fromBase64url, keySetFingerprint } from 'provared';
+import { existsSync, readFileSync, unlinkSync } from 'node:fs';
+import { join } from 'node:path';
+import { entryLine, fingerprint, fromBase64url, keySetFingerprint } from 'provared';
 import { portOwner, sendJson } from './port.mjs';
-import { DEFAULT_FOLDER, DEFAULT_PORT, VERSION, addWaitingPermission, handOverChecks, loadAgentKeys, makeRecorderKeys, readDeclined, readRetired, readWaitingPermissions, signingOriginsFrom } from './recorder.mjs';
+import {
+  DEFAULT_FOLDER, DEFAULT_PORT, VERSION, addWaitingPermission, admitRequest, checkNewSlip, declineAsked, freshFolder, handOverChecks, loadAgentKeys, makeRecorderKeys,
+  placeSlip, readDeclined, readRetired, readWaitingPermissions, signingOriginsFrom, startService, takeOutWaiting, waitingByFingerprint, writeTrusted,
+} from './recorder.mjs';
 
 const MAX_BODY = 1024 * 1024;
 
@@ -27,11 +32,14 @@ const NO_PERMISSION ='No permission has been signed for this agent yet: the reco
 
 /**
  * The waiting recorder's handler, for the port's owner (port.mjs).
- * @param {{folder: string, owner: ReturnType<typeof portOwner>, clock?: () => number, signingOrigins?: string|string[]}} o
- *   signingOrigins: the addresses a record handed over may have been signed at (signingOriginsFrom)
+ * @param {{folder: string, owner: ReturnType<typeof portOwner>, clock?: () => number, signingOrigins?: string|string[], faults?: (step: string) => Promise<void>|void, serviceOptions?: object}} o
+ *   signingOrigins: the addresses a record handed over may have been signed at (signingOriginsFrom); the full
+ *   recorder takes the same, and the same clock. For tests: faults is awaited at each step of a first permission
+ *   taken ("checked": every check passed, nothing written yet); serviceOptions go to startService.
  */
-export async function waitingHandler({ folder, owner, clock = Date.now, signingOrigins = process.env.PROVARED_CLAUDE_CODE_SIGNING_ORIGIN }) {
+export async function waitingHandler({ folder, owner, clock = Date.now, signingOrigins = process.env.PROVARED_CLAUDE_CODE_SIGNING_ORIGIN, faults = async () => {}, serviceOptions = {} }) {
   const signedAt = signingOriginsFrom(signingOrigins);
+  let admitting = false;
   const agent = await loadAgentKeys(folder);
   const sealer = await makeRecorderKeys(folder);
   const agentKeySet = await keySetFingerprint(agent.keys);
@@ -62,7 +70,22 @@ export async function waitingHandler({ folder, owner, clock = Date.now, signingO
       // Only a program that holds the feed's token, from this folder, may have a passkey trusted (feed.mjs).
       const reply = owner.feed.checkQuestion(req, res, bytes);
       if (!reply) return undefined;
-      return reply(409, refusedHere);
+      let given;
+      try {
+        given = JSON.parse(bytes.toString('utf8'));
+      } catch {
+        given = null;
+      }
+      const asked = admitRequest(given);
+      if (asked.refusal) return reply(200, { kind: 'renewal', fingerprint: null, outcome: 'refused', code: 'not-understood', message: asked.refusal });
+      // One admit at a time: a second, while one runs, changes nothing.
+      if (admitting) return reply(409, { error: 'Another admit-passkey is being answered on this computer now, so nothing was changed. Run the command again in a moment.', code: 'busy' });
+      admitting = true;
+      try {
+        return reply(200, await inTurn(() => admit(asked)));
+      } finally {
+        admitting = false;
+      }
     }
     if (req.url === '/stop') {
       send(200, { stopped: true });
@@ -127,17 +150,97 @@ export async function waitingHandler({ folder, owner, clock = Date.now, signingO
       : `A permission from the same passkey that starts no earlier waits here already, so this one is not kept: on the agent's computer, run "admit-passkey" with the thumbprint the signing window shows, ${T}.`, { thumbprint: T });
   }
 
-  return {
+  // TAKING A FIRST PERMISSION (POST /admit, with the feed's proof, after the
+  // person typed the thumbprint and "yes" at a terminal on this computer).
+  // In this order: one admit at a time (above); this handler still the one
+  // in place, and the folder still fresh; the checks of a permission handed
+  // over again, with that one passkey admitted, then startService's own
+  // checks on the slip, all before anything is written; the list of trusted
+  // passkeys written as exactly this one passkey (a list someone left is
+  // replaced); slip.json; the full recorder built on the same port and feed,
+  // which writes the slip as the book's first line; the full recorder put
+  // in place in one step; and only then "taken". Where the start fails,
+  // what this attempt wrote is put back and the permission waits.
+  async function admit(asked) {
+    const kind = 'renewal';
+    const fp = asked.fingerprint;
+    const refused = (code, message) => ({ kind, fingerprint: fp, outcome: 'refused', code, message });
+    if (owner.handler !== self) return refused('not-waiting', 'The recorder no longer waits for a first permission: one is in force. Nothing was changed.');
+    if (asked.decline) return declineAsked(folder, asked);
+    const { fresh, found } = freshFolder(folder);
+    if (!fresh) return refused('not-fresh', `The folder holds ${found.join(', ')} now, so it is not the fresh folder this recorder waits in, and nothing is taken or written. Stop the recorder ("stop"), look at those files, and start it again ("ensure").`);
+    const entry = await waitingByFingerprint(folder, fp);
+    if (!entry) return refused('no-such-permission', 'No permission with this fingerprint waits here, so nothing is taken: a passkey is admitted only with a permission it signed that was handed over and waits on this computer.');
+    const checked = await handOverChecks(entry.slip, fp, { agentKeys: agent.keys, signedAt, trusted: null, retired: readRetired(folder), admit: asked.thumbprint, now: clock(), startsLater, declined: readDeclined(folder) });
+    if (!checked.next) return refused(checked.code, checked.message);
+    // The checks startService makes on the slip it starts with, here too, before anything is written.
+    let next;
+    try {
+      next = await checkNewSlip(entry.slip, { agentKeys: agent.keys, trusted: [asked.thumbprint], retired: readRetired(folder) });
+    } catch (e) {
+      return refused(e.code ?? 'not-taken', e.message);
+    }
+    if (!asked.take) return { kind, fingerprint: fp, outcome: 'would-take', thumbprint: next.issuerKey, message: 'Every check passed: it would be taken.' };
+    await faults('checked');
+    const written = { trusted: false, slip: false };
+    let service;
+    try {
+      writeTrusted(folder, [asked.thumbprint], null, { replace: true });
+      written.trusted = true;
+      await placeSlip(folder, next);
+      written.slip = true;
+      service = await startService({ folder, on: owner, signingOrigins, clock, ...serviceOptions });
+    } catch (e) {
+      const left = putBack(written, next.slip);
+      return refused('not-started', `The permission passed every check, but the recorder could not start with it (${e.message}), so it is not taken${left.length ? `; ${left.join('; ')}` : ', and what was written for it was put back'}. The permission waits: put right what stands in the way, then run admit-passkey again.`);
+    }
+    // The full recorder, in place in one step: the next request goes to it, on the same port and feed.
+    owner.use(service.handler);
+    try {
+      takeOutWaiting(folder, fp);
+    } catch {
+      // Left in the list: it is the permission in force now, and admitted again it is "already".
+    }
+    return { kind, fingerprint: fp, outcome: 'taken', entries: service.recorder.book().split('\n').filter(Boolean).length, message: `Taken: the passkey ${asked.thumbprint} is trusted, and the agent acts under this permission from now on (in force from ${next.content.validFrom} until ${next.content.validUntil}).` };
+  }
+
+  // Put back what an admit wrote before the start failed: the folder was
+  // fresh, so the list of trusted passkeys and slip.json go, and a book that
+  // holds only this permission's line (no uploader has seen it: the waiting
+  // recorder's feed lists no book). Gives back what could not be put back.
+  function putBack(written, slip) {
+    const left = [];
+    const remove = (name) => {
+      try {
+        unlinkSync(join(folder, name));
+      } catch (e) {
+        if (e.code !== 'ENOENT') left.push(`${join(folder, name)} could not be removed (${e.message}): remove it before you run admit-passkey again`);
+      }
+    };
+    if (written.slip) remove('slip.json');
+    if (written.trusted) remove('trusted-passkeys.json');
+    const book = join(folder, 'book.jsonl');
+    try {
+      if (existsSync(book) && readFileSync(book, 'utf8') === `${entryLine({ slip })}\n`) remove('book.jsonl');
+    } catch (e) {
+      left.push(`${book} could not be read (${e.message})`);
+    }
+    return left;
+  }
+
+  const self = {
     handle,
     // The waiting recorder holds no book: the feed lists none.
     memory: () => [],
     handOver: (given) => inTurn(() => handOver(given)),
   };
+  return self;
 }
 
 /**
  * Start the waiting recorder: the port's owner, with the waiting handler in place, listening on 127.0.0.1.
- * @param {{folder?: string, port?: number, clock?: () => number, signingOrigins?: string|string[], handOverReadMs?: number}} [o] port 0 takes any free port
+ * @param {{folder?: string, port?: number, clock?: () => number, signingOrigins?: string|string[], handOverReadMs?: number, faults?: Function, serviceOptions?: object}} [o]
+ *   port 0 takes any free port; the rest as waitingHandler's
  * @returns {Promise<{port: number, owner: object, close: () => Promise<void>}>}
  */
 export async function startWaiting({ folder = DEFAULT_FOLDER, port = DEFAULT_PORT, handOverReadMs, ...options } = {}) {
