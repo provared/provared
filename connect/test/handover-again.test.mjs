@@ -94,3 +94,45 @@ test('two of one passkey that start alike: the first kept is handed over; one wh
   await h.round();
   assert.deepEqual(fingerprints(asked), fingerprints([{ slip: a }, { slip: unread }, { slip: unread2 }]));
 });
+
+test('where the hand-over of a passkey\'s latest fails, its next is handed over in the same round', async () => {
+  const p = passkey('P');
+  const real = renewal(p, '2026-11-22T09:00:00Z', 'the person\'s');
+  const odd = renewal(p, '2026-11-22T09:30:00Z', 'gets no answer');
+  const { h, asked, clock } = handing({ renewals: [{ slip: real }, { slip: odd }], cancellations: [] }, (record) => {
+    if (recordFingerprint(record.slip) === recordFingerprint(odd)) throw Object.assign(new Error('no answer'), { reason: 'feed-error' });
+    return { outcome: 'refused', code: 'waits-for-yes' };
+  });
+  assert.deepEqual((await h.round()).map((a) => [a.fingerprint, a.code]), [[recordFingerprint(real), 'waits-for-yes']]);
+  assert.deepEqual(fingerprints(asked), fingerprints([{ slip: odd }, { slip: real }]));
+  // Within the again time, neither; after it, both again, the latest first.
+  await h.round();
+  assert.equal(asked.length, 2);
+  clock.now += 1001;
+  await h.round();
+  assert.deepEqual(fingerprints(asked.slice(2)), fingerprints([{ slip: odd }, { slip: real }]));
+});
+
+test('a record too large for the recorder\'s feed is not sent, is answered for good as "too-large", and the passkey\'s next is handed over', async () => {
+  const { feedClient, FEED_MAX_HAND_OVER_BYTES } = await import('../upload.mjs');
+  assert.equal(FEED_MAX_HAND_OVER_BYTES, 256 * 1024);
+  let fetched = 0;
+  const client = feedClient({ address: 'http://127.0.0.1:1', token: 'T'.repeat(43), fetchImpl: async () => { fetched++; throw new Error('not asked here'); } });
+  const p = passkey('P');
+  const huge = renewal(p, '2026-11-22T09:30:00Z', 'x'.repeat(300000));
+  await assert.rejects(client.handOver({ kind: 'renewal', slip: huge }), (e) => e.reason === 'too-large' && /more than the 262144 bytes the recorder's feed takes/.test(e.message));
+  assert.equal(fetched, 0, 'nothing sent, not even a hello');
+  const real = renewal(p, '2026-11-22T09:00:00Z', 'the person\'s');
+  const notes = [];
+  const asked = [];
+  const clock = { now: Date.parse('2026-11-22T10:00:00Z') };
+  const feed = { handOver: async (record) => { asked.push(record); if (recordFingerprint(record.slip) === recordFingerprint(huge)) return client.handOver(record); return { outcome: 'refused', code: 'waits-for-yes' }; } };
+  const h = createHandover({ feed, readKept: async () => ({ renewals: [{ slip: real }, { slip: huge }], cancellations: [] }), putOutcomes: async (list) => { notes.push(list); }, log: quiet, now: () => clock.now, againMs: 1000 });
+  const answers = await h.round();
+  assert.deepEqual(answers.map((a) => [a.fingerprint, a.outcome, a.code]), [[recordFingerprint(huge), 'refused', 'too-large'], [recordFingerprint(real), 'refused', 'waits-for-yes']]);
+  assert.deepEqual(notes.at(-1).map((o) => o.code).sort(), ['too-large', 'waits-for-yes']);
+  // Answered for good: from now on only the person's is handed over.
+  clock.now += 1001;
+  await h.round();
+  assert.deepEqual(fingerprints(asked.slice(2)), fingerprints([{ slip: real }]));
+});

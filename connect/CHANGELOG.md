@@ -7,6 +7,13 @@
   them; `putAgent` takes the server's `unknown-type` refusal at once,
   instead of waiting 20 seconds at every round. Tests: two, in
   `test/agent-note.test.mjs`.
+- **One kept record no longer keeps a passkey's others back.** Where the
+  hand-over of a passkey's latest permission fails, its next is handed
+  over in the same round. A record larger than the recorder's feed takes
+  (256 KiB) is not sent (`too-large`), and is counted as answered for
+  good. Tests: two, in `test/handover-again.test.mjs`, and one against
+  the real waiting recorder, in
+  `integrations/claude-code/test/handover-shadow.test.mjs`.
 - **The agent note.** The agent's public key set, from the recorder, is
   put with the book in a sealed note of its own, `{ version: 1, agent: {
   name, keys } }`, under the book's key with the book's id bound in

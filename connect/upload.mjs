@@ -119,6 +119,8 @@ const POLL_MS = 2000;
 const RETRY_MS = 30000;
 /** How long the uploader waits after a round through the feed that found no book in force: as long as a round with nothing new waits at the recorder. */
 export const NO_BOOK_PAUSE_MS = 25000;
+/** The most bytes of one record handed over that the recorder's feed takes (feed.mjs, FEED_MAX_HAND_OVER_BYTES). */
+export const FEED_MAX_HAND_OVER_BYTES = 256 * 1024;
 // A read or a rename of the state that fails is tried this many times, this
 // far apart, in all: a scanner or a backup holds a file for moments.
 const STATE_TRIES = 5;
@@ -455,7 +457,10 @@ export function feedClient({ address, token, fetchImpl = globalThis.fetch }) {
      * recorder's answer: { outcome, code?, thumbprint?, message, ... }.
      */
     async handOver(record) {
-      const a = await get('/hand-over', 30, false, Buffer.from(JSON.stringify(record)));
+      const body = Buffer.from(JSON.stringify(record));
+      // Not sent: the recorder's feed refuses it before any proof, so its answer would say nothing true about it.
+      if (body.length > FEED_MAX_HAND_OVER_BYTES) throw feedError(`it is ${body.length} bytes, more than the ${FEED_MAX_HAND_OVER_BYTES} bytes the recorder's feed takes for one record, so it is never handed over (a permission signed on the signing page is far smaller: this one may not be the person's)`, 'too-large');
+      const a = await get('/hand-over', 30, false, body);
       if (a.missing || !a || typeof a !== 'object' || typeof a.outcome !== 'string') throw feedError('the recorder answered a record handed over in a form this uploader does not read', 'feed-error');
       return a;
     },

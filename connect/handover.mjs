@@ -146,29 +146,43 @@ export function createHandover({ feed, readKept, putOutcomes, log = console, now
     const records = recordsToHand(kept);
     // At most one renewal for each passkey in a round: of those the recorder has not answered for good, the one
     // that starts latest (the first kept, of two that start alike), as the waiting recorder keeps one for each
-    // passkey. One whose passkey cannot be read is its own.
-    const latest = new Map();
+    // passkey. One whose passkey cannot be read is its own. Where the one chosen gets no answer (its hand-over
+    // fails), the passkey's next, by its start, is handed over in the same round: so a record that cannot be
+    // handed over does not keep the others from the same passkey back.
+    const groups = new Map();
     for (const r of records) {
       if (r.kind !== 'renewal' || handled.get(sha256(JSON.stringify(r.body)))?.due === Infinity) continue;
       const p = passkeyOf(r) ?? r;
-      const before = latest.get(p);
-      if (!before || startOf(r) > startOf(before)) latest.set(p, r);
+      if (!groups.has(p)) groups.set(p, []);
+      groups.get(p).push(r);
     }
-    const chosen = new Set(latest.values());
+    const heads = new Map();
+    for (const group of groups.values()) {
+      group.sort((a, b) => (startOf(b) > startOf(a)) - (startOf(b) < startOf(a)));
+      heads.set(group[0], group);
+    }
     const answers = [];
-    for (const r of records) {
-      if (r.kind === 'renewal' && !chosen.has(r)) continue;
+    // One record handed over: "answered", "failed" (no answer: tried again later) or "not-due".
+    async function handOne(r) {
       const key = sha256(JSON.stringify(r.body));
       const last = handled.get(key);
-      if (last && last.due > now()) continue;
+      if (last && last.due > now()) return 'not-due';
       let answer;
       try {
         answer = await feed.handOver(r.body);
       } catch (e) {
+        if (e.reason === 'too-large') {
+          // Larger than the recorder's feed takes: it never can be handed over, so it is answered for good here.
+          const item = { kind: r.kind, fingerprint: r.fingerprint, outcome: 'refused', code: 'too-large', at: new Date(now()).toISOString() };
+          handled.set(key, { item, due: Infinity });
+          answers.push({ ...item, message: e.message });
+          log.error(`provared-connect: a ${r.kind} kept with the book was not handed to the recorder: ${e.message}`);
+          return 'failed';
+        }
         // The recorder stopped, busy, or not proving itself: tried again later, and said once.
         if (!last?.failed) log.error(`provared-connect: a ${r.kind} could not be handed to the recorder now: ${e.message}`);
         handled.set(key, { ...(last ?? {}), failed: true, due: now() + againMs });
-        continue;
+        return 'failed';
       }
       const outcome = ['taken', 'already', 'held', 'refused'].includes(answer.outcome) ? answer.outcome : 'refused';
       const final = outcome === 'taken' || outcome === 'already' || (outcome === 'refused' && !AGAIN.includes(answer.code));
@@ -182,6 +196,14 @@ export function createHandover({ feed, readKept, putOutcomes, log = console, now
       if (!last || last.item?.outcome !== item.outcome || last.item?.code !== item.code) {
         log.info(`provared-connect: the recorder answered ${outcome}${item.code ? ` (${item.code})` : ''} for a ${r.kind} handed over`);
       }
+      return 'answered';
+    }
+    for (const r of records) {
+      if (r.kind !== 'renewal') { await handOne(r); continue; }
+      const group = heads.get(r);
+      if (!group) continue;
+      // The passkey's latest first; the next only where the one before got no answer.
+      for (const c of group) if ((await handOne(c)) !== 'failed') break;
     }
     // The note: one outcome for each record the book keeps now, the latest the recorder gave.
     const current = new Set(records.map((r) => sha256(JSON.stringify(r.body))));
