@@ -141,6 +141,50 @@ async function standIn(port, { silentFirst = 0, silentAfterStop = 0, silentMs = 
   return { close: () => { server.close(); server.closeAllConnections(); } };
 }
 
+/**
+ * A stand-in on the port for a waiting recorder that follows a plan: each
+ * GET /status in turn is answered as one that waits ("waiting"), or left
+ * unanswered for that many milliseconds (a number); after the plan, it
+ * answers as one that waits. Every /stop is answered "stopped", and it goes
+ * on. "asked" lists what it was asked, in order.
+ */
+async function plannedStandIn(port, plan) {
+  const { createServer } = await import('node:http');
+  const asked = [];
+  let questions = 0;
+  const server = createServer((req, res) => {
+    const answer = (body) => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(body)); };
+    if (req.url === '/stop') {
+      asked.push('stop');
+      answer({ stopped: true });
+      return;
+    }
+    const step = plan[questions++] ?? 'waiting';
+    asked.push(step);
+    if (typeof step === 'number') { setTimeout(() => res.destroy(), step).unref(); return; }
+    answer({ waiting: true, version: 'stand-in' });
+  });
+  await new Promise((ok) => server.listen(port, '127.0.0.1', ok));
+  return { asked, close: () => { server.close(); server.closeAllConnections(); } };
+}
+
+test('"use <file>" ends with 1 and says every tool call is still refused where what answers still waits after it was stopped and the recorder started again', async () => {
+  const w = await freshWorld();
+  const port = await freePort();
+  // It answers /stop and goes on; after each stop two questions in a row go unanswered, so the port seems free.
+  const stand = await plannedStandIn(port, ['waiting', 1500, 1500, 'waiting', 'waiting', 1500, 1500, 'waiting', 'waiting']);
+  try {
+    const file = join(tempFolder('provared-cc-use-'), 'slip.json');
+    writeFileSync(file, JSON.stringify(await signSlip({ agentKeys: w.agent.keys, passkey: w.passkey })));
+    const r = await runCommand(['use', file], { folder: w.folder, port });
+    assert.equal(r.code, 1, `${r.out} ${r.err} ${stand.asked.join(' ')}`);
+    assert.match(r.out, /The permission is in place, but the recorder that answers on 127\.0\.0\.1:\d+ still waits for its first permission, so every tool call is refused/);
+    assert.doesNotMatch(r.out, /The recorder is running/);
+  } finally {
+    stand.close();
+  }
+});
+
 test('"use <file>" with a file that is refused leaves the waiting recorder running, and says nothing of stopping it', async () => {
   const w = await freshWorld();
   const port = await freePort();
