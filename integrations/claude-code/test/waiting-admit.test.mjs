@@ -225,6 +225,70 @@ test('records handed over while a permission is taken wait their turn and are th
   }
 });
 
+test('a folder that is no longer fresh at the admit (a file of held cancellations put there after the hand-over): "not-fresh", nothing written, and the permission waits', async () => {
+  const w = await waitingWorld();
+  try {
+    const mine = await w.handed();
+    writeFileSync(join(w.folder, 'held-cancellations.json'), JSON.stringify({ cancellations: [] }));
+    const r = await w.reader.post('/admit', { fingerprint: mine.fp, thumbprint: mine.T, take: true });
+    assert.equal(r.body.outcome, 'refused', JSON.stringify(r.body));
+    assert.equal(r.body.code, 'not-fresh');
+    assert.match(r.body.message, /held-cancellations\.json/);
+    for (const name of ['slip.json', 'trusted-passkeys.json', 'book.jsonl']) assert.equal(existsSync(join(w.folder, name)), false, `${name} is not written`);
+    assert.equal(readWaitingPermissions(w.folder).length, 1, 'the permission waits');
+    assert.equal((await status(w.port)).waiting, true);
+  } finally {
+    await w.waiting.close();
+  }
+});
+
+test('an admit that reached the waiting recorder before the switch, and whose body arrived after it, is answered "not-waiting" and changes nothing', async () => {
+  const gate = gateAt('checked');
+  const w = await waitingWorld({ faults: gate.faults });
+  let release = () => {};
+  try {
+    const mine = await w.handed();
+    const other = await w.handed(await developmentPasskey(), 'Another passkey\'s.');
+    // Told when an admit reaches the waiting handler.
+    const waitingOne = w.waiting.owner.handler;
+    const handle = waitingOne.handle;
+    let arrivals = 0;
+    let second;
+    const secondArrived = new Promise((r) => (second = r));
+    waitingOne.handle = (req, res) => {
+      if (req.url === '/admit' && ++arrivals === 2) second();
+      return handle(req, res);
+    };
+    const first = w.reader.post('/admit', { fingerprint: mine.fp, thumbprint: mine.T, take: true });
+    await within(gate.reached, 20000, 'the first admit at its checks');
+    // The second admit's first byte goes at once; the rest of its body only once the test lets it go.
+    const letGo = new Promise((r) => (release = r));
+    const slow = (url, init = {}) => {
+      if (init.method !== 'POST') return fetch(url, init);
+      const bytes = new TextEncoder().encode(init.body);
+      const body = new ReadableStream({
+        start(c) { c.enqueue(bytes.slice(0, 1)); },
+        async pull(c) { await letGo; c.enqueue(bytes.slice(1)); c.close(); },
+      });
+      return fetch(url, { ...init, body, duplex: 'half' });
+    };
+    const later = feedReader({ address: `http://127.0.0.1:${w.port}`, token: read(w.folder, 'feed-token').trim(), fetchImpl: slow }).post('/admit', { fingerprint: other.fp, thumbprint: other.T, take: true });
+    await within(secondArrived, 20000, 'the second admit at the waiting recorder');
+    gate.open();
+    assert.equal((await within(first, 30000, 'the first admit')).body.outcome, 'taken');
+    release();
+    const said = (await within(later, 30000, 'the second admit')).body;
+    assert.equal(said.outcome, 'refused', JSON.stringify(said));
+    assert.equal(said.code, 'not-waiting');
+    assert.deepEqual(readTrusted(w.folder), [mine.T], 'the other passkey is not trusted');
+    assert.equal((await status(w.port)).slip, mine.fp);
+  } finally {
+    release();
+    gate.open();
+    await w.waiting.close();
+  }
+});
+
 test('in the waiting recorder, a declined permission no longer waits and is refused when handed over again; "take": false drops nothing', async () => {
   const w = await waitingWorld();
   try {
