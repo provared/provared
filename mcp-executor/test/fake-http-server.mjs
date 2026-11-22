@@ -100,6 +100,12 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
       }
       const send = sse(res);
       send({ jsonrpc: '2.0', method: 'notifications/message', params: { level: 'info', data: `hello ${req.headers['mcp-session-id'] ?? 'no-session'}` } }, 'id: ev-1\n');
+      // With "askOnStream" set, a request of the server's own on the stream too (roots/list), whose answer, from whichever client, is kept in "state.answers".
+      if (state.askOnStream) {
+        const askId = `up-${nextAsk++}`;
+        asks.set(askId, (answer) => (state.answers ??= []).push(answer));
+        send({ jsonrpc: '2.0', id: askId, method: 'roots/list' });
+      }
       // The status of every task it holds, for whoever opens a stream: it keeps one store of tasks for every caller with its token.
       for (const t of tasks.values()) send({ jsonrpc: '2.0', method: 'notifications/tasks/status', params: { taskId: t.taskId, status: t.status } }, `id: task-${t.taskId}\n`);
       return;
@@ -353,6 +359,14 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
         /** Answer tools/list, from now on, with exactly this: {status, headers, body (text or bytes, or a function of the request's id)}; null: as usual. */
         rawList: (answer) => {
           state.rawList = answer;
+        },
+        /** Send, from now on, a request of its own (roots/list) on every GET stream too. */
+        askOnStream: () => {
+          state.askOnStream = true;
+        },
+        /** The answers that came to the requests it sent on GET streams. */
+        get answers() {
+          return state.answers ?? [];
         },
         get elsewhere() {
           return state.elsewhere;

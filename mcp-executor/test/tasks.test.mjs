@@ -13,7 +13,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 const { checkBook } = await import('provared');
-const { httpWorld, call, request, rawRequest, auth, META, TOKEN } = await import('./http-world.mjs');
+const { httpWorld, call, request, rawRequest, auth, beginSession, META, TOKEN } = await import('./http-world.mjs');
 const { CODES } = await import('../jsonrpc.mjs');
 const { readHttpSettings } = await import('../http.mjs');
 const { until } = await import('./world.mjs');
@@ -98,9 +98,9 @@ test('tasks: with allowTasks, each task is kept to the agent whose call made it;
     assert.equal(result.json.result.content[0].text, 'Ordered for 5.');
     // A method of tasks the executor does not know is refused even so.
     assert.equal((await request(w, 'alpha', 'tasks/other', { taskId }, { id: 10 })).json.error.code, CODES.methodNotFound);
-    // On a stream, the status of alpha's task reaches alpha alone.
+    // On a stream (each under the agent's own session: with two agents, a GET without one is not opened), the status of alpha's task reaches alpha alone.
     const stream = async (agent) => {
-      const s = await rawRequest(w, { method: 'GET', headers: { accept: 'text/event-stream', ...auth(w, agent) }, stream: true });
+      const s = await rawRequest(w, { method: 'GET', headers: { accept: 'text/event-stream', ...auth(w, agent), 'mcp-session-id': await beginSession(w, agent) }, stream: true });
       let text = '';
       s.res.on('data', (c) => {
         text += c;
@@ -135,8 +135,10 @@ test('Last-Event-ID goes on to the upstream only for an event the executor gave 
   const w = await httpWorld();
   try {
     const lastIds = () => w.upstream.seen.filter((s) => s.method === 'GET').map((s) => s.headers['last-event-id'] ?? null);
+    // Each agent's streams under a session of its own: with two agents, a GET without one is not opened.
+    const sessions = { alpha: await beginSession(w, 'alpha'), beta: await beginSession(w, 'beta') };
     const open = async (agent, headers = {}) => {
-      const s = await rawRequest(w, { method: 'GET', headers: { accept: 'text/event-stream', ...auth(w, agent), ...headers }, stream: true });
+      const s = await rawRequest(w, { method: 'GET', headers: { accept: 'text/event-stream', ...auth(w, agent), 'mcp-session-id': sessions[agent], ...headers }, stream: true });
       let text = '';
       s.res.on('data', (c) => {
         text += c;

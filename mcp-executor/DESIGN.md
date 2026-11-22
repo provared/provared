@@ -440,9 +440,25 @@ connections close (X115); a stop without warning, followed by a start,
 writes the receipt from the agent's copy before the executor listens
 (section 8).
 
-Tasks in front of an upstream. Every agent reaches the upstream with the
-executor's one credential, so to the upstream they are one caller; only a
-session, owned by the agent that opened it, tells them apart there. An
+The upstream's own messages in front of an upstream. Every agent reaches
+the upstream with the executor's one credential, so to the upstream they
+are one caller; only a session, owned by the agent that opened it, tells
+them apart there. A GET stream opened without a session is tied to no
+request and no session, so what the upstream sends on it (its own
+requests, list changes) may be any agent's: where the settings name more
+than one agent, such a GET is answered 405 with `Allow: POST, DELETE`,
+the specification's answer of a server that offers no stream there, and
+does not reach the upstream (X450). A request of the upstream's own that
+comes on a stream of one agent's (the answer to its request, or a GET
+under its session) is remembered for that agent, by session and id, up
+to `MAX_ASKS` (1,000) for each agent, its oldest forgotten first; an
+agent's response goes on only where it answers one of these, under the
+same session, and the request is then forgotten, so it is answered once.
+Any other response is refused with 400 and does not reach the upstream
+(X451).
+
+Tasks in front of an upstream. As above, to the upstream every agent is
+one caller. An
 upstream that keeps tasks for its caller rather than for a session would
 let one agent list, read or cancel another's (checked against the
 2025-11-25 revision, whose tasks are: `params.task` on a request asks for

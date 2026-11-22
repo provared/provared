@@ -97,6 +97,8 @@ export const TASKS_NOT_READ = 'The tool server\'s list of tasks could not be rea
 export const MAX_TASKS = 1000;
 /** The most ids of events (of the upstream's streams) the executor remembers giving one agent, so that a Last-Event-ID it names goes on; past it the oldest is forgotten. */
 export const MAX_EVENT_IDS = 1000;
+/** The most requests of the upstream's own the executor remembers handing on to one agent, unanswered; past it the oldest is forgotten, and an answer to it is refused. */
+export const MAX_ASKS = 1000;
 
 /** What readBody gives where a body would take its agent past waitingBytes. */
 const TOO_MUCH_HELD = Symbol('too much held');
@@ -464,6 +466,8 @@ export async function openHttpExecutor(config, more = {}) {
       /** In front of an upstream: the tasks this agent's calls made (allowTasks), and the ids of the events it was given, oldest first. */
       agent.tasks = new Set();
       agent.eventIds = new Set();
+      /** In front of an upstream: the requests of the upstream's own handed on to this agent and not yet answered, by session and id, oldest first. */
+      agent.asks = new Set();
       agents.set(name, agent);
     }
     // The front door's state file is read only now, with the locks held, its own among them: the command "owner" works on it under the same locks, so what it wrote is what is read, and nothing it writes later is undone. "ownerCheck" is the owner's check at its page: left out (as the command "http" leaves it), the one by the owner's passkey (owner.mjs); null, none.
@@ -669,6 +673,14 @@ export async function openHttpExecutor(config, more = {}) {
     agent.eventIds.delete(id);
     agent.eventIds.add(id);
     if (agent.eventIds.size > MAX_EVENT_IDS) agent.eventIds.delete(agent.eventIds.values().next().value);
+  };
+  /** A request of the upstream's own handed on to this agent, on a stream of a request of its, or of its session: its answer may come from this agent alone, under the same session, once. */
+  const askedOf = (ctx, m) => {
+    if (!isId(m.id)) return;
+    const key = callKey(ctx.sessionId, m.id);
+    ctx.agent.asks.delete(key);
+    ctx.agent.asks.add(key);
+    if (ctx.agent.asks.size > MAX_ASKS) ctx.agent.asks.delete(ctx.agent.asks.values().next().value);
   };
 
   /** Who a bearer secret signs in: {agent, token}, where "token" is null for an agent's own secret and {connection, expires} for an access token; or null. */
@@ -948,6 +960,7 @@ export async function openHttpExecutor(config, more = {}) {
                 }
                 if (kind === 'call') agent.log({ event: 'upstream-other-id', id: typeof foundId === 'string' ? foundId.slice(0, 80) : foundId });
               }
+              if (m && read.kind === 'request') askedOf(ctx, m);
               toAgent(scrub(event.raw));
             },
           });
@@ -1047,6 +1060,7 @@ export async function openHttpExecutor(config, more = {}) {
             out = list.answer();
             own = true;
           }
+          if (!own && m && read.kind === 'request') askedOf(ctx, m);
           const body_ = Buffer.from(scrub(out));
           // The executor's own error is JSON whatever the upstream sent, and is not to be stored: the upstream's content type and its word on caching were about the body that is not handed on (X260).
           res.writeHead(status, own ? { ...returned, 'content-type': JSON_TYPE, 'cache-control': 'no-store', 'content-length': body_.length } : { ...returned, 'content-type': type || JSON_TYPE, 'content-length': body_.length });
@@ -1495,6 +1509,7 @@ export async function openHttpExecutor(config, more = {}) {
 
   async function one(ctx, sessionId) {
     const { req, res, agent } = ctx;
+    ctx.sessionId = sessionId;
     // In front of a local program no one else reads the header, so the executor answers for it: "If the server receives a request with an invalid or unsupported MCP-Protocol-Version, it MUST respond with 400 Bad Request." A request that names no version is taken, as the specification allows (X247).
     const versions = local ? req.headersDistinct['mcp-protocol-version'] ?? [] : [];
     const otherVersion = versions.length === 1 && !LOCAL_VERSIONS.includes(versions[0]) && versions[0] !== ctx.session?.version;
@@ -1510,6 +1525,11 @@ export async function openHttpExecutor(config, more = {}) {
       // The GET stream of server messages, or the DELETE that ends a session: no message, so no mirrored metadata to check; the same few headers go on.
       const h = headersFor(req, null, undefined, agent);
       if (h.problem) return refuse(res, 400, null, HEADER_MISMATCH, h.problem);
+      // In front of an upstream, with more than one agent: a stream of the upstream's messages tied to no session is tied to no agent either, since to the upstream every agent is one caller. What comes on it (its own requests, list changes) could be another agent's, so it is not opened; 405 is the specification's way of saying that no stream is offered (X450).
+      if (!local && req.method === 'GET' && sessionId === undefined && agents.size > 1) {
+        agent.log({ event: 'refused', code: 'stream-not-tied' });
+        return refuse(res, 405, null, CODES.invalidRequest, 'In front of this upstream, with more than one agent, a stream of the server\'s messages is opened only under a session (Mcp-Session-Id): without one, what comes on it is no one agent\'s.', { allow: 'POST, DELETE' });
+      }
       if (h.dropped.length) agent.log({ event: 'headers-dropped', headers: h.dropped });
       if (local) {
         // A local program: the stream is of its session's own messages, and a DELETE ends the session and, with it, its program (X233, X234).
@@ -1702,7 +1722,13 @@ export async function openHttpExecutor(config, more = {}) {
       await ex.end;
       return;
     }
-    // The agent's response to a request of the upstream (a legacy session): relayed as it is.
+    // The agent's response to a request of the upstream: relayed as it is, where it answers a request the executor handed on to this agent under this session, once; anything else could answer another agent's, to an upstream that tells no caller from another, and is not sent on (X451).
+    const asked = callKey(sessionId, m.id);
+    if (!agent.asks.has(asked)) {
+      agent.log({ event: 'refused', code: 'response-not-asked' });
+      return refuse(res, 400, null, CODES.invalidRequest, 'The message answers no request the upstream sent to this agent, or one already answered, so it was not sent on.');
+    }
+    agent.asks.delete(asked);
     const ex = exchange(ctx, { method: 'POST', headers: h.headers, body: read.text, kind: 'other' });
     read = null;
     m = null;

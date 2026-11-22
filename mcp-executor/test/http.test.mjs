@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 
 const { checkBook, identifierFingerprint } = await import('provared');
-const { httpWorld, openHttpWorld, call, request, post, rawRequest, auth, META, TOKEN } = await import('./http-world.mjs');
+const { httpWorld, openHttpWorld, call, request, post, rawRequest, auth, beginSession, META, TOKEN } = await import('./http-world.mjs');
 const { CALL_DOCUMENT, RESULT_DOCUMENT, TOOL_DOCUMENT, CALL_META, EXECUTOR_STOPPED, UNLISTED_ACTION, UNREADABLE_ANSWER } = await import('../executor.mjs');
 const { CREDENTIAL_REMOVED, MAX_OPEN, MAX_SESSIONS, readHttpSettings, sseReader, sseEvent, secretHash } = await import('../http.mjs');
 const { readCopy, loadCopyKey } = await import('../copy.mjs');
@@ -936,9 +936,10 @@ test('defences on the agent\'s side, each with what it changes: the cap on reque
   const w = await httpWorld({ config: { bodyLimit: 2048, timeout: 5000 } });
   try {
     const a = w.executor.agent('alpha');
-    // 256 GET streams held open fill the agent's cap; the next is refused, and only for this agent.
+    // 256 GET streams held open fill the agent's cap; the next is refused, and only for this agent. (Under a session: with two agents, a GET without one is not opened.)
+    const session = await beginSession(w, 'alpha');
     const streams = [];
-    for (let i = 0; i < MAX_OPEN; i++) streams.push(await rawRequest(w, { method: 'GET', headers: { accept: 'text/event-stream', ...auth(w, 'alpha') }, stream: true }));
+    for (let i = 0; i < MAX_OPEN; i++) streams.push(await rawRequest(w, { method: 'GET', headers: { accept: 'text/event-stream', ...auth(w, 'alpha'), 'mcp-session-id': session }, stream: true }));
     assert.equal(a.open(), MAX_OPEN);
     const over = await request(w, 'alpha', 'ping');
     assert.equal(over.status, 503);
@@ -1028,7 +1029,7 @@ test('a body that never finishes: an authenticated POST that stops sending is re
     await until(() => a.open() === 0);
     assert.ok(w.logs.some((e) => e.event === 'refused' && e.code === 'body-timeout'));
     // The GET stream of server messages has no such limit.
-    const s = await rawRequest(w, { method: 'GET', headers: { accept: 'text/event-stream', ...auth(w, 'alpha') }, stream: true });
+    const s = await rawRequest(w, { method: 'GET', headers: { accept: 'text/event-stream', ...auth(w, 'alpha'), 'mcp-session-id': await beginSession(w, 'alpha') }, stream: true });
     await new Promise((d) => s.res.once('data', d));
     await pause(1500);
     assert.equal(a.open(), 1, 'the stream is still open after the timeout');

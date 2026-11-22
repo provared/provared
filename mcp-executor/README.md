@@ -323,8 +323,15 @@ What the executor does with each request:
   the executor's one credential, and only a session, which belongs to the
   agent that opened it, tells one agent's requests from another's there.
   So what the upstream keeps for its caller rather than for a session is
-  shared by every agent: what it sends on a GET stream opened without a
-  session goes to whichever agent opened one, and a task it keeps for its
+  shared by every agent. What it sends on a GET stream opened without a
+  session would go to whichever agent opened one, so where the settings
+  name more than one agent, such a GET is answered 405 (the
+  specification's "no stream offered here") and does not reach the
+  upstream; under a session, or with one agent, it passes. A response an
+  agent sends goes on only where it answers a request of the upstream's
+  own that the executor handed on to that agent, under the same session,
+  and only once (the last 1,000 unanswered for each agent); any other is
+  refused with 400 and does not reach the upstream. A task it keeps for its
   caller could be read or cancelled by any agent. Tasks are therefore
   refused unless the settings allow them (`allowTasks`): every `tasks/`
   request is answered with JSON-RPC error -32601, and a request that asks
