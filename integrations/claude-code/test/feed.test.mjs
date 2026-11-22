@@ -576,8 +576,15 @@ test('a token file that holds no token is left as it is, and the feed refuses ev
     for (const path of ['/hello', '/books']) {
       const r = await fetch(`http://127.0.0.1:${service.port}${path}`, { headers: { 'Provared-Feed-Hello': 'H'.repeat(43) } });
       assert.equal(r.status, 503);
-      assert.match((await r.json()).error, /does not hold a token/);
+      const said = (await r.json()).error;
+      assert.match(said, /does not hold a token/);
+      // The answer names no folder: the folder's path names the person's account. The status gives it.
+      assert.equal(said.includes(w.folder), false, said);
+      assert.equal(said.includes(join(w.folder, 'feed-token')), false, said);
     }
+    const handing = await fetch(`http://127.0.0.1:${service.port}/hand-over`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    assert.equal(handing.status, 503);
+    assert.equal((await handing.json()).error.includes(w.folder), false, 'POST /hand-over names no folder either');
     assert.match((await status(service.port)).feed.problem, /does not hold a token/);
     assert.equal(read(w.folder, 'feed-token'), 'not a token\n');
     // The recorder itself goes on.
