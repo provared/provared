@@ -323,9 +323,12 @@ What the executor does with each request:
   then the stream is closed; the agent merely disconnecting leaves the
   call running, bounded by `timeout`, and its real outcome is recorded.
 - A request that names an `Origin` is refused (403) unless
-  `allowedOrigins` lists it; a body over `bodyLimit` (10 MiB) is refused
+  `allowedOrigins` lists it; a body over `bodyLimit` (4 MiB) is refused
   (413), and one that does not arrive whole within `timeout` is refused
-  (408); an answer or an event of the upstream over 16 MiB is cut off; a
+  (408); a body that would take the bodies of one agent's requests in
+  flight past `waitingBytes` (32 MiB) is refused (503); a message of more
+  than 100,000 elements (list items and member names together) is
+  refused (400) before it is read, on stdio as over HTTP; an answer or an event of the upstream over 16 MiB is cut off; a
   call the upstream does not answer within `timeout` is cancelled and gets
   a receipt that says its outcome is not known; an agent whose connection
   does not take what the executor has waiting within `timeout` has that
@@ -390,7 +393,13 @@ The settings (`executor-http.example.json` is a start): `name`, `service`,
   secret, for the executor's own addresses (status, seal, acknowledge; see
   "Sealing, acknowledging, and what the executor says about itself").
   Without it those addresses answer nothing. It may not be an agent's.
-- `bodyLimit`: the most a POST body may be, in bytes (default 10,485,760).
+- `bodyLimit`: the most a POST body may be, in bytes (default 4,194,304,
+  the MCP TypeScript SDK's own limit).
+- `waitingBytes`: the most bytes of bodies one agent's requests may hold
+  at once, in bytes (default 33,554,432, as the gateway's). A body counts
+  from its declared length, or from its first byte, until its request has
+  been answered; a request that would take the agent past it is refused
+  with 503, and other agents are not touched.
 - `allowedOrigins`: the origins (scheme, host and port) whose pages may
   call the executor. Default none.
 - `oauth`: where agents connect through OAuth (below): `issuer`,

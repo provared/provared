@@ -420,7 +420,9 @@ countersignature, the copy) is the same code, `callCore` in
    text on the `Origin` rule was not among the sources of section 3, so
    X109 takes the safest reading and names what is to be checked.
 
-Limits (X107): the agent's body up to `bodyLimit` (10 MiB); an upstream
+Limits (X107): the agent's body up to `bodyLimit` (4 MiB); the bodies of
+one agent's requests in flight up to `waitingBytes` together (32 MiB); one
+message of the agent's up to 100,000 elements (`MAX_ELEMENTS`); an upstream
 JSON body or one event up to 16 MiB, as a line on stdio; the executor's
 `timeout` on every POST exchange; 256 requests of one agent in flight at
 once, beside `maxWaiting` for its calls; an `Origin` refused unless the
@@ -2375,8 +2377,18 @@ Notifications and the agent's responses are relayed as they are, with the
 upstream's status (202). A `tools/list` answer is filtered in a JSON body
 and in a stream alike (`filteredList`, shared with stdio).
 
-**X107. Limits.** The agent's POST body up to `bodyLimit`, 10 MiB by
-default as the gateway's, refused with 413 whether declared or not; an
+**X107. Limits.** The agent's POST body up to `bodyLimit`, 4 MiB by
+default as the MCP TypeScript SDK's, refused with 413 whether declared or not; the bodies of one agent's
+requests in flight up to `waitingBytes` together, 32 MiB by default as the
+gateway's, each counted from its declared length or its first byte until
+its request has been answered, past which the request is refused with 503
+and read no further; one message of the agent's, on stdio as over HTTP, up
+to 100,000 elements (`MAX_ELEMENTS`: the items of every list and the
+names of every object, counted in one walk of the text before it is read),
+past which it is refused before anything of it is built, since a message
+of many small elements costs many times its bytes once read; a request
+that only passes through lets go of the message as read once it has been
+sent on, keeping its text alone; an
 upstream JSON body, or one event, up to 16 MiB (`ANSWER_LIMIT`, the stdio
 line limit), past which the exchange is cut and a call gets "no answer";
 the executor's `timeout` on every POST exchange, and on the reading of a

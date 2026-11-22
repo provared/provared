@@ -270,7 +270,9 @@ export function idKey(id) {
  * notifications/cancelled, a name that is one of those the executor reads
  * once folded but is not written as the executor reads it ("Arguments").
  * The server's lines are read without those three, and handed on as raw
- * bytes.
+ * bytes. "elements" is the most elements a message may hold (MAX_ELEMENTS
+ * for the agent's lines, by default; no limit with "strictNumbers" false):
+ * a message past it is refused before it is read.
  */
 export function readMessage(line, options) {
   try {
@@ -289,21 +291,53 @@ export function readMessage(line, options) {
  */
 export const MAX_DEPTH = 256;
 
-/** Whether a JSON text is nested more than "limit" levels deep. It walks the text and calls nothing that calls itself. The text must already be known to be JSON. */
-export function deeperThan(text, limit) {
+/**
+ * The most elements, list items and member names together at every depth,
+ * in one message of an agent's. A message of many small elements costs far
+ * more memory once read than its bytes, so the count is taken from the
+ * text, before it is read. 100,000 is well past what a tool's arguments
+ * hold, and keeps what one message can cost when read to a few tens of MiB.
+ * A server's message is not held to it: a list a server gives may be long.
+ */
+export const MAX_ELEMENTS = 100_000;
+
+/**
+ * One walk of a text: whether it is nested more than "depth" levels deep,
+ * and whether it holds more than "elements" elements (each item of a list
+ * and each member name of an object, at every depth), {deep, many}: it
+ * stops at the first of the two limits it passes. It calls nothing
+ * that calls itself, and stops at the end of the text whatever the text
+ * is, so it may be given a text not yet known to be JSON; the answer is
+ * then of no meaning, but it comes.
+ */
+export function walkText(text, { depth: maxDepth = Infinity, elements: maxElements = Infinity } = {}) {
   let depth = 0;
+  let elements = 0;
+  // Just after "[" or "{": the next value or name, if any, is the first of its list or object.
+  let fresh = false;
   for (let i = 0; i < text.length; i++) {
     const c = text[i];
+    if (c === ' ' || c === '\t' || c === '\n' || c === '\r') continue;
+    if (fresh && c !== ']' && c !== '}') elements += 1;
+    fresh = false;
     if (c === '"') {
       let j = i + 1;
-      while (text[j] !== '"') j += text[j] === '\\' ? 2 : 1;
+      while (j < text.length && text[j] !== '"') j += text[j] === '\\' ? 2 : 1;
       i = j;
     } else if (c === '{' || c === '[') {
       depth += 1;
-      if (depth > limit) return true;
+      fresh = true;
+      if (depth > maxDepth) return { deep: true, many: false };
     } else if (c === '}' || c === ']') depth -= 1;
+    else if (c === ',' && depth > 0) elements += 1;
+    if (elements > maxElements) return { deep: false, many: true };
   }
-  return false;
+  return { deep: false, many: false };
+}
+
+/** Whether a JSON text is nested more than "limit" levels deep. It walks the text and calls nothing that calls itself. */
+export function deeperThan(text, limit) {
+  return walkText(text, { depth: limit }).deep;
 }
 
 /** The id a refusal may be answered under: the top-level "id" of the text, where it is there once, is text or a whole number, and is a number every reader holds exactly; else null. */
@@ -313,13 +347,17 @@ function answerableId(text) {
   return at.value;
 }
 
-function readStrictly(line, { strictNumbers = true } = {}) {
+function readStrictly(line, { strictNumbers = true, elements = strictNumbers ? MAX_ELEMENTS : Infinity } = {}) {
   let text;
   try {
     text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(line);
   } catch {
     return { refused: { code: CODES.parse, message: 'The line is not text in UTF-8.' }, id: null };
   }
+  // One walk of the text, before it is read: a message nested too deeply, or of too many elements, is refused before anything of it is built. Nothing after this point, here or in what uses the message, has to walk a value deeper than MAX_DEPTH: much that walks a value calls itself once for each level, and would overflow the stack.
+  const walked = walkText(text, { depth: MAX_DEPTH, elements });
+  if (walked.deep) return { refused: { code: CODES.invalidRequest, message: `The message is nested more than ${MAX_DEPTH} levels deep, which the executor does not read.` }, id: answerableId(text) };
+  if (walked.many) return { refused: { code: CODES.invalidRequest, message: `The message holds more than ${elements.toLocaleString('en-GB')} elements (list items and member names together), which the executor does not read.` }, id: answerableId(text) };
   let message;
   try {
     message = JSON.parse(text);
@@ -328,8 +366,6 @@ function readStrictly(line, { strictNumbers = true } = {}) {
   }
   if (Array.isArray(message)) return { refused: { code: CODES.invalidRequest, message: 'A list of messages (a batch) is not accepted: one message to a line.' }, id: null };
   if (!message || typeof message !== 'object') return { refused: { code: CODES.invalidRequest, message: 'A message is a JSON object.' }, id: null };
-  // Nothing after this point, here or in what uses the message, has to walk a value deeper than MAX_DEPTH: much that walks a value calls itself once for each level, and would overflow the stack.
-  if (deeperThan(text, MAX_DEPTH)) return { refused: { code: CODES.invalidRequest, message: `The message is nested more than ${MAX_DEPTH} levels deep, which the executor does not read.` }, id: answerableId(text) };
   const repeated = repeatedName(text);
   // These two refusals name the request where its id can be found, so that a client is not left waiting for an answer.
   if (repeated !== null) return { refused: { code: CODES.invalidRequest, message: 'A member name is given twice in one object of the message, which two readers may read differently.' }, id: answerableId(text) };

@@ -30,5 +30,6 @@
   "unlisted": "refuse",
   "hideUnlisted": true,
   "timeout": 230000,
+  "bodyLimit": 1048576,
   "allowedOrigins": []
 }

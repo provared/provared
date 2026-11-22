@@ -394,7 +394,14 @@ hashes npm gives, and `npm ci` checks them. The release rule, in this order:
   opened.
 - Limits for a server with 2 GB of memory: the guard 768 MB, one processor
   and 256 processes; Caddy 256 MB, half a processor and 128 processes.
-  Each log is kept to three files of 10 MB.
+  Each log is kept to three files of 10 MB. In 768 MB, Node.js gives the
+  guard a heap of about 430 MB, so the recipe's settings
+  (`executor-oauth.example.json`) take bodies of 1 MiB (`bodyLimit`:
+  1048576) in place of the guard's 4 MiB: a chat's tool call is far
+  smaller, and each agent's requests in flight still hold at most 32 MiB
+  of bodies together (`waitingBytes`). Settings made from an earlier copy
+  of the file have no such line, and take the guard's 4 MiB; add the line
+  to take the smaller limit.
 - Both restart unless stopped (the update command's `docker compose up -d`
   starts them all the same, above, "Updates"). The guard is given 30
   seconds to stop, so that each call in flight is settled and receipted.

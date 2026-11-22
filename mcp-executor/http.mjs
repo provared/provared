@@ -39,8 +39,16 @@ import { openLocalSessions, readSessionSettings } from './local.mjs';
 import { LOCK_WAIT_MS, lockState } from './lock.mjs';
 import { CLIENT_LIMIT, OAUTH_PATH, OAUTH_TIMEOUT, WELL_KNOWN, openFrontDoor, readOAuthSettings } from './oauth.mjs';
 
-/** The most a POST body may be, unless the settings say otherwise: 10 MiB, as the gateway takes. */
-export const BODY_LIMIT = 10 * 1024 * 1024;
+/** The most a POST body may be, unless the settings say otherwise: 4 MiB, the MCP TypeScript SDK's own limit. */
+export const BODY_LIMIT = 4 * 1024 * 1024;
+/**
+ * The most bytes of bodies one agent's requests may hold at once, unless the
+ * settings say otherwise (waitingBytes): 32 MiB, as the gateway's. A body is
+ * counted from its first byte (or its declared length) until its request has
+ * been answered, so that one agent cannot hold the executor's memory, and
+ * with it every other agent's service, with requests each inside bodyLimit.
+ */
+export const WAITING_BYTES = 32 * 1024 * 1024;
 /** The most one answer of the upstream may be (a JSON body, or one event of a stream): 16 MiB, as one line of a stdio server. */
 export const ANSWER_LIMIT = MAX_LINE_BYTES;
 /** The most the executor holds for an agent that is not reading its stream (res.writableLength): one answer's worth. Past it the exchange is cut. The upstream is paused as soon as the agent's connection takes no more, so this is reached only where one event nearly fills it and more follow in the same read of the upstream (X113). */
@@ -74,6 +82,9 @@ export const HELLO_BODY_LIMIT = 256;
 export const HELLO_WAIT_MS = 1000;
 export const HELLO_AT_ONCE = 8;
 export const HELLO_PER_CALLER = 4;
+
+/** What readBody gives where a body would take its agent past waitingBytes. */
+const TOO_MUCH_HELD = Symbol('too much held');
 
 /** The agent's headers that go on to the upstream. Every other is dropped: a header is a way to carry a token, and the upstream must get none but the executor's. */
 const FORWARDED_HEADERS = ['accept', 'accept-language', 'content-type', 'mcp-session-id', 'last-event-id'];
@@ -239,10 +250,13 @@ export function readHttpSettings(config, root, { keysOnly = false } = {}) {
   readRecorderSettings(config, s, at, root, warnings);
   s.bodyLimit = config.bodyLimit ?? BODY_LIMIT;
   if (!Number.isInteger(s.bodyLimit) || s.bodyLimit < 1024 || s.bodyLimit > 1024 * 1024 * 1024) at('bodyLimit', 'must be a whole number of bytes from 1,024 to 1,073,741,824.');
+  s.waitingBytes = config.waitingBytes ?? WAITING_BYTES;
+  if (!Number.isInteger(s.waitingBytes) || s.waitingBytes < 0 || s.waitingBytes > 1024 * 1024 * 1024) at('waitingBytes', 'must be a whole number of bytes from 0 to 1,073,741,824: the most the bodies of one agent\'s requests in flight may hold together.');
+  else if (Number.isInteger(s.bodyLimit) && s.waitingBytes < s.bodyLimit) warnings.push('waitingBytes: is less than bodyLimit, so a body of the largest size the executor takes can never be held.');
   s.allowedOrigins = config.allowedOrigins ?? [];
   if (!Array.isArray(s.allowedOrigins) || !s.allowedOrigins.every((o) => typeof o === 'string' && /^https?:\/\/[^/\s]+$/.test(o))) at('allowedOrigins', 'must be a list of origins (scheme, host and port, such as "http://localhost:3000") whose pages may call the executor; with none, a call that names an Origin is refused.');
   for (const k of Object.keys(config)) {
-    if (![...SHARED_KEYS, 'listen', 'path', 'upstream', 'agents', 'executor', 'bodyLimit', 'allowedOrigins', 'admin', 'oauth', ...(local ? ['server', 'shutdownWait', 'sessions'] : [])].includes(k)) warnings.push(`${k}: not a setting${['shutdownWait', 'sessions'].includes(k) ? ' without "server", a local program' : ''}; set aside.`);
+    if (![...SHARED_KEYS, 'listen', 'path', 'upstream', 'agents', 'executor', 'bodyLimit', 'waitingBytes', 'allowedOrigins', 'admin', 'oauth', ...(local ? ['server', 'shutdownWait', 'sessions'] : [])].includes(k)) warnings.push(`${k}: not a setting${['shutdownWait', 'sessions'].includes(k) ? ' without "server", a local program' : ''}; set aside.`);
   }
   if (s.unlisted === 'forward') warnings.push(UNLISTED_FORWARD_WARNING);
   return { settings: problems.length ? null : s, problems, warnings, partial: s };
@@ -421,6 +435,8 @@ export async function openHttpExecutor(config, more = {}) {
       releases[releases.length - 1] = agent.release;
       agent.hash = paths.secretHash ? Buffer.from(paths.secretHash) : null;
       agent.open = 0;
+      /** The bytes of bodies this agent's requests in flight hold, being read or waiting for their answers: at most waitingBytes. */
+      agent.held = 0;
       /** The sessions this agent opened, oldest first. */
       agent.sessions = new Set();
       agents.set(name, agent);
@@ -883,10 +899,24 @@ export async function openHttpExecutor(config, more = {}) {
    * with code BODY_TIMEOUT: the server's own request timeout is off, since a
    * GET stream or a long answer must not be cut, so the body's reading has
    * a limit of its own (X119).
+   *
+   * With "held" ({agent, bytes}), the body's bytes are counted for the agent
+   * (agent.held) as they arrive, its declared length at once, and kept until
+   * the caller gives them back; a body that would take the agent past
+   * waitingBytes gives TOO_MUCH_HELD, and is read no further.
    */
-  function readBody(req, limit = settings.bodyLimit, wait = settings.timeout) {
+  function readBody(req, limit = settings.bodyLimit, wait = settings.timeout, held = null) {
     const declared = Number(req.headers['content-length']);
     if (Number.isFinite(declared) && declared > limit) return Promise.resolve(null);
+    const share = (more) => {
+      if (!held) return true;
+      if (held.agent.held + more > settings.waitingBytes) return false;
+      held.agent.held += more;
+      held.bytes += more;
+      return true;
+    };
+    const reserved = Number.isFinite(declared) && declared > 0 ? declared : 0;
+    if (!share(reserved)) return Promise.resolve(TOO_MUCH_HELD);
     return new Promise((done, failed) => {
       const chunks = [];
       let size = 0;
@@ -900,6 +930,11 @@ export async function openHttpExecutor(config, more = {}) {
       req.on('data', (chunk) => {
         if (over) return;
         size += chunk.length;
+        if (size > reserved && !share(Math.min(chunk.length, size - reserved))) {
+          over = true;
+          chunks.length = 0;
+          return settle(done)(TOO_MUCH_HELD);
+        }
         if (size > limit) {
           over = true;
           chunks.length = 0;
@@ -1089,13 +1124,16 @@ export async function openHttpExecutor(config, more = {}) {
       return refuse(res, 503, null, CODES.notRecorded, `This agent already has ${MAX_OPEN} requests in flight, the most it may have. Try again when one has ended.`, { connection: 'close' });
     }
     agent.open += 1;
-    const ctx = { req, res, agent, token: who.token, upstream: null, streaming: false, finalEvent: null, session, entered: null };
+    // The bytes of this request's body, counted for the agent until the request has been answered (waitingBytes).
+    const held = { agent, bytes: 0 };
+    const ctx = { req, res, agent, token: who.token, upstream: null, streaming: false, finalEvent: null, session, entered: null, held };
     // A message in hand keeps its session from being taken for idle; an open stream of the program's own messages does not (X235).
     if (session && req.method !== 'GET') enter(ctx, session);
     try {
       await one(ctx, sessionIds[0]);
     } finally {
       agent.open -= 1;
+      agent.held -= held.bytes;
       if (ctx.entered) local.leave(ctx.entered);
     }
   }
@@ -1329,7 +1367,7 @@ export async function openHttpExecutor(config, more = {}) {
     if (!/^application\/json\s*(;|$)/.test(type)) return refuse(res, 415, null, CODES.invalidRequest, 'A message is sent as application/json.');
     let body;
     try {
-      body = await readBody(req);
+      body = await readBody(req, settings.bodyLimit, settings.timeout, ctx.held);
     } catch (e) {
       if (e.code === 'BODY_TIMEOUT') {
         agent.log({ event: 'refused', code: 'body-timeout' });
@@ -1339,17 +1377,22 @@ export async function openHttpExecutor(config, more = {}) {
       if (e.code === 'BODY_CLOSED') return;
       return refuse(res, 400, null, CODES.invalidRequest, 'The body could not be read.');
     }
+    if (body === TOO_MUCH_HELD) {
+      agent.log({ event: 'refused', code: 'too-much-held', held: agent.held });
+      return refuse(res, 503, null, CODES.notRecorded, `This agent's requests in flight already hold ${settings.waitingBytes} bytes of bodies, or would with this one, the most they may (waitingBytes). Try again when one has been answered.`, { connection: 'close' });
+    }
     if (body === null) {
       agent.log({ event: 'refused', code: 'body-too-large' });
       return refuse(res, 413, null, CODES.invalidRequest, `The body is larger than ${settings.bodyLimit} bytes, the most the executor takes.`, { connection: 'close' });
     }
     // One message, read strictly: a batch, a repeated name or a shape that is not a message goes no further.
-    const read = readMessage(body);
+    // "let": a request that only passes through lets go of its message, read and as bytes, once it has been sent on (below).
+    let read = readMessage(body);
     if (read.refused) {
       agent.log({ event: 'client-message-refused', code: read.refused.code });
       return refuse(res, 400, read.id, read.refused.code, read.refused.message);
     }
-    const m = read.message;
+    let m = read.message;
     // The check of MCP-Protocol-Version that waited for the message: an "initialize" with no session id is taken whatever version the header names, since the version is agreed inside "initialize" and the program's answer becomes the session's; any other message is refused as it would have been above (X287).
     if (versionWaits && !(read.kind === 'request' && m.method === 'initialize')) return refuseVersion();
     const h = headersFor(req, m, read.text);
@@ -1417,6 +1460,10 @@ export async function openHttpExecutor(config, more = {}) {
       // Every other request goes under an id of the executor's own, and its answer comes back under the agent's.
       const serverId = newServerId();
       const ex = exchange(ctx, { method: 'POST', headers: h.headers, body: spliceId(read.text, serverId) ?? JSON.stringify({ ...m, id: serverId }), kind: 'request', clientId: m.id, serverId, list: m.method === 'tools/list' && settings.hideUnlisted, learn: m.method === 'tools/list' });
+      // Its text, as sent, is all the exchange needs: the message as read, which may cost many times its bytes, is let go while the upstream answers.
+      read = null;
+      m = null;
+      body = null;
       res.on('close', () => ex.cancel());
       await ex.end;
       return;
@@ -1449,12 +1496,18 @@ export async function openHttpExecutor(config, more = {}) {
         }
       }
       const ex = exchange(ctx, { method: 'POST', headers: h.headers, body: text, kind: 'other' });
+      read = null;
+      m = null;
+      body = null;
       res.on('close', () => ex.cancel());
       await ex.end;
       return;
     }
     // The agent's response to a request of the upstream (a legacy session): relayed as it is.
     const ex = exchange(ctx, { method: 'POST', headers: h.headers, body: read.text, kind: 'other' });
+    read = null;
+    m = null;
+    body = null;
     res.on('close', () => ex.cancel());
     await ex.end;
   }

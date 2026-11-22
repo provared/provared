@@ -171,6 +171,33 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
 
 ## Not yet released
 
+- **`provared-mcp-executor`, after 0.5.1: the faults found by the check
+  against the MCP TypeScript SDK's advisories of October 2026.** The
+  version is not yet raised.
+  - **What one agent's messages may hold (F1).** With 0.5.1 each request
+    was bounded (a body of 10 MiB, no batch, 256 levels of nesting, 256
+    requests in flight for an agent) but nothing bounded the number of
+    elements in a message, nor what one agent's requests held together, and
+    a request kept its message as read until the upstream answered. So one
+    signed-in agent could, with requests inside every limit, end the
+    executor ("JavaScript heap out of memory") for every agent: six 10 MiB
+    requests of one-item lists at once with a heap of 1 GiB, and two 10 MiB
+    tool calls with the heap the claude.ai recipe's container gives (likely:
+    measured with the same limit, not in the container); or stall every other agent's
+    answers for seconds at a time. Now: the bodies of one agent's requests
+    in flight may hold `waitingBytes` together (new setting, default 32 MiB,
+    as the gateway's), each counted from its declared length or its first
+    byte until its request has been answered, past which the request is
+    refused with 503 and read no further; a message of the agent's of more
+    than 100,000 elements (list items and member names, `MAX_ELEMENTS` in
+    `jsonrpc.mjs`) is refused with 400 before it is read, on stdio as over
+    HTTP, counted in the one walk of the text that also finds its depth; a
+    request that only passes through lets go of its message as read once
+    it has been sent on (measured: a held request of 383 KiB of small
+    objects kept about 850 KiB of the heap in place of 3.1 MiB); and `bodyLimit` is
+    4 MiB by default, the SDK's, in place of 10 MiB. The claude.ai recipe's
+    settings take bodies of 1 MiB. Tests: `test/limits.test.mjs`.
+
 - **The recorder beside Claude Code, `provared-claude-code` 0.1.1: a web page cannot use its port.** With 0.1.0, a web page open in a browser on the same computer could ask the recorder to take a permission, trust a passkey, write a receipt for a call that never happened, or stop. 0.1.1 refuses what a browser sends for a web page, or under another website's name, on every route of the recorder's port, and for it reads and writes nothing. 0.1.0 is affected, and updating is not enough on its own: a recorder already running keeps the code it started with until it is restarted. After updating, restart it once, with both commands on one line so that no tool call falls between them: `provared-claude-code stop; provared-claude-code ensure`. With the Claude Code plugin, they are `node <the plugin's folder>/plugin.mjs stop; node <the plugin's folder>/plugin.mjs ensure`. A tool call does not start the recorder: while it is stopped, tool calls are refused, until `ensure` or the start of the next Claude Code session (with the plugin) starts it. From 0.1.1, `ensure` and the start of a session say so where the recorder that answers is not the version installed, with these commands; they do not stop it.
   In `integrations/claude-code/recorder.mjs`, every route, the feed's four (`/hello`, `/books`, `/lines` and `/hand-over`) among them, first refuses, before it reads the body, a request with an `Origin` header, with a `Sec-Fetch-Site` header other than `none`, or with a `Host` other than `127.0.0.1:<port>` (on port 80, `127.0.0.1` alone as well, as a client sends it there), and answers 403. Every route but the feed's then refuses, with 415, a POST whose `Content-Type`, read before the first `;`, trimmed and in any case, is not `application/json`. The port is kept once the recorder listens, so a request that came before the port closed (`close()`, or `POST /stop`) is still answered and its call recorded. Where the file `feed-token` holds no token, the feed's answer no longer names the folder, whose path names the person's account; the recorder's status still gives it. The status gives the package's version, from its `package.json`, as `version`. The hook, the recorder's commands, the feed's reader in `feed.mjs` and the uploader in `connect/upload.mjs` already sent all of this; the tests that ask the recorder directly, in `integrations/claude-code/test/` and `connect/test/`, now send `Content-Type: application/json` too, and three requests that `test/handover.test.mjs` writes by hand now name the port in `Host`. Any program on the computer can still use the port, as before; the README says so, in "What the record shows, and what it does not". `package.json`, its lockfile and `.claude-plugin/plugin.json` say 0.1.1, and the README names 0.1.1 where it names the version. New tests, in `test/local-port.test.mjs`: each route, with each of those headers wrong in turn (`Sec-Fetch-Site` of `same-site` or any value but `none`, a `Content-Type` that only names `application/json` after a `;`), is refused, the trusted passkeys, the permission in force and every file in the folder are unchanged, and the recorder still runs; a POST is refused with its body never sent; the feed's four routes refuse such a request and give it no session and no proof, and the feed's reader is still answered; a call whose request came before `close()` or `POST /stop` is answered and recorded; on port 80, `Host: 127.0.0.1` is taken (where port 80 can be taken); `ensure`, with an earlier recorder answering, says so and stops nothing. In `test/feed.test.mjs`, the feed's answer where its token file holds no token names no folder; in `test/plugin.test.mjs`, the start of a session says so where the recorder that answers is an earlier version. With any one of the checks taken out, a test fails. Published on npm on 22 November 2026, with the advisory GHSA-cj2m-rqh6-5984.
 
