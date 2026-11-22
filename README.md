@@ -295,10 +295,11 @@ other than the author has reviewed it yet.
 That is an invitation. The format may still change.
 Every published version stays on npm and the Python Package Index, so a
 record made with one version can always be checked by that version.
-The library makes no network request of its own: its tests fail where
-its code in `src/` or `bin/` opens a network connection. The one module
-that asks a time-stamp service, `provared/net/timestamp`, is separate,
-and is loaded only by a program that imports it.
+The library's own code, in `src/`, makes no network request: its tests
+fail where that code opens a network connection. Two parts kept apart in
+`net/` do: `provared/net/timestamp`, which asks a time-stamp service and
+is loaded only by a program that imports it, and the command
+`provared-headers`, which asks only the Bitcoin nodes you name.
 
 Questions, faults and suggestions: hello@prova.red, or
 [issues on GitHub](https://github.com/provared/provared/issues).
