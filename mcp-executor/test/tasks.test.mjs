@@ -264,3 +264,26 @@ test('tasks of 2026-07-28, with allowTasks and one agent: the task a call is ans
     await w.close();
   }
 });
+
+test('tasks of 2026-07-28, with allowTasks: Mcp-Name on tasks/get, tasks/update and tasks/cancel mirrors params.taskId, as the revision asks of a client; it is checked against the body and sent on, and one that differs is refused and not sent', async () => {
+  const w = await httpWorld({ agents: ['alpha'], config: { allowTasks: true } });
+  try {
+    const { taskId } = (await call(w, 'alpha', 'order', { total: 5, item: 'payroll run' }, { id: 'o', meta: META_TASKS })).json.result;
+    const named = (method, name, id, params = {}) => request(w, 'alpha', method, { taskId, ...params, _meta: META_TASKS }, { id, headers: { 'mcp-method': method, 'mcp-name': name } });
+    const got = await named('tasks/get', taskId, 'g');
+    assert.equal(got.status, 200);
+    assert.equal(got.json.result.taskId, taskId);
+    assert.equal(w.upstream.seen.at(-1).headers['mcp-name'], taskId, 'the header went on');
+    assert.deepEqual((await named('tasks/update', taskId, 'u', { inputResponses: {} })).json.result, { resultType: 'complete' });
+    const before = methodsSeen(w).length;
+    for (const method of ['tasks/get', 'tasks/update', 'tasks/cancel']) {
+      const r = await named(method, 'task-other', `x-${method}`);
+      assert.equal(r.status, 400, method);
+      assert.match(r.body, /mcp-name/, method);
+    }
+    assert.equal(methodsSeen(w).length, before, 'none of them reached the upstream');
+    assert.equal((await named('tasks/cancel', taskId, 'c')).status, 200);
+  } finally {
+    await w.close();
+  }
+});

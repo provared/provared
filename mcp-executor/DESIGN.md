@@ -406,8 +406,9 @@ countersignature, the copy) is the same code, `callCore` in
    the body's `_meta` value where both are given; the body's value is what
    goes on. `Mcp-Method` goes on only where it is the body's `method`;
    `Mcp-Name` only where it is the body's `params.uri` on a
-   `resources/read` or its `params.name` on a `tools/call` or
-   `prompts/get`, and on any other method it is refused. An
+   `resources/read`, its `params.name` on a `tools/call` or
+   `prompts/get`, or its `params.taskId` on a `tasks/get`, `tasks/update`
+   or `tasks/cancel`, and on any other method it is refused. An
    `Mcp-Param-<name>` header goes on
    only where the upstream's `tools/list` annotated a property of the
    tool's `inputSchema` with `x-mcp-header: <name>` and the call's
@@ -2559,8 +2560,9 @@ that `42.00000000000000000001`, which rounds to 42, is refused; the body's
 number is compared as `JSON.parse` read it, so a body number with more
 digits than a double holds is compared after that rounding. `Mcp-Method` only where it is the body's `method`;
 `Mcp-Name` only where it is, as text, the body's `params.uri` on a
-`resources/read`, or its `params.name` on a `tools/call` or `prompts/get`.
-Anything else (no annotation seen, a disagreement, a GET or DELETE, a
+`resources/read`, its `params.name` on a `tools/call` or `prompts/get`, or
+its `params.taskId` on a `tasks/get`, `tasks/update` or `tasks/cancel` (as
+the 2026-07-28 tasks extension asks of a client over HTTP). Anything else (no annotation seen, a disagreement, a GET or DELETE, a
 response, an `Mcp-Name` on any other method, whatever its params hold, a
 Base64 form that does not decode, a header given twice) is refused with
 400 and -32020 before anything reaches the upstream, as is a

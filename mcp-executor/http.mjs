@@ -129,7 +129,7 @@ export const LOCAL_VERSIONS = Object.freeze(['2025-11-25', '2025-06-18', '2025-0
 /** How a revision of the specification is written: a date. Only a header value of this form is named in the log (X287). */
 const REVISION = /^\d{4}-\d{2}-\d{2}$/;
 /** The member of params that Mcp-Name mirrors, for each method that has one, as the 2026-07-28 revision's table of standard request headers says (X110). */
-const MIRRORED_NAME = new Map([['tools/call', 'name'], ['prompts/get', 'name'], ['resources/read', 'uri']]);
+const MIRRORED_NAME = new Map([['tools/call', 'name'], ['prompts/get', 'name'], ['resources/read', 'uri'], ['tasks/get', 'taskId'], ['tasks/update', 'taskId'], ['tasks/cancel', 'taskId']]);
 /** A number as JSON writes one (RFC 8259): no hexadecimal, no space, no "Infinity", none of what Number() would take besides. */
 // eslint-disable-next-line security/detect-unsafe-regex -- no repetition inside repetition can match the same text two ways (runs of digits kept apart by a full stop and an "e" the digits cannot match), so matching takes time in step with the text.
 const JSON_NUMBER = /^(-?)(0|[1-9][0-9]*)(?:\.([0-9]+))?(?:[eE]([+-]?[0-9]+))?$/;
@@ -875,7 +875,7 @@ export async function openHttpExecutor(config, more = {}) {
         if (given !== message.method) return { problem: `The header ${name} (${given}) does not agree with the body's method (${message.method}).` };
       } else if (name === 'mcp-name') {
         const member = MIRRORED_NAME.get(message.method);
-        if (!member) return { problem: `The header ${name} mirrors a member of a tools/call, resources/read or prompts/get, and this message is none of them.` };
+        if (!member) return { problem: `The header ${name} mirrors a member of a request of one of these methods: ${[...MIRRORED_NAME.keys()].join(', ')}; and this message is none of them.` };
         const bodyName = message.params?.[member];
         if (typeof bodyName !== 'string') return { problem: `The header ${name} mirrors the body's params.${member}, which this message does not have as text.` };
         if (given !== bodyName) return { problem: `The header ${name} does not agree with the body's params.${member}.` };

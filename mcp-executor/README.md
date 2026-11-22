@@ -271,8 +271,9 @@ What the executor does with each request:
   1,000), with the `MCP-Protocol-Version` the body states, and the mirrored
   headers of the 2026-07-28 revision where each agrees with the body:
   `Mcp-Method` with the body's `method`, `Mcp-Name` with its
-  `params.uri` on a `resources/read` or its `params.name` on a
-  `tools/call` or `prompts/get`, and `Mcp-Param-<name>` with the call's
+  `params.uri` on a `resources/read`, its `params.name` on a
+  `tools/call` or `prompts/get`, or its `params.taskId` on a `tasks/get`,
+  `tasks/update` or `tasks/cancel`, and `Mcp-Param-<name>` with the call's
   argument at the
   property of the tool's `inputSchema` that the upstream's `tools/list`
   annotated `x-mcp-header: <name>` (a value wrapped as `=?base64?…?=` is
