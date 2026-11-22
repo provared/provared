@@ -188,6 +188,67 @@ test('"admit-passkey" shows control and other characters that do not print as es
   }
 });
 
+/**
+ * A stand-in for the recorder on a port of its own, over the folder's feed (port.mjs): it answers /status, and
+ * answers each POST /admit, with the feed's proof, as "answer" says.
+ */
+async function standInRecorder(folder, answer) {
+  const { portOwner, sendJson } = await import('../port.mjs');
+  const owner = portOwner({ folder });
+  owner.use({
+    async handle(req, res) {
+      if (req.method === 'GET' && req.url === '/status') return sendJson(res, 200, { version: 'stand-in' });
+      if (req.method === 'POST' && req.url === '/admit') {
+        const chunks = [];
+        for await (const chunk of req) chunks.push(chunk);
+        const bytes = Buffer.concat(chunks);
+        const reply = owner.feed.checkQuestion(req, res, bytes);
+        if (reply) reply(200, answer(JSON.parse(bytes.toString('utf8'))));
+        return undefined;
+      }
+      return sendJson(res, 404, { error: 'not found' });
+    },
+    memory: () => [],
+    handOver: () => ({ kind: null, fingerprint: null, outcome: 'refused', code: 'not-started', message: 'A stand-in.' }),
+  });
+  await owner.listen(0);
+  return owner;
+}
+
+test('"admit-passkey" shows a message from the recorder escaped, between quotation marks, in each of the four places it prints one', async () => {
+  const w = await world([]);
+  const passkey = await developmentPasskey();
+  const T = await thumbprint(passkey.key);
+  const slip = await signSlip({ agentKeys: w.agent.keys, passkey, purpose: 'Waits here.' });
+  const { fingerprint, fromBase64url } = await import('provared');
+  const { addWaitingPermission } = await import('../recorder.mjs');
+  const fp = await fingerprint(fromBase64url(slip.payload));
+  assert.equal(addWaitingPermission(w.folder, slip, fp, T), true);
+  // An escape sequence, a carriage return, a C1 control, a right-to-left override, a line break, a line separator, a
+  // zero-width space, a no-break space, a Hangul filler, a private-use character, quotation marks and a backslash.
+  const hostile = 'Said.\u001b[2K\r\u0085\u{202e}line\n\u{2028}\u{200b}\u{a0}\u{3164}\u{e000} "quoted" \\u001b end';
+  const esc = (hex) => `\\u${hex}`;
+  const shown = `"Said.${esc('001b')}[2K${esc('000d')}${esc('0085')}${esc('202e')}line${esc('000a')}${esc('2028')}${esc('200b')}${esc('00a0')}${esc('3164')}${esc('e000')} \\"quoted\\" \\\\u001b end"`;
+  // What the stand-in answers to a check, a decline and a take, for each of the four places.
+  const plans = [
+    { typed: 'yes', check: 'refused', decline: null, take: null, says: /Not taken, and left waiting: the permission .* \(from "[^"]+"\)\. "Said\./ },
+    { typed: 'no', check: 'would-take', decline: 'refused', take: null, says: /Not declined: "Said\./ },
+    { typed: 'yes', check: 'would-take', decline: null, take: 'refused', says: /Not taken, and left waiting: "Said\./ },
+    { typed: 'yes', check: 'would-take', decline: null, take: 'taken', says: /is trusted from now on, with the permission it signed \([^)]+\)\. "Said\./ },
+  ];
+  for (const plan of plans) {
+    const recorder = await standInRecorder(w.folder, (asked) => ({ kind: 'renewal', fingerprint: fp, outcome: asked.decline ? plan.decline : asked.take ? plan.take : plan.check, code: 'stand-in', message: hostile }));
+    try {
+      const r = await admitAt({ folder: w.folder, port: recorder.port }, T, plan.typed);
+      for (const line of r.out.split('\n')) assert.doesNotMatch(line, /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Cs}\p{Co}\p{Cn}\p{Default_Ignorable_Code_Point}\u{a0}]/u, JSON.stringify(line));
+      assert.match(r.out, plan.says);
+      assert.ok(r.out.includes(shown), r.out);
+    } finally {
+      await recorder.close();
+    }
+  }
+});
+
 test('printable shows a value between quotation marks, with the quotation mark and the backslash escaped, as JSON writes a string', () => {
   assert.equal(printable('Sam'), '"Sam"');
   assert.equal(printable('a "b" c'), '"a \\"b\\" c"');
@@ -197,7 +258,7 @@ test('printable shows a value between quotation marks, with the quotation mark a
   assert.notEqual(printable('x\\u001b[2Ky'), printable('x\u001b[2Ky'));
   // The plain space and ordinary letters as they are.
   assert.equal(printable('Read only, é'), '"Read only, é"');
-  const hostile = 'a\u001b[2K\r\u0085‮\n ​ 　ㅤ͏️\u{e0100}\u{f0000}͸￿\u{10ffff}"\\z';
+  const hostile = 'a\u001b[2K\r\u0085\u{202e}\n\u{2028}\u{200b}\u{a0}\u{3000}\u{3164}\u{34f}\u{fe0f}\u{e0100}\u{e000}\u{f0000}\u{378}\u{ffff}\u{10ffff}"\\z';
   assert.equal(JSON.parse(printable(hostile)), hostile, 'read as JSON, it is the text it shows');
 });
 
@@ -207,12 +268,12 @@ test('printable escapes the blank-looking spaces, the characters that are ignore
     return !shown.includes(ch) && /^"a(\\u[0-9a-f]{4})+b"$/.test(shown);
   };
   // Every space separator but the plain space: no-break, en quad to hair space, narrow no-break, medium mathematical, ideographic, Ogham.
-  for (const ch of [' ', ' ', ' ', ' ', ' ', ' ', ' ', '　']) assert.ok(escaped(ch), `U+${ch.codePointAt(0).toString(16)}`);
+  for (const ch of ['\u{a0}', '\u{1680}', '\u{2000}', '\u{2007}', '\u{200a}', '\u{202f}', '\u{205f}', '\u{3000}']) assert.ok(escaped(ch), `U+${ch.codePointAt(0).toString(16)}`);
   assert.equal(printable('a b'), '"a b"');
   // Ignored when shown (Default_Ignorable_Code_Point): the Hangul fillers, the combining grapheme joiner, variation selectors.
-  for (const ch of ['ᅟ', 'ㅤ', 'ﾠ', '͏', '️', '\u{e0100}']) assert.ok(escaped(ch), `U+${ch.codePointAt(0).toString(16)}`);
+  for (const ch of ['\u{115f}', '\u{3164}', '\u{ffa0}', '\u{34f}', '\u{fe0f}', '\u{e0100}']) assert.ok(escaped(ch), `U+${ch.codePointAt(0).toString(16)}`);
   // Private use (Co) and unassigned (Cn), noncharacters among them.
-  for (const ch of ['', '', '\u{f0000}', '\u{10fffd}', '͸', '￿', '\u{10ffff}']) assert.ok(escaped(ch), `U+${ch.codePointAt(0).toString(16)}`);
+  for (const ch of ['\u{e000}', '\u{f8ff}', '\u{f0000}', '\u{10fffd}', '\u{378}', '\u{ffff}', '\u{10ffff}']) assert.ok(escaped(ch), `U+${ch.codePointAt(0).toString(16)}`);
   // A code point past the first 65,536 is written as JSON writes it: two escapes.
   assert.equal(printable('\u{e0100}'), '"\\udb40\\udd00"');
 });
