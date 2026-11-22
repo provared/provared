@@ -111,8 +111,8 @@ checker:
   AI, and [an example](examples/frameworks/) for the Vercel AI SDK.
 - **[The gateway](gateway/README.md)**, for agents that act through web
   interfaces: it stands in front of each system an agent uses, holds
-  that system's credential and receipts each call. In the repository,
-  not yet on npm.
+  that system's credential and receipts each call. On npm as
+  `provared-gateway` (version 0.1.0, since 22 November 2026).
 
 ## The checker, and the sample record
 
@@ -295,6 +295,10 @@ other than the author has reviewed it yet.
 That is an invitation. The format may still change.
 Every published version stays on npm and the Python Package Index, so a
 record made with one version can always be checked by that version.
+The library makes no network request of its own: its tests fail where
+its code in `src/` or `bin/` opens a network connection. The one module
+that asks a time-stamp service, `provared/net/timestamp`, is separate,
+and is loaded only by a program that imports it.
 
 Questions, faults and suggestions: hello@prova.red, or
 [issues on GitHub](https://github.com/provared/provared/issues).

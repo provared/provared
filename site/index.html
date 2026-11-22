@@ -163,7 +163,7 @@ npx provared-check --sample</pre>
   <li><strong>The library</strong>, in JavaScript or Python, for an agent you write yourself: each action is checked against the permission first and receipted after. See <a href="#first">a first record of your own</a>, below.</li>
   <li><strong>The recorder beside Claude Code</strong>, <a href="https://www.npmjs.com/package/provared-claude-code">provared-claude-code on npm</a>, also a Claude Code plugin. It checks Claude Code's tool calls against the permission and receipts each one taken. Eight tools that only talk to the person or change what the model itself holds, such as AskUserQuestion and TodoWrite, are not recorded; <a href="https://github.com/provared/provared/blob/main/integrations/claude-code/README.md">its README</a> names them all. It keeps <a href="records/">the real record</a>.</li>
   <li><strong>Packages for two Python agent frameworks</strong>, LangChain and Pydantic AI, and, in the repository, an example for one JavaScript agent framework.</li>
-  <li><strong>The gateway</strong>, for agents that act through web interfaces: it stands in front of each system an agent uses, holds that system's credential and receipts each call. It is in <a href="https://github.com/provared/provared/tree/main/gateway">the repository</a>, not yet on npm.</li>
+  <li><strong>The gateway</strong>, for agents that act through web interfaces: it stands in front of each system an agent uses, holds that system's credential and receipts each call. <a href="https://www.npmjs.com/package/provared-gateway">provared-gateway on npm</a>; see <a href="https://github.com/provared/provared/tree/main/gateway">its folder in the repository</a>.</li>
 </ul>
 
 <h2 id="new">What is new</h2>
