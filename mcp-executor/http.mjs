@@ -539,11 +539,11 @@ export async function openHttpExecutor(config, more = {}) {
     return at;
   };
 
-  // Sessions the upstream opened (Mcp-Session-Id), each owned by the agent that opened it. An agent past its cap loses its own oldest, never another's.
+  // Sessions the upstream opened (Mcp-Session-Id), each owned by the agent that opened it and held to the connection made through OAuth it was begun under (null for an agent's own secret), as a local program's session is (X234). An agent past its cap loses its own oldest, never another's.
   const sessions = new Map();
-  const ownSession = (id, agent) => {
+  const ownSession = (id, agent, connection) => {
     if (sessions.has(id)) return;
-    sessions.set(id, agent.name);
+    sessions.set(id, { agent: agent.name, connection });
     agent.sessions.add(id);
     if (agent.sessions.size > MAX_SESSIONS) {
       const oldest = agent.sessions.values().next().value;
@@ -554,6 +554,15 @@ export async function openHttpExecutor(config, more = {}) {
   const forgetSession = (id, agent) => {
     sessions.delete(id);
     agent.sessions.delete(id);
+  };
+  /** Whether the upstream's session under this id is this agent's, begun under this connection. One used under another connection than its own is forgotten: no connection of the agent's may use it after. */
+  const upstreamSession = (id, agent, connection) => {
+    const s = sessions.get(id);
+    if (!s || s.agent !== agent.name) return false;
+    if (s.connection === connection) return true;
+    agent.log({ event: 'session-ended', why: 'another-connection' });
+    forgetSession(id, agent);
+    return false;
   };
   /** The key a call in flight is held by, in front of an upstream: its session and its id where a session id is given, since an id is unique only within its session (as in front of a local program, X236); its id alone where none is. */
   const callKey = (sessionId, id) => (sessionId === undefined ? idKey(id) : `session\n${sessionId}\n${idKey(id)}`);
@@ -841,7 +850,7 @@ export async function openHttpExecutor(config, more = {}) {
         // The few headers that come back are scrubbed as a body is: a header is a way to carry a token too.
         for (const name of RETURNED_HEADERS) if (up.headers[name] !== undefined && typeof up.headers[name] === 'string') returned[name] = scrub(up.headers[name]);
         const sessionId = up.headers['mcp-session-id'];
-        if (typeof sessionId === 'string' && SESSION_ID.test(sessionId) && status < 300) ownSession(sessionId, agent);
+        if (typeof sessionId === 'string' && SESSION_ID.test(sessionId) && status < 300) ownSession(sessionId, agent, ctx.token?.connection ?? null);
         // Never followed: a redirection would carry the credential elsewhere. And the upstream's refusal of the executor's credential is the executor's problem, not the agent's: nothing of it is relayed.
         if (status >= 300 && status < 400) {
           req.destroy();
@@ -1241,7 +1250,7 @@ export async function openHttpExecutor(config, more = {}) {
     if (sessionIds.length > 1 || (sessionIds.length === 1 && !SESSION_ID.test(sessionIds[0]))) return refuse(res, 400, null, CODES.invalidRequest, 'The Mcp-Session-Id header must be given once, as 1 to 512 visible ASCII characters.');
     // A local program's session is also held to the connection made through OAuth it was begun under (X234).
     const session = local && sessionIds.length === 1 ? local.owned(sessionIds[0], agent.name, who.token?.connection ?? null) : null;
-    if (sessionIds.length === 1 && (local ? !session : sessions.get(sessionIds[0]) !== agent.name)) {
+    if (sessionIds.length === 1 && (local ? !session : !upstreamSession(sessionIds[0], agent, who.token?.connection ?? null))) {
       agent.log({ event: 'refused', code: 'session-not-found' });
       return refuse(res, 404, null, CODES.invalidRequest, 'The session is not known to the executor, or is not this agent\'s. Begin a new one.');
     }

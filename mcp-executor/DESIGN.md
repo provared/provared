@@ -2450,7 +2450,11 @@ agent whose request it answered; a request, GET or DELETE carrying a
 session id is served only where the executor remembers it for this agent,
 else 404, which the specification makes the client's cue to begin a new
 session; a DELETE by the owner forgets it; a restart forgets all, so every
-client begins anew. A header given twice, or an id outside 1 to 512
+client begins anew. For an agent that signs in through OAuth, the session
+is also held to the connection it was begun under, as a local program's
+is (X234): used under another connection of the same agent it is
+forgotten, and answered 404, so that no connection of the agent's uses it
+after. A header given twice, or an id outside 1 to 512
 visible ASCII characters, is refused (400). Why: a session id is a
 capability the upstream handed to one agent, and passing an unknown one
 on would let an agent use another's after a restart. The other way: pass

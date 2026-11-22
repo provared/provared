@@ -310,9 +310,15 @@ What the executor does with each request:
   recorded as "outcome not known", and its body is not relayed.
 - Legacy sessions pass through: the `Mcp-Session-Id` the upstream gives
   comes back as it is, the GET stream of server messages and `initialize`
-  pass through, and a session belongs to the agent that opened it. Another
-  agent's request under it, or an unknown id (after a restart, the executor
-  knows none), is answered 404, and the client begins a new session.
+  pass through, and a session belongs to the agent that opened it and, for
+  an agent that connects through OAuth, to the connection it was begun
+  under. Another agent's request under it, a request under it from another
+  connection (the session is then forgotten), or an unknown id (after a
+  restart, the executor knows none), is answered 404, and the client
+  begins a new session. Where a request names a session, a call in flight
+  is held by that session and its id, so two sessions of one agent may use
+  the same ids, and a `notifications/cancelled` names a call of its own
+  session only.
 - To the upstream all agents are one caller: each request reaches it with
   the executor's one credential, and only a session, which belongs to the
   agent that opened it, tells one agent's requests from another's there.

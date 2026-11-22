@@ -53,3 +53,26 @@ test('F3: two sessions of one agent in front of an upstream each have their own 
     await w.close();
   }
 });
+
+test('F4: a session an upstream opened under one connection made through OAuth is not used under the next connection of the same agent', async () => {
+  const w = await oauthWorld();
+  try {
+    const c1 = await connect(w);
+    const initialize = { jsonrpc: '2.0', id: 0, method: 'initialize', params: { protocolVersion: LEGACY, capabilities: {}, clientInfo: { name: 'test', version: '1' } } };
+    const session = (await post(w, bearer(c1.access), initialize)).headers.get('mcp-session-id');
+    assert.ok(session);
+    assert.equal((await post(w, bearer(c1.access), { jsonrpc: '2.0', id: 1, method: 'ping' }, { headers: under(session) })).status, 200, 'its own connection may use it');
+    const c2 = await connect(w);
+    const ran = w.upstream.ran.length;
+    const carried = await post(w, bearer(c2.access), { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'echo', arguments: { x: 1 } } }, { headers: under(session) });
+    assert.equal(carried.status, 404);
+    assert.equal(w.upstream.ran.length, ran, 'nothing reached the upstream');
+    assert.ok(w.logs.some((e) => e.event === 'refused' && e.code === 'session-not-found'));
+    // The session is forgotten: not even the agent's later connections can use it; a new one is begun.
+    assert.equal((await post(w, bearer(c2.access), { jsonrpc: '2.0', id: 3, method: 'ping' }, { headers: under(session) })).status, 404);
+    const fresh = (await post(w, bearer(c2.access), initialize)).headers.get('mcp-session-id');
+    assert.equal((await post(w, bearer(c2.access), { jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'echo', arguments: { x: 1 } } }, { headers: under(fresh) })).status, 200);
+  } finally {
+    await w.close();
+  }
+});
