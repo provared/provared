@@ -88,13 +88,13 @@
 import { spawn, spawnSync } from 'node:child_process';
 import nodeCrypto from 'node:crypto';
 import { appendFileSync, closeSync, existsSync, fsyncSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, realpathSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
-import { createServer } from 'node:http';
 import { homedir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { performance } from 'node:perf_hooks';
 import { checkBook, checkSlip, entryLine, fingerprint, fromBase64url, inclusionPath, keySetFingerprint, openRecorder, thumbprint, toBase64url, utf8, verifyInclusion, writeSeal } from 'provared';
-import { createFeed, feedToken, isRandom } from './feed.mjs';
+import { isRandom } from './feed.mjs';
+import { portOwner } from './port.mjs';
 import { claudeFolder, doubledWords, filesOf, recorderHooksInSettings, removeInitHooks, within } from './settings-hooks.mjs';
 import { firstLineOfFile, replaceDurably, witnessClient } from './witness.mjs';
 import { MAX_RECORDER_WITNESSES, WITNESS_RETRY_MS, WITNESS_WAIT_MS, createWitnessing, heldSealFiles, keepStatement, readWitnessSettings, validAddress, writeWitnessSettings } from './witnessed.mjs';
@@ -1034,10 +1034,13 @@ async function slipsIn(text) {
  *   "seal" waits for the witnesses (5 seconds), witnessRetryMs how often a witness that is behind is asked again
  *   (a minute); signingOrigins are the addresses a record handed over may have been signed at
  *   (signingOriginsFrom: PROVARED_CLAUDE_CODE_SIGNING_ORIGIN, or https://sign.prova.red); handOverReadMs is how long
- *   the feed waits for the body of a record handed over (10 seconds), for tests
- * @returns {Promise<{port: number, close: () => Promise<void>, recorder: object, seal: () => Promise<object>, renew: (slip: object, o?: {newPasskey?: boolean}) => Promise<object>, newBook: () => Promise<object>, witnesses: () => Promise<object>}>}
+ *   the feed waits for the body of a record handed over (10 seconds), for tests; on is the owner of a port that
+ *   listens already (port.mjs, portOwner), whose feed the recorder takes: it then makes no server of its own and
+ *   does not listen, and its caller puts its handler ("handler") in place. Without it, the recorder makes its own
+ *   owner and listens on "port".
+ * @returns {Promise<{port: number, close: () => Promise<void>, recorder: object, seal: () => Promise<object>, renew: (slip: object, o?: {newPasskey?: boolean}) => Promise<object>, newBook: () => Promise<object>, witnesses: () => Promise<object>, handler: object}>}
  */
-export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_PORT, name = 'The recorder beside the coding agent', newBookAt = {}, inFlightMs = IN_FLIGHT_MS, faults = () => {}, clock = Date.now, witnessWaitMs = WITNESS_WAIT_MS, witnessRetryMs = WITNESS_RETRY_MS, signingOrigins = process.env.PROVARED_CLAUDE_CODE_SIGNING_ORIGIN, handOverReadMs } = {}) {
+export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_PORT, name = 'The recorder beside the coding agent', newBookAt = {}, inFlightMs = IN_FLIGHT_MS, faults = () => {}, clock = Date.now, witnessWaitMs = WITNESS_WAIT_MS, witnessRetryMs = WITNESS_RETRY_MS, signingOrigins = process.env.PROVARED_CLAUDE_CODE_SIGNING_ORIGIN, handOverReadMs, on = null } = {}) {
   const f = files(folder);
   const signedAt = signingOriginsFrom(signingOrigins);
   if (!existsSync(f.slip)) throw new Error(`There is no signed slip at ${f.slip}. Sign one on the signing page and put it in place: ${RUN} use <the saved file>`);
@@ -1077,15 +1080,11 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
   // the kept ones a call may still come back to, each only as far as it has
   // been written to its file ("written", set by each save that succeeds), so
   // that no line whose save failed reaches a reader; every save of a book
-  // answers the readers that wait.
-  const feed = createFeed({
-    folder,
-    token: feedToken(folder),
-    // A record handed over (POST /hand-over) is taken in its turn, between two calls.
-    handOver: (given) => inTurn(() => handOver(given)),
-    ...(handOverReadMs === undefined ? {} : { handOverReadMs }),
-    memory: () => [current, ...keptOpen.values()].map((b) => ({ key: b.id, path: b.path, text: () => b.writer.book(), saved: () => b.written ?? 0, inForce: b === current })),
-  });
+  // answers the readers that wait. The feed is the port's owner's (port.mjs):
+  // this recorder's own, or, given "on", the one the waiting recorder made,
+  // so that a reader's conversation holds across the switch.
+  const owner = on ?? portOwner({ folder, handOverReadMs });
+  const feed = owner.feed;
   const watched = (b, save) => (text) => {
     try {
       save(text);
@@ -1982,16 +1981,9 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
   // is always written, whether or not the hook still waits for it: the
   // hook has said that it was not confirmed, not that it was not written.
   class Gone extends Error {}
-  // A Content-Type of application/json, with or without parameters such as charset.
-  const isJson = (type) => typeof type === 'string' && type.split(';')[0].trim().toLowerCase() === 'application/json';
-  // The port, kept once the recorder listens: after the port is closed, the
-  // server no longer says which it was, and a request that came before is
-  // still answered.
-  let listening = null;
-  // The Host the recorder's own clients send: 127.0.0.1:<port>, or
-  // 127.0.0.1 alone on port 80, which a client leaves out.
-  const ownHost = (host) => host === `127.0.0.1:${listening}` || (listening === 80 && host === '127.0.0.1');
-  const server = createServer(async (req, res) => {
+  // A request that passed the port's checks (port.mjs, portChecks): a web
+  // page's request, and the feed's own, never reach this far.
+  async function handle(req, res) {
     let gone = false;
     res.on('close', () => {
       if (!res.writableFinished) gone = true;
@@ -2006,19 +1998,6 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
       res.end(JSON.stringify(body));
     };
     try {
-      // Every route, the feed's too, answers a program on this computer, not
-      // a web page. A browser names the page that sends a request (Origin,
-      // Sec-Fetch-Site), and names the website it meant to reach (Host): a
-      // website's name may be made to lead to this computer, but its Host is
-      // not 127.0.0.1. Refused before anything is read, and nothing is written.
-      if (req.headers.origin !== undefined) return send(403, { error: 'the recorder does not answer a web page (the request names an Origin)' });
-      if (req.headers['sec-fetch-site'] !== undefined && req.headers['sec-fetch-site'] !== 'none') return send(403, { error: 'the recorder does not answer a web page (Sec-Fetch-Site)' });
-      if (!ownHost(req.headers.host)) return send(403, { error: `the recorder answers at 127.0.0.1:${listening} only (Host)` });
-      // The feed's own requests (GET /hello, /books and /lines, POST /hand-over), with its token.
-      if (await feed.handle(req, res)) return undefined;
-      // A web page cannot send a body as application/json to another website
-      // without asking first, and this port never says yes.
-      if (req.method === 'POST' && !isJson(req.headers['content-type'])) return send(415, { error: 'the recorder takes a body as application/json only (Content-Type)' });
       if (req.method === 'GET' && req.url === '/status') {
         const witnessed = await witnessing.status();
         return send(200, {
@@ -2126,9 +2105,7 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
       }
       if (req.url === '/stop') {
         send(200, { stopped: true });
-        feed.close();
-        witnessing.close();
-        setTimeout(() => server.close(), 50);
+        owner.stop();
         return undefined;
       }
       return send(404, { error: 'not found' });
@@ -2136,16 +2113,24 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
       if (e instanceof Gone) return undefined;
       return send(500, { error: e.message });
     }
-  });
-  await new Promise((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(port, '127.0.0.1', resolve);
-  });
-  listening = server.address().port;
+  }
+  // What the port's owner hands to this recorder: the requests, and the feed's books and records handed over.
+  const handler = {
+    handle,
+    memory: () => [current, ...keptOpen.values()].map((b) => ({ key: b.id, path: b.path, text: () => b.writer.book(), saved: () => b.written ?? 0, inForce: b === current })),
+    // A record handed over (POST /hand-over) is taken in its turn, between two calls.
+    handOver: (given) => inTurn(() => handOver(given)),
+    close: () => witnessing.close(),
+  };
+  if (!on) {
+    owner.use(handler);
+    await owner.listen(port);
+  }
   // The witnesses are asked about every seal they have not signed for, from now on.
   witnessing.start();
   return {
-    port: listening,
+    get port() { return owner.port; },
+    handler,
     get recorder() { return current.writer; },
     get readings() { return readings; },
     witnesses: () => witnessing.status(),
@@ -2160,11 +2145,7 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
       return renewed;
     }),
     newBook: () => inTurn(newBook),
-    close: () => {
-      feed.close();
-      witnessing.close();
-      return new Promise((resolve) => server.close(resolve));
-    },
+    close: () => owner.close(),
   };
 }
 

@@ -15,7 +15,7 @@ import { join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assembleSlip, formatTime, prepareSlip } from 'provared';
 import { developmentPasskey } from 'provared/dev';
-import { makeAgentKeys } from '../recorder.mjs';
+import { makeAgentKeys, makeRecorderKeys } from '../recorder.mjs';
 
 export const here = fileURLToPath(new URL('.', import.meta.url));
 const hook = join(here, '..', 'hook.mjs');
@@ -107,6 +107,15 @@ export async function world(limits = [{ action: 'provared.code.run', count: 2 }]
   const slip = await signSlip({ agentKeys: agent.keys, passkey, limits });
   writeFileSync(join(folder, 'slip.json'), JSON.stringify(slip));
   return { folder, passkey, agent, slip };
+}
+
+/** A fresh folder, as "init" leaves it: the agent's keys and the recorder's, and no permission. */
+export async function freshWorld() {
+  const folder = tempFolder('provared-cc-fresh-');
+  const agent = await makeAgentKeys(folder);
+  await makeRecorderKeys(folder);
+  const passkey = await developmentPasskey();
+  return { folder, agent, passkey };
 }
 
 function run(args, { env = {}, cwd, input } = {}) {

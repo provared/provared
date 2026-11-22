@@ -35,6 +35,8 @@
     "settings-hooks.mjs",
     "actions.mjs",
     "feed.mjs",
+    "port.mjs",
+    "waiting.mjs",
     "witness.mjs",
     "witnessed.mjs",
     "proofs.mjs",
