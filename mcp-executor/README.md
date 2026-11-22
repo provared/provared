@@ -483,7 +483,12 @@ The settings (`executor-http.example.json` is a start): `name`, `service`,
   bodies of 1 MiB: the whole 32 MiB of bodies held took about 470 MiB
   more of the executor's memory, 542 MiB at its peak). Lower
   `waitingBytes` and `bodyLimit` where memory is short, as the claude.ai
-  recipe does with `bodyLimit`.
+  recipe does with `bodyLimit`. One agent's messages are read one at a
+  time, so that another agent need not wait for all of them; but this
+  holds on Windows only so far (in a test, under a second there, and 7.3
+  seconds on Linux, with one agent sending 30 costly messages of 1 MiB at
+  once). Where agents must not slow each other, give each a guard of its
+  own.
 - `allowedOrigins`: the origins (scheme, host and port) whose pages may
   call the executor. Default none.
 - `oauth`: where agents connect through OAuth (below): `issuer`,

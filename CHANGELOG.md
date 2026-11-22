@@ -180,8 +180,9 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
     - One agent's bodies in flight together, and the upstream's answers
       the executor holds for it, are each held to `waitingBytes` (32 MiB):
       past it a request, or an answer, is refused with 503.
-    - A message of more than 100,000 elements is refused (400), on every
-      transport, and no setting changes the number. A tool server's
+    - A message of more than 100,000 elements is refused (over HTTP with
+      400, over stdio with JSON-RPC error -32600), on every transport, and
+      no setting changes the number. A tool server's
       answer of more is not read: it is handed on as it came, and the
       call's receipt says the answer could not be read. But a `tools/list`
       answer of more is answered with an error (-32603), unless
@@ -196,7 +197,8 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
       subscription that names tasks. The upstream's offer of tasks is not
       handed on (`capabilities.tasks`, and the 2026-07-28 tasks extension
       in `capabilities.extensions`), and that extension is taken out of
-      what an agent declares, so a call is answered at once.
+      what an agent declares, so a tool server that follows the
+      specification answers a call at once.
     - `allowTasks: true` is a settings error unless the settings name
       exactly one agent: with more, the executor does not start.
     - In front of an upstream with more than one agent, a GET stream
@@ -228,9 +230,9 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
     byte until its request has been answered, past which the request is
     refused with 503 and read no further; a message of the agent's of more
     than 100,000 elements (list items and member names, `MAX_ELEMENTS` in
-    `jsonrpc.mjs`, a fixed number that no setting changes) is refused with
-    400 before it is read, on stdio as over
-    HTTP, counted in the one walk of the text that also finds its depth; a
+    `jsonrpc.mjs`, a fixed number that no setting changes) is refused
+    before it is read (over HTTP with 400, over stdio with -32600),
+    counted in the one walk of the text that also finds its depth; a
     request that only passes through lets go of its message as read once
     it has been sent on (measured: a held request of 383 KiB of small
     objects kept about 850 KiB of the heap in place of 3.1 MiB); and `bodyLimit` is
@@ -239,8 +241,10 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
     time, each in a turn of the event loop of its own: read back to back,
     30 messages of 1 MiB with 95,000 member names each held the thread for
     9 to 11 seconds while another agent's ping waited; now that ping waits
-    for about one of them for each step of its own exchange (measured: 0.6
-    to 0.9 seconds, each read 0.16 seconds). Tests: `test/limits.test.mjs`.
+    for about one of them for each step of its own exchange (measured on
+    Windows: 0.6 to 0.9 seconds, each read 0.16 seconds). On Linux this
+    does not hold yet: in the same test another agent still waited 7.3
+    seconds. That is a known limit; the test runs on Windows only. Tests: `test/limits.test.mjs`.
   - **Tasks in front of an upstream (F2).** With 0.5.1 every request but a
     tool call passed through unchecked, under the executor's one
     credential, so an upstream that keeps tasks for its caller rather than
@@ -252,7 +256,8 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
     (`params.task`) with -32602, each under the request's id with 200, as
     the executor's other refusals of a request it has read, and nothing is
     sent. With
-    `allowTasks`, each task is held to the agent whose call made it:
+    `allowTasks` (which now needs exactly one agent: see below), each task
+    is held to the agent whose call made it:
     `tasks/get`, `tasks/result` and `tasks/cancel` for another agent's task
     are refused and not sent, `tasks/list` comes back with the agent's own
     tasks alone, and an event that names another agent's task is dropped
@@ -321,7 +326,8 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
     `allowTasks`, the extension is taken out of what is sent on, so the
     upstream answers at once; a subscription that names tasks is refused
     and not sent; and a call answered with a task all the same has its
-    outcome not known. With `allowTasks`, the flat handle
+    outcome not known. With `allowTasks` (one agent only: see below), the
+    flat handle
     (`result.resultType` `"task"`, `result.taskId`) is learnt from any
     answer, `tasks/update` is served to the task's agent alone, a
     subscription goes on only where every task it names is the agent's,
@@ -352,16 +358,18 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
     503s, the 400 for a response not asked for, and ids counted by session
     where one is named), and the README on what `waitingBytes` counts
     (bytes as they came; the memory they take is several times that).
-  - Seven parts of these fixes could be taken out with no test noticing;
-    each now has a test that fails without it: the session in the key of
+  - Seven parts of these fixes could be taken out with no test noticing.
+    Each was given a test that fails without it; one of those tests was
+    later removed with the one-agent rule (below). They are: the session
+    in the key of
     a cancellation (`test/upstream-sessions.test.mjs`, whose step had come
     after the call it was to cancel had ended); methods and `params.task`
-    in other capitals, and a message that ties itself to another agent's
-    task (`test/tasks.test.mjs`); the session in the key of an answer to
+    in other capitals (`test/tasks.test.mjs`); a message that ties itself
+    to another agent's task (its test removed, as below); the session in the key of an answer to
     the upstream's request (`test/upstream-streams.test.mjs`); the budget
     given back when an unread answer's connection closes
     (`test/limits.test.mjs`, which skips where the computer's connection
-    takes the whole answer at once, as Windows does); the claude.ai
+    takes the whole answer at once, as Windows does; on Linux it runs and passes); the claude.ai
     recipe's `bodyLimit` (`test/recipe-compose.test.mjs`); and `npm ci`
     for the SDK in `agent-with-a-shell` (`test/recipe-shell.test.mjs`).
   - `test/recipe-shell.test.mjs` did not load on a clean checkout, where
