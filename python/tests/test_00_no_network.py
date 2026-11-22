@@ -58,7 +58,8 @@ EVENTS = frozenset({
     'socket.gethostbyname', 'socket.gethostbyaddr', 'socket.getnameinfo',
     'http.client.connect', 'urllib.Request',
 })
-# Starting a thread: the first from Python 3.13, the second before it.
+# Starting a thread raises one of these audit events in newer versions of
+# Python; Python 3.11 raises none, so Thread.start is also wrapped below.
 THREAD_STARTS = frozenset({'_thread.start_joinable_thread', '_thread.start_new_thread'})
 TESTS_OWN = 'tests'
 
@@ -97,11 +98,8 @@ def library_file_of(frame):
 def _hook(event, args):
     if event in THREAD_STARTS:
         thread = getattr(args[0], '__self__', None) if args else None
-        if isinstance(thread, threading.Thread):
-            who = _whose(sys._getframe(1))
-            if who is None:
-                who = getattr(threading.current_thread(), '_provared_started_by', None)
-            thread._provared_started_by = who
+        if isinstance(thread, threading.Thread) and not hasattr(thread, '_provared_started_by'):
+            _mark(thread, sys._getframe(1))
         return
     if event not in EVENTS:
         return
@@ -112,9 +110,25 @@ def _hook(event, args):
     raise NetworkUsed(f'Library code opened the network ({event}, from {found[-1][1]}). The library makes no network request.')
 
 
+def _mark(thread, frame):
+    """Note on the thread who started it: the library file, TESTS_OWN, or
+    whoever started the thread that starts it."""
+    who = _whose(frame)
+    if who is None:
+        who = getattr(threading.current_thread(), '_provared_started_by', None)
+    thread._provared_started_by = who
+
+
 if not getattr(sys, '_provared_no_network', False):
     sys._provared_no_network = True
     sys.addaudithook(_hook)
+    _thread_start = threading.Thread.start
+
+    def _marked_start(self, *args, **kwargs):
+        _mark(self, sys._getframe(1))
+        return _thread_start(self, *args, **kwargs)
+
+    threading.Thread.start = _marked_start
 
 
 def _run_as_library(code):
