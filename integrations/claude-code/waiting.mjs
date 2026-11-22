@@ -115,6 +115,8 @@ export async function waitingHandler({ folder, owner, clock = Date.now, signingO
   // cancellation is refused: no permission is in force.
   async function handOver(given) {
     const refused = (kind, fp, code, message, more = {}) => ({ kind, fingerprint: fp, outcome: 'refused', code, message, ...more });
+    // One that waited its turn behind the admit that put the full recorder in place: refused, and nothing kept.
+    if (owner.handler !== self) return refused(null, null, 'not-waiting', 'The recorder no longer waits for a first permission: one was taken while this was handed over. Hand it over again.');
     if (!given || typeof given !== 'object' || Array.isArray(given)) return refused(null, null, 'not-understood', 'What was handed over is not a renewal or a cancellation.');
     const names = Object.keys(given);
     if (given.kind === 'cancellation' && names.length === 2 && names.includes('cancellation')) {

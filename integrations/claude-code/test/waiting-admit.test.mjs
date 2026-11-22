@@ -191,6 +191,29 @@ test('tool calls sent throughout the switch are each answered, refused or allowe
   }
 });
 
+test('a hand-over that reached the waiting recorder while it took a permission is refused once the full recorder is in place, and keeps nothing', async () => {
+  const gate = gateAt('checked');
+  const w = await waitingWorld({ faults: gate.faults });
+  try {
+    const mine = await w.handed();
+    const taking = w.reader.post('/admit', { fingerprint: mine.fp, thumbprint: mine.T, take: true });
+    await within(gate.reached, 20000, 'the admit at its checks');
+    // Handed over now, it waits its turn in the waiting recorder, behind the admit.
+    const stranger = await signSlip({ agentKeys: w.agent.keys, passkey: await developmentPasskey(), purpose: 'Handed over during the switch.' });
+    const handing = feedReader({ address: `http://127.0.0.1:${w.port}`, token: read(w.folder, 'feed-token').trim() }).post('/hand-over', { kind: 'renewal', slip: stranger });
+    await new Promise((r) => setTimeout(r, 300));
+    gate.open();
+    assert.equal((await within(taking, 30000, 'the admit')).body.outcome, 'taken');
+    const said = (await within(handing, 30000, 'the hand-over')).body;
+    assert.equal(said.outcome, 'refused', JSON.stringify(said));
+    assert.equal(said.code, 'not-waiting');
+    assert.equal(readWaitingPermissions(w.folder).length, 0, 'nothing is kept by the waiting recorder after the switch');
+  } finally {
+    gate.open();
+    await w.waiting.close();
+  }
+});
+
 test('in the waiting recorder, a declined permission no longer waits and is refused when handed over again; "take": false drops nothing', async () => {
   const w = await waitingWorld();
   try {
