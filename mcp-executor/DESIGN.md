@@ -427,10 +427,14 @@ JSON body or one event up to 16 MiB, as a line on stdio; the executor's
 `timeout` on every POST exchange; 256 requests of one agent in flight at
 once, beside `maxWaiting` for its calls; an `Origin` refused unless the
 settings allow it, and the local address listened on unless they say
-otherwise (X109). A JSON answer nobody reads is held after its place among
-the 256 is freed, up to 16 MiB for each connection (`ANSWER_LIMIT`), until
-that connection closes: the exchange has ended, so neither `timeout` nor
-X113 reaches it, and the number of connections is not limited. A stop on request with a call in flight settles the call
+otherwise (X109). In front of an upstream, what the executor holds of the
+upstream's answers to one agent (read and not yet handed on, or waiting
+for that agent's connections to take it) is held to `waitingBytes` too,
+counted apart from the bodies: past it a JSON answer is refused with 503
+and a stream is closed. A JSON answer nobody reads is still held after
+its place among the 256 is freed, until its connection closes (neither
+`timeout` nor X113 reaches it), but it counts in that budget until then,
+so an agent that leaves answers unread is refused further ones. A stop on request with a call in flight settles the call
 as the executor's stop, writes its receipt and answers the agent before the
 connections close (X115); a stop without warning, followed by a start,
 writes the receipt from the agent's copy before the executor listens
@@ -2424,7 +2428,10 @@ default as the MCP TypeScript SDK's, refused with 413 whether declared or not; t
 requests in flight up to `waitingBytes` together, 32 MiB by default as the
 gateway's, each counted from its declared length or its first byte until
 its request has been answered, past which the request is refused with 503
-and read no further; one message of the agent's, on stdio as over HTTP, up
+and read no further; what is held of the upstream's answers to one agent
+up to `waitingBytes` as well, counted apart so that bodies at their budget
+leave room for their answers, past which a JSON answer is refused with 503
+and a stream is closed; one message of the agent's, on stdio as over HTTP, up
 to 100,000 elements (`MAX_ELEMENTS`: the items of every list and the
 names of every object, counted in one walk of the text before it is read),
 past which it is refused before anything of it is built, since a message

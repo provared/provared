@@ -362,6 +362,8 @@ export function sseReader({ onEvent, onTooLong, limit = ANSWER_LIMIT }) {
   let over = false;
   let first = true;
   return {
+    /** How many characters are held of the event not yet whole. */
+    pending: () => raw.length + buffer.length,
     feed(text) {
       if (over) return;
       buffer += text;
@@ -455,6 +457,8 @@ export async function openHttpExecutor(config, more = {}) {
       agent.open = 0;
       /** The bytes of bodies this agent's requests in flight hold, being read or waiting for their answers: at most waitingBytes. */
       agent.held = 0;
+      /** The bytes of the upstream's answers to this agent the executor holds, read and not yet handed on, or waiting for the agent's connection: at most waitingBytes, counted apart from the bodies. */
+      agent.answers = 0;
       /** The sessions this agent opened, oldest first. */
       agent.sessions = new Set();
       /** In front of an upstream: the tasks this agent's calls made (allowTasks), and the ids of the events it was given, oldest first. */
@@ -563,6 +567,23 @@ export async function openHttpExecutor(config, more = {}) {
     agent.log({ event: 'session-ended', why: 'another-connection' });
     forgetSession(id, agent);
     return false;
+  };
+  /**
+   * Count for the request's agent what the executor holds of the upstream's
+   * answer to it: "buffered", what has been read and not yet handed on, and
+   * what waits for the agent's connection to take it (res.writableLength).
+   * The count is in agent.answers until the response has gone: apart from
+   * the bodies (agent.held), so that bodies at their budget leave room for
+   * their answers, and against the same limit, waitingBytes. Gives whether
+   * the agent is still within it.
+   */
+  const holdAnswer = (ctx, buffered = ctx.buffered ?? 0) => {
+    const { res, agent } = ctx;
+    ctx.buffered = buffered;
+    const now = buffered + (res.destroyed || res.writableFinished ? 0 : res.writableLength);
+    agent.answers += now - (ctx.answerHeld ?? 0);
+    ctx.answerHeld = now;
+    return agent.answers <= settings.waitingBytes;
   };
   /** The key a call in flight is held by, in front of an upstream: its session and its id where a session id is given, since an id is unique only within its session (as in front of a local program, X236); its id alone where none is. */
   const callKey = (sessionId, id) => (sessionId === undefined ? idKey(id) : `session\n${sessionId}\n${idKey(id)}`);
@@ -771,7 +792,11 @@ export async function openHttpExecutor(config, more = {}) {
     let stallTimer = null;
     let done;
     const end = new Promise((d) => {
-      done = d;
+      // At the end of the exchange, what was read of the answer is held no longer; what waits for the agent's connection still counts (waitingBytes).
+      done = (v) => {
+        holdAnswer(ctx, 0);
+        d(v);
+      };
     });
     const finishAnd = (f) => (...a) => {
       f(...a);
@@ -785,10 +810,18 @@ export async function openHttpExecutor(config, more = {}) {
       res.destroy();
     };
     /** Write to the agent, unless it has gone. Where the agent's connection takes no more, the upstream is paused until it drains; an agent whose connection does not fully drain within the timeout, even one reading slowly, or for which more than the limit is waiting, is cut off (X113). */
+    /** What the executor holds of the upstream's answer would take this agent past waitingBytes: the exchange is cut (a JSON answer is refused, a stream closed). */
+    const tooMuchHeld = () => {
+      agent.log({ event: 'refused', code: 'answer-too-much-held', kind, held: agent.answers });
+      req?.destroy();
+      fail_(503, `The upstream's answer would take what the executor holds of answers for this agent past ${settings.waitingBytes} bytes (waitingBytes), so the exchange with the upstream was cut.`);
+    };
     const toAgent = (text) => {
       if (res.destroyed || res.writableEnded || finished) return;
       if (res.writableLength > BACKLOG_LIMIT) return stalled(`more than ${BACKLOG_LIMIT} bytes waiting`);
-      if (res.write(text) || !up_ || stallTimer) return;
+      const taken = res.write(text);
+      if (!holdAnswer(ctx)) return tooMuchHeld();
+      if (taken || !up_ || stallTimer) return;
       up_.pause();
       stallTimer = setTimeout(() => stalled(`not all taken within ${settings.timeout} ms`), settings.timeout);
       stallTimer.unref();
@@ -918,7 +951,12 @@ export async function openHttpExecutor(config, more = {}) {
               toAgent(scrub(event.raw));
             },
           });
-          up.on('data', (chunk) => reader.feed(decoder.decode(chunk, { stream: true })));
+          up.on('data', (chunk) => {
+            if (finished) return;
+            reader.feed(decoder.decode(chunk, { stream: true }));
+            // The part of an event not yet whole counts for the agent, as what waits for its connection does.
+            if (!finished && !holdAnswer(ctx, reader.pending())) tooMuchHeld();
+          });
           up.on('error', () => fail_(502, 'The upstream closed the stream before it was complete.'));
           up.on('aborted', () => fail_(502, 'The upstream closed the stream before its answer came.'));
           up.on('end', () => {
@@ -934,11 +972,14 @@ export async function openHttpExecutor(config, more = {}) {
         const chunks = [];
         let size = 0;
         up.on('data', (chunk) => {
+          if (finished) return;
           size += chunk.length;
           if (size > ANSWER_LIMIT) {
             req.destroy();
             return fail_(502, `The upstream's answer was larger than ${ANSWER_LIMIT} bytes, the most the executor takes.`);
           }
+          // What is read of the answer counts for the agent until it has been handed on (waitingBytes).
+          if (!holdAnswer(ctx, size)) return tooMuchHeld();
           chunks.push(chunk);
         });
         up.on('error', () => fail_(502, 'The upstream closed the connection before its answer was complete.'));
@@ -1262,6 +1303,10 @@ export async function openHttpExecutor(config, more = {}) {
     // The bytes of this request's body, counted for the agent until the request has been answered (waitingBytes).
     const held = { agent, bytes: 0 };
     const ctx = { req, res, agent, token: who.token, upstream: null, streaming: false, finalEvent: null, session, entered: null, held };
+    // What waits for the agent's connection counts in its budget until the connection has taken it, or has gone.
+    res.on('drain', () => holdAnswer(ctx));
+    res.once('finish', () => holdAnswer(ctx));
+    res.once('close', () => holdAnswer(ctx, 0));
     // A message in hand keeps its session from being taken for idle; an open stream of the program's own messages does not (X235).
     if (session && req.method !== 'GET') enter(ctx, session);
     try {
@@ -1269,6 +1314,8 @@ export async function openHttpExecutor(config, more = {}) {
     } finally {
       agent.open -= 1;
       agent.held -= held.bytes;
+      // The answer as written, where the agent has not yet taken it all.
+      holdAnswer(ctx);
       if (ctx.entered) local.leave(ctx.entered);
     }
   }
@@ -1672,7 +1719,7 @@ export async function openHttpExecutor(config, more = {}) {
     /** One agent's stub writer and copy, for tests and tools: {writer, stopped, calls}. */
     agent: (name) => {
       const a = agents.get(name);
-      return a ? { writer: a.writer, stopped: a.stopped, slip: { fingerprint: a.about.fingerprint }, calls: () => a.calls.size, open: () => a.open, sessions: () => (local ? local.count(name) : a.sessions.size) } : null;
+      return a ? { writer: a.writer, stopped: a.stopped, slip: { fingerprint: a.about.fingerprint }, calls: () => a.calls.size, open: () => a.open, held: () => ({ bodies: a.held, answers: a.answers }), sessions: () => (local ? local.count(name) : a.sessions.size) } : null;
     },
     /** In front of a local program: how many of its programs are running now, those of sessions just ended among them; null in front of an upstream HTTP server. */
     programs: () => (local ? local.programs() : null),

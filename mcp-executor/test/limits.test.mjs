@@ -12,7 +12,8 @@ import { test } from 'node:test';
 import { setFlagsFromString } from 'node:v8';
 import { runInNewContext } from 'node:vm';
 
-const { httpWorld, post, rawRequest, auth } = await import('./http-world.mjs');
+const { checkBook } = await import('provared');
+const { httpWorld, post, rawRequest, auth, call, request } = await import('./http-world.mjs');
 const { BODY_LIMIT, WAITING_BYTES, readHttpSettings } = await import('../http.mjs');
 const { MAX_ELEMENTS, CODES, readMessage } = await import('../jsonrpc.mjs');
 const { until } = await import('./world.mjs');
@@ -186,6 +187,44 @@ test('limits: a request that only passes through lets go of its message, as read
   } finally {
     await w.close();
     await Promise.all(pending);
+  }
+});
+
+test('limits: what the executor holds of the upstream\'s answers for an agent counts in waitingBytes too: past it a JSON answer is refused (503) and a stream is closed; the executor goes on, and another agent is answered', async () => {
+  const w = await httpWorld({ config: { bodyLimit: 16384, waitingBytes: 65536, timeout: 5000 } });
+  try {
+    // An answer within the budget is handed on.
+    const small = await request(w, 'alpha', 'big', { size: 30000 }, { id: 'small' });
+    assert.equal(small.status, 200);
+    assert.equal(small.json.result.text.length, 30000);
+    // A JSON answer that would take alpha past it: refused under the request's id, and the rest not read.
+    const big = await request(w, 'alpha', 'big', { size: 200000 }, { id: 'big' });
+    assert.equal(big.status, 503);
+    assert.equal(big.json.id, 'big');
+    assert.equal(big.json.error.code, CODES.noAnswer);
+    assert.match(big.json.error.message, /waitingBytes/);
+    assert.ok(w.logs.some((e) => e.event === 'refused' && e.code === 'answer-too-much-held'));
+    // The same as one event of a stream: the stream is closed before the event has come whole.
+    let streamed = null;
+    try {
+      streamed = await request(w, 'alpha', 'big', { size: 200000, sse: true }, { id: 'streamed' });
+    } catch {
+      streamed = null;
+    }
+    assert.ok(streamed === null || streamed.json?.result === undefined, 'no result reached the agent');
+    // A call whose answer is past it: its outcome is not known, and its receipt says so.
+    const c = await call(w, 'alpha', 'odd', { how: 'big-json', size: 200000 }, { id: 'c' });
+    assert.equal(c.json.error.code, CODES.noAnswer);
+    const stubs = (await checkBook(w.executor.agent('alpha').writer.book(), { issuerKeys: w.settings.agents.alpha.issuerKeys })).entries.filter((e) => e.kind === 'stub');
+    assert.ok(stubs.at(-1).content.details.some((d) => d.name === 'provared.error'));
+    // The executor goes on: another agent is answered, and so is alpha once its answers are given back.
+    assert.equal((await post(w, 'beta', { jsonrpc: '2.0', id: 'b', method: 'ping' })).status, 200);
+    await until(() => w.executor.agent('alpha').open() === 0, { timeout: 5000 });
+    assert.equal((await request(w, 'alpha', 'big', { size: 30000 }, { id: 'again' })).status, 200);
+    // Everything held is given back once the answers have gone.
+    await until(() => { const h = w.executor.agent('alpha').held(); return h.bodies === 0 && h.answers === 0; }, { timeout: 5000 });
+  } finally {
+    await w.close();
   }
 });
 

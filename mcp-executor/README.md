@@ -435,7 +435,13 @@ The settings (`executor-http.example.json` is a start): `name`, `service`,
   at once, in bytes (default 33,554,432, as the gateway's). A body counts
   from its declared length, or from its first byte, until its request has
   been answered; a request that would take the agent past it is refused
-  with 503, and other agents are not touched.
+  with 503, and other agents are not touched. In front of an upstream,
+  what the executor holds of the upstream's answers to one agent (read
+  and not yet handed on, or waiting for the agent's connection to take
+  it) is held to the same number, counted apart: past it a JSON answer is
+  refused with 503 (a call's outcome is then not known) and a stream is
+  closed. So one agent holds at most about twice `waitingBytes` in bodies
+  and answers.
 - `allowedOrigins`: the origins (scheme, host and port) whose pages may
   call the executor. Default none.
 - `oauth`: where agents connect through OAuth (below): `issuer`,

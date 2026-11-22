@@ -34,7 +34,10 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
   const seen = [];
   const sessions = new Set();
   const tasks = new Map();
-  const state ={ elsewhere: 0, aborted: 0, fold: false, ran: [], deepList: 0 };
+  /** The server's own requests waiting for a client's answer, by id: whoever answers under the id settles it, as a server without sessions does. */
+  const asks = new Map();
+  let nextAsk = 1;
+  const state = { elsewhere: 0, aborted: 0, fold: false, ran: [], deepList: 0 };
   /** The text of a value nested "depth" lists deep. */
   const deep = (depth) => `${'['.repeat(depth)}1${']'.repeat(depth)}`;
   // With "fold" set, the server reads member names without regard to capitals, the last one winning, as some JSON readers do for the fields they know.
@@ -125,6 +128,12 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
       }
       if (Array.isArray(m)) return json(res, 400, { jsonrpc: '2.0', id: null, error: { code: -32600, message: 'No batches' } });
       if (Object.hasOwn(m, 'result') || Object.hasOwn(m, 'error') || m.id === undefined) {
+        // A client's answer to a request of the server's own ("ask", below): it settles the call that asked.
+        const asked = asks.get(m.id);
+        if (asked) {
+          asks.delete(m.id);
+          asked(m);
+        }
         res.writeHead(202);
         return res.end();
       }
@@ -136,6 +145,15 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
         return result(res, id, { protocolVersion: params.protocolVersion ?? '2025-11-25', capabilities: { tools: {} }, serverInfo: { name: 'fake-http-server', version: '0.0.1' } }, { 'mcp-session-id': session });
       }
       if (method === 'ping') return result(res, id, {});
+      // An answer of "size" bytes of text, as a JSON body, or (params.sse) as one event.
+      if (method === 'big') {
+        const r = { text: 'x'.repeat(params.size ?? 100) };
+        if (params.sse) {
+          sse(res)({ jsonrpc: '2.0', id, result: r });
+          return res.end();
+        }
+        return result(res, id, r);
+      }
       // Tasks (2025-11-25), in one store for whoever presents its token, with no sessions: a tools/call that asks for a task is answered with its handle, and tasks/list, tasks/get, tasks/result and tasks/cancel serve any task to any caller.
       if (method === 'tools/call' && params.task) {
         const taskId = `task-${tasks.size + 1}-${Math.random().toString(36).slice(2, 10)}`;
@@ -219,6 +237,17 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
           // Both in one write, so that they arrive in one chunk.
           send(`${JSON.stringify({ jsonrpc: '2.0', id, result: { resultType: 'complete', content: [{ type: 'text', text: 'first' }] } })}\n\nid: ev-2\ndata: ${JSON.stringify({ jsonrpc: '2.0', id, result: { resultType: 'complete', content: [{ type: 'text', text: 'second' }] } })}`, 'id: ev-1\n');
           return res.end();
+        }
+        if (how === 'ask') {
+          // A request of the server's own on the call's stream (elicitation), under an id it numbers itself; the call is answered with whatever answer comes under that id, from whichever client.
+          const send = sse(res);
+          const askId = `up-${nextAsk++}`;
+          asks.set(askId, (answer) => {
+            send({ jsonrpc: '2.0', id, result: { resultType: 'complete', content: [{ type: 'text', text: `answered: ${JSON.stringify(answer.result ?? answer.error)}` }] } });
+            res.end();
+          });
+          res.on('close', () => asks.delete(askId));
+          return send({ jsonrpc: '2.0', id: askId, method: 'elicitation/create', params: { message: 'Which account?', requestedSchema: { type: 'object', properties: {} } } });
         }
         if (how === 'drop') {
           const send = sse(res);
