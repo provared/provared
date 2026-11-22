@@ -14,7 +14,10 @@
 //                                   long (0 to 25; 25 where it is not given) for anything to change
 //     &max=<lines>                  at most this many lines (0 to 500; 500 where it is not given):
 //                                   0 asks only for the line before place n, the size and the last
-//   POST /hand-over                 a record the person signed elsewhere, handed to the recorder to
+//   GET /agent                      the agent's public key set, { agent: { name, keys }, fingerprint },
+//                                   worked out by the recorder from the agent's key file, never the
+//                                   file: only public members (kty, alg, crv, x, pub) are given
+//   POST /hand-over                a record the person signed elsewhere, handed to the recorder to
 //                                   take (a renewal or a cancellation, from the application); the
 //                                   recorder checks it itself and answers what it did (recorder.mjs)
 //
@@ -123,6 +126,31 @@ const RANDOM = /^[A-Za-z0-9_-]{43}$/;
 export function isRandom(value) {
   return typeof value === 'string' && RANDOM.test(value) && Buffer.from(value, 'base64url').toString('base64url') === value;
 }
+/** The members of a public key that GET /agent gives: the agent's keys are Ed25519 (kty, alg, crv, x) and ML-DSA-87 (kty, alg, pub). */
+export const PUBLIC_KEY_MEMBERS = Object.freeze(['kty', 'alg', 'crv', 'x', 'pub']);
+
+/**
+ * The answer of GET /agent, made afresh from what the recorder gives: a
+ * name, one key or more, each of public members only (PUBLIC_KEY_MEMBERS,
+ * each a string), and a fingerprint of 43 characters of base64url. null
+ * where anything else is there: a key with a private member (d, priv) is
+ * never given, and no member is dropped, since the fingerprint is the key
+ * set's as given.
+ */
+export function publicKeySet(given) {
+  const a = given?.agent;
+  if (!a || typeof a !== 'object' || typeof a.name !== 'string' || !Array.isArray(a.keys) || a.keys.length === 0) return null;
+  if (typeof given.fingerprint !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(given.fingerprint)) return null;
+  const keys = [];
+  for (const k of a.keys) {
+    if (!k || typeof k !== 'object' || Array.isArray(k)) return null;
+    const names = Object.keys(k);
+    if (names.length === 0 || !names.every((n) => PUBLIC_KEY_MEMBERS.includes(n) && typeof k[n] === 'string')) return null;
+    keys.push(Object.fromEntries(names.map((n) => [n, k[n]])));
+  }
+  return { agent: { name: a.name, keys }, fingerprint: given.fingerprint };
+}
+
 // eslint-disable-next-line security/detect-unsafe-regex -- the number has at most nine digits, so the text it can match is short and bounded.
 const BOOK_NAME = /^book(?:-[1-9][0-9]{0,8})?\.jsonl$/;
 const KEPT_NAME = /^book-([1-9][0-9]{0,8})\.jsonl$/;
@@ -294,11 +322,14 @@ function lineFromBytes(buf) {
  * @param {{folder: string, memory: () => {key: number, path: string, text: () => string, saved?: () => number, inForce: boolean}[], token: {token: string|null, problem: string|null, path: string}, now?: () => number}} o
  *   memory: the books the recorder holds open, asked each time; key names one book for as long as
  *   the recorder holds it, wherever its file now is; saved gives how many characters of its text the
- *   recorder has written to the file (all of it where not given); now, sessionQuestions, maxBusy and
+ *   recorder has written to the file (all of it where not given); agent: () => the agent's public key
+ *   set, { agent: { name, keys }, fingerprint }, or null where the recorder cannot give it yet (GET /agent
+ *   is answered 503); without it, the feed does not know GET /agent, as an earlier recorder's feed did
+ *   not; now, sessionQuestions, maxBusy and
  *   handOverReadMs are for the tests (the clock, FEED_SESSION_QUESTIONS, FEED_MAX_BUSY and
  *   FEED_HAND_OVER_READ_MS by default)
  */
-export function createFeed({ folder, memory, token, handOver = null, now = Date.now, sessionQuestions = FEED_SESSION_QUESTIONS, maxBusy = FEED_MAX_BUSY, handOverReadMs = FEED_HAND_OVER_READ_MS }) {
+export function createFeed({ folder, memory, token, handOver = null, agent = null, now = Date.now, sessionQuestions = FEED_SESSION_QUESTIONS, maxBusy = FEED_MAX_BUSY, handOverReadMs = FEED_HAND_OVER_READ_MS }) {
   let version = 0;
   let waiting = new Set();
   let closed = false;
@@ -561,7 +592,7 @@ export function createFeed({ folder, memory, token, handOver = null, now = Date.
   async function handle(req, res) {
     const url = new URL(req.url, 'http://127.0.0.1');
     if (url.pathname === '/hand-over') return handOverRequest(req, res);
-    if (url.pathname !== '/hello' && url.pathname !== '/books' && url.pathname !== '/lines') return false;
+    if (url.pathname !== '/hello' && url.pathname !== '/books' && url.pathname !== '/lines' && !(url.pathname === '/agent' && agent)) return false;
     if (req.method !== 'GET') return plain(res, 405, { error: 'the feed answers GET only' });
     if (token.problem || !token.token) return plain(res, 503, { error: offWords });
     if (url.pathname === '/hello') return hello(req, res);
@@ -569,7 +600,7 @@ export function createFeed({ folder, memory, token, handOver = null, now = Date.
     if (!talk) return true;
     const send = (code, body, more) => proved(res, talk, code, body, more);
 
-    const known = url.pathname === '/books' ? [] : ['from', 'id', 'book', 'wait', 'max'];
+    const known = url.pathname === '/books' || url.pathname === '/agent' ? [] : ['from', 'id', 'book', 'wait', 'max'];
     for (const name of new Set(url.searchParams.keys())) {
       if (!known.includes(name)) return send(400, { error: `the feed does not know "${name}"${known.length ? `; it takes ${known.join(', ')}` : ''}` });
       if (url.searchParams.getAll(name).length > 1) return send(400, { error: `"${name}" is given more than once` });
@@ -585,6 +616,21 @@ export function createFeed({ folder, memory, token, handOver = null, now = Date.
       }
     };
     if (url.pathname === '/books') return take(() => send(200, { books: listing().map(publicEntry), version }));
+    if (url.pathname === '/agent') {
+      return take(async () => {
+        let given;
+        try {
+          given = await agent();
+        } catch {
+          // In words that name no folder.
+          return send(500, { error: 'the recorder could not read the agent\'s key set' });
+        }
+        if (!given) return send(503, { error: 'the recorder is starting: ask again in a moment' });
+        const shown = publicKeySet(given);
+        if (!shown) return send(500, { error: 'the agent\'s key set is not in the form the feed gives (public members only), so it is not given' });
+        return send(200, shown);
+      });
+    }
 
     const whole = (name, fallback, highest) => {
       const text = url.searchParams.get(name);
@@ -792,8 +838,28 @@ export function feedReader({ address, token, fetchImpl = globalThis.fetch }) {
       return { code: 401, body, proved: false };
     }
     const ok = sameProof(r.headers.get('provared-feed-proof'), feedHmac(talk.key, FEED_LABELS.answer, talk.session, nonce, String(r.status), bytes));
-    if (!ok) throw Object.assign(new Error('an answer of the feed does not carry the recorder\'s proof'), { code: 'not-proved' });
+    if (!ok) throw Object.assign(new Error('an answer of the feed does not carry the recorder\'s proof'), { code: 'not-proved', status: r.status });
     return { code: r.status, body: JSON.parse(bytes.toString()), proved: true };
+  }
+  /**
+   * GET /agent: { given: true, agent: { name, keys }, fingerprint }, proved and in the form the feed gives
+   * (publicKeySet); { given: false } where an earlier recorder answers with its own 404, which carries no
+   * proof, and nothing in it is read. Anything else throws.
+   */
+  async function agent() {
+    let r;
+    try {
+      r = await get('/agent');
+    } catch (e) {
+      if (e.code === 'not-proved' && e.status === 404) {
+        talk = null;
+        return { given: false };
+      }
+      throw e;
+    }
+    const shown = r.code === 200 ? publicKeySet(r.body) : null;
+    if (!shown) throw Object.assign(new Error(`the recorder gave no key set in the form the feed gives (it answered ${r.code})`), { code: r.code === 200 ? 'not-understood' : r.code });
+    return { given: true, ...shown };
   }
   /** A question with a body (POST), proved over every byte of the body. */
   async function post(path, value, renewed = false) {
@@ -812,8 +878,8 @@ export function feedReader({ address, token, fetchImpl = globalThis.fetch }) {
       return { code: 401, body: answer, proved: false };
     }
     const ok = sameProof(r.headers.get('provared-feed-proof'), feedHmac(talk.key, FEED_LABELS.answer, talk.session, nonce, String(r.status), bytes));
-    if (!ok) throw Object.assign(new Error('an answer of the feed does not carry the recorder\'s proof'), { code: 'not-proved' });
+    if (!ok) throw Object.assign(new Error('an answer of the feed does not carry the recorder\'s proof'), { code: 'not-proved', status: r.status });
     return { code: r.status, body: JSON.parse(bytes.toString()), proved: true };
   }
-  return { get, post, hello };
+  return { get, post, hello, agent };
 }

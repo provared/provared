@@ -104,6 +104,7 @@ import { fileURLToPath } from 'node:url';
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { createCryptoCore } from '@microtoll/crypto-core';
 import { authenticateConnection, createEphemeralIdentity, sendAndAwait } from '@microtoll/identity';
+import { readKeySet } from './agent.mjs';
 import { sealEntry } from './entry.mjs';
 import { HAND_OVER_AGAIN_MS, bookSide, createHandover } from './handover.mjs';
 import { checkConnection } from './line.mjs';
@@ -346,7 +347,7 @@ function sameProof(given, expected) {
 }
 
 /**
- * A client of a recorder's feed: GET /books and GET /lines. The token
+ * A client of a recorder's feed: GET /books, GET /lines and GET /agent, and POST /hand-over. The token
  * never travels. The client opens a conversation with a random number of
  * its own (GET /hello); the recorder answers with a random number of its
  * own and an HMAC-SHA-256 over both, keyed by the token: until that proof
@@ -398,7 +399,8 @@ export function feedClient({ address, token, fetchImpl = globalThis.fetch }) {
   }
 
   // A question with a body (POST /hand-over) is proved over every byte of the body as well, under a label of its own.
-  async function get(path, wait, renewed = false, sending = null) {
+  // notFoundUnproved: an unproved 404 is answered { notGiven: true }, and nothing in it is read (GET /agent of an earlier recorder).
+  async function get(path, wait, renewed = false, sending = null, notFoundUnproved = false) {
     if (!talk) await hello();
     const nonce = randomBytes(32).toString('base64url');
     const proof = sending === null
@@ -411,7 +413,7 @@ export function feedClient({ address, token, fetchImpl = globalThis.fetch }) {
     if (response.status === 401) {
       const body = readJson(bytes);
       // A conversation the recorder no longer holds (it restarted, or gave it up): another is opened, once.
-      if (body.renew === true && !renewed) { talk = null; return get(path, wait, true, sending); }
+      if (body.renew === true && !renewed) { talk = null; return get(path, wait, true, sending, notFoundUnproved); }
       // Given up again before its question: another program may be opening conversations without end.
       // Taken as a busy feed, and tried again later; the uploader does not stop for good on it.
       if (body.renew === true) { talk = null; throw feedError('the recorder gave up this uploader\'s conversation again before its question was answered (another program may be opening conversations); tried again later', 'feed-busy'); }
@@ -419,6 +421,8 @@ export function feedClient({ address, token, fetchImpl = globalThis.fetch }) {
     }
     if (!sameProof(response.headers.get('provared-feed-proof'), feedHmac(talk.key, FEED_LABELS.answer, talk.session, nonce, String(response.status), bytes))) {
       talk = null;
+      // An earlier recorder does not know the route, and answers it outside its feed: "not given", and nothing more is taken from it.
+      if (notFoundUnproved && response.status === 404) return { notGiven: true };
       throw feedError(`an answer from ${base.origin} does not carry the recorder's proof over it; it is not used`, 'feed-error');
     }
     const body = readJson(bytes);
@@ -448,6 +452,19 @@ export function feedClient({ address, token, fetchImpl = globalThis.fetch }) {
       const a = await get('/hand-over', 30, false, Buffer.from(JSON.stringify(record)));
       if (a.missing || !a || typeof a !== 'object' || typeof a.outcome !== 'string') throw feedError('the recorder answered a record handed over in a form this uploader does not read', 'feed-error');
       return a;
+    },
+    /**
+     * The agent's public key set (GET /agent): { given: true, agent: { name, keys }, fingerprint }, from an
+     * answer with the recorder's proof, in the form readKeySet reads (agent.mjs). { given: false } where an
+     * earlier recorder, which does not give it, answers with its own 404, which carries no proof: nothing in
+     * that answer is used. Anything else throws, and nothing in it is used either.
+     */
+    async agent() {
+      const a = await get('/agent', 0, false, null, true);
+      if (a.notGiven) return { given: false };
+      const agent = a.missing ? null : readKeySet(a.agent);
+      if (!agent || typeof a.fingerprint !== 'string' || !RANDOM.test(a.fingerprint)) throw feedError('the recorder gave the agent\'s key set in a form this uploader does not read; it is not used', 'feed-error');
+      return { given: true, agent, fingerprint: a.fingerprint };
     },
     /** The lines of one book, named by its identity or, with none, by its name, from a place on. */
     async lines({ id, book, from, wait = 0, max }) {

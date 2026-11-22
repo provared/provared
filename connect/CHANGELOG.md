@@ -2,6 +2,14 @@
 
 ## Not yet released
 
+- **The agent's public key set, from the recorder's feed.** `feedClient`
+  gains `agent()`, for the recorder's new `GET /agent`: the key set, from
+  an answer with the recorder's proof, in the form a new module,
+  `agent.mjs`, reads (`readKeySet`: public members only, none dropped).
+  An earlier recorder's 404, which carries no proof, is read as "not
+  given", and nothing in it is used; any other answer without the proof
+  is refused. `agent.mjs` is in the package, as `provared-connect/agent`.
+  Tests: five, in `test/agent-feed.test.mjs`.
 - **A pause where the recorder has no book.** Through the feed, a round
   that finds no book in force (the recorder waits for its first
   permission) comes back at once; the uploader now waits 25 seconds

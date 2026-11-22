@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { entryLine, fingerprint, fromBase64url, keySetFingerprint } from 'provared';
 import { portOwner, sendJson } from './port.mjs';
 import {
-  DEFAULT_FOLDER, DEFAULT_PORT, VERSION, addWaitingPermission, admitRequest, checkNewSlip, declineAsked, freshFolder, handOverChecks, loadAgentKeys, makeRecorderKeys,
+  DEFAULT_FOLDER, DEFAULT_PORT, VERSION, addWaitingPermission, admitRequest, agentKeySetAnswer, checkNewSlip, declineAsked, freshFolder, handOverChecks, loadAgentKeys, makeRecorderKeys,
   placeSlip, readDeclined, readRetired, readWaitingPermissions, signingOriginsFrom, startService, takeOutWaiting, untilFreeLater, waitingByFingerprint, writeTrusted,
 } from './recorder.mjs';
 
@@ -45,6 +45,7 @@ export async function waitingHandler({ folder, owner, clock = Date.now, signingO
   const agent = await loadAgentKeys(folder);
   const sealer = await makeRecorderKeys(folder);
   const agentKeySet = await keySetFingerprint(agent.keys);
+  const agentAnswer = await agentKeySetAnswer(agent.keys);
   const sealerKeySet = await keySetFingerprint(sealer.keys);
   const started = new Date(clock()).toISOString();
   const refusedHere = { error: NO_PERMISSION, code: 'no-permission-yet' };
@@ -262,6 +263,8 @@ export async function waitingHandler({ folder, owner, clock = Date.now, signingO
     // The waiting recorder holds no book: the feed lists none.
     memory: () => [],
     handOver: (given) => inTurn(() => handOver(given)),
+    // GET /agent: the agent's public key set, as the full recorder gives it.
+    agent: () => agentAnswer,
   };
   return self;
 }

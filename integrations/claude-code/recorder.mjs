@@ -1251,6 +1251,7 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
   if (JSON.stringify(placed.content.agent.keys) !== JSON.stringify(agent.keys)) {
     throw new Error('The slip names other keys than the agent\'s keys in this folder. Sign a slip with the keys that "keys" prints.');
   }
+  const agentAnswer = await agentKeySetAnswer(agent.keys);
   const newAt = { entries: newBookAt.entries ?? NEW_BOOK_ENTRIES, bytes: newBookAt.bytes ?? NEW_BOOK_BYTES };
   const sealKeys = [await keySetFingerprint(sealer.keys)];
   const options = { sealKeys };
@@ -2340,6 +2341,8 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
     memory: () => [current, ...keptOpen.values()].map((b) => ({ key: b.id, path: b.path, text: () => b.writer.book(), saved: () => b.written ?? 0, inForce: b === current })),
     // A record handed over (POST /hand-over) is taken in its turn, between two calls.
     handOver: (given) => inTurn(() => handOver(given)),
+    // GET /agent: the agent's public key set, worked out once at the start from the key file.
+    agent: () => agentAnswer,
     close: () => witnessing.close(),
   };
   if (!on) {
@@ -2562,6 +2565,17 @@ export function startingPermission(agentKeys) {
     with: [],
     purpose: 'Coding work with Claude Code on this computer.',
   };
+}
+
+/**
+ * The agent's public key set as the feed gives it (GET /agent), in both
+ * states of the recorder: { agent: { name, keys }, fingerprint }. The keys
+ * are the public ones worked out from the agent's key file (loadAgentKeys);
+ * the name is the starting permission's, as in the link "init" prints; the
+ * fingerprint is the key set's (keySetFingerprint), as "init" prints it.
+ */
+export async function agentKeySetAnswer(keys) {
+  return { agent: { name: startingPermission(keys).agent.name, keys }, fingerprint: await keySetFingerprint(keys) };
 }
 
 /** The signing page's address, with a starting permission in its fragment (the part after "#", which a browser never sends). */

@@ -32,6 +32,7 @@
     "./handover": "./handover.mjs",
     "./entry": "./entry.mjs",
     "./outcomes": "./outcomes.mjs",
+    "./agent": "./agent.mjs",
     "./book": "./book.mjs",
     "./package.json": "./package.json"
   },
@@ -47,6 +48,7 @@
     "handover.mjs",
     "entry.mjs",
     "outcomes.mjs",
+    "agent.mjs",
     "book.mjs",
     "CHANGELOG.md",
     "LICENSE-CC-BY-4.0.txt"

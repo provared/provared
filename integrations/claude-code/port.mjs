@@ -56,10 +56,11 @@ export async function portChecks(req, res, listening, feed) {
 /**
  * The owner of the recorder's port, and of its feed.
  *
- * A handler is {handle(req, res), memory(), handOver(given), close?()}:
- * "handle" answers a request that passed the checks; "memory" and
- * "handOver" are the feed's (the books it reads from memory, and a record
- * handed over); "close" is called once when the port closes.
+ * A handler is {handle(req, res), memory(), handOver(given), agent?(), close?()}:
+ * "handle" answers a request that passed the checks; "memory",
+ * "handOver" and "agent" are the feed's (the books it reads from memory, a
+ * record handed over, and the agent's public key set for GET /agent);
+ * "close" is called once when the port closes.
  * @param {{folder: string, handOverReadMs?: number}} o handOverReadMs: for tests (feed.mjs)
  */
 export function portOwner({ folder, handOverReadMs }) {
@@ -72,6 +73,8 @@ export function portOwner({ folder, handOverReadMs }) {
     // Whichever handler is in place: the feed is made once, so a reader's conversation holds across the switch.
     memory: () => (handler ? handler.memory() : []),
     handOver: (given) => (handler ? handler.handOver(given) : { kind: null, fingerprint: null, outcome: 'refused', code: 'not-started', message: 'The recorder is starting: hand it over again in a moment.' }),
+    // GET /agent: the agent's public key set, from whichever handler is in place; none yet, the feed says so.
+    agent: () => (handler?.agent ? handler.agent() : null),
     ...(handOverReadMs === undefined ? {} : { handOverReadMs }),
   });
   const server = createServer(async (req, res) => {
