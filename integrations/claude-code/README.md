@@ -27,7 +27,7 @@ The first line installs the package from npm, with its one dependency,
 the library `provared`. To install it from a copy of the repository
 instead: `git clone https://github.com/provared/provared.git`, then, in
 `provared/integrations/claude-code`, `npm pack` and
-`npm install -g provared-claude-code-0.1.0.tgz` (`npm pack` makes the
+`npm install -g provared-claude-code-0.1.1.tgz` (`npm pack` makes the
 package as npm would, so that `provared` is installed with it).
 
 `init` makes the agent's keys, writes the hooks into the project's
@@ -81,7 +81,7 @@ Adding the marketplace downloads a copy of this repository (about 60 MB);
 integrations/claude-code` downloads only the two folders the plugin uses.
 
 Claude Code copies this folder into its plugin cache
-(`~/.claude/plugins/cache/provared/provared-recorder/0.1.0/`). The library
+(`~/.claude/plugins/cache/provared/provared-recorder/0.1.1/`). The library
 `provared` comes separately:
 
 - Some versions of Claude Code install it beside the plugin, from
@@ -1367,6 +1367,14 @@ along with everything else. To keep the record on another disk:
   trusted passkeys among them), ask the recorder to take a new permission
   with `--new-passkey`, admit a retired passkey again, stop it, or edit
   the settings that run the hooks.
+  A web page in a browser cannot use the recorder's port. The recorder
+  refuses a request that names a web page (an `Origin` header, or a
+  `Sec-Fetch-Site` header other than `none`), or names any address but
+  `127.0.0.1:<port>` (the `Host` header). It refuses a body that is not
+  sent as `application/json`. It reads and writes nothing for a request
+  it refuses. The feed's requests carry the proof of its token, as
+  before. Any program on the computer can still use the port, as before:
+  the port asks for no secret, so this holds whoever runs the program.
   The list of trusted passkeys raises the bar; it does not close the
   gap. The evidence that holds is a checker that names your own passkey
   (`check --issuer`, or `provared-check --issuer`): a permission signed
