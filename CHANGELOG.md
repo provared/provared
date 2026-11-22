@@ -174,6 +174,34 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
 - **`provared-mcp-executor`, after 0.5.1: the faults found by the check
   against the MCP TypeScript SDK's advisories of October 2026.** The
   version is not yet raised.
+  - **Upgrade notes: what a user may notice after 0.5.1.**
+    - A body over 4 MiB is refused (413): the default `bodyLimit` was
+      10 MiB. Set `bodyLimit` to take larger ones.
+    - One agent's bodies in flight together, and the upstream's answers
+      the executor holds for it, are each held to `waitingBytes` (32 MiB):
+      past it a request, or an answer, is refused with 503.
+    - A message of more than 100,000 elements is refused (400), on every
+      transport, and no setting changes the number. A tool server's
+      answer of more is not read: it is handed on as it came, and the
+      call's receipt says the answer could not be read.
+    - In front of an upstream, tasks are refused until `allowTasks` is
+      true: every `tasks/` request, a request with `params.task`, and a
+      subscription that names tasks. The upstream's offer of tasks is not
+      handed on, and the 2026-07-28 tasks extension is taken out of what
+      an agent declares, so a call is answered at once.
+    - In front of an upstream with more than one agent, a GET stream
+      without a session is refused (405): there, an agent gets no
+      list-change notices on such a stream, and cannot resume a broken
+      stream by a GET with no session.
+    - An agent's response is refused (400) unless it answers a request the
+      upstream sent to that agent, under the same session, once.
+    - `Last-Event-ID` is dropped unless it names an event the executor
+      gave that agent.
+    - A `notifications/cancelled` cuts a call only under the call's own
+      session.
+    - A session the upstream opened under one OAuth connection is answered
+      404 under another connection of the same agent; the client begins a
+      new session.
   - **What one agent's messages may hold (F1).** With 0.5.1 each request
     was bounded (a body of 10 MiB, no batch, 256 levels of nesting, 256
     requests in flight for an agent) but nothing bounded the number of
