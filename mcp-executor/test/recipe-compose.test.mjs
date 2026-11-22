@@ -611,17 +611,19 @@ test('package-lock.json: the lockfile is made from npm, with no provisional mark
     writeFileSync(join(copy, 'package-lock.provisional.json'), '{}');
     const marked = run('--recipe', copy);
     assert.equal(marked.status, 1, marked.stdout + marked.stderr);
-    assert.match(marked.stderr, /Stopped: the recipe's lockfile is provisional: its entry for provared-mcp-executor 0\.5\.0 was made from a pack/);
+    const pinned = JSON.parse(read('package.json')).dependencies['provared-mcp-executor'];
+    const literal = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    assert.match(marked.stderr, new RegExp(`Stopped: the recipe's lockfile is provisional: its entry for provared-mcp-executor ${literal(pinned)} was made from a pack`));
     rmSync(join(copy, 'package-lock.provisional.json'));
     const unmarked = run('--recipe', copy);
     assert.equal(unmarked.status, 0, unmarked.stdout + unmarked.stderr);
     assert.match(unmarked.stdout, /from npm \(its hash not compared with npm: --registry does that\)/);
     const other = JSON.parse(read('package.json'));
-    other.dependencies['provared-mcp-executor'] = '0.5.1';
+    other.dependencies['provared-mcp-executor'] = '99.0.0';
     writeFileSync(join(copy, 'package.json'), JSON.stringify(other));
     const differs = run('--recipe', copy);
     assert.equal(differs.status, 1);
-    assert.match(differs.stderr, /gives provared-mcp-executor 0\.5\.0, and package\.json 0\.5\.1/);
+    assert.match(differs.stderr, new RegExp(`gives provared-mcp-executor ${literal(pinned)}, and package\\.json 99\\.0\\.0`));
     assert.equal(run('--recipe', copy, '--wrong').status, 1);
     // A mistyped option is refused as one, with --recipe or without it, before any file is looked at (X367).
     for (const args of [['--registy'], ['--registy', '--recipe', copy], ['--recipe', copy, '--registy']]) {

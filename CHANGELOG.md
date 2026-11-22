@@ -225,7 +225,16 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
     the guard is listed in the MCP Registry, without naming a version. The
     root README, the home page and "Provared in three minutes" name 0.5.1
     as the guard's version, and the home page's "What is new" has an entry
-    for it.
+    for it. The recipe (`recipes/claude-ai/compose/`) builds 0.5.1: its
+    `package.json` names it, and its lockfile was made from npm after 0.5.1
+    was published, with npm's hash
+    (`sha512-j36/cBjICI7o0YxmpfB78l27fZ+MpSFzpgAX3JpjrJ2VHgoUPBdIjKZnHbdssP6sFO63OygLGNwbuN41T2xuJw==`);
+    `node tools/release/check-recipe-lock.mjs --registry` passes. The
+    recipe's README, the Dockerfile's comment and the Docker check's
+    examples name 0.5.1, and the README no longer says the build waits for
+    the version to be on npm. The release check's test reads the version
+    from the recipe's `package.json`, so it need not change with each
+    version.
   - **A receipt found in the book at a start** settles a call the copy
     shows as sent and not finished only where it is the only receipt naming
     the call, it is the call the copy's `sending` line shows (the same
