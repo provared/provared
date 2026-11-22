@@ -216,9 +216,10 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
   settle open calls before changing the gateway's `id`, and that a call
   whose `set-aside` line the copy could not take comes back at the next
   start. Details in `gateway/CHANGELOG.md`.
-- **`provared-mcp-executor` 0.5.1 (published by hand to npm on 22 November 2026): the MCP executor after the same review.** Review 3.4 of the gateway's
-  countersignature found the same gaps in the executor. The executor still
-  asks for `provared` 0.9.0, exactly.
+- **`provared-mcp-executor` 0.5.1 (published by hand to npm on 22
+  November 2026): the MCP executor after the same review.** Review 3.4 of
+  the gateway's countersignature found the same gaps in the executor. The
+  executor still asks for `provared` 0.9.0, exactly.
   - **Versions.** 0.5.1 in `package.json`, its lockfile and `server.json`
     (both fields); the `npm pack` file name in the README. The README says
     the guard is listed in the MCP Registry, without naming a version. The
@@ -250,7 +251,9 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
     than the one recorded goes to the new list `countersignatures`; more
     than one receipt for a call goes to the new list `moreThanOne`. The
     summary gains `countersignatureProblems` and `moreThanOneReceipt`, and
-    `agree` is false where either is found. (`compare.mjs`.)
+    `agree` is false where either is found. `notInCopy` now lists every
+    receipt the copy does not know, where before only one for each call
+    was kept. (`compare.mjs`.)
   - **`compare`, a receipt written at a later start** (found by a re-check
     of these fixes). Where the copy's `done` line names no receipt and says
     it was countersigned, the receipt in the book must carry a valid
@@ -307,6 +310,7 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
   MCP Registry lists 0.5.0 since 21 November 2026, and the recipe's README, the
   design notes and this change log say that 0.5.0 (by hand to npm) and 0.9.0
   (through the workflow) were published on 21 November 2026. Text only.
+  0.5.1 replaces this wording: see its entry.
 
 - **The lockfiles carry what npm published.** The guard's lockfile
   (`mcp-executor/package-lock.json`) and the recipe's
