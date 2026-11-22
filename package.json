@@ -1,6 +1,6 @@
 {
   "name": "provared",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "Proof of what an AI agent was allowed to do, and what it then did. A passkey-signed permission with limits a machine can check, a signed receipt for each action, and a free checker. Evidence, not a verdict.",
   "author": "Pavel Izmaylov",
   "license": "Apache-2.0 AND CC-BY-4.0",
@@ -75,7 +75,7 @@
     "node": ">=24.7"
   },
   "scripts": {
-    "test": "node --disable-warning=ExperimentalWarning --test \"test/**/*.test.mjs\"",
+    "test": "node --disable-warning=ExperimentalWarning --import ./test/helpers/no-network.mjs --test \"test/**/*.test.mjs\"",
     "check": "node --disable-warning=ExperimentalWarning bin/provared-check.mjs",
     "headers": "node bin/provared-headers.mjs",
     "demo": "node --disable-warning=ExperimentalWarning demo/server.mjs"

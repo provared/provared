@@ -193,8 +193,13 @@ the address of the server the guard runs on.
 
 ## How the guard starts it
 
-The package is not on npm. Copy the folder `integrations/shopify` of the
-repository to the server; there is nothing to install.
+The package is on npm as `provared-shopify` (version 0.1.0, since
+21 November 2026) and needs Node.js 24 and no other package. Put its files on the
+server: unpack it from npm (`npm pack provared-shopify@0.1.0`, then
+`tar -xzf` the file it names; the files are in `package/`), or copy the
+folder `integrations/shopify` of the repository. The example below has
+them in `/srv/provared-shopify`: move `package/`, or the copied folder,
+there.
 
 `executor-http.example.json` is an example of the guard's settings with
 this server behind its front door for claude.ai, and

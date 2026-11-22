@@ -30,8 +30,14 @@ software on protocol version 2025-11-25 only, with every program on one
 computer; on the newer 2026-07-28 it has met only a test server of its
 own. The agents' secrets travel in the clear unless something else
 encrypts the connection to the guard, and so does the tool server's
-credential if the tool server is reached by plain HTTP. Sealing the
-record and keys held in a key service are designed but not built. And it
+credential if the tool server is reached by plain HTTP. Keys held in a
+key service are designed but not built. Sealing the record is built, in
+the guard from version 0.5.0, with limits that [its README](mcp-executor/README.md)
+lists: among them, where the keys that seal are in the guard's own files,
+whoever can read those files can seal a book of their own; a central
+sealer, a separate program that holds those keys, must run on the same
+computer as the guard; and seals held elsewhere and witnesses are not
+built. And it
 proves nothing about a tool the agent can reach without
 it: the tool's credential must be taken away from the agent. It keeps
 the credential, and its own keys, from the agent only where the agent
@@ -105,8 +111,8 @@ checker:
   AI, and [an example](examples/frameworks/) for the Vercel AI SDK.
 - **[The gateway](gateway/README.md)**, for agents that act through web
   interfaces: it stands in front of each system an agent uses, holds
-  that system's credential and receipts each call. In the repository,
-  not yet on npm.
+  that system's credential and receipts each call. On npm as
+  `provared-gateway` (version 0.1.0, since 22 November 2026).
 
 ## The checker, and the sample record
 
@@ -251,6 +257,11 @@ each part protects against, is in
   (`npm install -g provared-mcp-executor`), which stands between agents and a tool server, holds the server's
   credential, and countersigns
   each receipt with keys of its own.
+- **A tool server behind the guard, on npm with its own README:**
+  [provared-shopify](integrations/shopify/README.md) (version 0.1.0, on
+  npm since 21 November 2026), a small MCP server for one Shopify store's
+  Admin API, made to run behind the guard. It has been run only against a
+  made-up Shopify, in its tests.
 - **[The pages at prova.red](https://prova.red/)**: the checker's answer
   for the sample record, a worked example for developers, and the same
   in plain words for a reader who does not write code.
@@ -271,7 +282,7 @@ each part protects against, is in
 
 ## Status
 
-**The library at version 0.9.0 and the guard at 0.5.0, both drafts.**
+**The library at version 0.9.1 and the guard at 0.5.0, both drafts.**
 Published as they are, by one author in their
 own time, built with AI tools since 3 October 2026; fixes as time
 allows. The code has been through more than 80 rounds of review by AI
@@ -284,6 +295,13 @@ other than the author has reviewed it yet.
 That is an invitation. The format may still change.
 Every published version stays on npm and the Python Package Index, so a
 record made with one version can always be checked by that version.
+The library's own code, in `src/`, makes no network request: its tests
+fail if that code opens a network connection while they run. Two parts
+kept apart in `net/` do: `provared/net/timestamp`, which asks a
+time-stamp service and is loaded only by a program that imports it, and
+the network code of the command `provared-headers`, which asks only the
+Bitcoin nodes you name (and, for a node given by name, your computer's
+own name service).
 
 Questions, faults and suggestions: hello@prova.red, or
 [issues on GitHub](https://github.com/provared/provared/issues).

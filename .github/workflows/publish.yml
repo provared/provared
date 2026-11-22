@@ -148,7 +148,7 @@ jobs:
           node-version: 24
           package-manager-cache: false
       - name: Run the tests
-        run: node --disable-warning=ExperimentalWarning --test 'test/**/*.test.mjs'
+        run: node --disable-warning=ExperimentalWarning --import ./test/helpers/no-network.mjs --test 'test/**/*.test.mjs'
 
   test-python:
     name: Test the Python packages (Python ${{ matrix.python }})

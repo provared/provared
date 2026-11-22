@@ -6,7 +6,7 @@ Everything about the format, the library, the checker, the stub writer beside an
 
 ## Status
 
-**Version 0.9.0, a draft.** Published as it is, by one author in their
+**Version 0.9.1, a draft.** Published as it is, by one author in their
 own time; fixes as time allows. The format may still change, so do not
 rely on a draft record staying checkable.
 
@@ -153,7 +153,7 @@ be loaded from anywhere. The tool prints the file's SHA-256 fingerprint,
 so that a copy can be compared with it. (Tried on 8 October 2026 in the
 three browser builds this repository is tested with, and on 13 October
 2026 in Chrome 155, Edge 155 and Brave 155.) The file for
-version 0.9.0 is attached to the release on GitHub. Its SHA-256
+version 0.9.1 is attached to the release on GitHub. Its SHA-256
 fingerprint is
 `486471a5b8f3108d08acaacb96d7c27ceeecf95b93bce8e47721b8872a9b1bbc`.
 
@@ -762,6 +762,26 @@ not a promise. The numbers `0` and `-0` share a fingerprint, as RFC
 8785 writes both as `0`. If `onStub` fails, its error is passed on,
 though the tool has run and its stub is in the book. `recordTools`
 names no agent software, and works with any function.
+
+A document of your own, under a name that does not begin `provared.`,
+is fingerprinted as you choose: the checker checks only that its
+`sha256` has the form of a SHA-256 fingerprint in base64url. Where such
+a document is short or easy to guess (a yes or a no, an account number,
+a small sum), take its fingerprint over exactly 16 random bytes, fresh
+for each document, followed by the document, and keep those bytes beside
+the document, not in the record. The length is fixed so that what was
+fingerprinted splits into bytes and document only one way: were it free,
+the 16 bytes followed by the document "no" would be the same bytes as 17
+bytes (those 16 and "n") followed by the document "o". Whoever holds the
+document and its bytes can work the fingerprint out again; whoever holds
+only the record cannot find the document by trying likely values. Where
+the action needs the person's approval, the approval's `details` must
+carry the same salted fingerprint as the stub's, since the checker
+requires the two to be the same (format description, section 17). This
+is guidance, not a rule of the
+format, and a checker cannot see whether it was followed. It does not
+apply to the reserved names (below, and format description, section
+27), whose text is fixed so that another system's log can be matched.
 
 [examples/frameworks/](https://github.com/provared/provared/tree/main/examples/frameworks) in the repository shows
 `recordTools` beside a JavaScript agent framework, the Vercel AI SDK

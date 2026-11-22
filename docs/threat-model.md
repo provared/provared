@@ -248,7 +248,9 @@ keys it gives.
 An approval for one action cannot be moved to another action, another
 amount, another service, another document or another slip. In a whole
 book it cannot be used twice; single pages of a Show cannot show a second
-use, and say so. A3 cannot forge a countersignature, so where the slip asks
+use, and say so. An approval's single use is shown within one book: the
+record cannot show that the same approval was not used in another book.
+A3 cannot forge a countersignature, so where the slip asks
 for one, an action the other side did not confirm shows as outside the
 slip. A4 cannot be made to seem to have refused or to have stated terms:
 both need its keys.
