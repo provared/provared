@@ -148,3 +148,59 @@ These change what the entries above describe.
   clock put forward or back no longer ends a wait at once or stretches it;
   and a test's slip lasts a day, not an hour (`test/world.mjs`), so a clock
   put forward by more than an hour no longer ends it under a running test.
+
+### After the re-check of the review's fixes (21 to 22 November 2026)
+
+- **Only the copy sets a call aside** (F1). Where the gateway keeps a copy,
+  a call is taken as set aside at a start only where the copy's own
+  `set-aside` line says so. A call that `<book>.journal-set-aside` names
+  and the copy still shows open is no longer settled, and nothing is
+  written to the copy for it on that file's word: the agent is stopped, the
+  call is listed for the administrator, and the log says
+  `set-aside-not-in-copy` with the reason. Before, a line in that file,
+  which whoever holds the journal key can write, settled a sent call with
+  no stop and no word in the log, and the gateway wrote `set-aside` for it
+  into its own copy. Without a copy, that file still decides, as before.
+- **A journal line from before the copy** (F2). A journal line, whose tag
+  checks, for a call the copy does not hold is passed over where the book
+  holds one stub for the call and it is the call the line shows,
+  countersigned where a stub found at a start must be: nothing is written
+  or countersigned for it, and the log says `receipt-found` with
+  `"inCopy": false`. Before, every such line stopped the agent, so giving a
+  running gateway its keys, or losing its copy, stopped every agent that
+  had made a call in the last run, and only setting aside calls with sound
+  receipts let it go on. Any other such line can still only be set aside.
+- **`compare`, a stub written at a later start** (F3). Where the copy's
+  `done` line names no stub and says the call was countersigned, the stub
+  in the book must carry a valid countersignature; otherwise it goes to
+  `countersignatures` and `agree` is false. Before, that branch checked no
+  countersignature.
+- **A countersignature wherever the slip names the gateway's id** (F4). A
+  stub found in the book for a call sent naming the gateway settles it
+  only with a valid countersignature wherever the slip names the gateway's
+  id with keys, its present keys or others, as the guard asks. Before, only
+  a slip naming the present keys asked for it, so after a change of the
+  gateway's keys a one-sided stub settled a call sent under the earlier
+  slip.
+- **`acknowledge` looks at the book again** (F5) before each stub. Where
+  the book already holds a stub for the call (the journal could not take
+  the line saying it was acknowledged), no second stub is written; with a
+  copy that stub settles the call only as a stub found at a start does, and
+  the copy notes it `found-in-book`. Before, trying again wrote a second
+  countersigned stub.
+- **README.** "What the gateway does with each call" and "The gateway's
+  own copy" say so; "The gateway's keys are not changed for you" says what
+  an acknowledgement after a change of keys writes.
+- **Tests** (`test/review5.test.mjs`, 12): a call on the set-aside file
+  that the copy shows open, with and without its journal line; the same
+  file without a copy; the copy's own `set-aside` line where that file is
+  gone; a gateway first given keys after two calls, with and without a new
+  slip naming it; a lost copy, with a one-sided stub that still can only
+  be set aside; a stub written at a later start, with and without its
+  countersignature; after a change of keys, a one-sided stub and one
+  countersigned with the earlier keys; an honest acknowledgement after the
+  change; an acknowledgement tried again after the journal could not be
+  written, with and without a copy; and, after a change of keys, a
+  one-sided stub an acknowledgement wrote that the journal could not
+  record, which then does not settle the call, so that it can only be set
+  aside.

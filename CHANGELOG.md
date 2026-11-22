@@ -185,6 +185,18 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
   only where the book is fully checked and within its slips. Unknown
   settings are refused. Details in `gateway/CHANGELOG.md`. The library does
   not change.
+- **The gateway after a re-check of those fixes** (`gateway/`, not yet
+  published). With a copy, only the copy's own `set-aside` line sets a call
+  aside: a call that the file beside the journal names and the copy shows
+  open stops the agent and is listed (`set-aside-not-in-copy`). A journal
+  line the copy lacks is passed over where the book holds the stub that is
+  that call, so a gateway first given keys, or one whose copy was lost, is
+  not stopped by calls whose receipts are sound. `compare` checks the
+  countersignature of a stub written at a later start. A found stub needs
+  the gateway's countersignature wherever its slip names the gateway's id
+  with keys, not only its present keys. `acknowledge` looks at the book
+  again before each stub, so trying again writes none twice. Details in
+  `gateway/CHANGELOG.md`.
 - **The MCP executor, after the same review** (`mcp-executor/`, not
   released; the version stays 0.5.0). Review 3.4 of the gateway's
   countersignature found the same gaps in the executor.

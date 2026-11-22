@@ -268,6 +268,20 @@ function foundProblem(found, sending, countersigned) {
   return null;
 }
 
+/**
+ * Whether a stub found in the book for a call must carry a valid
+ * countersignature of the gateway to settle it: the call was sent naming the
+ * gateway's id, under a slip that names that id with keys, the gateway's
+ * present keys or any others (keys it held before), as the guard asks.
+ * @param {object|undefined} slipContent the content of the slip the call was sent under
+ * @param {{with?: string}} line the call's "sending" line, or its journal line
+ * @param {{id: string}|null} own the gateway's own keys, or null
+ * @returns {boolean}
+ */
+function countersignatureRequired(slipContent, line, own) {
+  return own !== null && line.with === own.id && (Array.isArray(slipContent?.with) ? slipContent.with : []).some((w) => w?.id === own.id && w.keys !== undefined);
+}
+
 // --- an outside time-stamp on each seal (format description, section 21.2) ---
 //
 // Where "recorder.stamp" gives a time-stamp service, each seal is sent to it
@@ -470,6 +484,8 @@ export async function openGateway(config, more = {}) {
     const slipsInBook = new Set(result.entries.filter((e) => e.kind === 'slip' && e.problems.length === 0).map((e) => e.fingerprint));
     // Whether each slip of the book names the gateway: the calls under it the gateway countersigns.
     const slipNames = new Map(result.entries.filter((e) => e.kind === 'slip' && e.fingerprint).map((e) => [e.fingerprint, own ? namesGateway(e.content, own) : false]));
+    // Each slip's content, by fingerprint: whether it names the gateway's id with any keys.
+    const slipContents = new Map(result.entries.filter((e) => e.kind === 'slip' && e.fingerprint).map((e) => [e.fingerprint, e.content]));
     const copy = own ? openAgentCopy(name, copyPaths(a, name, root)) : null;
     if (own) for (const w of ownKeyWarnings(at, about.content, own, [...upstreams.values()])) log({ event: 'warning', agent: name, message: w });
     const pending = [];
@@ -478,15 +494,27 @@ export async function openGateway(config, more = {}) {
     // whoever holds the journal key can write, and that anyone can empty. Each "sending" line of the copy, by call.
     const sendingInCopy = new Map();
     if (copy) for (const l of copy.read.lines) if (l.valid && l.entry.kind === 'sending' && typeof l.entry.call === 'string') sendingInCopy.set(l.entry.call, l.entry);
+    // The calls the copy itself shows set aside. Where the gateway keeps a copy, only these are set aside: the list
+    // beside the journal is written under the journal key, so whoever holds that key could add to it.
+    const asideInCopy = new Set();
+    if (copy) for (const l of copy.read.lines) if (l.valid && l.entry.kind === 'set-aside' && typeof l.entry.call === 'string') asideInCopy.add(l.entry.call);
     const journalCalls = new Set();
     for (const p of journal.pending) {
-      if (asideBefore.has(p.call)) continue;
+      if (copy ? asideInCopy.has(p.call) : asideBefore.has(p.call)) continue;
       if (p.tag === 'valid' && copy) {
         // A journal line is taken only where the copy holds the same call; the copy's own line is then the one acted on
         // (below). One that names a call of the copy and says otherwise is not acted on: the copy's line decides.
         if (sendingInCopy.has(p.call)) {
           if (sameCall(sendingInCopy.get(p.call), p.line)) journalCalls.add(p.call);
           else log({ event: 'journal-line-differs', agent: name, call: p.call });
+          continue;
+        }
+        // A line from before the copy (the gateway first given keys, or its copy taken away) whose call the book holds
+        // one stub for, the call the line shows: passed over, as it was before the gateway had keys. Nothing is
+        // written for it, and nothing countersigned.
+        const inBook = isObject(p.line) ? (stubsByCall.get(await identifierFingerprint(p.call)) ?? []) : [];
+        if (inBook.length && foundProblem(inBook, p.line, countersignatureRequired(slipContents.get(p.line.slip), p.line, own)) === null) {
+          log({ event: 'receipt-found', agent: name, call: p.call, inCopy: false });
           continue;
         }
         p.problem = 'The gateway\'s copy holds no "sending" line for this call with the same slip, action, amount, service and documents, so the gateway did not send the call this line describes. It is never given a stub: set it aside.';
@@ -517,7 +545,7 @@ export async function openGateway(config, more = {}) {
         const at_ = new Date(now()).toISOString();
         const line = lineOf(s);
         if (found.length) {
-          const problem = foundProblem(found, s, s.with === own.id && slipNames.get(s.slip) === true);
+          const problem = foundProblem(found, s, countersignatureRequired(slipContents.get(s.slip), s, own));
           if (problem === null) {
             const cs = found[0].countersignature?.state === 'valid' ? await countersignatureFingerprint(text.split('\n')[found[0].index]) : null;
             copy.note({ kind: 'done', call, when: at_, outcome: 'found-in-book', stub: found[0].fingerprint, countersigned: cs !== null, ...(cs ? { countersignature: cs } : {}) });
@@ -526,8 +554,10 @@ export async function openGateway(config, more = {}) {
             log({ event: 'receipt-not-matching', agent: name, call, stubs: found.map((e) => e.fingerprint), problem });
             pending.push({ call, tag: 'valid', line, problem: `${problem} It is never given a stub: set it aside.`, warning: null, inBook: found.map((e) => e.fingerprint) });
           }
-        } else if (asideBefore.has(call)) copy.note({ kind: 'set-aside', call, when: at_ });
-        else {
+        } else {
+          // Named in the list beside the journal, and still open in the copy: not taken as set aside, since only the
+          // copy's own "set-aside" line says the administrator set a call aside. Nothing is written to the copy for it.
+          if (asideBefore.has(call)) log({ event: 'set-aside-not-in-copy', agent: name, call, reason: "The list of calls set aside beside the journal names this call, and the gateway's copy does not show it set aside, so it is not taken as set aside: it waits for the administrator." });
           if (!journalCalls.has(call)) log({ event: 'journal-line-missing', agent: name, call });
           pending.push({ call, tag: 'valid', line, problem: null, ...(await unusableLine(line, startedAt, { slipsInBook, writer, upstream: s.upstream })) });
         }
@@ -1287,6 +1317,30 @@ export async function openGateway(config, more = {}) {
       const written = [];
       for (const p of usable.sort((x, y) => Date.parse(x.line.when) - Date.parse(y.line.when))) {
         const l = p.line;
+        // Never two stubs for one call: the book is looked at again before each is written, so that trying again after
+        // a failure (the journal could not take the line saying the call was acknowledged) writes none twice.
+        const checkedNow = await agent.writer.check();
+        const callAt = await identifierFingerprint(p.call);
+        const found = checkedNow.entries.filter((e) => e.kind === 'stub' && (e.content?.details ?? []).some((d) => d.name === CALL_DOCUMENT && d.sha256 === callAt));
+        if (found.length) {
+          // With a copy, it settles the call only as a stub found at a start does; without one, as before.
+          const problem = agent.copy ? foundProblem(found, l, countersignatureRequired(checkedNow.entries.find((e) => e.kind === 'slip' && e.fingerprint === l.slip)?.content, l, own)) : null;
+          if (problem !== null) {
+            p.problem = `${problem} It is never given a stub: set it aside.`;
+            p.inBook = found.map((e) => e.fingerprint);
+            log({ event: 'receipt-not-matching', agent: name, call: p.call, stubs: p.inBook, problem });
+            throw new Error(`The call ${p.call} has a stub in the book that does not settle it: ${problem} Set it aside.`);
+          }
+          note(agent, { acknowledged: p.call, stub: found[0].fingerprint });
+          agent.pending = agent.pending.filter((x) => x !== p);
+          const cs = found[0].countersignature?.state === 'valid' ? await countersignatureFingerprint(agent.writer.book().split('\n')[found[0].index] ?? '') : null;
+          if (!noteCopy(agent, { kind: 'done', call: p.call, outcome: 'found-in-book', stub: found[0].fingerprint, countersigned: cs !== null, ...(cs ? { countersignature: cs } : {}) })) {
+            throw new Error(`The stub ${found[0].fingerprint} is in the book, and the gateway's copy could not say so: ${agent.stopped}`);
+          }
+          log({ event: 'receipt-found', agent: name, call: p.call });
+          written.push({ when: l.when, action: l.action, slip: l.slip, stub: found[0].fingerprint, countersigned: cs !== null, found: true });
+          continue;
+        }
         const request = { action: l.action, ...(l.amount ? { amount: l.amount } : {}), ...(l.with !== undefined ? { with: l.with } : {}), details: [...l.details, { name: 'provared.error', sha256: error }] };
         let stub;
         // Countersigned now, with the gateway's own keys, where the slip the call was sent under gives them for its service.

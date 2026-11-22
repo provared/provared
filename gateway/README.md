@@ -465,10 +465,16 @@ check with it; so the stub counts against the limits of the slip it was
 sent under, not the new one. A call sent under a slip the book does not
 hold cannot be acknowledged, and can only be set aside; a slip that names
 other agent keys than the gateway now holds is refused when the stub is
-written, and the call stays waiting. A call leaves the list as soon as the
-line saying so is in the journal, so trying again after a failure writes no
-stub twice. A stub written on acknowledgement goes into the book after
-every entry that reached the book while the gateway was stopped: so where a
+written, and the call stays waiting. Before each stub the gateway looks at
+the book again: where the book already holds a stub for the call (written
+before a failure, when the journal could not take the line saying the call
+was acknowledged), no second stub is written. With a copy, that stub
+settles the call only as a stub found at a start does (below), and the copy
+notes it `found-in-book`; without one, it settles the call. A call leaves
+the list as soon as the line saying so is in the journal; so trying again
+after a failure writes no stub twice. A stub written on acknowledgement
+goes into the book after every entry that reached the book while the
+gateway was stopped: so where a
 cancellation of that slip was put into the book meanwhile (only by hand),
 the stub reads as made after the cancellation (`after-cancellation`),
 because without an outside time-stamp its place in the book is what counts.
@@ -477,10 +483,12 @@ because without an outside time-stamp its place in the book is what counts.
 **Setting aside a call that was sent leaves it with no receipt**: the book
 then does not show it. The calls set aside are kept in
 `<book>.journal-set-aside` (each line tagged as the journal's are), which a
-clean start does not empty: a line for such a call that is put back into
-the journal later is taken as set aside. Deleting that file brings such
-lines back to the administrator. The agent takes calls again once nothing
-is waiting. A clean start empties the journal.
+clean start does not empty: where the gateway keeps no copy, a line for
+such a call that is put back into the journal later is taken as set aside,
+and deleting that file brings such lines back to the administrator. Where
+it keeps a copy, the copy's own line decides instead (below). The agent
+takes calls again once nothing is waiting. A clean start empties the
+journal.
 
 **Where the gateway keeps its own copy** (below), the copy decides, not the
 journal, since anyone who can write the folder can empty the journal, and
@@ -491,12 +499,21 @@ administrator, and the stub written for it is written from the copy's own
 line (the log says `journal-line-missing` where the journal has no line for
 it). A journal line is taken only where the copy holds a `sending` line for
 the same call with the same slip, action, amount, service and documents.
-One for a call the copy does not hold is listed, never given a stub, and
-can only be set aside (`journal-line-not-in-copy`); one that names a call
-of the copy and says otherwise is not acted on (`journal-line-differs`). So
-a journal line from before the gateway kept a copy can only be set aside.
-A gateway without keys of its own (no `gateway` in the settings) keeps no
-copy and countersigns nothing: at a start the journal decides, as described
+One for a call the copy does not hold is passed over where the book holds
+one stub for that call and it is the call the line shows, countersigned
+where a stub found at a start must be (below): nothing is written or
+countersigned for it, and the log says `receipt-found` with
+`"inCopy": false`. So a gateway first given keys after calls were made, or
+one whose copy was taken away, is not stopped by the calls whose stubs the
+book holds. Any other such line is listed, never given a stub, and can only
+be set aside (`journal-line-not-in-copy`); one that names a call of the
+copy and says otherwise is not acted on (`journal-line-differs`). A call is
+set aside only where the copy's own `set-aside` line says so: one that
+`<book>.journal-set-aside` names and the copy still shows open stops the
+agent and is listed again, the log says `set-aside-not-in-copy`, and
+nothing is written to the copy on that file's word. A gateway without keys
+of its own (no `gateway` in the settings) keeps no copy and countersigns
+nothing: at a start the journal decides, as described
 above, as it did before the gateway had keys of its own.
 
 **A book cut part-way through a line.** A stop while a line of the book is
@@ -594,8 +611,9 @@ At a start, a call the copy shows as sent and not finished is settled by a
 stub the book holds for it only where there is one such stub, it is the
 call the `sending` line shows (the same slip, action, amount and service,
 the line's documents first, then only documents of an outcome), and, where
-the slip names the gateway, it carries a valid countersignature of the
-gateway. The copy then notes it `found-in-book`, with its countersignature's
+the call was sent naming the gateway under a slip that names the gateway's
+id with keys (its present keys or any others, such as keys it held
+before), it carries a valid countersignature of the gateway. The copy then notes it `found-in-book`, with its countersignature's
 fingerprint. Any other such stub stops the agent (`receipt-not-matching`):
 the call is listed for the administrator, can only be set aside, and never
 gets a stub of the gateway's. At a start the gateway also warns where the
@@ -630,7 +648,9 @@ countersignature the copy records), `differs` (the book holds a receipt for
 the call, but another, or one that is not the call the `sending` line
 shows: `why` says which), `countersignatures` (a receipt the copy says the
 gateway countersigned whose countersignature is missing, does not check, or
-is another than the one the copy records), `moreThanOne` (more than one
+is another than the one the copy records; for a stub written at a later
+start, whose `done` line names no stub, one missing or not checking),
+`moreThanOne` (more than one
 receipt for one call), `missing` (the gateway sent the call and wrote its
 receipt, and the book has none), `notWritten` (the gateway could not write
 the receipt to the book: its own stop), `unfinished` (sent, and the gateway
@@ -776,8 +796,14 @@ refuse websocket upgrades and `CONNECT` itself, as `listen` does.
   the gateway does not countersign under it, so where it requires a
   countersignature its calls are refused (`countersignature-missing`) until
   a new slip names the new keys. A call sent under the old keys and
-  acknowledged after the change is written one-sided. There is no setting
-  for the keys the gateway held before.
+  acknowledged after the change is written one-sided, so the book is then
+  not within its slips where that slip requires a countersignature; and
+  where that stub reaches the book while the journal or the copy cannot say
+  so, it does not settle the call when the gateway looks again (a one-sided
+  stub under a slip that names the gateway's id with keys), and the call
+  can then only be set aside. A stub countersigned with the old keys still
+  settles such a call. There is no setting for the keys the gateway held
+  before.
 - **Every receipt is one-sided** unless the gateway or the upstream
   countersigns. A one-sided stub is the gateway's word. The fingerprints of the request and
   of the answer show that content matches, not that it was the same call;
