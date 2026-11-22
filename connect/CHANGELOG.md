@@ -2,6 +2,26 @@
 
 ## Not yet released
 
+- **The agent note.** The agent's public key set, from the recorder, is
+  put with the book in a sealed note of its own, `{ version: 1, agent: {
+  name, keys } }`, under the book's key with the book's id bound in
+  (`agent.mjs`: `sealAgent`, `openAgent`, `agentContext`, the context
+  `"<namespace>/agent/v1" ‖ 0x00 ‖ object id`). It opens with the book's
+  current key only. `bookSide.putAgent` sends it as `provared-put-agent`,
+  with the append capability; `createAgentNote` puts it at each hand-over
+  round where its text differs from the last one put. An earlier recorder,
+  which does not give the key set, is said once, and nothing is put. The
+  application's server does not take the note yet. Tests: nine, in
+  `test/agent-note.test.mjs`.
+- **One conversation with the recorder at a time.** Questions the
+  uploader asks its feed at once share one conversation, begun once,
+  instead of each beginning its own. Test: one, in
+  `test/agent-feed.test.mjs`.
+- **What is handed over again, and how many.** `AGAIN` gains
+  `waits-for-yes` and `nothing-in-force`. In a round, at most one new
+  permission for each passkey is handed over: the one that starts latest,
+  of those not answered for good. Tests: three, in
+  `test/handover-again.test.mjs`.
 - **The agent's public key set, from the recorder's feed.** `feedClient`
   gains `agent()`, for the recorder's new `GET /agent`: the key set, from
   an answer with the recorder's proof, in the form a new module,

@@ -104,7 +104,7 @@ import { fileURLToPath } from 'node:url';
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { createCryptoCore } from '@microtoll/crypto-core';
 import { authenticateConnection, createEphemeralIdentity, sendAndAwait } from '@microtoll/identity';
-import { readKeySet } from './agent.mjs';
+import { createAgentNote, readKeySet } from './agent.mjs';
 import { sealEntry } from './entry.mjs';
 import { HAND_OVER_AGAIN_MS, bookSide, createHandover } from './handover.mjs';
 import { checkConnection } from './line.mjs';
@@ -377,6 +377,7 @@ export function feedClient({ address, token, fetchImpl = globalThis.fetch }) {
   if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(token)) throw new Error('the feed token file does not hold a token (43 letters, digits, "-" and "_"): give the file feed-token from the recorder\'s folder');
   const tokenKey = Buffer.from(token);
   let talk = null;
+  let opening = null;
   const reach = async (path, headers, wait, body = null) => {
     try {
       const how = body === null ? {} : { method: 'POST', body, headers: { ...headers, 'Content-Type': 'application/json' } };
@@ -401,26 +402,31 @@ export function feedClient({ address, token, fetchImpl = globalThis.fetch }) {
   // A question with a body (POST /hand-over) is proved over every byte of the body as well, under a label of its own.
   // notFoundUnproved: an unproved 404 is answered { notGiven: true }, and nothing in it is read (GET /agent of an earlier recorder).
   async function get(path, wait, renewed = false, sending = null, notFoundUnproved = false) {
-    if (!talk) await hello();
+    // One conversation is begun at a time: questions asked at once (the lines, the hand-over, the agent's keys) share it.
+    if (!talk) await (opening ??= hello().finally(() => { opening = null; }));
+    // The conversation this question is asked in, whatever another question does to "talk" meanwhile.
+    const t = talk;
+    if (!t) throw feedError('the conversation with the recorder was given up while this question waited for it; asked again later', 'feed-busy');
+    const drop = () => { if (talk === t) talk = null; };
     const nonce = randomBytes(32).toString('base64url');
     const proof = sending === null
-      ? feedHmac(talk.key, FEED_LABELS.question, talk.session, nonce, `GET ${path}`)
-      : feedHmac(talk.key, FEED_LABELS.questionWithBody, talk.session, nonce, `POST ${path}`, sending);
+      ? feedHmac(t.key, FEED_LABELS.question, t.session, nonce, `GET ${path}`)
+      : feedHmac(t.key, FEED_LABELS.questionWithBody, t.session, nonce, `POST ${path}`, sending);
     // The uploader's own number goes with each question: the recorder keeps nothing from the hello.
-    const headers = { 'Provared-Feed-Session': talk.session, 'Provared-Feed-Hello': talk.mine, 'Provared-Feed-Nonce': nonce, 'Provared-Feed-Proof': proof.toString('base64url') };
+    const headers = { 'Provared-Feed-Session': t.session, 'Provared-Feed-Hello': t.mine, 'Provared-Feed-Nonce': nonce, 'Provared-Feed-Proof': proof.toString('base64url') };
     const response = await reach(path, headers, wait, sending);
     const bytes = Buffer.from(await response.arrayBuffer());
     if (response.status === 401) {
       const body = readJson(bytes);
       // A conversation the recorder no longer holds (it restarted, or gave it up): another is opened, once.
-      if (body.renew === true && !renewed) { talk = null; return get(path, wait, true, sending, notFoundUnproved); }
+      if (body.renew === true && !renewed) { drop(); return get(path, wait, true, sending, notFoundUnproved); }
       // Given up again before its question: another program may be opening conversations without end.
       // Taken as a busy feed, and tried again later; the uploader does not stop for good on it.
-      if (body.renew === true) { talk = null; throw feedError('the recorder gave up this uploader\'s conversation again before its question was answered (another program may be opening conversations); tried again later', 'feed-busy'); }
+      if (body.renew === true) { drop(); throw feedError('the recorder gave up this uploader\'s conversation again before its question was answered (another program may be opening conversations); tried again later', 'feed-busy'); }
       throw feedError(`the recorder's feed refused this uploader's proof: ${typeof body.error === 'string' ? body.error.slice(0, 300) : 401}. Give the file feed-token from the recorder's folder`, 'feed-refused');
     }
-    if (!sameProof(response.headers.get('provared-feed-proof'), feedHmac(talk.key, FEED_LABELS.answer, talk.session, nonce, String(response.status), bytes))) {
-      talk = null;
+    if (!sameProof(response.headers.get('provared-feed-proof'), feedHmac(t.key, FEED_LABELS.answer, t.session, nonce, String(response.status), bytes))) {
+      drop();
       // An earlier recorder does not know the route, and answers it outside its feed: "not given", and nothing more is taken from it.
       if (notFoundUnproved && response.status === 404) return { notGiven: true };
       throw feedError(`an answer from ${base.origin} does not carry the recorder's proof over it; it is not used`, 'feed-error');
@@ -1443,11 +1449,15 @@ export async function main(argv = process.argv.slice(2)) {
   // Records handed to the recorder: through the feed only.
   let handover = null;
   let side = null;
+  let agentNote = null;
   if (feed) {
     side = bookSide({ cc: createCryptoCore({ namespace: connection.namespace }), connection, connect: uploader.connect, key: uploader.key });
     handover = createHandover({ feed, readKept: side.readKept, putOutcomes: side.putOutcomes, log: console });
+    agentNote = createAgentNote({ feed, putAgent: side.putAgent, log: console });
   }
+  // The agent note first (the agent's keys, for the page to fill in), then the records kept with the book.
   const handOverOnce = async () => {
+    try { await agentNote.round(); } catch (e) { console.error(`provared-connect: the agent's keys could not be passed on now: ${e.reason || e.code || 'error'}: ${e.message}`); }
     try { await handover.round(); } catch (e) { console.error(`provared-connect: records kept with the book could not be handed to the recorder now: ${e.reason || e.code || 'error'}: ${e.message}`); }
   };
   if (once) {

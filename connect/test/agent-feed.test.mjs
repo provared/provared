@@ -105,6 +105,19 @@ test('a proved answer not in the form read is not used: a private member, a key 
   }
 });
 
+test('questions asked at once share one conversation: the key set, the books and the lines', { skip }, async () => {
+  let hellos = 0;
+  const r = await recorderOn({ agent: () => GIVEN, before: (req) => { if (req.url.startsWith('/hello')) hellos++; return false; } });
+  try {
+    const [agent, books] = await Promise.all([r.client.agent(), r.client.books(), r.client.lines({ book: 'book.jsonl', from: 0 })]);
+    assert.equal(agent.given, true);
+    assert.equal(books.books.length, 1);
+    assert.equal(hellos, 1);
+  } finally {
+    await r.close();
+  }
+});
+
 test('the key set\'s form: public members only, none dropped; a name, one to eight keys, at most 8,192 characters', () => {
   assert.deepEqual(readKeySet({ name: 'Claude Code', keys: KEYS }), { name: 'Claude Code', keys: KEYS });
   assert.equal(readKeySet({ name: 'Claude Code', keys: [{ ...KEYS[0], d: 'd'.repeat(43) }] }), null);
