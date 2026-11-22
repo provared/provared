@@ -16,7 +16,8 @@ import { AGENT_PURPOSE, NOT_GIVEN_WORDS, agentContext, createAgentNote, openAgen
 import { bookSide } from '../handover.mjs';
 import { NAMESPACE } from '../entry.mjs';
 import { openOutcomes, sealOutcomes } from '../outcomes.mjs';
-import { createUploader, feedClient } from '../upload.mjs';
+import { createUploader, feedClient, handOverRound } from '../upload.mjs';
+import { performance } from 'node:perf_hooks';
 
 const cc = createCryptoCore({ namespace: NAMESPACE });
 const KEYS = [{ alg: 'Ed25519', crv: 'Ed25519', kty: 'OKP', x: 'x'.repeat(43) }, { alg: 'ML-DSA-87', kty: 'AKP', pub: 'p'.repeat(3456) }];
@@ -144,6 +145,44 @@ test('bookSide.putAgent sends the note sealed for the book, with the append capa
   assert.equal(msg.appendCapabilitySecret, connection.appendCapabilitySecret);
   assert.deepEqual(await openAgent(cc, key, objectId, cc.fromBase64Url(msg.sealed)), AGENT);
   assert.ok(!msg.sealed.includes('Claude'), 'sealed, not in the clear');
+});
+
+test('a server that does not know the agent note answers unknown-type: the put is refused at once, not after the wait', async () => {
+  const objectId = crypto.randomUUID();
+  const key = await newKey();
+  const listeners = new Set();
+  // As the engine answers a message no handler takes: an error with the request's id, and no "-ok" or "-failed".
+  const socket = {
+    readyState: 1,
+    send(text) {
+      const { requestId } = JSON.parse(text);
+      setImmediate(() => {
+        for (const l of [...listeners]) l({ data: JSON.stringify({ type: 'error', reason: 'unknown-type', requestId: 'another' }) });
+        for (const l of [...listeners]) l({ data: JSON.stringify({ type: 'error', reason: 'unknown-type', requestId }) });
+      });
+    },
+    addEventListener(type, l) { if (type === 'message') listeners.add(l); },
+    removeEventListener(type, l) { listeners.delete(l); },
+  };
+  const side = bookSide({ cc, connection: { objectId, appendCapabilitySecret: cc.toBase64Url(cc.randomBytes(32)) }, connect: async () => socket, key: async () => key });
+  const began = performance.now();
+  await assert.rejects(side.putAgent(AGENT), (e) => e.reason === 'unknown-type');
+  assert.ok(performance.now() - began < 2000, `refused after ${Math.round(performance.now() - began)} ms`);
+  assert.equal(listeners.size, 0, 'nothing is left listening');
+});
+
+test('a hand-over round hands the records over first, and only then puts the agent note', async () => {
+  const order = [];
+  let release;
+  const held = new Promise((r) => { release = r; });
+  const agentNote = { round: async () => { order.push('note begun'); await held; order.push('note ended'); return 'failed'; } };
+  const handover = { round: async () => { order.push('records'); return []; } };
+  const done = handOverRound({ handover, agentNote, log: { info() {}, error() {} } });
+  await new Promise((r) => setImmediate(r));
+  assert.deepEqual(order, ['records', 'note begun'], 'the records do not wait for the note');
+  release();
+  await done;
+  assert.deepEqual(order, ['records', 'note begun', 'note ended']);
 });
 
 // --- against an earlier recorder's own feed ---

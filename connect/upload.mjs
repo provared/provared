@@ -1322,6 +1322,16 @@ export function createUploader({ connection, book, log = console, stateFile = `$
 }
 
 /**
+ * One hand-over round: the records kept with the book first, so that
+ * nothing the person signed waits for the note; then the agent note (the
+ * agent's keys, for the application). Neither stops the other.
+ */
+export async function handOverRound({ handover, agentNote, log = console }) {
+  try { await handover.round(); } catch (e) { log.error(`provared-connect: records kept with the book could not be handed to the recorder now: ${e.reason || e.code || 'error'}: ${e.message}`); }
+  try { await agentNote.round(); } catch (e) { log.error(`provared-connect: the agent's keys could not be passed on now: ${e.reason || e.code || 'error'}: ${e.message}`); }
+}
+
+/**
  * The rounds of lines through the feed, one after another, until one fails
  * for good (resolves with false), or stop() says so (true).
  *   round(wait)    one round: true, done; "again", failed for now; false, refused for good
@@ -1455,11 +1465,7 @@ export async function main(argv = process.argv.slice(2)) {
     handover = createHandover({ feed, readKept: side.readKept, putOutcomes: side.putOutcomes, log: console });
     agentNote = createAgentNote({ feed, putAgent: side.putAgent, log: console });
   }
-  // The agent note first (the agent's keys, for the page to fill in), then the records kept with the book.
-  const handOverOnce = async () => {
-    try { await agentNote.round(); } catch (e) { console.error(`provared-connect: the agent's keys could not be passed on now: ${e.reason || e.code || 'error'}: ${e.message}`); }
-    try { await handover.round(); } catch (e) { console.error(`provared-connect: records kept with the book could not be handed to the recorder now: ${e.reason || e.code || 'error'}: ${e.message}`); }
-  };
+  const handOverOnce = () => handOverRound({ handover, agentNote, log: console });
   if (once) {
     let ok = await attempt();
     if (ok === true && handover) { await handOverOnce(); ok = await attempt(); }

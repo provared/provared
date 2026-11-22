@@ -9,8 +9,9 @@
 // other member, a private one (d, priv) among them, is never passed on.
 // The uploader puts it with the book, sealed under the book's own key with
 // the book's id bound in, where its text differs from the last one put
-// (createAgentNote); the application's page opens it to fill in the keys of
-// the agent's first permission.
+// (createAgentNote), for the application to fill in the keys of the agent's
+// first permission. The application's server and page do not take or open
+// it yet.
 //
 // THE NOTE OPENS WITH THE BOOK'S CURRENT KEY ONLY. Its bound context names
 // no key epoch, so a note sealed under an earlier key of the book does not
@@ -20,9 +21,8 @@
 // (outcomes.mjs): the book's key is also held by everyone given a read-only
 // link to the book, so whoever holds such a link, working with the server,
 // could seal a note the page opens, and the server can hold the note back
-// or hand back an older one. The person compares the key set's fingerprint
-// in the signing window with the one "init" printed on the agent's
-// computer; and the recorder takes no permission for other keys.
+// or hand back an older one. What guards the agent is the recorder, which
+// takes no permission for other keys than its own ("other-agent").
 //
 // The key set: { name, keys: [{ kty, alg, crv?, x?, pub? }, ...] }
 // The note:    { version: 1, agent: <the key set> }
@@ -141,7 +141,9 @@ export function createAgentNote({ feed, putAgent, log = console }) {
     try {
       await putAgent(JSON.parse(text).agent);
     } catch (e) {
-      sayOnce(`put ${e.reason || e.code || e.message}`, `provared-connect: the agent's keys could not be written to the server: ${e.reason || e.code || 'error'}: ${e.message}`);
+      sayOnce(`put ${e.reason || e.code || e.message}`, e.reason === 'unknown-type'
+        ? 'provared-connect: the application\'s server does not take the agent\'s keys yet (unknown-type): they are offered again at each round, and the records are handed over as before'
+        : `provared-connect: the agent's keys could not be written to the server: ${e.reason || e.code || 'error'}: ${e.message}`);
       return 'failed';
     }
     noted = text;

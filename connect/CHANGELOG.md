@@ -2,6 +2,11 @@
 
 ## Not yet released
 
+- **The records no longer wait for the agent note.** A hand-over round
+  (`handOverRound`) hands the records over first and puts the note after
+  them; `putAgent` takes the server's `unknown-type` refusal at once,
+  instead of waiting 20 seconds at every round. Tests: two, in
+  `test/agent-note.test.mjs`.
 - **The agent note.** The agent's public key set, from the recorder, is
   put with the book in a sealed note of its own, `{ version: 1, agent: {
   name, keys } }`, under the book's key with the book's id bound in

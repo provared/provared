@@ -33,7 +33,7 @@
 // WHEN. As soon as the book's sealed content changes (the engine tells
 // whoever watches the book's shelf), and once a minute besides.
 
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { createAccess, openContent } from '@microtoll/access';
 import { describe } from './book.mjs';
 import { COLLECTION } from './entry.mjs';
@@ -206,6 +206,41 @@ export function createHandover({ feed, readKept, putOutcomes, log = console, now
   return Object.freeze({ round });
 }
 
+/** How long a message to the server waits for its answer: 20 seconds. */
+export const SERVER_ANSWER_MS = 20000;
+
+/**
+ * Sends a message to the server with an id of its own, and resolves on its
+ * answer okType; rejects on failType, on the server's own refusal of a
+ * message it does not take ({ type: "error", reason }, with the same id:
+ * "unknown-type" from a server that does not know the message yet), when
+ * the connection closes, or after SERVER_ANSWER_MS.
+ */
+function askServer(ws, request, okType, failType, waitMs = SERVER_ANSWER_MS) {
+  const requestId = `a${randomUUID()}`;
+  return new Promise((resolve, reject) => {
+    const end = (fn, value) => {
+      clearTimeout(timer);
+      ws.removeEventListener('message', onMessage);
+      ws.removeEventListener('close', onClose);
+      fn(value);
+    };
+    const refused = (msg) => Object.assign(new Error(typeof msg.reason === 'string' ? msg.reason : 'refused'), { reason: msg.reason, code: msg.reason, serverMessage: msg });
+    function onMessage(event) {
+      let msg;
+      try { msg = JSON.parse(event.data); } catch { return; }
+      if (!msg || msg.requestId !== requestId) return;
+      if (msg.type === okType) end(resolve, msg);
+      else if (msg.type === failType || msg.type === 'error') end(reject, refused(msg));
+    }
+    function onClose() { end(reject, Object.assign(new Error('the connection to the server closed before it answered'), { reason: 'closed' })); }
+    const timer = setTimeout(() => end(reject, Object.assign(new Error('the server did not answer in time'), { reason: 'timeout' })), waitMs);
+    ws.addEventListener('message', onMessage);
+    ws.addEventListener('close', onClose);
+    ws.send(JSON.stringify({ ...request, requestId }));
+  });
+}
+
 /**
  * The book's kept records, its note of outcomes and its agent note, through the uploader's
  * own signed-in connection to the server (connect), opened with the book's
@@ -240,7 +275,8 @@ export function bookSide({ cc, connection, connect, key }) {
   /** Writes the agent note (agent.mjs): the agent's public key set, sealed under the book's key with its id bound in. */
   async function putAgent(agent) {
     const sealed = await sealAgent(cc, await key(), connection.objectId, agent);
-    await sendAndAwait(await connect(), {
+    // Asked with its own wait, which takes the server's refusal of a message it does not know yet at once.
+    await askServer(await connect(), {
       type: 'provared-put-agent', objectId: connection.objectId, appendCapabilitySecret: connection.appendCapabilitySecret, sealed: cc.toBase64Url(sealed),
     }, 'provared-put-agent-ok', 'provared-put-agent-failed');
   }
