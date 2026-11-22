@@ -124,7 +124,7 @@ npm install -g provared-mcp-executor
 ```
 
 Or from a copy of the repository: in `mcp-executor`, `npm pack`, then
-`npm install -g ./provared-mcp-executor-0.5.0.tgz`.
+`npm install -g ./provared-mcp-executor-0.5.1.tgz`.
 
 Use version 0.4.2 or later. Every version from 0.1.0 to 0.4.1 has two
 weaknesses: in front of a tool server whose JSON reader ignores capitals
@@ -2005,7 +2005,7 @@ secret. Its records prove nothing about anyone; see `demo/README.md`. Of
 that folder, only `server.mjs` (the made-up server) and
 `content-rules.json` (its one rule) are in the npm package, for the `demo`
 command. `server.json` describes the package for the official MCP
-Registry, which lists 0.5.0 since 21 November 2026. It is published there by the workflow
+Registry, where the guard is listed. It is published there by the workflow
 `.github/workflows/mcp-registry.yml`, started by hand, which signs in
 with GitHub's identity token for the run. A version can be published to
 the registry only after the same version is on npm, because the registry

@@ -16,7 +16,7 @@
 #
 #   docker build -f Dockerfile \
 #     --build-context executor-file=<folder holding the .tgz> \
-#     --build-arg EXECUTOR=file:/tmp/executor/provared-mcp-executor-0.5.0.tgz .
+#     --build-arg EXECUTOR=file:/tmp/executor/provared-mcp-executor-0.5.1.tgz .
 
 # Empty unless a folder is handed to the builder under this name.
 FROM scratch AS executor-file
