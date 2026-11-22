@@ -261,6 +261,8 @@ export function readHttpSettings(config, root, { keysOnly = false } = {}) {
       for (const k of Object.keys(a)) if (!['secretHash', 'oauth', 'slip', 'book', 'keys', 'issuerKeys', 'copy', 'copyKey'].includes(k)) warnings.push(`${prefix}.${k}: not a setting; set aside.`);
       s.agents.set(name, paths);
     }
+    // Tasks only for one agent: the ownership kept by the executor is not relied on to keep several agents apart.
+    if (s.allowTasks === true && Object.keys(config.agents).length !== 1) at('allowTasks', 'can be true only where the settings name exactly one agent, because several agents share one caller at the tool server, so one agent could reach another\'s task.');
   }
 
   const ex = config.executor;

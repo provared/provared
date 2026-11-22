@@ -3,8 +3,9 @@
 // with the executor's one credential, so an upstream that keeps its tasks
 // for whoever presents that credential cannot tell one agent's from
 // another's. The made-up upstream here does just that (fake-http-server.mjs).
-// By default the executor refuses tasks; with "allowTasks" it keeps each
-// task to the agent whose call made it. And Last-Event-ID, which asks the
+// By default the executor refuses tasks; "allowTasks" is taken only where
+// the settings name one agent, and then a task the executor did not see
+// made for that agent is refused. And Last-Event-ID, which asks the
 // upstream to replay a stream, goes on only for an event the executor gave
 // that agent.
 
@@ -13,7 +14,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 const { checkBook } = await import('provared');
-const { httpWorld, call, request, post, rawRequest, auth, beginSession, META, TOKEN } = await import('./http-world.mjs');
+const { httpWorld, openHttpWorld, call, request, post, rawRequest, auth, beginSession, META, TOKEN } = await import('./http-world.mjs');
 const { CODES } = await import('../jsonrpc.mjs');
 const { readHttpSettings } = await import('../http.mjs');
 const { until } = await import('./world.mjs');
@@ -65,36 +66,42 @@ test('tasks: by default every tasks/ request, and a tools/call that asks for a t
   }
 });
 
-test('tasks: with allowTasks, each task is kept to the agent whose call made it; the five steps of the check are refused or kept to beta; alpha still gets its own result', async () => {
-  const w = await httpWorld({ slips: SLIPS, config: { allowTasks: true } });
+test('tasks: allowTasks is a settings error unless the settings name exactly one agent, since several agents share one caller at the tool server; two agents with it are refused at start, one starts', async () => {
+  const two = await httpWorld({ config: { allowTasks: true }, open: false });
   try {
-    // 1. beta's own call to "order": refused by its permission.
-    assert.equal((await call(w, 'beta', 'order', { total: 5, item: 'payroll run' }, { id: 1 })).json.result.isError, true);
-    // 2. alpha's call to "order" as a task: checked and receipted as any call; its result is the task's handle.
+    await assert.rejects(openHttpWorld(two), /allowTasks: .*exactly one agent.*another's task/);
+  } finally {
+    await two.close();
+  }
+  const one = await httpWorld({ agents: ['alpha'], config: { allowTasks: true } });
+  await one.close();
+  const base = { listen: { port: 0 }, upstream: { url: 'http://127.0.0.1:1/mcp' }, executor: { keys: 'e' }, tools: {} };
+  const agent = (n) => ({ secretHash: n.repeat(43), slip: `s${n}`, book: `b${n}`, keys: `k${n}`, issuerKeys: ['x'] });
+  assert.ok(readHttpSettings({ ...base, agents: { a: agent('A'), b: agent('B') }, allowTasks: true }, '.').problems.some((p) => p.startsWith('allowTasks')));
+  assert.ok(!readHttpSettings({ ...base, agents: { a: agent('A'), b: agent('B') } }, '.').problems.some((p) => p.startsWith('allowTasks')), 'without allowTasks, several agents start, and tasks are refused');
+});
+
+test('tasks: with allowTasks and one agent, its own task is served; a task the executor did not see made is refused and not sent, and is left out of tasks/list; the agent gets its own result', async () => {
+  const w = await httpWorld({ agents: ['alpha'], config: { allowTasks: true } });
+  try {
+    // The call to "order" as a task: checked and receipted as any call; its result is the task's handle.
     const made = await taskCall(w, 'alpha', 1);
     assert.equal(made.status, 200);
     const taskId = made.json.result.task.taskId;
     assert.equal(typeof taskId, 'string');
     assert.equal((await stubs(w, 'alpha')).length, 1, 'a receipt for the call');
+    // A task made past the executor, by another caller with the same credential: refused by every method that names it, and not sent; it runs on.
     const other = await taskElsewhere(w);
-    // 3. beta's tasks/list: alpha's task, and the one made past the executor, are not in it.
-    const listed = await request(w, 'beta', 'tasks/list', undefined, { id: 2 });
-    assert.equal(listed.status, 200);
-    assert.equal(listed.json.id, 2);
-    assert.deepEqual(listed.json.result.tasks, []);
-    // 4. beta's tasks/result for alpha's task: refused, and not sent.
     const before = methodsSeen(w).length;
-    const got = await request(w, 'beta', 'tasks/result', { taskId }, { id: 3 });
-    assert.equal(got.status, 200);
-    assert.equal(got.json.error.code, CODES.invalidParams);
-    assert.doesNotMatch(got.body, /Ordered/);
-    // 5. beta's tasks/cancel and tasks/get for alpha's task: refused, and not sent; the task runs on.
-    assert.equal((await request(w, 'beta', 'tasks/cancel', { taskId }, { id: 4 })).json.error.code, CODES.invalidParams);
-    assert.equal((await request(w, 'beta', 'tasks/get', { taskId }, { id: 5 })).json.error.code, CODES.invalidParams);
-    assert.equal((await request(w, 'beta', 'tasks/get', { taskId: other }, { id: 6 })).json.error.code, CODES.invalidParams, 'nor a task the executor did not make');
+    for (const [i, method] of ['tasks/result', 'tasks/cancel', 'tasks/get', 'tasks/update'].entries()) {
+      const r = await request(w, 'alpha', method, { taskId: other }, { id: 20 + i });
+      assert.equal(r.status, 200, method);
+      assert.equal(r.json.error.code, CODES.invalidParams, method);
+      assert.doesNotMatch(r.body, /Ordered/);
+    }
     assert.equal(methodsSeen(w).length, before, 'none of them reached the upstream');
-    assert.equal(w.upstream.tasks.get(taskId).status, 'completed');
-    // alpha: its own task is listed, and it gets its status and its own result.
+    assert.equal(w.upstream.tasks.get(other).status, 'completed');
+    // Its own task is listed (and the other not), and it gets its status and its own result.
     const own = await request(w, 'alpha', 'tasks/list', undefined, { id: 7 });
     assert.deepEqual(own.json.result.tasks.map((t) => t.taskId), [taskId]);
     assert.equal((await request(w, 'alpha', 'tasks/get', { taskId }, { id: 8 })).json.result.status, 'completed');
@@ -104,43 +111,18 @@ test('tasks: with allowTasks, each task is kept to the agent whose call made it;
     assert.equal(result.json.result.content[0].text, 'Ordered for 5.');
     // A method of tasks the executor does not know is refused even so.
     assert.equal((await request(w, 'alpha', 'tasks/other', { taskId }, { id: 10 })).json.error.code, CODES.methodNotFound);
-    // On a stream (each under the agent's own session: with two agents, a GET without one is not opened), the status of alpha's task reaches alpha alone.
-    const stream = async (agent) => {
-      const s = await rawRequest(w, { method: 'GET', headers: { accept: 'text/event-stream', ...auth(w, agent), 'mcp-session-id': await beginSession(w, agent) }, stream: true });
-      let text = '';
-      s.res.on('data', (c) => {
-        text += c;
-      });
-      await until(() => text.includes('hello'), { timeout: 5000 });
-      // The made-up upstream writes every event at once; a little more time lets any later one come.
-      await new Promise((d) => setTimeout(d, 100));
-      s.res.destroy();
-      return text;
-    };
-    assert.match(await stream('alpha'), new RegExp(taskId));
-    const betaStream = await stream('beta');
-    assert.doesNotMatch(betaStream, new RegExp(taskId));
-    assert.match(betaStream, new RegExp(other), 'a task the executor did not make is not the executor\'s to hold back');
-  } finally {
-    await w.close();
-  }
-});
-
-test('tasks: with allowTasks, a message of an agent\'s that its _meta ties to another agent\'s task is refused and not sent, a request with 200 and a notification with 400; the task\'s own agent\'s goes on', async () => {
-  const w = await httpWorld({ slips: SLIPS, config: { allowTasks: true } });
-  try {
-    const taskId = (await taskCall(w, 'alpha', 1)).json.result.task.taskId;
-    const related = { 'io.modelcontextprotocol/related-task': { taskId } };
-    const before = w.upstream.seen.length;
-    const asked = await request(w, 'beta', 'ping', { _meta: related }, { id: 'p' });
-    assert.equal(asked.status, 200);
-    assert.equal(asked.json.error.code, CODES.invalidParams);
-    assert.match(asked.json.error.message, /not this agent's/);
-    const told = await post(w, 'beta', { jsonrpc: '2.0', method: 'notifications/progress', params: { progressToken: 't', progress: 1, _meta: related } });
-    assert.equal(told.status, 400);
-    assert.equal(w.upstream.seen.length, before, 'neither reached the upstream');
-    const own = await request(w, 'alpha', 'ping', { _meta: related }, { id: 'q' });
-    assert.deepEqual(own.json.result, {});
+    // On a stream, the status of its own task reaches it, and so does that of the task made past the executor: not the executor's to hold back.
+    const s = await rawRequest(w, { method: 'GET', headers: { accept: 'text/event-stream', ...auth(w, 'alpha'), 'mcp-session-id': await beginSession(w, 'alpha') }, stream: true });
+    let text = '';
+    s.res.on('data', (c) => {
+      text += c;
+    });
+    await until(() => text.includes('hello'), { timeout: 5000 });
+    // The made-up upstream writes every event at once; a little more time lets any later one come.
+    await new Promise((d) => setTimeout(d, 100));
+    s.res.destroy();
+    assert.match(text, new RegExp(taskId));
+    assert.match(text, new RegExp(other));
   } finally {
     await w.close();
   }
@@ -208,7 +190,7 @@ test('tasks: without allowTasks, the upstream\'s offer of tasks does not reach t
       await w.close();
     }
   }
-  const w = await httpWorld({ config: { allowTasks: true } });
+  const w = await httpWorld({ agents: ['alpha'], config: { allowTasks: true } });
   try {
     w.upstream.offerTasks();
     const o = await offered(w);
@@ -255,52 +237,29 @@ test('tasks of 2026-07-28, by default: the extension is taken out of what an age
   }
 });
 
-test('tasks of 2026-07-28, with allowTasks: the task a call is answered with is its agent\'s, who may get and update it; another agent may not get, update, cancel or subscribe to it, and is not given its notifications', async () => {
-  const w = await httpWorld({ slips: SLIPS, config: { allowTasks: true } });
+test('tasks of 2026-07-28, with allowTasks and one agent: the task a call is answered with is the agent\'s, which may get, update and subscribe to it; a task the executor did not see made may not be got, updated, cancelled or subscribed to', async () => {
+  const w = await httpWorld({ agents: ['alpha'], config: { allowTasks: true } });
   try {
     const made = await call(w, 'alpha', 'order', { total: 5, item: 'payroll run' }, { id: 'o', meta: META_TASKS });
     assert.equal(made.json.result.resultType, 'task');
     const { taskId } = made.json.result;
     assert.equal(typeof taskId, 'string');
     assert.equal(Object.hasOwn(lastSent(w, 'tools/call').params._meta['io.modelcontextprotocol/clientCapabilities'].extensions, TASKS_EXTENSION), true, 'the extension goes on');
-    // alpha's own.
+    // Its own.
     assert.equal((await ask(w, 'alpha', 'tasks/get', { taskId }, 'g')).json.result.taskId, taskId);
     assert.deepEqual((await ask(w, 'alpha', 'tasks/update', { taskId, inputResponses: {} }, 'u')).json.result, { resultType: 'complete' });
-    // beta, by every route: refused, and not sent.
+    // A task it was not answered with, by every route: refused, and not sent.
     const before = methodsSeen(w).length;
     for (const method of ['tasks/get', 'tasks/update', 'tasks/cancel']) {
-      const r = await ask(w, 'beta', method, { taskId, inputResponses: {} }, method);
+      const r = await ask(w, 'alpha', method, { taskId: 'task-unknown', inputResponses: {} }, method);
       assert.equal(r.json.error.code, CODES.invalidParams, method);
     }
-    assert.equal((await ask(w, 'beta', 'subscriptions/listen', { notifications: { taskIds: [taskId] } }, 'l')).json.error.code, CODES.invalidParams);
-    assert.equal((await ask(w, 'beta', 'subscriptions/listen', { notifications: { TaskIds: [taskId] } }, 'l2')).json.error.code, CODES.invalidParams, 'in other capitals too');
+    assert.equal((await ask(w, 'alpha', 'subscriptions/listen', { notifications: { taskIds: [taskId, 'task-unknown'] } }, 'l')).json.error.code, CODES.invalidParams);
+    assert.equal((await ask(w, 'alpha', 'subscriptions/listen', { notifications: { TaskIds: [taskId] } }, 'l2')).json.error.code, CODES.invalidParams, 'in other capitals too');
     assert.equal(methodsSeen(w).length, before, 'none of them reached the upstream');
-    // A subscription of beta's that names no task: alpha's task's notification is not given to beta.
-    const betas = await ask(w, 'beta', 'subscriptions/listen', { notifications: {} }, 'l3');
-    assert.equal(betas.status, 200);
-    assert.doesNotMatch(betas.body, new RegExp(taskId));
-    assert.doesNotMatch(betas.body, /4471/);
-    // alpha's subscription to its own task: its notification comes.
+    // Its subscription to its own task: its notification comes.
     const alphas = await ask(w, 'alpha', 'subscriptions/listen', { notifications: { taskIds: [taskId] } }, 'l4');
     assert.ok(alphas.events.some((e) => e.method === 'notifications/tasks' && e.params.taskId === taskId));
-  } finally {
-    await w.close();
-  }
-});
-
-test('tasks of 2026-07-28, with allowTasks: a task named in answers to two agents is neither\'s, so an agent that has an id named to it first does not get the other\'s task', async () => {
-  const w = await httpWorld({ slips: SLIPS, config: { allowTasks: true } });
-  try {
-    // beta has the id "task-shared" named to it, in the answer to a request of its own.
-    assert.equal((await ask(w, 'beta', 'claim', { taskId: 'task-shared' }, 'c')).json.result.taskId, 'task-shared');
-    // The upstream then makes that task for alpha's call.
-    const made = await call(w, 'alpha', 'odd', { how: 'task-anyway', taskId: 'task-shared' }, { id: 'o', meta: META_TASKS });
-    assert.equal(made.json.result.taskId, 'task-shared');
-    // Neither may reach it now: not beta, who would have alpha's task, and not alpha, since the executor cannot tell which agent's it is.
-    const before = methodsSeen(w).length;
-    for (const agent of ['beta', 'alpha']) assert.equal((await ask(w, agent, 'tasks/get', { taskId: 'task-shared' }, `g-${agent}`)).json.error.code, CODES.invalidParams, agent);
-    assert.equal(methodsSeen(w).length, before);
-    assert.ok(w.logs.some((e) => e.event === 'task-disputed'));
   } finally {
     await w.close();
   }

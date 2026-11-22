@@ -490,21 +490,22 @@ handed on: the answer to `initialize` or `server/discover` loses
 `capabilities.tasks`, and each tool of a `tools/list` loses
 `execution.taskSupport`, in any capitals, every number kept as the
 upstream wrote it; an answer that cannot be read for this is not handed on
-(X457). With `allowTasks`, the extension goes on;
-the task id in the answer to a request that asked for a task, and in any
-answer that is a flat handle (for a call, its outcome), is held for the
-agent that sent the request, up to `MAX_TASKS` (1,000) for each agent,
-its oldest forgotten first, and a task named in answers to two agents is
-neither's (X456); `tasks/get`, `tasks/result`, `tasks/cancel` and
-`tasks/update` go on only where `params.taskId` is one of that agent's,
-and `subscriptions/listen` only where every task it names is (X455);
-`tasks/list` comes back with that agent's tasks alone (a list that cannot
-be read is not handed on, as for `tools/list`); another `tasks/…` method
-is refused; a message of the agent's that names another agent's task is
-refused; and an event of the upstream's that names another agent's task
-is dropped from this agent's streams. A task the executor did not see
-made (before a restart, or by another caller of the upstream) is refused
-to every agent, and an event that names one is not held back. The
+(X457). `allowTasks` is a settings error unless the settings name
+exactly one agent: several agents share one caller at the tool server, so
+one agent could reach another's task (X461). With `allowTasks`, the
+extension goes on; the task id in the answer to a request that asked for
+a task, and in any answer that is a flat handle (for a call, its
+outcome), is held for the agent, up to `MAX_TASKS` (1,000), its oldest
+forgotten first; `tasks/get`, `tasks/result`, `tasks/cancel` and
+`tasks/update` go on only where `params.taskId` is one of those, and
+`subscriptions/listen` only where every task it names is (X455);
+`tasks/list` comes back with those tasks alone (a list that cannot be
+read is not handed on, as for `tools/list`); and another `tasks/…` method
+is refused. A task the executor did not see made (before a restart, or by
+another caller of the upstream) is refused, and an event that names one
+is not held back. The code still holds each task under the name of its
+agent (X456 and the checks between agents are kept), but with one agent
+those checks have nothing to keep apart. The
 `Last-Event-ID` header, by which a client asks for a stream to be
 replayed after an event, goes on only where it names one of the last
 `MAX_EVENT_IDS` (1,000) events the executor gave that agent: an upstream
@@ -944,8 +945,8 @@ programs, and that program outlived the executor (the review ran it).
    The same on stdio and in front of a local program, where a program
    serves one agent's session and so keeps its tasks to it. In front of an
    upstream HTTP server, where every agent is one caller to the upstream,
-   tasks are refused unless the settings allow them, and then each is held
-   to the agent whose call made it (section 10, "Tasks in front of an
+   tasks are refused unless the settings allow them, which they may only
+   where they name exactly one agent (section 10, "Tasks in front of an
    upstream").
 
 The 204 for a DELETE and the 400 for an `initialize` that names a session

@@ -345,25 +345,23 @@ What the executor does with each request:
   to make a task: the executor takes the extension out of every request
   it sends on, so the upstream answers at once, with the result. A call
   that the upstream answers with a task all the same is recorded with its
-  outcome not known, and the agent is told so. With `allowTasks`, the
+  outcome not known, and the agent is told so. `allowTasks` can be true
+  only where the settings name exactly one agent; with several, the
+  executor does not start, because they share one caller at the tool
+  server and one agent could reach another's task. With it, the
   extension goes on, and a call that becomes a task is checked and
   receipted as any call (its receipt's result is the task's handle; a
-  later `tasks/result` or `tasks/get` passes with no receipt). The task an
-  answer names (`result.task.taskId` where the request asked for one;
-  `result.taskId` where `result.resultType` is `"task"`, in any answer) is
-  held to the agent the answer went to (the last 1,000 for each agent),
-  and a task named in answers to two agents is neither's. `tasks/get`,
-  `tasks/result`, `tasks/cancel` and `tasks/update` that name another
-  agent's task, or one the executor did not see made, are refused (-32602)
-  and not sent, and so is a subscription that names one in
-  `notifications.taskIds`; `tasks/list` comes back with that agent's tasks
-  alone; any other `tasks/` method is refused; and an event of the
-  upstream's that names another agent's task (`notifications/tasks/status`,
-  `notifications/tasks`, or a message whose `_meta` ties it to that task)
-  is dropped from this agent's streams. After a restart the executor knows
-  no task, so the tasks made before it are refused. The methods and fields
-  covered are those of the 2025-11-25 revision and, for 2026-07-28, those
-  named here.
+  later `tasks/result` or `tasks/get` passes with no receipt). The
+  executor remembers the task an answer names (`result.task.taskId` where
+  the request asked for one; `result.taskId` where `result.resultType` is
+  `"task"`, in any answer), the last 1,000. `tasks/get`, `tasks/result`,
+  `tasks/cancel` and `tasks/update` that name a task the executor did not
+  see made (by another caller of the upstream, or before a restart) are
+  refused (-32602) and not sent, and so is a subscription that names one
+  in `notifications.taskIds`; `tasks/list` comes back with the tasks it
+  saw made alone; and any other `tasks/` method is refused. The methods
+  and fields covered are those of the 2025-11-25 revision and, for
+  2026-07-28, those named here.
 - Cancellation follows the era. On the 2026-07-28 revision, closing the
   response stream is the cancellation: the executor then closes its stream
   to the upstream, the outcome is recorded as not known, as on stdio, and
@@ -438,10 +436,10 @@ The settings (`executor-http.example.json` is a start): `name`, `service`,
   about) and `credential`: `{"file": <path>}`, the file that holds the
   bearer token, readable by the executor alone. Without `credential` the
   upstream is called with none, and the start says so.
-- `allowTasks`, in front of an upstream only: `true` lets agents use the
-  upstream's tasks, each held to the agent whose call made it; default
-  `false`, every task request refused (see "To the upstream all agents are
-  one caller", above). With `false`, the upstream's offer of tasks is not
+- `allowTasks`, in front of an upstream only: `true` lets the agent use the
+  upstream's tasks, and is a settings error unless the settings name
+  exactly one agent; default `false`, every task request refused (see "To
+  the upstream all agents are one caller", above). With `false`, the upstream's offer of tasks is not
   handed on either, so that a client is not asked to use what is refused:
   the answer to `initialize` or `server/discover` loses
   `capabilities.tasks`, and each tool in a `tools/list` loses
