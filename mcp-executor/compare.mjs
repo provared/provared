@@ -98,7 +98,7 @@ export async function compareCopyWithBook({ copyPath, copyKey, name, service, bo
     withdrawn: 0,
     copy: { lines: copy.lines.length, checked: copy.checked, refused: copy.refused, cut: copy.cut !== null, sequence: copy.sequence },
     // "sealersExpected": the recorders a seal in the book had to be signed by (key-set fingerprints), or null where none was named and a seal's keys were compared with nothing.
-    book: { entries: checked.entries.length, problemFound: checked.summary.problemFound, fullyChecked: checked.summary.fullyChecked, seals: checked.entries.filter((e) => e.kind === 'seal').length, sealersExpected: Array.isArray(options.sealKeys) ? [...options.sealKeys] : null },
+    book: { entries: checked.entries.length, problemFound: checked.summary.problemFound, fullyChecked: checked.summary.fullyChecked, withinSlips: checked.summary.withinSlips, seals: checked.entries.filter((e) => e.kind === 'seal').length, sealersExpected: Array.isArray(options.sealKeys) ? [...options.sealKeys] : null },
   };
   const seen = new Set();
   for (const c of calls.values()) {
@@ -181,7 +181,9 @@ export async function compareCopyWithBook({ copyPath, copyKey, name, service, bo
     copy.refused === 0 &&
     copy.cut === null &&
     copy.sequence.ok &&
-    !checked.summary.problemFound;
+    !checked.summary.problemFound &&
+    checked.summary.fullyChecked === true &&
+    checked.summary.withinSlips === true;
   result.summary = {
     sent: result.matched.length + result.differs.length + result.countersignatures.length + result.missing.length + result.notWritten.length + result.unfinished.length + result.setAside.length,
     matched: result.matched.length,
@@ -196,6 +198,8 @@ export async function compareCopyWithBook({ copyPath, copyKey, name, service, bo
     denialsMissingFromBook: result.denialsMissing.length,
     withoutRules: result.withoutRules.length,
     bookProblem: checked.summary.problemFound,
+    bookFullyChecked: checked.summary.fullyChecked === true,
+    bookWithinSlips: checked.summary.withinSlips === true,
     // A call set aside is a call the executor sent that the book does not show: the two never agree while there is one.
     agree: restAgrees && result.setAside.length === 0,
     // True where the calls set aside are the only disagreement, so that this known state can be told from a new one.

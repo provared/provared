@@ -1284,7 +1284,11 @@ Beside these, `withoutRules` lists the executor's receipts and denials
 under a slip that states rules on content and that name no rules file;
 it does not change the code. It ends with code 0 only where everything agrees, every line of the copy
 checks under the key and runs in sequence, and the book itself has no
-problem. The copy key must exist (`compare` makes none), and a book named
+problem, was fully checked and is within its slips (the summary's
+`bookProblem`, `bookFullyChecked` and `bookWithinSlips`). A book outside
+its slips, for whatever reason, is no agreement, even where every call of
+the copy matches; nor is a book this computer could not fully check (a
+signature method it lacks). The copy key must exist (`compare` makes none), and a book named
 with `--book` must exist.
 
 It cannot find a call that never went through the executor, whether a tool

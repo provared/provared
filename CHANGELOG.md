@@ -240,6 +240,15 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
     (`compare.mjs`; the README's "The copy, and comparing it with the
     book"; a test in `test/review5.test.mjs`, with and without the
     countersignature.)
+  - **`compare` is stricter in 0.5.1 than in 0.5.0.** `agree` is now true
+    only where the book was also fully checked and is within its slips, as
+    the gateway's `compare` asks; before, a book outside its slips (a
+    receipt under another service, say) or one this computer could not
+    fully check still agreed where the copy matched. Such a book now ends
+    `compare` with code 1, and `onlySetAside` is false for it, as in the
+    gateway. The summary gains `bookFullyChecked` and `bookWithinSlips`,
+    and `book` gains `withinSlips`. (`compare.mjs`; the README's "The copy,
+    and comparing it with the book"; two tests in `test/review5.test.mjs`.)
   - **Tests** (`mcp-executor/test/review5.test.mjs`, 5): a receipt found at
     a start with other arguments, one-sided, or one of two; one that is the
     call, countersigned; a countersignature taken off or swapped; a receipt

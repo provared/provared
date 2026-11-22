@@ -249,3 +249,41 @@ test('M2 (re-check F3): compare checks the countersignature of a receipt written
     }
   }
 });
+
+test('X433: a book outside its slips does not agree, even where every call of the copy matches', async () => {
+  const w = await afterOneCall();
+  assert.equal((await compareOf(w)).summary.agree, true);
+  // A receipt of the agent under another service, which the slip does not name: not the executor's, and outside the slip.
+  const [first] = copyLines(w);
+  await forge(w, { slip: first.slip, action: first.action, with: 'elsewhere', details: [{ name: 'provared.arguments', sha256: await argumentsFingerprint({}) }] });
+  const result = await compareOf(w);
+  assert.deepEqual([result.summary.matched, result.summary.notInCopy, result.summary.bookProblem, result.summary.bookFullyChecked], [1, 0, false, true], JSON.stringify(result.summary));
+  assert.equal(result.summary.bookWithinSlips, false);
+  assert.equal(result.book.withinSlips, false);
+  assert.equal(result.summary.agree, false);
+  assert.equal(result.summary.onlySetAside, false);
+});
+
+test('X433: a book with a problem, or one this computer could not fully check, does not agree', async () => {
+  const w = await afterOneCall();
+  const book = readFileSync(bookPath(w), 'utf8');
+  const spoilt = await compareOf(w, `${book}{"not":"a line"}\n`);
+  assert.equal(spoilt.summary.matched, 1);
+  assert.equal(spoilt.summary.bookProblem, true);
+  assert.equal(spoilt.summary.agree, false);
+  assert.equal(spoilt.summary.onlySetAside, false);
+  // A computer without one of the signature methods the keys use, and a book that holds only a denial: no receipt,
+  // so no countersignature this computer cannot check (that would itself be a disagreement). No problem is found,
+  // the book is within its slip, and it is not fully checked.
+  const v = await world({ slip: { limits: [{ action: 'supplies.order', max: 100, unit: 'GBP' }] } });
+  await v.client.call('order', { total: 200 });
+  await v.close();
+  const sees = (withoutMethods) => compareCopyWithBook({ copyPath: join(v.folder, 'copy.jsonl'), copyKey: copyKeyOf(v), name: v.settings.name, service: 'executor', book: readFileSync(bookPath(v), 'utf8'), options: { issuerKeys: v.settings.agent.issuerKeys, withoutMethods } });
+  const seen = await sees([]);
+  assert.deepEqual([seen.summary.sent, seen.refused.length, seen.refused[0].denialInBook, seen.summary.agree], [0, 1, true, true], JSON.stringify(seen.summary));
+  const blind = await sees(['ML-DSA-87']);
+  assert.equal(blind.refused[0].denialInBook, true, JSON.stringify(blind.summary));
+  assert.deepEqual([blind.summary.bookProblem, blind.summary.bookWithinSlips, blind.summary.bookFullyChecked], [false, true, false], JSON.stringify(blind.summary));
+  assert.equal(blind.summary.agree, false);
+  assert.equal(blind.summary.onlySetAside, false);
+});
