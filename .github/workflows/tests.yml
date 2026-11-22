@@ -94,7 +94,9 @@ jobs:
   # The library's own tests, the same files as "npm test" at the top of the
   # repository: only test/**/*.test.mjs, so that the packages below, and
   # the helper files beside their tests, are not run here. Each package is
-  # run in its own job, so that a failure says which part broke.
+  # run in its own job, so that a failure says which part broke. As in
+  # "npm test", test/helpers/no-network.mjs is loaded first: a connection
+  # that library code opens fails the run.
   javascript:
     name: JavaScript library
     runs-on: ubuntu-latest
@@ -108,7 +110,7 @@ jobs:
         with:
           node-version: 24
       - name: Run the tests
-        run: set -o pipefail; node --test 'test/**/*.test.mjs' 2>&1 | tee "$RUNNER_TEMP/test-output.txt"
+        run: set -o pipefail; node --import ./test/helpers/no-network.mjs --test 'test/**/*.test.mjs' 2>&1 | tee "$RUNNER_TEMP/test-output.txt"
       - name: Fail on any warning but the expected one
         run: sh tools/lint/node-warnings.sh "$RUNNER_TEMP/test-output.txt"
 
