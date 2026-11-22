@@ -316,6 +316,65 @@ function addWaitingPermission(folder, slip, fingerprintOf, thumbprintOf) {
   return true;
 }
 
+/** The words for a permission signed at another address than the signing page the recorder expects (signedAt). */
+function otherAddressWords(origin, signedAt) {
+  return `This permission was signed at ${typeof origin === 'string' ? origin : 'an address it does not name'}, not at ${signedAt.join(' or ')}, where the records this recorder takes from the application are signed, so it is not taken.`;
+}
+
+/** The words for a renewal whose start was too far ahead when it was handed over. */
+function startsLaterWords(from) {
+  return `This permission starts at ${from}, more than ${HAND_OVER_ALLOWANCE_MS / 60000} minutes ahead of this computer's clock when it was handed over, so it is not taken, and it stays refused while this recorder runs. A permission does not say when it was signed: one that starts later than that could have been signed before a cancellation and kept back until after it. Sign one that starts within ${HAND_OVER_ALLOWANCE_MS / 60000} minutes of signing; to use one that starts later, put it on this computer yourself: ${RUN} renew <file>.`;
+}
+
+/**
+ * The checks of a permission handed over that need no permission in force,
+ * shared by the full recorder (handOverRenewal, in startService) and the
+ * waiting recorder (waiting.mjs): it starts no more than
+ * HAND_OVER_ALLOWANCE_MS ahead of this computer's clock ("starts-later",
+ * looked at before its passkey, and remembered in "startsLater" by its
+ * fingerprint); then, as checkNewSlip checks it, it is sound, with a valid
+ * passkey signature, names this folder's agent keys ("other-agent"), has not
+ * ended, and is not from a retired passkey; and it was signed at the
+ * expected signing address ("other-signing-address").
+ *
+ * "trusted": the passkeys trusted, or null where none is yet (the waiting
+ * recorder: then every passkey is new, and the permission can only wait for
+ * the person's "yes"). "admit": the thumbprint of a passkey the person admits
+ * here for this one permission, which must have signed it ("other-passkey").
+ *
+ * Gives back {next} (checkNewSlip's answer) where every check passes, or
+ * {code, message, thumbprint?, untrusted?} where one fails; "untrusted"
+ * marks a permission whose only fault is a passkey this computer does not
+ * trust, signed at the expected address, which may wait for "admit-passkey".
+ * @param {object} slip
+ * @param {string} fp its fingerprint
+ * @param {{agentKeys: object[], signedAt: string[], trusted: string[]|null, retired: string[], admit?: string|null, now: number, startsLater: Set<string>}} o
+ */
+export async function handOverChecks(slip, fp, { agentKeys, signedAt, trusted, retired, admit = null, now, startsLater }) {
+  const stated = startOf(slip);
+  if (startsLater.has(fp) || stated > now + HAND_OVER_ALLOWANCE_MS) {
+    if (startsLater.size >= 1000) startsLater.delete(startsLater.values().next().value);
+    startsLater.add(fp);
+    return { code: 'starts-later', message: startsLaterWords(new Date(stated).toISOString()) };
+  }
+  let next;
+  try {
+    next = await checkNewSlip(slip, { agentKeys, trusted: trusted ?? [], retired, newPasskey: admit !== null || trusted === null });
+  } catch (e) {
+    if (e.code === 'passkey-not-trusted' && admit === null) {
+      // Its signature checked (only the trust in its passkey failed), so what it says of its address is the passkey's.
+      const origin = JSON.parse(new TextDecoder().decode(fromBase64url(slip.payload))).issuer?.origin;
+      if (!signedAt.includes(origin)) return { code: 'other-signing-address', message: otherAddressWords(origin, signedAt) };
+      return { code: e.code, message: e.message, thumbprint: e.thumbprint, untrusted: true };
+    }
+    return { code: e.code ?? 'not-taken', message: e.message, ...(e.thumbprint ? { thumbprint: e.thumbprint } : {}) };
+  }
+  // Admitted for this one permission only: signed by the passkey the person named.
+  if (admit !== null && next.issuerKey !== admit) return { code: 'other-passkey', message: `This permission is signed by the passkey ${next.issuerKey}, not by ${admit}, the passkey being admitted, so it is not taken.` };
+  if (!signedAt.includes(next.content.issuer.origin)) return { code: 'other-signing-address', message: otherAddressWords(next.content.issuer.origin, signedAt) };
+  return { next };
+}
+
 // --- new books ---
 //
 // The format allows at most 100,000 entries in a book, and the check
@@ -1844,17 +1903,11 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
     return refused(null, null, 'not-understood', 'What was handed over is not a renewal ({kind: "renewal", slip}) or a cancellation ({kind: "cancellation", cancellation}).');
   }
 
-  // A permission signed at another address than the signing page the recorder expects (signedAt).
-  function otherAddress(kind, fp, origin, refused) {
-    return refused(kind, fp, 'other-signing-address', `This permission was signed at ${typeof origin === 'string' ? origin : 'an address it does not name'}, not at ${signedAt.join(' or ')}, where the records this recorder takes from the application are signed, so it is not taken.`);
-  }
-
   // A renewal whose start was too far ahead when it was handed over: refused
   // for good, by its fingerprint, for as long as the service runs, though
   // its start comes nearer (a restart forgets them; the uploader does not
   // hand over again a record refused with this code).
   const startsLater = new Set();
-  const startsLaterWords = (from) => `This permission starts at ${from}, more than ${HAND_OVER_ALLOWANCE_MS / 60000} minutes ahead of this computer's clock when it was handed over, so it is not taken, and it stays refused while this recorder runs. A permission does not say when it was signed: one that starts later than that could have been signed before a cancellation and kept back until after it. Sign one that starts within ${HAND_OVER_ALLOWANCE_MS / 60000} minutes of signing; to use one that starts later, put it on this computer yourself: ${RUN} renew <file>.`;
 
   // admit: the thumbprint of a passkey this computer does not trust, which
   // the person admits here ("admit-passkey") for this one permission; check:
@@ -1869,34 +1922,21 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
     }
     if (fp === current.fingerprint) return { kind, fingerprint: fp, outcome: 'already', message: 'This permission is the one in force: the book holds it already.' };
     if (everSlips.has(fp)) return refused(kind, fp, 'not-again', 'This permission was in force before, and a later one replaced it: the recorder does not go back to it. Sign a new permission.');
-    // Before the passkey is looked at, so that such a permission never waits for "admit-passkey".
-    const stated = startOf(slip);
-    if (startsLater.has(fp) || stated > clock() + HAND_OVER_ALLOWANCE_MS) {
-      if (startsLater.size >= 1000) startsLater.delete(startsLater.values().next().value);
-      startsLater.add(fp);
-      return refused(kind, fp, 'starts-later', startsLaterWords(new Date(stated).toISOString()));
-    }
+    // The checks that need no permission in force, shared with the waiting recorder.
     trusted = trustedNow();
-    let next;
-    try {
-      next = await checkNewSlip(slip, { agentKeys: agent.keys, previous: current, trusted, retired: readRetired(folder), newPasskey: admit !== null });
-    } catch (e) {
-      if (e.code === 'passkey-not-trusted' && admit === null) {
-        // Its signature checked (only the trust in its passkey failed), so what it says of its address is the passkey's.
-        const origin = JSON.parse(new TextDecoder().decode(fromBase64url(slip.payload))).issuer?.origin;
-        if (!signedAt.includes(origin)) return otherAddress(kind, fp, origin, refused);
+    const checked = await handOverChecks(slip, fp, { agentKeys: agent.keys, signedAt, trusted, retired: readRetired(folder), admit, now: clock(), startsLater });
+    if (!checked.next) {
+      if (checked.untrusted) {
         // Kept for "admit-passkey", which shows it on this computer and takes it only once the person confirms there.
         try {
-          addWaitingPermission(folder, slip, fp, e.thumbprint);
+          addWaitingPermission(folder, slip, fp, checked.thumbprint);
         } catch {
           // Not kept: "renew <file> --new-passkey" still takes it, from the person's own file.
         }
       }
-      return refused(kind, fp, e.code ?? 'not-taken', e.message, e.thumbprint ? { thumbprint: e.thumbprint } : {});
+      return refused(kind, fp, checked.code, checked.message, checked.thumbprint ? { thumbprint: checked.thumbprint } : {});
     }
-    // Admitted for this one permission only: signed by the passkey the person named.
-    if (admit !== null && next.issuerKey !== admit) return refused(kind, fp, 'other-passkey', `This permission is signed by the passkey ${next.issuerKey}, not by ${admit}, the passkey being admitted, so it is not taken.`);
-    if (!signedAt.includes(next.content.issuer.origin)) return otherAddress(kind, fp, next.content.issuer.origin, refused);
+    const { next } = checked;
     if (Date.parse(next.content.validFrom) < Date.parse(current.content.validFrom)) {
       return refused(kind, fp, 'older', `This permission starts at ${next.content.validFrom}, before the permission in force (from ${current.content.validFrom}), so it is not taken: a record signed earlier and handed over late would take the agent back. Sign a new permission.`);
     }
