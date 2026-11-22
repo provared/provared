@@ -92,7 +92,7 @@ test('a renewal from a passkey the recorder does not trust is refused and report
     const declined = await typedAt(w, T, 'maybe');
     assert.equal(declined.code, 1);
     assert.match(declined.out, new RegExp(`Passkey \\(thumbprint\\)\\s+${T}`));
-    assert.match(declined.out, /Signed at\s+http:\/\/localhost/);
+    assert.match(declined.out, /Signed at\s+"http:\/\/localhost"/);
     assert.match(declined.out, /Nothing was changed/);
     assert.equal(readTrusted(w.folder).includes(T), false);
     assert.equal((await status(w.port)).slip, first);
@@ -631,7 +631,7 @@ test(`the waiting list keeps one permission for each passkey, the one that start
     assert.equal(waiting[0].thumbprint, T);
     assert.equal(waiting[0].slip.payload, newer.payload, 'the one that starts latest, though handed over first');
     const shown = await runCommand(['admit-passkey', T], { folder: w.folder, port: w.port, input: 'no\n' });
-    assert.match(shown.out, /Purpose\s+NEWER/);
+    assert.match(shown.out, /Purpose\s+"NEWER/);
     assert.doesNotMatch(shown.out, /OLDER/);
     // A later one replaces it.
     const latest = await signSlip({ agentKeys: w.agent.keys, passkey: mine, from: Date.now() + 2000, purpose: 'LATEST' });

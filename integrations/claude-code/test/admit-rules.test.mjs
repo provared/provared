@@ -17,7 +17,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 const { assembleCancellation, prepareCancellation, thumbprint } = await import('provared');
 const { developmentPasskey } = await import('provared/dev');
 const { feedReader } = await import('../feed.mjs');
-const { ADMIT_THUMBPRINT_LEAST, admitWaiting, readTrusted, readWaitingPermissions, startService } = await import('../recorder.mjs');
+const { ADMIT_THUMBPRINT_LEAST, admitWaiting, printable, readTrusted, readWaitingPermissions, startService } = await import('../recorder.mjs');
 const { runCommand, signSlip, status, world } = await import('./world.mjs');
 
 const LOCAL = { signingOrigins: ['http://localhost'] };
@@ -180,12 +180,41 @@ test('"admit-passkey" shows control and other characters that do not print as es
     assert.equal(r.code, 1, r.out);
     for (const line of r.out.split('\n')) assert.doesNotMatch(line, /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Cs}]/u, JSON.stringify(line));
     assert.match(r.out, /Read only\.\\u001b\[2K\\u000d\\u0085\\u202eline one\\u000aFingerprint fake\\u2028\\u200b/);
-    assert.match(r.out, /Signed by \(a label\) {4}SamRead only\.\\u001b/);
-    assert.match(r.out, /Agent {18}AgentRead only\.\\u001b/);
+    assert.match(r.out, /Signed by \(a label\) {4}"SamRead only\.\\u001b/);
+    assert.match(r.out, /Agent {18}"AgentRead only\.\\u001b/);
     assert.equal(readTrusted(w.folder).includes(T), false);
   } finally {
     await w.service.close();
   }
+});
+
+test('printable shows a value between quotation marks, with the quotation mark and the backslash escaped, as JSON writes a string', () => {
+  assert.equal(printable('Sam'), '"Sam"');
+  assert.equal(printable('a "b" c'), '"a \\"b\\" c"');
+  // Typed as text, a backslash and "u001b" no longer read like an escaped control.
+  assert.equal(printable('x\\u001b[2Ky'), '"x\\\\u001b[2Ky"');
+  assert.equal(printable('\u001b'), '"\\u001b"');
+  assert.notEqual(printable('x\\u001b[2Ky'), printable('x\u001b[2Ky'));
+  // The plain space and ordinary letters as they are.
+  assert.equal(printable('Read only, é'), '"Read only, é"');
+  const hostile = 'a\u001b[2K\r\u0085‮\n ​ 　ㅤ͏️\u{e0100}\u{f0000}͸￿\u{10ffff}"\\z';
+  assert.equal(JSON.parse(printable(hostile)), hostile, 'read as JSON, it is the text it shows');
+});
+
+test('printable escapes the blank-looking spaces, the characters that are ignored when shown, private-use and unassigned code points', () => {
+  const escaped = (ch) => {
+    const shown = printable(`a${ch}b`);
+    return !shown.includes(ch) && /^"a(\\u[0-9a-f]{4})+b"$/.test(shown);
+  };
+  // Every space separator but the plain space: no-break, en quad to hair space, narrow no-break, medium mathematical, ideographic, Ogham.
+  for (const ch of [' ', ' ', ' ', ' ', ' ', ' ', ' ', '　']) assert.ok(escaped(ch), `U+${ch.codePointAt(0).toString(16)}`);
+  assert.equal(printable('a b'), '"a b"');
+  // Ignored when shown (Default_Ignorable_Code_Point): the Hangul fillers, the combining grapheme joiner, variation selectors.
+  for (const ch of ['ᅟ', 'ㅤ', 'ﾠ', '͏', '️', '\u{e0100}']) assert.ok(escaped(ch), `U+${ch.codePointAt(0).toString(16)}`);
+  // Private use (Co) and unassigned (Cn), noncharacters among them.
+  for (const ch of ['', '', '\u{f0000}', '\u{10fffd}', '͸', '￿', '\u{10ffff}']) assert.ok(escaped(ch), `U+${ch.codePointAt(0).toString(16)}`);
+  // A code point past the first 65,536 is written as JSON writes it: two escapes.
+  assert.equal(printable('\u{e0100}'), '"\\udb40\\udd00"');
 });
 
 test('"admit-passkey" with no argument only lists what waits, and takes nothing', async () => {

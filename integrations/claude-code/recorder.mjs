@@ -2778,8 +2778,40 @@ function sayRenewed(answer) {
   console.log(`  The one before (${answer.previous}) is kept beside it as slip-${answer.previous}.json. The book holds ${answer.entries} entries.`);
 }
 
-// Take a slip into the book: through the running service, or, where it is
-// not running, by putting the slip in place and opening the book here.
+// What does not print, or may not be seen, at a terminal: controls (the line
+// breaks among them), format characters such as the marks that turn text
+// right to left, line and paragraph separators, spaces (all but the plain
+// space is escaped), characters that are ignored when shown, and
+// private-use and unassigned code points.
+const NOT_SHOWN = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Zs}\p{Default_Ignorable_Code_Point}\p{Co}\p{Cn}]/gu;
+// A character as JSON writes an escape: \u001b, and two such for a code point past U+FFFF.
+const escapeOf = (ch) => Array.from({ length: ch.length }, (_, i) => `\\u${ch.charCodeAt(i).toString(16).padStart(4, '0')}`).join('');
+
+/**
+ * Text from a permission, or from what answers on the port, as it may be
+ * shown at a terminal: between quotation marks, with the quotation mark and
+ * the backslash escaped, so that where it begins and ends is seen and text
+ * typed as "\u001b" does not read like an escape; well-formed; and every
+ * character of NOT_SHOWN but the plain space written as an escape, \u001b,
+ * so that it can neither move the cursor nor reorder, hide or pad what is
+ * shown. It is a string as JSON writes it: read as JSON, it gives back the
+ * text (made well-formed).
+ */
+export function printable(text) {
+  return `"${String(text).toWellFormed().replace(/["\\]/g, '\\$&').replace(NOT_SHOWN, (ch) => (ch === ' ' ? ch : escapeOf(ch)))}"`;
+}
+
+/**
+ * JSON text (from JSON.stringify) as it may be shown at a terminal: every
+ * character of NOT_SHOWN within it written as an escape, but the plain space
+ * and the controls below U+0020, which JSON.stringify escapes itself within
+ * a string, so that those left are its own line breaks. It is still JSON, and
+ * reads as the same value.
+ */
+export function printableJson(json) {
+  return json.toWellFormed().replace(NOT_SHOWN, (ch) => (ch <= ' ' ? ch : escapeOf(ch)));
+}
+
 /**
  * "admit-passkey <thumbprint>" for a passkey this recorder has never
  * trusted. The server between the application and this computer could put
@@ -2811,20 +2843,6 @@ function sayRenewed(answer) {
  *   taken); say: where the words go (console.log); least: the fewest characters of a thumbprint taken (for tests)
  * @returns {Promise<number>} the exit code
  */
-/**
- * Text from a permission, as it may be shown at a terminal: well-formed, and
- * every character that does not print (controls, the line breaks among
- * them, format characters such as the marks that turn text right to left,
- * and line and paragraph separators) written as an escape, \u001b, so that
- * it can neither move the cursor nor reorder or hide what is shown.
- */
-export function printable(text) {
-  return String(text).toWellFormed().replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, (ch) => {
-    const code = ch.codePointAt(0).toString(16);
-    return code.length <= 4 ? `\\u${code.padStart(4, '0')}` : `\\u{${code}}`;
-  });
-}
-
 export async function admitWaiting(folder, port, given, { answer = firstLineTyped, terminal = process.stdin.isTTY === true, say = (words) => console.log(words), least = ADMIT_THUMBPRINT_LEAST } = {}) {
   if (!(await running(port))) {
     say(`The recorder is not running, so nothing is admitted: a permission waiting here is checked by the running recorder, against the cancellations it holds, before it is taken. Start it first ("${RUN} ensure"), then run this again.`);
@@ -2888,8 +2906,9 @@ export async function admitWaiting(folder, port, given, { answer = firstLineType
     return 1;
   }
   left.sort((a, b) => Date.parse(b.content.validFrom) - Date.parse(a.content.validFrom));
-  // Every value from the permission, escaped where it does not print (printable).
-  const show = (v) => printable(typeof v === 'string' ? v : JSON.stringify(v));
+  // Every value from the permission, escaped where it does not print: text between quotation marks (printable),
+  // a limit or a condition as its JSON text, whose texts are between quotation marks already (printableJson).
+  const show = (v) => (typeof v === 'string' ? printable(v) : printableJson(JSON.stringify(v) ?? 'undefined'));
   say(left.length === 1
     ? 'A permission handed over from the application waits here, signed by a passkey this computer does not trust.\n'
     : `${left.length} permissions handed over from the application wait here, signed by a passkey this computer does not trust. The first, which starts latest, is the one taken.\n`);
@@ -2962,6 +2981,8 @@ async function renewFrom(file, folder, port, newPasskey = false) {
   await renewWith(slipFrom(readFileSync(file, 'utf8'), file), folder, port, newPasskey);
 }
 
+// Take a slip into the book: through the running service, or, where it is
+// not running, by putting the slip in place and opening the book here.
 async function renewWith(slip, folder, port, newPasskey = false) {
   const answering = await running(port);
   // The waiting recorder holds no permission to renew: said so, before any question that needs the feed's proof.

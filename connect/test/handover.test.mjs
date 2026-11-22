@@ -176,7 +176,7 @@ test('a renewal from a passkey the agent\'s computer does not trust is refused a
   const shown = r.answered('no', 'admit-passkey', T);
   assert.equal(shown.status, 1);
   assert.ok(shown.stdout.includes(T), shown.stdout);
-  assert.match(shown.stdout, /Purpose\s+From another passkey\./);
+  assert.match(shown.stdout, /Purpose\s+"From another passkey\."/);
   assert.match(shown.stdout, /Nothing was changed/);
   assert.equal(JSON.parse(readFileSync(join(r.folder, 'trusted-passkeys.json'), 'utf8')).passkeys.includes(T), false);
   // The person confirms, typing "yes" at a terminal (the recorder takes nothing typed into a pipe): the passkey is
