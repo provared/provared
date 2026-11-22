@@ -308,7 +308,7 @@ export function startOf(slip) {
  * cannot choose an older one of the person's to be shown), newest handed
  * over first, at most MAX_WAITING_PERMISSIONS. Gives back whether it is kept.
  */
-function addWaitingPermission(folder, slip, fingerprintOf, thumbprintOf) {
+export function addWaitingPermission(folder, slip, fingerprintOf, thumbprintOf) {
   const list = readWaitingPermissions(folder).filter((p) => p.fingerprint !== fingerprintOf);
   const same = list.filter((p) => p.thumbprint === thumbprintOf);
   if (same.some((p) => startOf(p.slip) >= startOf(slip))) return false;
