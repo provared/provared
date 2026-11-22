@@ -166,6 +166,28 @@ test(`a thumbprint start under ${ADMIT_THUMBPRINT_LEAST} characters, in other ca
   }
 });
 
+test('"admit-passkey" shows control and other characters that do not print as escapes, never as they are, in every field', async () => {
+  const w = await running();
+  try {
+    const passkey = await developmentPasskey();
+    const T = await thumbprint(passkey.key);
+    // An escape sequence, a carriage return, a C1 control, a right-to-left override, a line break, a line separator
+    // and a zero-width space (a lone surrogate cannot be signed: the library refuses it).
+    const hostile = 'Read only.\u001b[2K\r\u0085‮line one\nFingerprint fake ​';
+    const slip = await signSlip({ agentKeys: w.agent.keys, passkey, purpose: hostile, issuerName: `Sam${hostile}`, agentName: `Agent${hostile}` });
+    assert.equal((await w.hand({ kind: 'renewal', slip })).code, 'passkey-not-trusted');
+    const r = await admitAt(w, T, 'leave it');
+    assert.equal(r.code, 1, r.out);
+    for (const line of r.out.split('\n')) assert.doesNotMatch(line, /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Cs}]/u, JSON.stringify(line));
+    assert.match(r.out, /Read only\.\\u001b\[2K\\u000d\\u0085\\u202eline one\\u000aFingerprint fake\\u2028\\u200b/);
+    assert.match(r.out, /Signed by \(a label\) {4}SamRead only\.\\u001b/);
+    assert.match(r.out, /Agent {18}AgentRead only\.\\u001b/);
+    assert.equal(readTrusted(w.folder).includes(T), false);
+  } finally {
+    await w.service.close();
+  }
+});
+
 test('"admit-passkey" with no argument only lists what waits, and takes nothing', async () => {
   const w = await running();
   try {

@@ -2757,6 +2757,20 @@ function sayRenewed(answer) {
  *   taken); say: where the words go (console.log); least: the fewest characters of a thumbprint taken (for tests)
  * @returns {Promise<number>} the exit code
  */
+/**
+ * Text from a permission, as it may be shown at a terminal: well-formed, and
+ * every character that does not print (controls, the line breaks among
+ * them, format characters such as the marks that turn text right to left,
+ * and line and paragraph separators) written as an escape, \u001b, so that
+ * it can neither move the cursor nor reorder or hide what is shown.
+ */
+export function printable(text) {
+  return String(text).toWellFormed().replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, (ch) => {
+    const code = ch.codePointAt(0).toString(16);
+    return code.length <= 4 ? `\\u${code.padStart(4, '0')}` : `\\u{${code}}`;
+  });
+}
+
 export async function admitWaiting(folder, port, given, { answer = firstLineTyped, terminal = process.stdin.isTTY === true, say = (words) => console.log(words), least = ADMIT_THUMBPRINT_LEAST } = {}) {
   if (!(await running(port))) {
     say(`The recorder is not running, so nothing is admitted: a permission waiting here is checked by the running recorder, against the cancellations it holds, before it is taken. Start it first ("${RUN} ensure"), then run this again.`);
@@ -2781,7 +2795,7 @@ export async function admitWaiting(folder, port, given, { answer = firstLineType
       return 0;
     }
     say(all.length === 1 ? 'One permission handed over from the application waits here, from a passkey this computer does not trust:' : `${all.length} permissions handed over from the application wait here, from passkeys this computer does not trust:`);
-    for (const p of all) say(`  passkey ${p.thumbprint}: the permission ${p.fingerprint}, from ${p.content.validFrom} until ${p.content.validUntil}`);
+    for (const p of all) say(`  passkey ${p.thumbprint}: the permission ${p.fingerprint}, from ${printable(p.content.validFrom)} until ${printable(p.content.validUntil)}`);
     say(`Nothing is taken without a thumbprint. ${fromSigningWindow} Then: ${RUN} admit-passkey <the thumbprint>`);
     return 0;
   }
@@ -2813,14 +2827,15 @@ export async function admitWaiting(folder, port, given, { answer = firstLineType
   for (const p of mine) {
     const said = await admit(p, { take: false });
     if (said.outcome === 'would-take') left.push(p);
-    else say(`Not taken, and left waiting: the permission ${p.fingerprint} (from ${p.content.validFrom}). ${said.message}`);
+    else say(`Not taken, and left waiting: the permission ${p.fingerprint} (from ${printable(p.content.validFrom)}). ${printable(said.message)}`);
   }
   if (left.length === 0) {
     say(`Nothing from the passkey ${thumb} can be taken now, so nothing is admitted.`);
     return 1;
   }
   left.sort((a, b) => Date.parse(b.content.validFrom) - Date.parse(a.content.validFrom));
-  const show = (v) => (typeof v === 'string' ? v : JSON.stringify(v));
+  // Every value from the permission, escaped where it does not print (printable).
+  const show = (v) => printable(typeof v === 'string' ? v : JSON.stringify(v));
   say(left.length === 1
     ? 'A permission handed over from the application waits here, signed by a passkey this computer does not trust.\n'
     : `${left.length} permissions handed over from the application wait here, signed by a passkey this computer does not trust. The first, which starts latest, is the one taken.\n`);
@@ -2836,8 +2851,8 @@ export async function admitWaiting(folder, port, given, { answer = firstLineType
     say(`  Needs                  ${(c.requires || []).length ? c.requires.map(show).join('; ') : 'nothing'}`);
     say(`  Never                  ${(c.never || []).length ? c.never.map(show).join(', ') : 'nothing stated'}`);
     say(`  With                   ${(c.with || []).length ? c.with.map((w) => show(w.id ?? w)).join(', ') : 'no service named'}`);
-    say(`  From                   ${c.validFrom}`);
-    say(`  Until                  ${c.validUntil}`);
+    say(`  From                   ${show(c.validFrom)}`);
+    say(`  Until                  ${show(c.validUntil)}`);
     say(`  Purpose                ${show(c.purpose)}`);
     say(`  Fingerprint            ${p.fingerprint}\n`);
   }
@@ -2851,7 +2866,7 @@ export async function admitWaiting(folder, port, given, { answer = firstLineType
   const typed = (await answer('Type yes to take this permission and trust its passkey, no to decline it, or anything else to leave it waiting: ')).trim();
   if (typed === 'no') {
     const said = await admit(chosen, { decline: true });
-    say(said.outcome === 'declined' ? `The permission ${chosen.fingerprint} is declined: it no longer waits, the passkey is not trusted, and the permission is refused from now on if it is handed over again.` : `Not declined: ${said.message}`);
+    say(said.outcome === 'declined' ? `The permission ${chosen.fingerprint} is declined: it no longer waits, the passkey is not trusted, and the permission is refused from now on if it is handed over again.` : `Not declined: ${printable(said.message)}`);
     return 1;
   }
   if (typed !== 'yes') {
@@ -2860,10 +2875,10 @@ export async function admitWaiting(folder, port, given, { answer = firstLineType
   }
   const said = await admit(chosen, { take: true });
   if (said.outcome !== 'taken' && said.outcome !== 'already') {
-    say(`Not taken, and left waiting: ${said.message}`);
+    say(`Not taken, and left waiting: ${printable(said.message)}`);
     return 1;
   }
-  say(`The passkey ${thumb} is trusted from now on, with the permission it signed (${chosen.fingerprint}). ${said.message}`);
+  say(`The passkey ${thumb} is trusted from now on, with the permission it signed (${chosen.fingerprint}). ${printable(said.message)}`);
   return 0;
 }
 

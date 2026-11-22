@@ -80,13 +80,13 @@ export const ACTIONS = ['provared.code.read', 'provared.code.change', 'provared.
 
 /**
  * A slip signed with the development stand-in for a passkey.
- * @param {{agentKeys: object[], passkey?: object, limits?: object[], actions?: string[], never?: string[], from?: number, until?: number, purpose?: string, sign?: (challenge: Uint8Array) => Promise<object>}} o
+ * @param {{agentKeys: object[], passkey?: object, limits?: object[], actions?: string[], never?: string[], from?: number, until?: number, purpose?: string, sign?: (challenge: Uint8Array) => Promise<object>, issuerName?: string, agentName?: string}} o
  */
-export async function signSlip({ agentKeys, passkey, limits = [], actions = ACTIONS, never = ['destroys'], from = Date.now() - 60000, until = Date.now() + 3600000, purpose = 'Test the recorder beside a coding agent.', sign, id }) {
+export async function signSlip({ agentKeys, passkey, limits = [], actions = ACTIONS, never = ['destroys'], from = Date.now() - 60000, until = Date.now() + 3600000, purpose = 'Test the recorder beside a coding agent.', sign, id, issuerName = 'Sam (development)', agentName = 'A coding agent' }) {
   passkey ??= await developmentPasskey();
   const prepared = await prepareSlip({
-    issuer: { name: 'Sam (development)', key: passkey.key, rpId: passkey.rpId, origin: passkey.origin },
-    agent: { name: 'A coding agent', keys: agentKeys },
+    issuer: { name: issuerName, key: passkey.key, rpId: passkey.rpId, origin: passkey.origin },
+    agent: { name: agentName, keys: agentKeys },
     actions,
     limits,
     never,
