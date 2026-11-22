@@ -511,7 +511,9 @@ copy and says otherwise is not acted on (`journal-line-differs`). A call is
 set aside only where the copy's own `set-aside` line says so: one that
 `<book>.journal-set-aside` names and the copy still shows open stops the
 agent and is listed again, the log says `set-aside-not-in-copy`, and
-nothing is written to the copy on that file's word. A gateway without keys
+nothing is written to the copy on that file's word. So where the copy
+could not take the `set-aside` line, the call comes back at the next start
+as an open call, and the log names why (`set-aside-not-in-copy`). A gateway without keys
 of its own (no `gateway` in the settings) keeps no copy and countersigns
 nothing: at a start the journal decides, as described
 above, as it did before the gateway had keys of its own.
@@ -803,7 +805,9 @@ refuse websocket upgrades and `CONNECT` itself, as `listen` does.
   stub under a slip that names the gateway's id with keys), and the call
   can then only be set aside. A stub countersigned with the old keys still
   settles such a call. There is no setting for the keys the gateway held
-  before.
+  before. Changing the gateway's `id` while a call is open leaves the stub
+  found for that call unchecked for a countersignature, so settle or set
+  aside the open calls before changing the id.
 - **Every receipt is one-sided** unless the gateway or the upstream
   countersigns. A one-sided stub is the gateway's word. The fingerprints of the request and
   of the answer show that content matches, not that it was the same call;

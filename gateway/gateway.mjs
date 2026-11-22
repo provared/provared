@@ -1300,6 +1300,19 @@ export async function openGateway(config, more = {}) {
     return inTurn(agent, async () => {
       if (agent.pending.length === 0) throw new Error('This agent has no call without a receipt to acknowledge.');
       for (const c of setAside) if (!agent.pending.some((p) => p.call === c)) throw new Error(`No call "${c}" is waiting to be acknowledged.`);
+      // As the guard does, before anything is written or settled: the book file must hold the book the gateway has in
+      // memory, as the gateway left it. A stub that an earlier try wrote only to memory is never taken as settling a call.
+      if (!agent.file.holds(agent.writer.book()) && !save(agent)) throw new Error('The book file could not be written (the log says why: book-not-written), so nothing was acknowledged; the agent stays stopped.');
+      let intact;
+      try {
+        intact = agent.file.intact();
+      } catch {
+        intact = false;
+      }
+      if (!intact) {
+        log({ event: 'book-changed', agent: agent.name });
+        throw new Error('The book file is not as the gateway left it: something else changed it. Nothing was acknowledged; the agent stays stopped.');
+      }
       const asideNow = [];
       for (const c of setAside) {
         const p = agent.pending.find((x) => x.call === c);

@@ -9,7 +9,7 @@
 import './local-library.mjs'; // first: "provared" is this repository's own library
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
-import { appendFileSync, mkdirSync, readFileSync, renameSync, rmdirSync, writeFileSync } from 'node:fs';
+import { accessSync, appendFileSync, chmodSync, constants, mkdirSync, readFileSync, renameSync, rmdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
@@ -379,6 +379,56 @@ test('F4 and F5: after a change of keys, a one-sided stub the acknowledgement wr
   } finally {
     await r.g.close();
   }
+});
+
+test('N1: an acknowledgement tried again after the book file could not be written does not settle the call from a stub only in memory; after a start with the file writable, the stub is in the file', async (t) => {
+  const w = await afterCalls(await cw({ requires: [{ need: 'countersignature' }] }));
+  const id = 'held-call-book-not-written';
+  await stoppedMidCall(w, id);
+  const r = await again(w);
+  chmodSync(w.bookPath, 0o444);
+  let writable = true;
+  try {
+    accessSync(w.bookPath, constants.W_OK);
+  } catch {
+    writable = false;
+  }
+  if (writable) {
+    // Run with rights that write any file (as root): the book file cannot be made unwritable here.
+    chmodSync(w.bookPath, 0o666);
+    await r.g.close();
+    t.skip('the book file stays writable with these rights');
+    return;
+  }
+  try {
+    await assert.rejects(r.g.acknowledge('patching'), /book file could not be written/);
+    await assert.rejects(r.g.acknowledge('patching'), /book file could not be written/, 'the second try does not settle the call');
+    const status = (await r.g.status()).agents.patching;
+    assert.notEqual(status.stopped, null, 'the agent stays stopped');
+    assert.deepEqual(status.receiptsMissing.map((l) => l.call), [id], 'the call stays listed');
+    assert.ok(!copyEntries(w).some((e) => e.kind === 'done' && e.call === id), 'the copy does not say it is done');
+    assert.ok(!readFileSync(journalOf(w), 'utf8').includes('"acknowledged"'), 'the journal does not say it is acknowledged');
+  } finally {
+    await r.g.close();
+    chmodSync(w.bookPath, 0o666);
+  }
+  assert.equal((await stubsFor(w, id)).length, 0, 'no stub reached the file');
+  const r2 = await again(w);
+  try {
+    assert.deepEqual((await r2.g.status()).agents.patching.receiptsMissing.map((l) => l.call), [id], 'listed again at the next start');
+    assert.equal((await r2.call('GET', '/tickets/api/now/table/b')).status, 503);
+    const ack = await r2.g.acknowledge('patching');
+    assert.equal(ack.written.length, 1);
+    const stubs = await stubsFor(w, id);
+    assert.equal(stubs.length, 1, 'the stub is in the file');
+    assert.equal(stubs[0].fingerprint, ack.written[0].stub);
+    assert.equal((await r2.g.status()).agents.patching.stopped, null);
+  } finally {
+    await r2.g.close();
+  }
+  const result = await compareOf(w);
+  assert.equal(result.summary.missingFromBook, 0);
+  assert.equal(result.summary.agree, true, JSON.stringify(result.summary));
 });
 
 test('F5: without a copy, an acknowledgement tried again after the journal could not be written writes no second stub either', async () => {

@@ -206,3 +206,23 @@ These change what the entries above describe.
   one-sided stub an acknowledgement wrote that the journal could not
   record, which then does not settle the call, so that it can only be set
   aside.
+
+### After the second re-check (22 November 2026)
+
+- **`acknowledge` first makes sure the book file holds the book** (N1), as
+  the guard does: before anything is written or settled, the book in memory
+  is saved to its file where the file does not hold it all, and the file
+  must be as the gateway left it. Where it cannot be written, or something
+  else changed it, nothing is acknowledged, the agent stays stopped and the
+  call stays listed. Before, after a failed write of the book file, a
+  second acknowledgement settled the call from a stub only in memory, so
+  that after a restart the book held no stub for it.
+- **README.** "The gateway's keys are not changed for you" says to settle
+  or set aside open calls before changing the gateway's `id` (N2); "The
+  gateway's own copy" says that a call whose `set-aside` line the copy
+  could not take comes back at the next start as an open call, with
+  `set-aside-not-in-copy` in the log (N3).
+- **Tests** (`test/review5.test.mjs`, 1 more): two acknowledgements with
+  the book file unwritable both fail, the call stays listed, and after a
+  start with the file writable the stub the acknowledgement writes is in
+  the file.

@@ -195,8 +195,13 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
   countersignature of a stub written at a later start. A found stub needs
   the gateway's countersignature wherever its slip names the gateway's id
   with keys, not only its present keys. `acknowledge` looks at the book
-  again before each stub, so trying again writes none twice. Details in
-  `gateway/CHANGELOG.md`.
+  again before each stub, so trying again writes none twice. After a second
+  re-check, `acknowledge` first makes sure the book file holds the book in
+  memory, as the guard does, so a failed write of that file is never
+  followed by a call settled from a stub only in memory; the README says to
+  settle open calls before changing the gateway's `id`, and that a call
+  whose `set-aside` line the copy could not take comes back at the next
+  start. Details in `gateway/CHANGELOG.md`.
 - **The MCP executor, after the same review** (`mcp-executor/`, not
   released; the version stays 0.5.0). Review 3.4 of the gateway's
   countersignature found the same gaps in the executor.
