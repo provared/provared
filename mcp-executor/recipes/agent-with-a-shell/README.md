@@ -61,8 +61,9 @@ hold. Do not run it where those names are in use.
 All seven passed on 7 November 2026, with the official MCP software
 (`@modelcontextprotocol/sdk` 1.32.2) on protocol version 2025-11-25 and
 the guard at 0.3.0. The recipe has not been run since it moved to the
-guard 0.5.1. The SDK is named at one version in `package.json`, but has
-no lockfile here, so npm resolves the SDK's own dependencies at each run.
+guard 0.5.1. The SDK and its own dependencies are installed with
+`npm ci` from `package-lock.json`, so npm checks each package against its
+hash.
 
 ## What it does not show
 

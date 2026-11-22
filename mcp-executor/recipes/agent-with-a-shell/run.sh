@@ -64,10 +64,10 @@ docker cp guard/package-lock.json "$G":/data/package-lock.json || die "copy guar
 docker exec "$G" sh -c 'cd /data && timeout 300 npm ci --ignore-scripts 2>&1 | tail -3' || die "npm ci of the executor"
 docker exec "$G" sh -c 'cd /data && ls node_modules' | tr '\n' ' '; echo
 
-step "install the SDK (1.32.2) for the stand-in server and client; the guard has the outside route, the other two do not"
-# The SDK has no lockfile here yet: npm resolves its own dependencies at each run.
+step "install the SDK (1.32.2) for the stand-in server and client, from its lockfile (package-lock.json: npm checks each package against its hash); the guard has the outside route, the other two do not"
 docker cp package.json "$G":/sdk/package.json || die "copy package.json"
-docker exec "$G" sh -c 'cd /sdk && timeout 300 npm install --ignore-scripts 2>&1 | tail -3' || die "npm install of the SDK"
+docker cp package-lock.json "$G":/sdk/package-lock.json || die "copy package-lock.json"
+docker exec "$G" sh -c 'cd /sdk && timeout 300 npm ci --ignore-scripts 2>&1 | tail -3' || die "npm ci of the SDK"
 for c in "$S" "$A"; do
   docker exec "$G" tar -C /sdk -cf - node_modules | docker exec -i "$c" tar -C / -xf - || die "copy SDK to $c"
 done
