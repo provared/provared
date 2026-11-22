@@ -3406,7 +3406,8 @@ export async function main(argv) {
       console.log(`The recorder is not running (nothing answers on 127.0.0.1:${port}).`);
       return 1;
     }
-    console.log(JSON.stringify(status, null, 2));
+    // Every text in it, from a permission or from what answers, escaped where it does not print; still JSON.
+    console.log(printableJson(JSON.stringify(status, null, 2)));
     return 0;
   }
   if (command === 'seal') {

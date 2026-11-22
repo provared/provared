@@ -268,6 +268,26 @@ test('"use <file>" seen a waiting recorder, but a permission was taken before it
   }
 });
 
+test('"status" prints a text from the permission with C1 controls, DEL and right-to-left marks escaped, and is still JSON that reads as the same value', async () => {
+  const w = await freshWorld();
+  const port = await freePort();
+  try {
+    const agentName = 'Agent\u{9b}2K\u{7f}\u{202e}eman\u001b[1m\u{2028}\u{a0}end';
+    const file = join(tempFolder('provared-cc-use-'), 'slip.json');
+    writeFileSync(file, JSON.stringify(await signSlip({ agentKeys: w.agent.keys, passkey: w.passkey, agentName })));
+    const u = await runCommand(['use', file], { folder: w.folder, port });
+    assert.equal(u.code, 0, `${u.out} ${u.err}`);
+    const s = await runCommand(['status'], { folder: w.folder, port });
+    assert.equal(s.code, 0, s.out);
+    for (const line of s.out.split('\n')) assert.doesNotMatch(line, /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Co}\p{Cn}\p{Default_Ignorable_Code_Point}\u{a0}]/u, JSON.stringify(line));
+    const esc = (hex) => `\\u${hex}`;
+    assert.ok(s.out.includes(`"agent": "Agent${esc('009b')}2K${esc('007f')}${esc('202e')}eman${esc('001b')}[1m${esc('2028')}${esc('00a0')}end"`), s.out);
+    assert.equal(JSON.parse(s.out).agent, agentName, 'read as JSON, the same name');
+  } finally {
+    await stopService(port);
+  }
+});
+
 test('"use <file>" with a file that is refused leaves the waiting recorder running, and says nothing of stopping it', async () => {
   const w = await freshWorld();
   const port = await freePort();
