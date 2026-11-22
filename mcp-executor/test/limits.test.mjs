@@ -288,6 +288,25 @@ test('limits: a call sent on unchecked ("unlisted": "forward") lets go of its me
   }
 });
 
+test('limits: an answer the agent leaves unread counts in its budget until its connection closes, and is given back then', async (t) => {
+  const w = await httpWorld({ config: { timeout: 10000 } });
+  try {
+    const body = JSON.stringify({ jsonrpc: '2.0', id: 'unread', method: 'big', params: { size: 15 * 1024 * 1024 } });
+    const s = await rawRequest(w, { headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', ...auth(w, 'alpha') }, body, stream: true });
+    s.res.pause();
+    // More than the connection takes at once is left waiting for the agent: it counts. Where the computer's connection takes the whole answer at once (Windows, on its own address, does), nothing is left waiting, and there is nothing to see.
+    const waiting = await until(() => w.executor.agent('alpha').held().answers > 1024 * 1024, { timeout: 3000 }).then(() => true, () => false);
+    if (!waiting) {
+      s.res.destroy();
+      return t.skip('the connection took the whole answer at once, so none of it was left waiting');
+    }
+    s.res.destroy();
+    await until(() => w.executor.agent('alpha').held().answers === 0, { timeout: 5000 });
+  } finally {
+    await w.close();
+  }
+});
+
 test('limits: a body of exactly bodyLimit is taken by default; one byte more is refused with 413', async () => {
   const w = await httpWorld();
   try {

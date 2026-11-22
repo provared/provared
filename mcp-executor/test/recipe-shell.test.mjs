@@ -120,4 +120,11 @@ test('recipe agent-with-a-shell: the guard is the one the claude.ai recipe build
   assert.ok(run.includes(`provared-mcp-executor ${version}`), 'the step names the version');
   assert.ok(readFileSync(join(RECIPE, 'README.md'), 'utf8').includes(`\`provared-mcp-executor\` ${version}`), 'the README names it');
   assert.match(read(RECIPE, 'package.json').dependencies['@modelcontextprotocol/sdk'], /^\d+\.\d+\.\d+$/, 'one version of the SDK, exactly');
+  // The SDK too, from its own lockfile with npm ci, its version the lockfile's.
+  assert.match(run, /cd \/data && timeout 300 npm ci --ignore-scripts/, 'the guard, with npm ci');
+  assert.match(run, /cd \/sdk && timeout 300 npm ci --ignore-scripts/, 'the SDK, with npm ci');
+  assert.doesNotMatch(run, /npm install --ignore-scripts/, 'nothing installed unchecked');
+  const sdkLock = read(RECIPE, 'package-lock.json').packages;
+  assert.equal(sdkLock['node_modules/@modelcontextprotocol/sdk'].version, read(RECIPE, 'package.json').dependencies['@modelcontextprotocol/sdk']);
+  assert.match(sdkLock['node_modules/@modelcontextprotocol/sdk'].integrity, /^sha512-/, 'with npm\'s hash');
 });

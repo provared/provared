@@ -34,15 +34,23 @@ test('F3: two sessions of one agent in front of an upstream each have their own 
     assert.equal(second.json.id, 9);
     assert.equal(second.json.error, undefined, JSON.stringify(second.json));
     assert.deepEqual(second.json.result.structuredContent.args, { x: 2 });
-    // A cancellation under the second session naming id 9: not the first session's call.
-    const cancelled = await post(w, 'alpha', { jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: 9 } }, { headers: under(a2) });
-    assert.ok(cancelled.status < 300);
     const done = await first;
     assert.equal(done.status, 200);
     assert.equal(done.json.result.content[0].text, 'Done, slowly. session-a1', 'the first session\'s call ran to its end');
     const stubs = (await checkBook(w.executor.agent('alpha').writer.book(), { issuerKeys: w.settings.agents.alpha.issuerKeys })).entries.filter((e) => e.kind === 'stub');
     assert.equal(stubs.length, 2);
     assert.ok(stubs.every((s) => !s.content.details.some((d) => d.name === 'provared.error')), 'neither receipt says the call failed');
+    // A cancellation under the second session naming an id in flight in both: the second session's call, not the first's. One agent's calls go to the upstream one at a time, so the second session's call waits its turn while the first's is with the upstream, and the cancellation comes while both are in flight.
+    const longer = callIn(w, 'alpha', a1, 11, 'slow', { ms: 1500, tag: 'session-a1-again' });
+    await until(() => w.upstream.ran.some((r) => r.args.tag === 'session-a1-again'), { timeout: 5000 });
+    const waiting = callIn(w, 'alpha', a2, 11, 'echo', { x: 3 });
+    await until(() => w.executor.agent('alpha').calls() === 2, { timeout: 5000 });
+    const cancelled = await post(w, 'alpha', { jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: 11 } }, { headers: under(a2) });
+    assert.ok(cancelled.status < 300);
+    const ran = await longer;
+    assert.equal(ran.json?.result?.content?.[0]?.text, 'Done, slowly. session-a1-again', 'the first session\'s call ran to its end');
+    await waiting.catch(() => null);
+    assert.ok(!w.upstream.ran.some((r) => r.args.x === 3), 'the second session\'s call, cancelled while it waited, was not sent');
     // A cancellation under the call's own session still cuts it.
     const third = callIn(w, 'alpha', a1, 10, 'slow', { ms: 3000, tag: 'cut' });
     await until(() => w.upstream.ran.some((r) => r.args.tag === 'cut'), { timeout: 5000 });

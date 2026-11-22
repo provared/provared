@@ -13,7 +13,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 const { checkBook } = await import('provared');
-const { httpWorld, call, request, rawRequest, auth, beginSession, META, TOKEN } = await import('./http-world.mjs');
+const { httpWorld, call, request, post, rawRequest, auth, beginSession, META, TOKEN } = await import('./http-world.mjs');
 const { CODES } = await import('../jsonrpc.mjs');
 const { readHttpSettings } = await import('../http.mjs');
 const { until } = await import('./world.mjs');
@@ -51,6 +51,12 @@ test('tasks: by default every tasks/ request, and a tools/call that asks for a t
       assert.equal(r.json.id, method);
       assert.equal(r.json.error.code, CODES.methodNotFound, method);
     }
+    // In other capitals too, as an upstream that reads without regard to capitals would take them: a method of tasks, and the member that asks for a task.
+    const seenBefore = w.upstream.seen.length;
+    assert.equal((await request(w, 'beta', 'Tasks/List', undefined, { id: 'folded' })).json.error.code, CODES.methodNotFound);
+    const folded = await post(w, 'alpha', { jsonrpc: '2.0', id: 'T', method: 'tools/call', params: { name: 'order', arguments: { total: 5, item: 'payroll run' }, Task: { ttl: 60000 }, _meta: META } });
+    assert.equal(folded.json.error.code, CODES.invalidParams);
+    assert.equal(w.upstream.seen.length, seenBefore, 'neither reached the upstream');
     assert.deepEqual(methodsSeen(w).filter((m) => m.startsWith('tasks/') || m === 'tools/call'), ['tools/call'], 'none of them reached the upstream: the one call there is the one made past the executor');
     assert.equal(w.upstream.tasks.get(taskId).status, 'completed', 'the task was not cancelled');
     assert.ok(w.logs.some((e) => e.event === 'refused' && e.code === 'tasks-refused'));
@@ -115,6 +121,26 @@ test('tasks: with allowTasks, each task is kept to the agent whose call made it;
     const betaStream = await stream('beta');
     assert.doesNotMatch(betaStream, new RegExp(taskId));
     assert.match(betaStream, new RegExp(other), 'a task the executor did not make is not the executor\'s to hold back');
+  } finally {
+    await w.close();
+  }
+});
+
+test('tasks: with allowTasks, a message of an agent\'s that its _meta ties to another agent\'s task is refused and not sent, a request with 200 and a notification with 400; the task\'s own agent\'s goes on', async () => {
+  const w = await httpWorld({ slips: SLIPS, config: { allowTasks: true } });
+  try {
+    const taskId = (await taskCall(w, 'alpha', 1)).json.result.task.taskId;
+    const related = { 'io.modelcontextprotocol/related-task': { taskId } };
+    const before = w.upstream.seen.length;
+    const asked = await request(w, 'beta', 'ping', { _meta: related }, { id: 'p' });
+    assert.equal(asked.status, 200);
+    assert.equal(asked.json.error.code, CODES.invalidParams);
+    assert.match(asked.json.error.message, /not this agent's/);
+    const told = await post(w, 'beta', { jsonrpc: '2.0', method: 'notifications/progress', params: { progressToken: 't', progress: 1, _meta: related } });
+    assert.equal(told.status, 400);
+    assert.equal(w.upstream.seen.length, before, 'neither reached the upstream');
+    const own = await request(w, 'alpha', 'ping', { _meta: related }, { id: 'q' });
+    assert.deepEqual(own.json.result, {});
   } finally {
     await w.close();
   }

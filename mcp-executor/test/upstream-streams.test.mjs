@@ -8,7 +8,7 @@ import './local-library.mjs'; // first: "provared" is this repository's own libr
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-const { httpWorld, post, rawRequest, auth, META } = await import('./http-world.mjs');
+const { httpWorld, post, rawRequest, auth, beginSession, META } = await import('./http-world.mjs');
 const { CODES } = await import('../jsonrpc.mjs');
 
 /** A GET of the stream of server messages, as an agent: {status, headers, res}, the body still to be read. */
@@ -105,6 +105,28 @@ test('upstream streams: the upstream\'s request on one agent\'s call stream reac
     assert.match(result.result.content[0].text, /"account":"alpha"/);
     // Answered once: again, refused.
     assert.equal((await post(w, 'alpha', answer(asked.id, 'alpha'))).status, 400);
+  } finally {
+    await w.close();
+  }
+});
+
+test('upstream streams: under sessions, the upstream\'s request is answered under the session it came on; the same agent\'s answer under another of its sessions is refused (400) and not sent on', async () => {
+  const w = await httpWorld();
+  try {
+    const [s1, s2] = [await beginSession(w, 'alpha'), await beginSession(w, 'alpha')];
+    const under = (session) => ({ 'mcp-session-id': session, 'mcp-protocol-version': '2025-11-25' });
+    const body = JSON.stringify({ jsonrpc: '2.0', id: 'asking', method: 'tools/call', params: { name: 'odd', arguments: { how: 'ask' } } });
+    const s = await rawRequest(w, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', ...auth(w, 'alpha'), ...under(s1) }, body, stream: true });
+    assert.equal(s.status, 200);
+    let text = await readUntil(s.res, (t) => t.includes('elicitation/create'));
+    const asked = messagesIn(text).find((m) => m.method === 'elicitation/create');
+    const before = w.upstream.seen.length;
+    const elsewhere = await post(w, 'alpha', answer(asked.id, 'other-session'), { headers: under(s2) });
+    assert.equal(elsewhere.status, 400);
+    assert.equal(w.upstream.seen.length, before, 'not sent on');
+    assert.equal((await post(w, 'alpha', answer(asked.id, 'alpha'), { headers: under(s1) })).status, 202);
+    text += await readUntil(s.res, (t) => t.includes('answered:'));
+    assert.match(messagesIn(text).find((m) => m.id === 'asking').result.content[0].text, /"account":"alpha"/);
   } finally {
     await w.close();
   }

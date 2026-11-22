@@ -305,6 +305,18 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
     answered, as requests did before F1 (measured: 3.1 MiB held for
     383 KiB of text); now it lets go of it once sent. Tests:
     `test/limits.test.mjs`.
+  - Seven parts of these fixes could be taken out with no test noticing;
+    each now has a test that fails without it: the session in the key of
+    a cancellation (`test/upstream-sessions.test.mjs`, whose step had come
+    after the call it was to cancel had ended); methods and `params.task`
+    in other capitals, and a message that ties itself to another agent's
+    task (`test/tasks.test.mjs`); the session in the key of an answer to
+    the upstream's request (`test/upstream-streams.test.mjs`); the budget
+    given back when an unread answer's connection closes
+    (`test/limits.test.mjs`, which skips where the computer's connection
+    takes the whole answer at once, as Windows does); the claude.ai
+    recipe's `bodyLimit` (`test/recipe-compose.test.mjs`); and `npm ci`
+    for the SDK in `agent-with-a-shell` (`test/recipe-shell.test.mjs`).
   - `test/recipe-shell.test.mjs` did not load on a clean checkout, where
     nothing is installed: it named the library before `local-library.mjs`
     was loaded. It now loads that file first. A new test,
