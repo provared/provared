@@ -202,7 +202,7 @@ test('requests are taken one at a time: no stub written while a renewal switches
   const { folder, passkey, agent } = await world([]);
   const service = await startService({ folder, port: 0 });
   try {
-    const post = (path, body) => fetch(`http://127.0.0.1:${service.port}${path}`, { method: 'POST', body: JSON.stringify(body) }).then((r) => r.json());
+    const post = (path, body) => fetch(`http://127.0.0.1:${service.port}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json());
     const renewing = post('/renew', { slip: await signSlip({ agentKeys: agent.keys, passkey }) });
     const stubs = await Promise.all(Array.from({ length: 12 }, (_, i) => post('/record', { action: 'provared.code.read', details: [{ name: 'Read', sha256: 'A'.repeat(43) }], toolUseId: `r${i}` })));
     assert.ok(!(await renewing).error);
@@ -361,7 +361,7 @@ test('the stub of a call that was taken is written even where its hook gave up w
     // A seal holds the service for about a second and a half (SLH-DSA).
     const sealing = service.seal();
     const given = { action: 'provared.code.read', details: [{ name: 'Read', sha256: 'A'.repeat(43) }], toolUseId: 'gave-up' };
-    await assert.rejects(fetch(`http://127.0.0.1:${service.port}/record`, { method: 'POST', body: JSON.stringify(given), signal: AbortSignal.timeout(150) }));
+    await assert.rejects(fetch(`http://127.0.0.1:${service.port}/record`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(given), signal: AbortSignal.timeout(150) }));
     await sealing;
     await new Promise((r) => setTimeout(r, 500));
     const result = await book(folder, [await thumbprint(passkey.key)], { sealKeys: [(await status(service.port)).sealer] });
@@ -455,7 +455,7 @@ test('a renewal whose caller gave up waiting is not made', async () => {
       return emit.apply(this, args);
     };
     const giveUp = new AbortController();
-    const asked = fetch(`http://127.0.0.1:${service.port}/renew`, { method: 'POST', body: JSON.stringify({ slip: second }), signal: giveUp.signal });
+    const asked = fetch(`http://127.0.0.1:${service.port}/renew`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slip: second }), signal: giveUp.signal });
     const answered = asked.then(() => 'answered', () => 'given up');
     const res = await inTime(Promise.race([waiting, answered]), 'the service reading the renewal');
     assert.notEqual(res, 'answered', 'the renewal was answered while the seal held the service');

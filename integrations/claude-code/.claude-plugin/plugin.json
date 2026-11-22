@@ -1,6 +1,6 @@
 {
   "name": "provared-recorder",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Records Claude Code with Provared: its tool calls are checked against a permission you sign with your own passkey, refused if they are outside it, and receipted if they are taken. Eight tools that only talk to you or change what the model itself holds are not recorded. Evidence, not a verdict.",
   "author": {
     "name": "Pavel Izmaylov",

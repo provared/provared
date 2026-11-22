@@ -555,12 +555,15 @@ export function createFeed({ folder, memory, token, handOver = null, now = Date.
    * @param {import('node:http').IncomingMessage} req
    * @param {import('node:http').ServerResponse} res
    */
+  // Why the feed is off, in words that name no folder (the recorder's status gives the token file's full path).
+  const offWords = `the feed is off: the token file (${FEED_TOKEN}, in the recorder's folder) does not hold a token it can use; the recorder's status says why`;
+
   async function handle(req, res) {
     const url = new URL(req.url, 'http://127.0.0.1');
     if (url.pathname === '/hand-over') return handOverRequest(req, res);
     if (url.pathname !== '/hello' && url.pathname !== '/books' && url.pathname !== '/lines') return false;
     if (req.method !== 'GET') return plain(res, 405, { error: 'the feed answers GET only' });
-    if (token.problem || !token.token) return plain(res, 503, { error: `the feed is off: ${token.problem ?? 'it has no token'}` });
+    if (token.problem || !token.token) return plain(res, 503, { error: offWords });
     if (url.pathname === '/hello') return hello(req, res);
     const talk = conversation(req, res);
     if (!talk) return true;
@@ -653,7 +656,7 @@ export function createFeed({ folder, memory, token, handOver = null, now = Date.
    */
   async function handOverRequest(req, res) {
     if (req.method !== 'POST') return plain(res, 405, { error: 'a record is handed over with POST' });
-    if (token.problem || !token.token) return plain(res, 503, { error: `the feed is off: ${token.problem ?? 'it has no token'}` });
+    if (token.problem || !token.token) return plain(res, 503, { error: offWords });
     if (req.url !== '/hand-over') return plain(res, 400, { error: 'POST /hand-over takes nothing after its name' });
     const declared = req.headers['content-length'];
     if (typeof declared !== 'string' || !/^\d{1,7}$/.test(declared)) return plain(res, 411, { error: 'a record handed over states its length (Content-Length)' });

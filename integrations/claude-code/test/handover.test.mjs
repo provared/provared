@@ -180,7 +180,7 @@ test('a cancellation of the permission in force stops the agent, and the agent\'
     const answer = await checkBook(read(w.folder, 'book.jsonl'));
     assert.equal(answer.summary.problemFound, false);
     // No new book while the permission in force is cancelled: it would begin with that permission alone.
-    const r = await fetch(`http://127.0.0.1:${w.port}/new-book`, { method: 'POST', body: '{}' });
+    const r = await fetch(`http://127.0.0.1:${w.port}/new-book`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
     assert.equal(r.status, 409);
     assert.match((await r.json()).error, /cancelled, so no new book is started/);
     // A renewal signed after it, starting five minutes after it: taken; the agent acts again under it from then.
@@ -264,7 +264,7 @@ test('the hand-over is proved like every question of the feed: over the body, wi
       const timer = setTimeout(() => { socket.destroy(); done('no answer'); }, 3000);
       socket.on('data', (d) => { got += d; if (got.includes('\r\n')) { clearTimeout(timer); socket.destroy(); done(got.split('\r\n')[0]); } });
       socket.on('error', fail);
-      socket.write(['POST /hand-over HTTP/1.1', 'Host: 127.0.0.1', 'Content-Length: 100', 'Provared-Feed-Session: x', '', '{'].join('\r\n'));
+      socket.write(['POST /hand-over HTTP/1.1', `Host: 127.0.0.1:${w.port}`, 'Content-Length: 100', 'Provared-Feed-Session: x', '', '{'].join('\r\n'));
     });
     assert.match(early, /^HTTP\/1\.1 401/);
     // A body that does not state its length (sent in pieces): refused before it is read.
@@ -302,7 +302,7 @@ test(`at most ${FEED_MAX_HANDING} records are taken on at once, counted before t
       const headers = await provedHeaders(w.port, tokenOf(w.folder), Buffer.from('{}'));
       const socket = connect(w.port, '127.0.0.1');
       await new Promise((done) => socket.once('connect', done));
-      socket.write([`POST /hand-over HTTP/1.1`, 'Host: 127.0.0.1', 'Content-Length: 100', ...Object.entries(headers).map(([k, v]) => `${k}: ${v}`), '', '{'].join('\r\n'));
+      socket.write([`POST /hand-over HTTP/1.1`, `Host: 127.0.0.1:${w.port}`, 'Content-Length: 100', ...Object.entries(headers).map(([k, v]) => `${k}: ${v}`), '', '{'].join('\r\n'));
       slow.push(socket);
     }
     await delay(300);
@@ -371,7 +371,7 @@ test('a cancellation dated ahead of the clock is held, kept on the disk, and sti
     assert.equal((await pre(again.port, 'after-restart')).decision.permissionDecision, 'deny', 'the held cancellation was not lost');
     assert.equal((await status(again.port)).cancelled, true);
     // No new book while it is held: it goes into this book first.
-    const r = await fetch(`http://127.0.0.1:${again.port}/new-book`, { method: 'POST', body: '{}' });
+    const r = await fetch(`http://127.0.0.1:${again.port}/new-book`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
     assert.equal(r.status, 409);
   } finally {
     await again.close();
@@ -406,7 +406,7 @@ test('while a cancellation is held, a renewal that starts before its date is ref
     assert.ok(kept[0].acknowledgements?.length, 'with the acknowledgement signed for it');
     // No new book while it is held, though the permission in force is not the one it cancels.
     assert.equal((await status(w.port)).cancelled, false);
-    const r = await fetch(`http://127.0.0.1:${w.port}/new-book`, { method: 'POST', body: '{}' });
+    const r = await fetch(`http://127.0.0.1:${w.port}/new-book`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
     assert.equal(r.status, 409);
     assert.match((await r.json()).error, /held beside the book/);
   } finally {
@@ -602,7 +602,7 @@ test('"admit-passkey" shows only what that passkey signed, by the permission its
     assert.match(shown.out, new RegExp(`Passkey \\(thumbprint\\)\\s+${S}`));
     assert.match(shown.out, /The stranger's/);
     // And the service itself takes nothing for one passkey that another signed.
-    const said = await (await fetch(`http://127.0.0.1:${w.port}/admit`, { method: 'POST', body: JSON.stringify({ slip: list.permissions[0].slip, thumbprint: T, take: true }) })).json();
+    const said = await (await fetch(`http://127.0.0.1:${w.port}/admit`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slip: list.permissions[0].slip, thumbprint: T, take: true }) })).json();
     assert.equal(said.code, 'other-passkey');
     assert.deepEqual(kinds(w.folder), ['slip']);
   } finally {
@@ -656,7 +656,7 @@ test('a body of a record handed over that does not arrive in time is let go, and
       const socket = connect(service.port, '127.0.0.1');
       socket.on('error', () => {});
       await new Promise((done) => socket.once('connect', done));
-      socket.write(['POST /hand-over HTTP/1.1', 'Host: 127.0.0.1', 'Content-Length: 100', ...Object.entries(headers).map(([k, v]) => `${k}: ${v}`), '', '{'].join('\r\n'));
+      socket.write(['POST /hand-over HTTP/1.1', `Host: 127.0.0.1:${service.port}`, 'Content-Length: 100', ...Object.entries(headers).map(([k, v]) => `${k}: ${v}`), '', '{'].join('\r\n'));
       slow.push(socket);
     }
     const body = Buffer.from(JSON.stringify({ kind: 'renewal', slip: await signSlip({ agentKeys: w.agent.keys, passkey: w.passkey }) }));

@@ -99,7 +99,7 @@ async function recorder() {
   let child = start();
   await up();
   let calls = 0;
-  const post = async (path, body = {}) => (await fetch(`${base}${path}`, { method: 'POST', body: JSON.stringify(body) })).json();
+  const post = async (path, body = {}) => (await fetch(`${base}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json();
   const r = {
     folder, port, base, issuerKey: await thumbprint(passkey.key),
     token: () => readFileSync(join(folder, 'feed-token'), 'utf8').trim(),

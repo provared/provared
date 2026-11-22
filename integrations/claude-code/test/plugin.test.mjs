@@ -452,6 +452,33 @@ test('the start of a session, as the plugin: what the person must do where nothi
   }
 });
 
+test('the start of a session, as the plugin, says so where the recorder that answers is an earlier version, with how to restart it, and stops nothing', async () => {
+  const { folder } = await world([]);
+  const project = tempFolder('provared-project-');
+  // A recorder before 0.1.1, which gives no version in its status.
+  const asked = [];
+  const earlier = createServer((req, res) => {
+    asked.push(`${req.method} ${req.url}`);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ slip: 'earlier', entries: 1 }));
+  });
+  await new Promise((r) => earlier.listen(0, '127.0.0.1', r));
+  const env = { ...asPlugin(folder, project), PROVARED_CLAUDE_CODE_PORT: String(earlier.address().port) };
+  try {
+    const r = await runPlugin(pluginArgs('SessionStart'), { env, cwd: project });
+    assert.equal(r.code, 0, r.err);
+    const said = JSON.parse(r.out);
+    assert.equal(said.systemMessage, said.hookSpecificOutput.additionalContext, 'told to the person and to Claude alike');
+    assert.match(said.systemMessage, /The recorder that is running is an earlier version, which does not give its version/);
+    assert.match(said.systemMessage, /plugin\.mjs"? stop; .*plugin\.mjs"? ensure/);
+    assert.doesNotMatch(said.systemMessage, /every tool call is refused/);
+    assert.deepEqual(asked, ['GET /status'], 'asked its status, and not told to stop');
+  } finally {
+    earlier.closeAllConnections();
+    await new Promise((r) => earlier.close(r));
+  }
+});
+
 /** A file to load before a program's own (NODE_OPTIONS --import), that holds it back for a while, as a slow computer would. */
 function delayFor(ms) {
   const file = join(tempFolder('provared-delay-'), 'delay.mjs');
