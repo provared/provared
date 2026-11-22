@@ -15,7 +15,7 @@ import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { test } from 'node:test';
 
-const { thumbprint } = await import('provared');
+const { assembleCancellation, prepareCancellation, thumbprint } = await import('provared');
 const { developmentPasskey } = await import('provared/dev');
 const { feedReader } = await import('../feed.mjs');
 const { admitWaiting, readTrusted, readWaitingPermissions } = await import('../recorder.mjs');
@@ -191,23 +191,34 @@ test('tool calls sent throughout the switch are each answered, refused or allowe
   }
 });
 
-test('a hand-over that reached the waiting recorder while it took a permission is refused once the full recorder is in place, and keeps nothing', async () => {
+test('records handed over while a permission is taken wait their turn and are then handled by the full recorder: a cancellation of it is taken, and another passkey\'s permission is answered by the full recorder\'s rules', async () => {
   const gate = gateAt('checked');
   const w = await waitingWorld({ faults: gate.faults });
   try {
     const mine = await w.handed();
     const taking = w.reader.post('/admit', { fingerprint: mine.fp, thumbprint: mine.T, take: true });
     await within(gate.reached, 20000, 'the admit at its checks');
-    // Handed over now, it waits its turn in the waiting recorder, behind the admit.
+    // Handed over now, each waits its turn in the waiting recorder, behind the admit.
+    const prepared = await prepareCancellation({ slip: mine.fp, when: Date.now() });
+    const cancellation = assembleCancellation(prepared, await w.passkey.sign(prepared.challenge));
     const stranger = await signSlip({ agentKeys: w.agent.keys, passkey: await developmentPasskey(), purpose: 'Handed over during the switch.' });
-    const handing = feedReader({ address: `http://127.0.0.1:${w.port}`, token: read(w.folder, 'feed-token').trim() }).post('/hand-over', { kind: 'renewal', slip: stranger });
+    const newReader = () => feedReader({ address: `http://127.0.0.1:${w.port}`, token: read(w.folder, 'feed-token').trim() });
+    const cancelling = newReader().post('/hand-over', { kind: 'cancellation', cancellation });
+    const handing = newReader().post('/hand-over', { kind: 'renewal', slip: stranger });
     await new Promise((r) => setTimeout(r, 300));
     gate.open();
     assert.equal((await within(taking, 30000, 'the admit')).body.outcome, 'taken');
+    const cancelled = (await within(cancelling, 30000, 'the cancellation')).body;
+    assert.equal(cancelled.outcome, 'taken', JSON.stringify(cancelled));
+    assert.equal((await status(w.port)).cancelled, true, 'the permission just taken is cancelled');
+    assert.equal((await runHook(w.port, 'PreToolUse', 'Read', { file_path: 'README.md' })).decision.permissionDecision, 'deny', 'no call is allowed under it');
     const said = (await within(handing, 30000, 'the hand-over')).body;
+    // The full recorder's own answer for a passkey it does not trust (the uploader hands that over again).
     assert.equal(said.outcome, 'refused', JSON.stringify(said));
-    assert.equal(said.code, 'not-waiting');
-    assert.equal(readWaitingPermissions(w.folder).length, 0, 'nothing is kept by the waiting recorder after the switch');
+    assert.equal(said.code, 'passkey-not-trusted');
+    // Kept by the full recorder, as it keeps any permission from a passkey it does not trust; the one taken no longer waits.
+    assert.deepEqual(readWaitingPermissions(w.folder).map((p) => p.fingerprint), [said.fingerprint]);
+    assert.notEqual(said.fingerprint, mine.fp);
   } finally {
     gate.open();
     await w.waiting.close();

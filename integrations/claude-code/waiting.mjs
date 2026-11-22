@@ -115,8 +115,11 @@ export async function waitingHandler({ folder, owner, clock = Date.now, signingO
   // cancellation is refused: no permission is in force.
   async function handOver(given) {
     const refused = (kind, fp, code, message, more = {}) => ({ kind, fingerprint: fp, outcome: 'refused', code, message, ...more });
-    // One that waited its turn behind the admit that put the full recorder in place: refused, and nothing kept.
-    if (owner.handler !== self) return refused(null, null, 'not-waiting', 'The recorder no longer waits for a first permission: one was taken while this was handed over. Hand it over again.');
+    // One that waited its turn behind the admit that put the full recorder in
+    // place: passed on to the full recorder, which answers it by its own rules
+    // (a cancellation of the permission just taken is taken), and nothing is
+    // kept here.
+    if (owner.handler !== self) return owner.handler.handOver(given);
     if (!given || typeof given !== 'object' || Array.isArray(given)) return refused(null, null, 'not-understood', 'What was handed over is not a renewal or a cancellation.');
     const names = Object.keys(given);
     if (given.kind === 'cancellation' && names.length === 2 && names.includes('cancellation')) {
@@ -161,7 +164,9 @@ export async function waitingHandler({ folder, owner, clock = Date.now, signingO
   // passkeys written as exactly this one passkey (a list someone left is
   // replaced); slip.json; the full recorder built on the same port and feed,
   // which writes the slip as the book's first line; the full recorder put
-  // in place in one step; and only then "taken". Where the start fails,
+  // in place in one step; and only then "taken" (a record handed over
+  // meanwhile, which waited its turn behind this, then goes to the full
+  // recorder: handOver above). Where the start fails,
   // what this attempt wrote is put back and the permission waits.
   async function admit(asked) {
     const kind = 'renewal';

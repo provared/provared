@@ -43,8 +43,11 @@ export const HAND_OVER_AGAIN_MS = 60000;
  * before it, and is not handed over.
  */
 export const CANCELLATION_ALLOWANCE_MS = 300 * 1000;
-/** Refusals the person can put right on the agent's computer, or that may pass: handed over again. */
-export const AGAIN = Object.freeze(['passkey-not-trusted', 'passkey-retired', 'cancellation-held', 'failed', 'not-taken']);
+/**
+ * Refusals the person can put right on the agent's computer, or that may
+ * pass: handed over again. "not-started": the recorder was still starting.
+ */
+export const AGAIN = Object.freeze(['passkey-not-trusted', 'passkey-retired', 'cancellation-held', 'failed', 'not-taken', 'not-started']);
 
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('base64url');
 

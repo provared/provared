@@ -246,6 +246,18 @@ test('what the book keeps is read with the book\'s key: content the server chang
   assert.equal(handed, 0);
 });
 
+test('a record the recorder refuses because it is still starting ("not-started") is handed over again in the next round', async () => {
+  const slip = { payload: Buffer.from(JSON.stringify({ validFrom: '2026-11-01T10:00:00.000Z' })).toString('base64url') };
+  const answers = [{ outcome: 'refused', code: 'not-started' }, { outcome: 'taken' }];
+  let handed = 0;
+  const clock = { now: Date.now() };
+  const h = createHandover({ feed: { handOver: async () => answers[handed++] }, readKept: async () => ({ renewals: [{ slip }], cancellations: [] }), putOutcomes: async () => {}, log: quiet, now: () => clock.now, againMs: 1000 });
+  assert.deepEqual((await h.round()).map((a) => a.code), ['not-started']);
+  clock.now += 1001;
+  assert.deepEqual((await h.round()).map((a) => a.outcome), ['taken']);
+  assert.equal(handed, 2);
+});
+
 test('the note of outcomes opens only for its own book, and holds only outcomes in its form', async () => {
   const objectId = crypto.randomUUID();
   const key = await cc.importSymmetricKey(cc.generateSymmetricKey());
