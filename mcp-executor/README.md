@@ -322,14 +322,15 @@ What the executor does with each request:
   caller could be read or cancelled by any agent. Tasks are therefore
   refused unless the settings allow them (`allowTasks`): every `tasks/`
   request is answered with JSON-RPC error -32601, and a request that asks
-  for a task (`params.task`) with -32602, each with 400, and nothing
-  reaches the upstream. With `allowTasks`, a call that asks for a task is
+  for a task (`params.task`) with -32602, each under the request's id with
+  200, as the executor's other refusals of a request it has read, and
+  nothing reaches the upstream. With `allowTasks`, a call that asks for a task is
   checked and receipted as any call (its receipt's result is the task's
   handle; the later `tasks/result` passes with no receipt), and the task
   its answer names is held to the agent whose call made it (the last 1,000
   for each agent): `tasks/get`, `tasks/result` and `tasks/cancel` that
   name another agent's task, or one the executor did not see made, are
-  refused (400, -32602) and not sent; `tasks/list` comes back with that
+  refused (-32602) and not sent; `tasks/list` comes back with that
   agent's tasks alone; any other `tasks/` method is refused; and an event
   of the upstream's that names another agent's task (its
   `notifications/tasks/status`, or a message whose `_meta` ties it to that

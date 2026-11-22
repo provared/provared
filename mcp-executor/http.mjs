@@ -1538,7 +1538,8 @@ export async function openHttpExecutor(config, more = {}) {
       const refusal = read.kind === 'request' ? taskRefusal(m, agent) : (othersTask(m, agent) ? { rpc: CODES.invalidParams, message: 'The message names a task that is not this agent\'s.' } : null);
       if (refusal) {
         agent.log({ event: 'refused', code: settings.allowTasks ? 'task-not-this-agents' : 'tasks-refused', method: typeof m.method === 'string' ? m.method.slice(0, 80) : null });
-        return refuse(res, 400, read.kind === 'request' ? m.id : null, refusal.rpc, refusal.message);
+        // A request is answered 200, as the executor's other refusals of a message it has read, so that the agent's MCP library reads the error as the response (X112); a notification or a response, which has no response, 400.
+        return refuse(res, read.kind === 'request' ? 200 : 400, read.kind === 'request' ? m.id : null, refusal.rpc, refusal.message);
       }
     }
     // A request that asks for a task (allowTasks): the task its answer names is this agent's.

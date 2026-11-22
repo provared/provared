@@ -38,7 +38,7 @@ test('tasks: by default every tasks/ request, and a tools/call that asks for a t
     assert.equal(own.json.result.isError, true);
     // 2. alpha's call to "order" as a task: refused, and not sent.
     const made = await taskCall(w, 'alpha', 1);
-    assert.equal(made.status, 400);
+    assert.equal(made.status, 200, 'answered as the executor\'s other refusals of a request it has read (X112)');
     assert.equal(made.json.id, 1);
     assert.equal(made.json.error.code, CODES.invalidParams);
     assert.match(made.json.error.message, /task/);
@@ -47,7 +47,7 @@ test('tasks: by default every tasks/ request, and a tools/call that asks for a t
     const taskId = await taskElsewhere(w);
     for (const [method, params] of [['tasks/list', undefined], ['tasks/result', { taskId }], ['tasks/cancel', { taskId }], ['tasks/get', { taskId }]]) {
       const r = await request(w, 'beta', method, params, { id: method });
-      assert.equal(r.status, 400, method);
+      assert.equal(r.status, 200, method);
       assert.equal(r.json.id, method);
       assert.equal(r.json.error.code, CODES.methodNotFound, method);
     }
@@ -79,13 +79,13 @@ test('tasks: with allowTasks, each task is kept to the agent whose call made it;
     // 4. beta's tasks/result for alpha's task: refused, and not sent.
     const before = methodsSeen(w).length;
     const got = await request(w, 'beta', 'tasks/result', { taskId }, { id: 3 });
-    assert.equal(got.status, 400);
+    assert.equal(got.status, 200);
     assert.equal(got.json.error.code, CODES.invalidParams);
     assert.doesNotMatch(got.body, /Ordered/);
     // 5. beta's tasks/cancel and tasks/get for alpha's task: refused, and not sent; the task runs on.
-    assert.equal((await request(w, 'beta', 'tasks/cancel', { taskId }, { id: 4 })).status, 400);
-    assert.equal((await request(w, 'beta', 'tasks/get', { taskId }, { id: 5 })).status, 400);
-    assert.equal((await request(w, 'beta', 'tasks/get', { taskId: other }, { id: 6 })).status, 400, 'nor a task the executor did not make');
+    assert.equal((await request(w, 'beta', 'tasks/cancel', { taskId }, { id: 4 })).json.error.code, CODES.invalidParams);
+    assert.equal((await request(w, 'beta', 'tasks/get', { taskId }, { id: 5 })).json.error.code, CODES.invalidParams);
+    assert.equal((await request(w, 'beta', 'tasks/get', { taskId: other }, { id: 6 })).json.error.code, CODES.invalidParams, 'nor a task the executor did not make');
     assert.equal(methodsSeen(w).length, before, 'none of them reached the upstream');
     assert.equal(w.upstream.tasks.get(taskId).status, 'completed');
     // alpha: its own task is listed, and it gets its status and its own result.

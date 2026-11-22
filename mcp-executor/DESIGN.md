@@ -448,8 +448,9 @@ and `tasks/cancel` name it by `params.taskId`; `tasks/list` gives
 `taskId`; and `_meta["io.modelcontextprotocol/related-task"].taskId` ties
 another message to it). So, unless `allowTasks` is true, every request
 whose method is `tasks/…` (in any capitals) is refused with -32601, and
-every request with a `task` member in its `params` with -32602, each with
-400, before anything reaches the upstream. With `allowTasks`, the task id
+every request with a `task` member in its `params` with -32602, each
+under the request's id with 200 as X112 says of the executor's other
+refusals of a request it has read, before anything reaches the upstream. With `allowTasks`, the task id
 in the answer to a request that asked for a task (for a call, its outcome)
 is held for the agent that sent it, up to `MAX_TASKS`
 (1,000) for each agent, its oldest forgotten first; `tasks/get`,

@@ -205,7 +205,9 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
     nothing in that agent's book and no line in the log. Now tasks are
     refused unless the new setting `allowTasks` is true: a `tasks/` request
     with JSON-RPC error -32601, a request that asks for a task
-    (`params.task`) with -32602, each with 400, and nothing is sent. With
+    (`params.task`) with -32602, each under the request's id with 200, as
+    the executor's other refusals of a request it has read, and nothing is
+    sent. With
     `allowTasks`, each task is held to the agent whose call made it:
     `tasks/get`, `tasks/result` and `tasks/cancel` for another agent's task
     are refused and not sent, `tasks/list` comes back with the agent's own
