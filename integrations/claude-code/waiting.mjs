@@ -7,7 +7,7 @@
 
 import { fingerprint, fromBase64url, keySetFingerprint } from 'provared';
 import { portOwner, sendJson } from './port.mjs';
-import { DEFAULT_FOLDER, DEFAULT_PORT, VERSION, addWaitingPermission, handOverChecks, loadAgentKeys, makeRecorderKeys, readRetired, readWaitingPermissions, signingOriginsFrom } from './recorder.mjs';
+import { DEFAULT_FOLDER, DEFAULT_PORT, VERSION, addWaitingPermission, handOverChecks, loadAgentKeys, makeRecorderKeys, readDeclined, readRetired, readWaitingPermissions, signingOriginsFrom } from './recorder.mjs';
 
 const MAX_BODY = 1024 * 1024;
 
@@ -113,7 +113,7 @@ export async function waitingHandler({ folder, owner, clock = Date.now, signingO
     } catch {
       return refused('renewal', null, 'not-sound', 'What was handed over is not a signed permission.');
     }
-    const checked = await handOverChecks(slip, fp, { agentKeys: agent.keys, signedAt, trusted: null, retired: readRetired(folder), now: clock(), startsLater });
+    const checked = await handOverChecks(slip, fp, { agentKeys: agent.keys, signedAt, trusted: null, retired: readRetired(folder), now: clock(), startsLater, declined: readDeclined(folder) });
     if (!checked.next) return refused('renewal', fp, checked.code, checked.message, checked.thumbprint ? { thumbprint: checked.thumbprint } : {});
     const T = checked.next.issuerKey;
     let kept;

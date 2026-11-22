@@ -13,7 +13,7 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createCryptoCore } from '@microtoll/crypto-core';
 import { assembleCancellation, assembleSlip, formatTime, prepareCancellation, prepareSlip, thumbprint } from 'provared';
 import { developmentPasskey } from 'provared/dev';
@@ -179,9 +179,12 @@ test('a renewal from a passkey the agent\'s computer does not trust is refused a
   assert.match(shown.stdout, /Purpose\s+From another passkey\./);
   assert.match(shown.stdout, /Nothing was changed/);
   assert.equal(JSON.parse(readFileSync(join(r.folder, 'trusted-passkeys.json'), 'utf8')).passkeys.includes(T), false);
-  // The person confirms: the passkey is taken with that permission, which the book now holds.
-  const admitted = r.answered('yes', 'admit-passkey', T);
-  assert.equal(admitted.status, 0, admitted.stderr || admitted.stdout);
+  // The person confirms, typing "yes" at a terminal (the recorder takes nothing typed into a pipe): the passkey is
+  // taken with that permission, which the book now holds.
+  const { admitWaiting } = await import(pathToFileURL(recorderFile).href);
+  const said = [];
+  const admitted = await admitWaiting(r.folder, r.port, T, { answer: async () => 'yes', terminal: true, say: (words) => said.push(words) });
+  assert.equal(admitted, 0, said.join('\n'));
   assert.deepEqual(kinds(r.book()), ['slip', 'slip']);
   // A minute later it is handed over again: the book holds it already.
   clock.now += 61000;

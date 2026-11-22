@@ -279,9 +279,42 @@ export function readWaitingPermissions(folder) {
   }
 }
 
-function writeWaitingPermissions(folder, list) {
+/** "admit-passkey" takes no fewer than this many characters of a thumbprint (96 bits): out of reach of trying keys until one starts alike. */
+export const ADMIT_THUMBPRINT_LEAST = 16;
+
+/** At most this many declined permissions are remembered beside the waiting list, the oldest left out first. */
+export const MAX_DECLINED = 64;
+
+/** The fingerprints of the permissions the person declined ("no" to "admit-passkey"), oldest first. */
+export function readDeclined(folder) {
   const path = files(folder).waiting;
-  if (list.length === 0) {
+  if (!existsSync(path)) return [];
+  try {
+    const held = JSON.parse(readFileSync(path, 'utf8').replace(/^﻿/, ''));
+    return Array.isArray(held?.declined) ? held.declined.filter((d) => typeof d === 'string' && THUMBPRINT.test(d)).slice(-MAX_DECLINED) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** The end a permission states, read from its content (not checked here), in milliseconds; NaN where it cannot be read. */
+function endOf(slip) {
+  try {
+    return Date.parse(JSON.parse(new TextDecoder().decode(fromBase64url(slip.payload))).validUntil);
+  } catch {
+    return NaN;
+  }
+}
+
+// Written only by the running recorder (full or waiting), never by a
+// command: it adds a permission, takes one out once taken or declined, and
+// leaves out one that has ended. The declined fingerprints are kept with it.
+function writeWaitingPermissions(folder, list, declined = readDeclined(folder)) {
+  const path = files(folder).waiting;
+  const now = Date.now();
+  const kept = list.filter((p) => !(endOf(p.slip) <= now)).slice(0, MAX_WAITING_PERMISSIONS);
+  const remembered = [...new Set(declined)].slice(-MAX_DECLINED);
+  if (kept.length === 0 && remembered.length === 0) {
     try {
       unlinkSync(path);
     } catch (e) {
@@ -289,8 +322,73 @@ function writeWaitingPermissions(folder, list) {
     }
     return;
   }
-  const about = 'Permissions handed over from the application and refused, because a passkey this computer does not trust signed them. Each waits for "admit-passkey <thumbprint>", which shows it and takes it, with its passkey, only once the person confirms on this computer. Nothing here is trusted.';
-  replaceFile(path, JSON.stringify({ about, permissions: list.slice(0, MAX_WAITING_PERMISSIONS) }, null, 2) + '\n', { temporary: `${path}.${process.pid}.tmp` });
+  const about = 'Permissions handed over from the application and refused, because a passkey this computer does not trust signed them. Each waits for "admit-passkey <thumbprint>", which shows it and takes it, with its passkey, only once the person confirms on this computer. Nothing here is trusted. "declined": the fingerprints of the permissions the person declined there, refused from then on.';
+  replaceFile(path, JSON.stringify({ about, permissions: kept, declined: remembered }, null, 2) + '\n', { temporary: `${path}.${process.pid}.tmp` });
+}
+
+/** Take a permission out of the waiting list, once it is taken. */
+export function takeOutWaiting(folder, fp) {
+  const list = readWaitingPermissions(folder);
+  if (list.some((p) => p.fingerprint === fp)) writeWaitingPermissions(folder, list.filter((p) => p.fingerprint !== fp));
+}
+
+/** Decline a waiting permission: taken out of the list, and its fingerprint remembered, so that it is refused from then on. */
+function declineWaiting(folder, fp) {
+  writeWaitingPermissions(folder, readWaitingPermissions(folder).filter((p) => p.fingerprint !== fp), [...readDeclined(folder).filter((d) => d !== fp), fp]);
+}
+
+/**
+ * The permission the waiting list holds under a fingerprint, worked out from
+ * the permission itself (never the list's own note of it): {slip, fingerprint}, or null.
+ */
+async function waitingByFingerprint(folder, fp) {
+  for (const p of readWaitingPermissions(folder)) {
+    try {
+      if ((await fingerprint(fromBase64url(p.slip.payload))) === fp) return { slip: p.slip, fingerprint: fp };
+    } catch {
+      // Not a permission that can be read: not this one.
+    }
+  }
+  return null;
+}
+
+/**
+ * What POST /admit asks, read and checked: {fingerprint, thumbprint, take,
+ * decline}, or {refusal} where it is not in that form. The permission is
+ * named by its fingerprint and taken from the recorder's own waiting list:
+ * a request that carries a permission itself is not understood.
+ */
+function admitRequest(given) {
+  const names = given && typeof given === 'object' && !Array.isArray(given) ? Object.keys(given) : null;
+  const ok = names !== null
+    && names.every((n) => ['fingerprint', 'thumbprint', 'take', 'decline'].includes(n))
+    && typeof given.fingerprint === 'string' && THUMBPRINT.test(given.fingerprint)
+    && typeof given.thumbprint === 'string' && THUMBPRINT.test(given.thumbprint)
+    && (given.take === undefined || typeof given.take === 'boolean')
+    && (given.decline === undefined || given.decline === true)
+    && !(given.decline === true && given.take === true);
+  if (!ok) return { refusal: 'What was asked is not the fingerprint of a permission waiting here and the thumbprint of the passkey that signed it ({fingerprint, thumbprint, take}). A permission is never taken from the request: only from the waiting list.' };
+  return { fingerprint: given.fingerprint, thumbprint: given.thumbprint, take: given.take === true, decline: given.decline === true };
+}
+
+/**
+ * POST /admit with "decline": the person typed "no". The permission must be
+ * waiting, and signed by that passkey; it is taken out of the list and its
+ * fingerprint remembered (declineWaiting).
+ */
+export async function declineAsked(folder, asked) {
+  const kind = 'renewal';
+  const entry = await waitingByFingerprint(folder, asked.fingerprint);
+  if (!entry) return { kind, fingerprint: asked.fingerprint, outcome: 'refused', code: 'no-such-permission', message: 'No permission with this fingerprint waits here, so nothing was declined.' };
+  let signer = null;
+  try {
+    signer = await thumbprint(JSON.parse(new TextDecoder().decode(fromBase64url(entry.slip.payload))).issuer.key);
+  } catch {
+    // Not a permission that can be read: no passkey signed it.
+  }
+  if (signer !== asked.thumbprint) return { kind, fingerprint: asked.fingerprint, outcome: 'refused', code: 'other-passkey', message: `This permission is not signed by the passkey ${asked.thumbprint}, so nothing was declined.` };
+  declineWaiting(folder, asked.fingerprint);
+  return { kind, fingerprint: asked.fingerprint, outcome: 'declined', message: 'Declined: the permission no longer waits, and it is refused from now on if it is handed over again.' };
 }
 
 /** The start a permission states, read from its content (not checked here), in milliseconds; NaN where it cannot be read. */
@@ -348,9 +446,12 @@ function startsLaterWords(from) {
  * trust, signed at the expected address, which may wait for "admit-passkey".
  * @param {object} slip
  * @param {string} fp its fingerprint
- * @param {{agentKeys: object[], signedAt: string[], trusted: string[]|null, retired: string[], admit?: string|null, now: number, startsLater: Set<string>}} o
+ * A permission the person declined ("declined", its fingerprint) is refused first ("declined").
+ * @param {{agentKeys: object[], signedAt: string[], trusted: string[]|null, retired: string[], admit?: string|null, now: number, startsLater: Set<string>, declined?: string[]}} o
  */
-export async function handOverChecks(slip, fp, { agentKeys, signedAt, trusted, retired, admit = null, now, startsLater }) {
+export async function handOverChecks(slip, fp, { agentKeys, signedAt, trusted, retired, admit = null, now, startsLater, declined = [] }) {
+  // The person said "no" to this permission on this computer ("admit-passkey"): refused from then on.
+  if (declined.includes(fp)) return { code: 'declined', message: 'The person declined this permission on the agent\'s computer, so it is not taken, and it is not kept to wait again. Sign a new permission if you mean the agent to act.' };
   const stated = startOf(slip);
   if (startsLater.has(fp) || stated > now + HAND_OVER_ALLOWANCE_MS) {
     if (startsLater.size >= 1000) startsLater.delete(startsLater.values().next().value);
@@ -1924,7 +2025,7 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
     if (everSlips.has(fp)) return refused(kind, fp, 'not-again', 'This permission was in force before, and a later one replaced it: the recorder does not go back to it. Sign a new permission.');
     // The checks that need no permission in force, shared with the waiting recorder.
     trusted = trustedNow();
-    const checked = await handOverChecks(slip, fp, { agentKeys: agent.keys, signedAt, trusted, retired: readRetired(folder), admit, now: clock(), startsLater });
+    const checked = await handOverChecks(slip, fp, { agentKeys: agent.keys, signedAt, trusted, retired: readRetired(folder), admit, now: clock(), startsLater, declined: readDeclined(folder) });
     if (!checked.next) {
       if (checked.untrusted) {
         // Kept for "admit-passkey", which shows it on this computer and takes it only once the person confirms there.
@@ -1954,6 +2055,14 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
     try {
       const renewed = await renew(slip, admit !== null);
       await whenFull();
+      if (admit !== null) {
+        // Taken: it no longer waits. The list is the running recorder's to write, never a command's.
+        try {
+          takeOutWaiting(folder, fp);
+        } catch {
+          // Left in the list: it is the permission in force now, and handed over or admitted again it is "already".
+        }
+      }
       return { kind, fingerprint: fp, outcome: 'taken', entries: renewed.entries, message: `Taken: the agent acts under this permission from now on (in force from ${next.content.validFrom} until ${next.content.validUntil}).` };
     } catch (e) {
       return refused(kind, fp, e.code ?? 'failed', e.message);
@@ -2138,16 +2247,21 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
           return sealed;
         }));
       }
-      // "admit-passkey" for a permission handed over and waiting: the hand-over's
-      // own checks, with that one passkey admitted for that one permission;
-      // "take": false checks only.
+      // "admit-passkey" for a permission handed over and waiting
+      // ({fingerprint, thumbprint, take}): the permission is taken from this
+      // recorder's own waiting list by its fingerprint, never from the
+      // request, and goes through the hand-over's own checks, with that one
+      // passkey admitted for that one permission; "take": false checks only,
+      // and drops nothing; "decline": the person typed "no".
       if (req.url === '/admit') {
         return reply(200, await unlessGone(async () => {
           const refused = (kind, fingerprint, code, message) => ({ kind, fingerprint, outcome: 'refused', code, message });
-          if (typeof given.thumbprint !== 'string' || !THUMBPRINT.test(given.thumbprint) || !given.slip || typeof given.slip !== 'object' || typeof given.slip.payload !== 'string') {
-            return refused('renewal', null, 'not-understood', 'What was asked is not a permission and the thumbprint of the passkey to admit.');
-          }
-          return handOverRenewal(given.slip, refused, { admit: given.thumbprint, check: given.take !== true });
+          const asked = admitRequest(given);
+          if (asked.refusal) return refused('renewal', null, 'not-understood', asked.refusal);
+          if (asked.decline) return declineAsked(folder, asked);
+          const entry = await waitingByFingerprint(folder, asked.fingerprint);
+          if (!entry) return refused('renewal', asked.fingerprint, 'no-such-permission', 'No permission with this fingerprint waits here, so nothing is taken: a passkey is admitted only with a permission it signed that was handed over and waits on this computer.');
+          return handOverRenewal(entry.slip, refused, { admit: asked.thumbprint, check: !asked.take });
         }));
       }
       if (req.url === '/renew' || req.url === '/new-book') {
@@ -2553,97 +2667,138 @@ function sayRenewed(answer) {
  * a permission signed by anyone's passkey where the uploader reads, so a
  * passkey is never admitted by itself: only with a permission it signed
  * that was handed over and refused, which waits in waiting-permissions.json.
- * Only through the running service (POST /admit), which runs every check a
- * permission handed over goes through (not held before, not older than the
- * one in force, not starting too far ahead, not starting before a
- * cancellation and the allowance, and the cancellations it holds), with
- * that one passkey admitted for that one permission. Each waiting
- * permission from the passkey is checked first; one that fails is dropped
- * from the list and said. The rest are shown in full, the one that starts
- * latest first, each with the thumbprint of the passkey worked out from the
- * permission itself, and the first is taken, with its passkey, only once
- * the person types "yes" on this computer.
- * @param {(prompt: string) => Promise<string>} answer reads what the person types
+ * The person names the passkey by its thumbprint, or at least its first
+ * ADMIT_THUMBPRINT_LEAST characters, pasted from the signing window, never
+ * from the application: the match is exact, case-sensitive, at the start of
+ * the thumbprint worked out from each permission itself; where it matches
+ * more than one passkey, nothing is taken. With no thumbprint, the command
+ * only lists what waits.
+ *
+ * Only through the running recorder (POST /admit, with the feed's proof),
+ * which takes the permission from its own waiting list by fingerprint and
+ * runs every check a permission handed over goes through (not held before,
+ * not older than the one in force, not starting too far ahead, not starting
+ * before a cancellation and the allowance, and the cancellations it holds),
+ * with that one passkey admitted for that one permission. Each waiting
+ * permission from the passkey is checked first; one that fails is left
+ * waiting, and why is said: the command never writes the list. The rest are
+ * shown in full, the one that starts latest first, and the first is taken,
+ * with its passkey, only once the person types "yes" at a terminal on this
+ * computer. A typed "no" declines it, and it is refused from then on;
+ * anything else leaves it waiting.
+ * @param {string|undefined} given the thumbprint, or its start; undefined lists only
+ * @param {{answer?: (prompt: string) => Promise<string>, terminal?: boolean, say?: (words: string) => void, least?: number}} [o]
+ *   answer reads what the person types; terminal: whether the input is a terminal (from a pipe nothing is
+ *   taken); say: where the words go (console.log); least: the fewest characters of a thumbprint taken (for tests)
  * @returns {Promise<number>} the exit code
  */
-async function admitWaiting(folder, port, thumb, answer) {
+export async function admitWaiting(folder, port, given, { answer = firstLineTyped, terminal = process.stdin.isTTY === true, say = (words) => console.log(words), least = ADMIT_THUMBPRINT_LEAST } = {}) {
   if (!(await running(port))) {
-    console.log(`The recorder is not running, so nothing is admitted: a permission waiting here is checked by the running recorder, against the cancellations it holds, before it is taken. Start it first ("${RUN} ensure"), then run this again.`);
+    say(`The recorder is not running, so nothing is admitted: a permission waiting here is checked by the running recorder, against the cancellations it holds, before it is taken. Start it first ("${RUN} ensure"), then run this again.`);
     return 1;
   }
-  // The waiting permissions this passkey signed, as each permission itself says.
-  const mine = [];
+  // The waiting permissions, each with the passkey and fingerprint worked out from the permission itself.
+  const all = [];
   for (const p of readWaitingPermissions(folder)) {
     try {
       const check = await checkSlip(p.slip);
-      if (check.problems.length === 0 && check.signature.state === 'valid' && check.issuerKey === thumb) {
-        mine.push({ slip: p.slip, content: check.content, thumbprint: check.issuerKey, fingerprint: await fingerprint(fromBase64url(p.slip.payload)) });
+      if (check.problems.length === 0 && check.signature.state === 'valid') {
+        all.push({ slip: p.slip, content: check.content, thumbprint: check.issuerKey, fingerprint: await fingerprint(fromBase64url(p.slip.payload)) });
       }
     } catch {
       // Not a permission that checks: not shown.
     }
   }
-  if (mine.length === 0) {
-    console.log(`No permission signed by the passkey ${thumb} is waiting here, and this recorder has never trusted that passkey, so nothing is admitted. A passkey this computer does not trust is taken only with a permission it signed: one handed over from the application and refused (it then waits here), or one you saved as a file ("${RUN} renew <file> --new-passkey").`);
+  const fromSigningWindow = 'Copy the thumbprint from the signing window, not from the application or from this list: the application\'s server could have put any of these permissions here.';
+  if (given === undefined) {
+    if (all.length === 0) {
+      say('No permission waits here.');
+      return 0;
+    }
+    say(all.length === 1 ? 'One permission handed over from the application waits here, from a passkey this computer does not trust:' : `${all.length} permissions handed over from the application wait here, from passkeys this computer does not trust:`);
+    for (const p of all) say(`  passkey ${p.thumbprint}: the permission ${p.fingerprint}, from ${p.content.validFrom} until ${p.content.validUntil}`);
+    say(`Nothing is taken without a thumbprint. ${fromSigningWindow} Then: ${RUN} admit-passkey <the thumbprint>`);
+    return 0;
+  }
+  if (!new RegExp(`^[A-Za-z0-9_-]{${least},43}$`).test(given)) {
+    say(`Give at least ${least} characters of the passkey's thumbprint, as the signing window shows it after you sign (letters, digits, "-" and "_"): paste it from the signing window, where it can be trusted. Nothing was changed.`);
+    return 2;
+  }
+  const matching = all.filter((p) => p.thumbprint.startsWith(given));
+  const passkeys = [...new Set(matching.map((p) => p.thumbprint))];
+  if (passkeys.length === 0) {
+    say(all.length > 0
+      ? `No permission from a passkey starting with ${given} waits here, so nothing is admitted. ${all.length === 1 ? 'One other waits' : `${all.length} others wait`}, from ${all.length === 1 ? 'a passkey' : 'passkeys'} you did not name: the server may be filling the list. Save the permission from the signing window as a file and run "${RUN} use <file>".`
+      : `No permission from a passkey starting with ${given} waits here, so nothing is admitted. A passkey this computer does not trust is taken only with a permission it signed: one handed over from the application (it then waits here), or one you saved as a file from the signing window ("${RUN} use <file>", or "${RUN} renew <file> --new-passkey" once a permission is in force).`);
     return 1;
   }
-  const admit = async (p, take) => {
-    const said = await askProved(folder, port, '/admit', { slip: p.slip, thumbprint: thumb, take });
+  if (passkeys.length > 1) {
+    say(`Permissions from ${passkeys.length} passkeys whose thumbprints start with ${given} wait here, so nothing is taken: give more characters of the thumbprint, or paste it whole, from the signing window.`);
+    return 1;
+  }
+  const thumb = passkeys[0];
+  const mine = matching;
+  const admit = async (p, asked) => {
+    const said = await askProved(folder, port, '/admit', { fingerprint: p.fingerprint, thumbprint: thumb, ...asked });
     if (said.error === 'not found') throw new Error(`The recorder that is running is an earlier version, which cannot admit a passkey while it runs. Restart it once, with both commands on one line so that no tool call falls between them, then run admit-passkey again: ${RUN} stop; ${RUN} ensure`);
     if (said.error) throw new Error(said.error);
     return said;
   };
-  const drop = (fp) => writeWaitingPermissions(folder, readWaitingPermissions(folder).filter((p) => p.fingerprint !== fp));
   const left = [];
   for (const p of mine) {
-    const said = await admit(p, false);
+    const said = await admit(p, { take: false });
     if (said.outcome === 'would-take') left.push(p);
-    else {
-      drop(p.fingerprint);
-      console.log(`Dropped from the list, and not taken: the permission ${p.fingerprint} (from ${p.content.validFrom}). ${said.message}`);
-    }
+    else say(`Not taken, and left waiting: the permission ${p.fingerprint} (from ${p.content.validFrom}). ${said.message}`);
   }
   if (left.length === 0) {
-    console.log(`Nothing is left waiting from the passkey ${thumb}, so nothing is admitted.`);
+    say(`Nothing from the passkey ${thumb} can be taken now, so nothing is admitted.`);
     return 1;
   }
   left.sort((a, b) => Date.parse(b.content.validFrom) - Date.parse(a.content.validFrom));
   const show = (v) => (typeof v === 'string' ? v : JSON.stringify(v));
-  console.log(left.length === 1
+  say(left.length === 1
     ? 'A permission handed over from the application waits here, signed by a passkey this computer does not trust.\n'
     : `${left.length} permissions handed over from the application wait here, signed by a passkey this computer does not trust. The first, which starts latest, is the one taken.\n`);
   for (const [i, p] of left.entries()) {
     const c = p.content;
-    if (left.length > 1) console.log(`  ${i + 1}.`);
-    console.log(`  Passkey (thumbprint)   ${p.thumbprint}`);
-    console.log(`  Signed by (a label)    ${show(c.issuer?.name)}`);
-    console.log(`  Signed at              ${show(c.issuer?.origin)} (website name ${show(c.issuer?.rpId)})`);
-    console.log(`  Agent                  ${show(c.agent?.name)}, key set ${await keySetFingerprint(c.agent.keys)}`);
-    console.log(`  May                    ${(c.actions || []).map(show).join(', ') || 'nothing'}`);
-    console.log(`  Limits                 ${(c.limits || []).length ? c.limits.map(show).join('; ') : 'none'}`);
-    console.log(`  Needs                  ${(c.requires || []).length ? c.requires.map(show).join('; ') : 'nothing'}`);
-    console.log(`  Never                  ${(c.never || []).length ? c.never.map(show).join(', ') : 'nothing stated'}`);
-    console.log(`  With                   ${(c.with || []).length ? c.with.map((w) => show(w.id ?? w)).join(', ') : 'no service named'}`);
-    console.log(`  From                   ${c.validFrom}`);
-    console.log(`  Until                  ${c.validUntil}`);
-    console.log(`  Purpose                ${show(c.purpose)}`);
-    console.log(`  Fingerprint            ${p.fingerprint}\n`);
+    if (left.length > 1) say(`  ${i + 1}.`);
+    say(`  Passkey (thumbprint)   ${p.thumbprint}`);
+    say(`  Signed by (a label)    ${show(c.issuer?.name)}`);
+    say(`  Signed at              ${show(c.issuer?.origin)} (website name ${show(c.issuer?.rpId)})`);
+    say(`  Agent                  ${show(c.agent?.name)}, key set ${await keySetFingerprint(c.agent.keys)}`);
+    say(`  May                    ${(c.actions || []).map(show).join(', ') || 'nothing'}`);
+    say(`  Limits                 ${(c.limits || []).length ? c.limits.map(show).join('; ') : 'none'}`);
+    say(`  Needs                  ${(c.requires || []).length ? c.requires.map(show).join('; ') : 'nothing'}`);
+    say(`  Never                  ${(c.never || []).length ? c.never.map(show).join(', ') : 'nothing stated'}`);
+    say(`  With                   ${(c.with || []).length ? c.with.map((w) => show(w.id ?? w)).join(', ') : 'no service named'}`);
+    say(`  From                   ${c.validFrom}`);
+    say(`  Until                  ${c.validUntil}`);
+    say(`  Purpose                ${show(c.purpose)}`);
+    say(`  Fingerprint            ${p.fingerprint}\n`);
   }
-  console.log('Take it only if you signed it yourself, with a passkey you made: compare the thumbprint above with the one your signing page or application shows for your passkey. Anyone can make a passkey and sign a permission with it, and the application\'s server could have put this one here.');
-  const typed = (await answer('Type yes to take this permission and trust its passkey, or anything else to leave it: ')).trim();
-  if (typed !== 'yes') {
-    console.log('Nothing was changed: the passkey is not trusted, and the permission waits.');
+  say(`Take it only if you signed it yourself. ${fromSigningWindow} Compare the fingerprint above with the one the signing window shows as well: an older permission of yours, put here again, has another fingerprint.`);
+  // Only typed at a terminal: from a pipe or a file, another program could be answering.
+  if (!terminal) {
+    say('Nothing was changed: the answer must be typed at a terminal, and this command\'s input is not one (a pipe or a file), so nothing is asked and nothing is taken. Run it in a terminal window, and type yes there. The permission waits.');
     return 1;
   }
   const chosen = left[0];
-  const said = await admit(chosen, true);
-  if (said.outcome !== 'taken' && said.outcome !== 'already') {
-    drop(chosen.fingerprint);
-    console.log(`Not taken, and dropped from the list: ${said.message}`);
+  const typed = (await answer('Type yes to take this permission and trust its passkey, no to decline it, or anything else to leave it waiting: ')).trim();
+  if (typed === 'no') {
+    const said = await admit(chosen, { decline: true });
+    say(said.outcome === 'declined' ? `The permission ${chosen.fingerprint} is declined: it no longer waits, the passkey is not trusted, and the permission is refused from now on if it is handed over again.` : `Not declined: ${said.message}`);
     return 1;
   }
-  drop(chosen.fingerprint);
-  console.log(`The passkey ${thumb} is trusted from now on, with the permission it signed (${chosen.fingerprint}). ${said.message}`);
+  if (typed !== 'yes') {
+    say('Nothing was changed: the passkey is not trusted, and the permission waits.');
+    return 1;
+  }
+  const said = await admit(chosen, { take: true });
+  if (said.outcome !== 'taken' && said.outcome !== 'already') {
+    say(`Not taken, and left waiting: ${said.message}`);
+    return 1;
+  }
+  say(`The passkey ${thumb} is trusted from now on, with the permission it signed (${chosen.fingerprint}). ${said.message}`);
   return 0;
 }
 
@@ -2747,10 +2902,12 @@ const USAGE = `Usage: ${RUN} <command>
   retire-passkey <thumbprint>
                 take no new permission from that passkey, with or without --new-passkey; what it
                 signed before stands, and limits are still counted across the books it signed
-  admit-passkey <thumbprint>
+  admit-passkey [<thumbprint>]
                 take new permissions from a retired passkey again; for a passkey this recorder has
-                never trusted, show the permission it signed that was handed over from the
-                application and refused, and take both only once you type "yes"
+                never trusted, named by its thumbprint or its first 16 characters or more, pasted
+                from the signing window, show the permission it signed that was handed over from
+                the application and waits here, and take both only once you type "yes" at a
+                terminal ("no" declines it); with no thumbprint, list what waits
   start         run the recorder in this terminal
   ensure        start the recorder in the background, if it is not running
   status        what the recorder holds
@@ -2849,14 +3006,16 @@ export async function main(argv) {
     return code;
   }
   if (command === 'retire-passkey' || command === 'admit-passkey') {
+    // "admit-passkey" alone lists what waits, and takes nothing.
+    if (command === 'admit-passkey' && rest.length === 0) return admitWaiting(folder, port, undefined);
     if (!rest[0]) {
       console.log(USAGE);
       return 2;
     }
     const retire = command === 'retire-passkey';
-    // A passkey this recorder has never trusted: only with a permission it signed that waits here, shown and confirmed.
-    if (!retire && THUMBPRINT.test(rest[0]) && !(readTrusted(folder) ?? []).includes(rest[0])) {
-      return admitWaiting(folder, port, rest[0], firstLineTyped);
+    // A passkey this recorder has never trusted, named in full or by its start: only with a permission it signed that waits here, shown and confirmed at a terminal.
+    if (!retire && !(THUMBPRINT.test(rest[0]) && (readTrusted(folder) ?? []).includes(rest[0]))) {
+      return admitWaiting(folder, port, rest[0]);
     }
     const lists = retirePasskey(folder, rest[0], retire);
     if (!lists.changed) {
