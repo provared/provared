@@ -6,7 +6,7 @@ Everything about the format, the library, the checker, the stub writer beside an
 
 ## Status
 
-**Version 0.9.0, a draft.** Published as it is, by one author in their
+**Version 0.9.1, a draft.** Published as it is, by one author in their
 own time; fixes as time allows. The format may still change, so do not
 rely on a draft record staying checkable.
 
@@ -153,7 +153,7 @@ be loaded from anywhere. The tool prints the file's SHA-256 fingerprint,
 so that a copy can be compared with it. (Tried on 8 October 2026 in the
 three browser builds this repository is tested with, and on 13 October
 2026 in Chrome 155, Edge 155 and Brave 155.) The file for
-version 0.9.0 is attached to the release on GitHub. Its SHA-256
+version 0.9.1 is attached to the release on GitHub. Its SHA-256
 fingerprint is
 `486471a5b8f3108d08acaacb96d7c27ceeecf95b93bce8e47721b8872a9b1bbc`.
 
