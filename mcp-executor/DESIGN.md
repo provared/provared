@@ -2607,15 +2607,20 @@ as on stdio, so the agent's MCP library reads it as a response; a body
 that cannot be read as one message is 400 with a JSON-RPC error (the id
 where one was read, else null); the transport's own refusals are 401 (not
 signed in), 403 (`Origin`), 404 (the path, a session), 405 (a method other
-than POST, GET or DELETE), 408 (a body not whole within `timeout`), 413
-(the body), 415 (not `application/json`), 503 (too many in flight, or the
-executor stopping), each with a JSON-RPC error body and id null; a
-mirrored header that disagrees with the body or cannot be checked is 400
-with -32020 (X110);
+than POST, GET or DELETE; and, in front of an upstream with more than one
+agent, a GET with no session id, X450), 408 (a body not whole within
+`timeout`), 413 (the body), 415 (not `application/json`), 503 (too many in
+flight, a body past `waitingBytes`, or the executor stopping), each with a
+JSON-RPC error body and id null; an upstream's answer past what one agent
+may hold of answers (`waitingBytes`, X107) is 503 with the JSON-RPC error
+under the agent's id; an agent's response that answers no request the
+upstream sent it is 400 (X451); a mirrored header that disagrees with the
+body or cannot be checked is 400 with -32020 (X110);
 an upstream failure on a request that is not a call is 502 or 504 with the
-same. A duplicate id is counted for each agent (on stdio, for the one
-session), so two concurrent calls of one agent under one id are refused
-and two agents may use the same ids. The tests' client speaks to the
+same. A duplicate id is counted for each agent and, where a request names
+a session, for that session (X236; on stdio, for the one session), so two
+concurrent calls of one agent under one id in one session are refused, two
+sessions of one agent may use the same ids, and two agents may. The tests' client speaks to the
 executor over `node:http` on one connection for each request: the
 built-in `fetch` keeps connections alive, which kept the test process
 from ending and tripped an assertion in Node.js on Windows at exit.

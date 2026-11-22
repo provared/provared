@@ -250,8 +250,9 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
     the claude.ai recipe's, npm's own (`npm ci --offline` from a local
     cache passed with it, and the recipe's set-up of the guard gave
     settings that 0.5.1's `check` reads with no problem). The SDK
-    (1.32.2) still has no lockfile there: making one needs npm's registry,
-    which was not asked. The recipe has not been run since. Test:
+    (1.32.2) is installed the same way, with `npm ci` from the recipe's
+    `package-lock.json` (95 packages, each with npm's hash), made from
+    npm's registry. The recipe has not been run since. Test:
     `test/recipe-shell.test.mjs` runs the stand-in server with a made-up
     stand-in for the SDK.
   - In front of an upstream, the upstream's answers to an agent (up to
@@ -305,6 +306,13 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
     answered, as requests did before F1 (measured: 3.1 MiB held for
     383 KiB of text); now it lets go of it once sent. Tests:
     `test/limits.test.mjs`.
+  - Sentences that were not true, or no longer, are mended: the SDK's
+    lockfile in `agent-with-a-shell` (above), DESIGN's word that a GET with
+    no session id passes (it is refused with 405 where there are several
+    agents), X112's list of the executor's statuses (the new 405, the two
+    503s, the 400 for a response not asked for, and ids counted by session
+    where one is named), and the README on what `waitingBytes` counts
+    (bytes as they came; the memory they take is several times that).
   - Seven parts of these fixes could be taken out with no test noticing;
     each now has a test that fails without it: the session in the key of
     a cancellation (`test/upstream-sessions.test.mjs`, whose step had come

@@ -471,8 +471,14 @@ The settings (`executor-http.example.json` is a start): `name`, `service`,
   and not yet handed on, or waiting for the agent's connection to take
   it) is held to the same number, counted apart: past it a JSON answer is
   refused with 503 (a call's outcome is then not known) and a stream is
-  closed. So one agent holds at most about twice `waitingBytes` in bodies
-  and answers.
+  closed. What is counted is bytes as they came: one agent's bodies and
+  answers together count at most about twice `waitingBytes`. The memory
+  they take is more, since a message read takes several times its bytes
+  (measured in the review of this release, with the default 32 MiB and
+  bodies of 1 MiB: the whole 32 MiB of bodies held took about 470 MiB
+  more of the executor's memory, 542 MiB at its peak). Lower
+  `waitingBytes` and `bodyLimit` where memory is short, as the claude.ai
+  recipe does with `bodyLimit`.
 - `allowedOrigins`: the origins (scheme, host and port) whose pages may
   call the executor. Default none.
 - `oauth`: where agents connect through OAuth (below): `issuer`,
