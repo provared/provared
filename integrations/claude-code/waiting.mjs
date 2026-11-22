@@ -150,9 +150,9 @@ export async function waitingHandler({ folder, owner, clock = Date.now, signingO
     } catch (e) {
       return refused('renewal', fp, 'failed', `The permission could not be kept to wait here (${e.message}): hand it over again, or save it from the signing window as a file and run "use <file>".`);
     }
-    return refused('renewal', fp, 'waits-for-yes', kept
-      ? `The permission waits on the agent's computer for the person's "yes": there, run "admit-passkey" with the thumbprint the signing window shows, ${T}.`
-      : `A permission from the same passkey that starts no earlier waits here already, so this one is not kept: on the agent's computer, run "admit-passkey" with the thumbprint the signing window shows, ${T}.`, { thumbprint: T });
+    // Not kept: a code of its own, final, so that no program reads it as waiting.
+    if (!kept) return refused('renewal', fp, 'not-kept', `A permission from the same passkey that starts no earlier waits here already, so this one is not kept: on the agent's computer, run "admit-passkey" with the thumbprint the signing window shows, ${T}, to take that one.`, { thumbprint: T });
+    return refused('renewal', fp, 'waits-for-yes', `The permission waits on the agent's computer for the person's "yes": there, run "admit-passkey" with the thumbprint the signing window shows, ${T}.`, { thumbprint: T });
   }
 
   // TAKING A FIRST PERMISSION (POST /admit, with the feed's proof, after the

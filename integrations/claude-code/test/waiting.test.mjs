@@ -76,6 +76,23 @@ test('a sound first permission handed over to the waiting recorder waits for "ye
   }
 });
 
+test('a permission not kept, because one from the same passkey that starts no earlier waits already, is answered "not-kept", not "waits-for-yes"', async () => {
+  const w = await waitingWorld();
+  try {
+    const newer = await signSlip({ agentKeys: w.agent.keys, passkey: w.passkey, purpose: 'The newer one.' });
+    assert.equal((await w.hand({ kind: 'renewal', slip: newer })).code, 'waits-for-yes');
+    const older = await signSlip({ agentKeys: w.agent.keys, passkey: w.passkey, purpose: 'The older one.', from: Date.now() - 120000 });
+    const said = await w.hand({ kind: 'renewal', slip: older });
+    assert.equal(said.outcome, 'refused', JSON.stringify(said));
+    assert.equal(said.code, 'not-kept');
+    assert.equal(said.thumbprint, await thumbprint(w.passkey.key));
+    assert.match(said.message, /starts no earlier/);
+    assert.equal(readWaitingPermissions(w.folder).length, 1, 'only the newer one waits');
+  } finally {
+    await w.waiting.close();
+  }
+});
+
 test('the waiting recorder refuses, and keeps nothing of, a permission for other keys, one signed at another address, one that starts too far ahead, one that has ended, and a cancellation', async () => {
   const w = await waitingWorld();
   const elsewhere = await waitingWorld({});
