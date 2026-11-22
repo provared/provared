@@ -763,6 +763,19 @@ not a promise. The numbers `0` and `-0` share a fingerprint, as RFC
 though the tool has run and its stub is in the book. `recordTools`
 names no agent software, and works with any function.
 
+A document of your own, under a name that does not begin `provared.`,
+is fingerprinted as you choose: the checker checks only that its
+`sha256` has the form of a SHA-256 fingerprint in base64url. Where such
+a document is short or easy to guess (a yes or a no, an account number,
+a small sum), take its fingerprint over at least 16 random bytes
+followed by the document, and keep those bytes beside the document, not
+in the record. Whoever holds the document and its bytes can work the
+fingerprint out again; whoever holds only the record cannot find the
+document by trying likely values. This is guidance, not a rule of the
+format, and a checker cannot see whether it was followed. It does not
+apply to the reserved names (below, and format description, section
+27), whose text is fixed so that another system's log can be matched.
+
 [examples/frameworks/](https://github.com/provared/provared/tree/main/examples/frameworks) in the repository shows
 `recordTools` beside a JavaScript agent framework, the Vercel AI SDK
 (`ai`, version 7). The SDK's own tool calls the recorded tool from its
