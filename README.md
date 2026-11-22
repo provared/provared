@@ -30,8 +30,9 @@ software on protocol version 2025-11-25 only, with every program on one
 computer; on the newer 2026-07-28 it has met only a test server of its
 own. The agents' secrets travel in the clear unless something else
 encrypts the connection to the guard, and so does the tool server's
-credential if the tool server is reached by plain HTTP. Sealing the
-record and keys held in a key service are designed but not built. And it
+credential if the tool server is reached by plain HTTP. Keys held in a
+key service are designed but not built; sealing the record is built, in
+the guard from version 0.5.0. And it
 proves nothing about a tool the agent can reach without
 it: the tool's credential must be taken away from the agent. It keeps
 the credential, and its own keys, from the agent only where the agent
