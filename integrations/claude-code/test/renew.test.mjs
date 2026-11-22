@@ -60,7 +60,7 @@ test('a new slip is taken while the service runs: no call finds it gone, and stu
     const loop = (async () => {
       // eslint-disable-next-line no-unmodified-loop-condition -- set to false by the renewal command when it ends, while the loop waits.
       while (renewing) {
-        const response = await fetch(`http://127.0.0.1:${port}/before`, { method: 'POST', body: JSON.stringify({ action: 'provared.code.read' }) });
+        const response = await fetch(`http://127.0.0.1:${port}/before`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'provared.code.read' }) });
         asked.push({ ok: response.ok, allowed: (await response.json()).allowed, slip: (await status(port)).slip });
       }
     })();
@@ -263,7 +263,7 @@ test('a renewal that fails after the book file took the new permission puts the 
     const second = await signSlip({ agentKeys: agent.keys, passkey: await developmentPasskey() });
     // The list of trusted passkeys is held open, so that writing it fails after slip.json and the book are written. It
     // is let go only once the renewal has answered, however long the recorder's retries take on a busy computer.
-    const { r } = await holdingOpen(join(folder, 'trusted-passkeys.json'), () => fetch(`http://127.0.0.1:${service.port}/renew`, { method: 'POST', body: JSON.stringify({ slip: second, newPasskey: true }) }));
+    const { r } = await holdingOpen(join(folder, 'trusted-passkeys.json'), () => fetch(`http://127.0.0.1:${service.port}/renew`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slip: second, newPasskey: true }) }));
     if (process.platform !== 'win32' && r.ok) return; // elsewhere a file held open can be replaced: nothing failed
     assert.equal(r.ok, false, 'the renewal failed');
     assert.equal(read(folder, 'book.jsonl'), service.recorder.book(), 'the book file is the recorder\'s book again');
@@ -296,7 +296,7 @@ test('a renewal with --new-passkey that fails on the way leaves the new passkey 
     // Another program holds slip.json open until the renewal has answered, so
     // that on Windows it cannot be replaced, however long the recorder's two
     // seconds of retries take to run on a busy computer.
-    const { r } = await holdingOpen(join(folder, 'slip.json'), () => fetch(`http://127.0.0.1:${service.port}/renew`, { method: 'POST', body: JSON.stringify({ slip: second, newPasskey: true }) }));
+    const { r } = await holdingOpen(join(folder, 'slip.json'), () => fetch(`http://127.0.0.1:${service.port}/renew`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slip: second, newPasskey: true }) }));
     if (process.platform !== 'win32' && r.ok) return; // elsewhere a file held open can be replaced: nothing failed
     assert.equal(r.ok, false, 'the renewal failed');
     const after = await status(service.port);

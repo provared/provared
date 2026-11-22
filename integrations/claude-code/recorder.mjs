@@ -111,6 +111,15 @@ export const SIGNING_PAGE = 'https://sign.prova.red/';
 // may reach this file through a link).
 const SELF = realpathSync(fileURLToPath(import.meta.url));
 const HOOK = join(dirname(SELF), 'hook.mjs');
+// This package's version, from its package.json beside this file (null where that cannot be read): the running recorder gives it in its status.
+export const VERSION = (() => {
+  try {
+    const { version } = JSON.parse(readFileSync(join(dirname(SELF), 'package.json'), 'utf8'));
+    return typeof version === 'string' ? version : null;
+  } catch {
+    return null;
+  }
+})();
 // How the person runs this program: by its name where it was installed
 // from npm, and by its path from a copy of the repository.
 // Run through the Claude Code plugin's entry (plugin.mjs), that entry names it.
@@ -1973,6 +1982,15 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
   // is always written, whether or not the hook still waits for it: the
   // hook has said that it was not confirmed, not that it was not written.
   class Gone extends Error {}
+  // A Content-Type of application/json, with or without parameters such as charset.
+  const isJson = (type) => typeof type === 'string' && type.split(';')[0].trim().toLowerCase() === 'application/json';
+  // The port, kept once the recorder listens: after the port is closed, the
+  // server no longer says which it was, and a request that came before is
+  // still answered.
+  let listening = null;
+  // The Host the recorder's own clients send: 127.0.0.1:<port>, or
+  // 127.0.0.1 alone on port 80, which a client leaves out.
+  const ownHost = (host) => host === `127.0.0.1:${listening}` || (listening === 80 && host === '127.0.0.1');
   const server = createServer(async (req, res) => {
     let gone = false;
     res.on('close', () => {
@@ -1988,11 +2006,23 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
       res.end(JSON.stringify(body));
     };
     try {
-      // The feed's own requests (GET /books and /lines), with its token.
+      // Every route, the feed's too, answers a program on this computer, not
+      // a web page. A browser names the page that sends a request (Origin,
+      // Sec-Fetch-Site), and names the website it meant to reach (Host): a
+      // website's name may be made to lead to this computer, but its Host is
+      // not 127.0.0.1. Refused before anything is read, and nothing is written.
+      if (req.headers.origin !== undefined) return send(403, { error: 'the recorder does not answer a web page (the request names an Origin)' });
+      if (req.headers['sec-fetch-site'] !== undefined && req.headers['sec-fetch-site'] !== 'none') return send(403, { error: 'the recorder does not answer a web page (Sec-Fetch-Site)' });
+      if (!ownHost(req.headers.host)) return send(403, { error: `the recorder answers at 127.0.0.1:${listening} only (Host)` });
+      // The feed's own requests (GET /hello, /books and /lines, POST /hand-over), with its token.
       if (await feed.handle(req, res)) return undefined;
+      // A web page cannot send a body as application/json to another website
+      // without asking first, and this port never says yes.
+      if (req.method === 'POST' && !isJson(req.headers['content-type'])) return send(415, { error: 'the recorder takes a body as application/json only (Content-Type)' });
       if (req.method === 'GET' && req.url === '/status') {
         const witnessed = await witnessing.status();
         return send(200, {
+          version: VERSION,
           slip: current.fingerprint,
           issuer: current.issuerKey,
           sealer: sealKeys[0],
@@ -2111,10 +2141,11 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
     server.once('error', reject);
     server.listen(port, '127.0.0.1', resolve);
   });
+  listening = server.address().port;
   // The witnesses are asked about every seal they have not signed for, from now on.
   witnessing.start();
   return {
-    port: server.address().port,
+    port: listening,
     get recorder() { return current.writer; },
     get readings() { return readings; },
     witnesses: () => witnessing.status(),
@@ -2367,11 +2398,17 @@ async function running(port, waitMs = 60000) {
  * Start the recorder in the background if it is not running, and wait for
  * it to answer: for 20 seconds, or until "until" (a time) where that comes
  * first. 0 where it answers, 1 where it does not, and "starting" where it
- * was started and the time ran out before it answered.
+ * was started and the time ran out before it answered. Where the recorder
+ * that answers is not this version (one before 0.1.1 gives none), it is
+ * said, with how to restart it; it is not stopped here.
  */
 async function ensure(folder, port, say = (words) => console.error(words), until = Infinity) {
   const left = () => Math.max(250, Math.min(60000, Math.round(until - Date.now())));
-  if (await running(port, left())) return 0;
+  const answering = await running(port, left());
+  if (answering) {
+    if (answering.version !== VERSION) say(`The recorder that is running is ${typeof answering.version === 'string' ? `version ${answering.version.slice(0, 40)}` : 'an earlier version, which does not give its version'}, not ${VERSION ?? 'this one'}, the one installed here: it keeps the code it started with until it is restarted. Restart it once, with both commands on one line so that no tool call falls between them: ${RUN} stop; ${RUN} ensure`);
+    return 0;
+  }
   if (!existsSync(files(folder).slip)) {
     say(`The recorder has no signed permission yet (${files(folder).slip}), so it was not started. Sign one and put it in place: ${RUN} use <the saved file>`);
     return 1;
@@ -2419,6 +2456,7 @@ async function sessionStart(folder, port) {
     const started = await ensure(folder, port, (words) => problems.push(words), until);
     if (started === 'starting') said.push(`Provared: the recorder is still starting. Until it answers, tool calls are refused; if they still are in a minute, run "${RUN} status", or "${RUN} start" to see why.`);
     else if (started !== 0) said.push(`Provared: ${problems.join(' ')} Until it runs, every tool call is refused.`);
+    else if (problems.length > 0) said.push(`Provared: ${problems.join(' ')}`);
   }
   if (said.length > 0) {
     const words = said.join('\n\n');

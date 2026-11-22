@@ -27,7 +27,7 @@ The first line installs the package from npm, with its one dependency,
 the library `provared`. To install it from a copy of the repository
 instead: `git clone https://github.com/provared/provared.git`, then, in
 `provared/integrations/claude-code`, `npm pack` and
-`npm install -g provared-claude-code-0.1.0.tgz` (`npm pack` makes the
+`npm install -g provared-claude-code-0.1.1.tgz` (`npm pack` makes the
 package as npm would, so that `provared` is installed with it).
 
 `init` makes the agent's keys, writes the hooks into the project's
@@ -81,7 +81,7 @@ Adding the marketplace downloads a copy of this repository (about 60 MB);
 integrations/claude-code` downloads only the two folders the plugin uses.
 
 Claude Code copies this folder into its plugin cache
-(`~/.claude/plugins/cache/provared/provared-recorder/0.1.0/`). The library
+(`~/.claude/plugins/cache/provared/provared-recorder/0.1.1/`). The library
 `provared` comes separately:
 
 - Some versions of Claude Code install it beside the plugin, from
@@ -161,6 +161,10 @@ Code offers an update only when that version changes
 recorder already running keeps the code it started with until it is
 stopped and started again (`stop`, then `ensure`), and the commands
 printed before an update name the folder of the version before it.
+Since 0.1.1 the recorder gives its version in its status, and `ensure`,
+and so the start of a session, says so where the recorder that answers
+is not the version installed (one before 0.1.1 gives none), with the
+two commands to restart it; it does not stop it.
 
 **Not twice.** Claude Code runs a plugin's hook and the same hook in a
 settings file side by side. Where the recorder's hooks are both in a
@@ -1091,7 +1095,7 @@ version too (`npx provared-check` takes the latest).
 | `retire-passkey <thumbprint>` | Take no new permission from that passkey, with or without `--new-passkey`; what it signed stands, and limits are still counted across the books it signed |
 | `admit-passkey <thumbprint>` | Take new permissions from a retired passkey again; for a passkey this recorder has never trusted (with the recorder running), check the permission it signed that was handed over and refused as every record handed over is checked, show it, and take both only once you type `yes` |
 | `start` | Run the recorder in this terminal, and see what it says |
-| `ensure` | Start the recorder in the background if it is not running (the hooks run this when a session starts) |
+| `ensure` | Start the recorder in the background if it is not running (the hooks run this when a session starts); where the recorder that answers is not the version installed, say so, with the commands to restart it |
 | `status` | What the recorder holds: the permission, until when, the number of entries, the passkeys whose permissions are in the record and those retired (`trusted`, `retired`), the calls allowed and not yet recorded (`callsNotYetRecorded`), the books kept (`keptBooks`), when a new one is started (`newBookAt`), the feed's token file and how many questions wait (`feed`), and for each witness what it holds and why it is behind (`witnesses`), and whether the permission in force is cancelled (`cancelled`) |
 | `seal` | Seal the book now, with the recorder's three keys, and ask the witnesses named, waiting up to five seconds while no other request waits |
 | `new-book` | Seal the book, keep it as `book-<n>.jsonl`, and start a new one that begins with the permission in force (done by itself at 90,000 entries, or at 100 MB of text) |
@@ -1367,6 +1371,18 @@ along with everything else. To keep the record on another disk:
   trusted passkeys among them), ask the recorder to take a new permission
   with `--new-passkey`, admit a retired passkey again, stop it, or edit
   the settings that run the hooks.
+  A web page in a browser cannot use the recorder's port. On every
+  route, the feed's four (`/hello`, `/books`, `/lines`, `/hand-over`)
+  among them, the recorder refuses a request that names a web page (an
+  `Origin` header, or a `Sec-Fetch-Site` header other than `none`), or
+  names any address but `127.0.0.1:<port>` (the `Host` header; on port
+  80, `127.0.0.1` alone as well). On every route but the feed's, it
+  refuses a body that is not sent as `application/json`; the feed's
+  requests carry the proof of its token instead, as before. It refuses
+  such a request before it reads the body, and reads and writes nothing
+  for it. Any program on the computer can still use the port, as
+  before: the recorder's own routes ask for no secret, so this holds
+  whoever runs the program.
   The list of trusted passkeys raises the bar; it does not close the
   gap. The evidence that holds is a checker that names your own passkey
   (`check --issuer`, or `provared-check --issuer`): a permission signed
