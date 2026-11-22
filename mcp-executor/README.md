@@ -381,7 +381,9 @@ What the executor does with each request:
   (408); a body that would take the bodies of one agent's requests in
   flight past `waitingBytes` (32 MiB) is refused (503); a message of more
   than 100,000 elements (list items and member names together) is
-  refused (400) before it is read, on stdio as over HTTP; a message of the
+  refused (400) before it is read, on stdio as over HTTP (the number is
+  fixed: no setting changes it, so a call whose arguments hold more, such
+  as 34,000 rows of three fields, is refused wherever it is sent); a message of the
   tool server's of more than 100,000 elements is not read either: a call's
   answer is handed on as it came and its receipt says the answer could not
   be read (no fingerprint of the result), another answer is handed on as

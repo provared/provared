@@ -190,7 +190,8 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
     byte until its request has been answered, past which the request is
     refused with 503 and read no further; a message of the agent's of more
     than 100,000 elements (list items and member names, `MAX_ELEMENTS` in
-    `jsonrpc.mjs`) is refused with 400 before it is read, on stdio as over
+    `jsonrpc.mjs`, a fixed number that no setting changes) is refused with
+    400 before it is read, on stdio as over
     HTTP, counted in the one walk of the text that also finds its depth; a
     request that only passes through lets go of its message as read once
     it has been sent on (measured: a held request of 383 KiB of small
