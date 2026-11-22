@@ -216,9 +216,15 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
   settle open calls before changing the gateway's `id`, and that a call
   whose `set-aside` line the copy could not take comes back at the next
   start. Details in `gateway/CHANGELOG.md`.
-- **The MCP executor, after the same review** (`mcp-executor/`, not
-  released; the version stays 0.5.0). Review 3.4 of the gateway's
-  countersignature found the same gaps in the executor.
+- **`provared-mcp-executor` 0.5.1 (published by hand to npm on 22 November 2026): the MCP executor after the same review.** Review 3.4 of the gateway's
+  countersignature found the same gaps in the executor. The executor still
+  asks for `provared` 0.9.0, exactly.
+  - **Versions.** 0.5.1 in `package.json`, its lockfile and `server.json`
+    (both fields); the `npm pack` file name in the README. The README says
+    the guard is listed in the MCP Registry, without naming a version. The
+    root README, the home page and "Provared in three minutes" name 0.5.1
+    as the guard's version, and the home page's "What is new" has an entry
+    for it.
   - **A receipt found in the book at a start** settles a call the copy
     shows as sent and not finished only where it is the only receipt naming
     the call, it is the call the copy's `sending` line shows (the same

@@ -62,7 +62,7 @@
   <li class="show"><strong>Anyone can check them</strong>Later, on their own computer, with the free checker. With the library, one page can show a checker the proof for one entry, with the parts they do not need kept covered.</li>
 </ul>
 
-<p>The guard works with tools that use the Model Context Protocol (MCP), the common way for AI agents to reach tools. It is the npm package provared-mcp-executor, version 0.5.0, published on 21 November 2026.</p>
+<p>The guard works with tools that use the Model Context Protocol (MCP), the common way for AI agents to reach tools. It is the npm package provared-mcp-executor, version 0.5.1, published on 22 November 2026.</p>
 
 <h2 id="claude">With claude.ai</h2>
 
@@ -168,7 +168,8 @@ npx provared-check --sample</pre>
 
 <h2 id="new">What is new</h2>
 
-<p><strong>provared-mcp-executor 0.5.0</strong>, published on 21 November 2026, with library version 0.9.0:</p>
+<p><strong>provared-mcp-executor 0.5.1</strong>, published on 22 November 2026, with library version 0.9.0: stricter checks on receipts that the guard finds in the record but has no note of having written. When the guard starts and finds a receipt for a call it was sending when it stopped, it takes that receipt only where it is the call it sent and, where the permission names the guard's keys, it carries the guard's countersignature. The command <code>compare</code> now reports a receipt that is not the call sent, a countersignature that is missing or wrong, and two receipts for one call, and it agrees only where the whole record was checked and stays within its permissions.</p>
+<p>Before that, on 21 November, <strong>provared-mcp-executor 0.5.0</strong>, with library version 0.9.0:</p>
 <ul>
   <li><strong>The guard as a claude.ai connector.</strong> A business can run the guard on its own server and add it to claude.ai as a custom connector. Signing in uses OAuth, and the owner approves each new connection with a passkey. On 15 November 2026 an earlier build of this version was tried with claude.ai on a server on the internet.</li>
   <li><strong>A local program as the tool server, over HTTP.</strong> Over HTTP, the guard can start a local program as the tool server and stand in front of it.</li>
@@ -335,7 +336,7 @@ agent = create_agent(model, tools=[order_supplies, send_message],
   <li>A tool server behind the guard: <a href="https://www.npmjs.com/package/provared-shopify">provared-shopify</a>, for one Shopify store's Admin API, on npm. It has been run only against a made-up Shopify, in its tests.</li>
   <li>The core of the format as an individual Internet-Draft at the Internet Engineering Task Force: <a href="https://datatracker.ietf.org/doc/draft-izmaylov-agent-permission-receipts/">draft-izmaylov-agent-permission-receipts</a>. An Internet-Draft is a working document, not a standard.</li>
 </ul>
-<p><strong>Status:</strong> the library is at version 0.9.1 and the guard at version 0.5.0. Both are drafts, published as they are by one author in their own time, with fixes as time allows. The format may still change. Every published version stays on npm and the Python Package Index, so a record made with one version can always be checked by that version. What a record does not prove is stated beside what it does.</p>
+<p><strong>Status:</strong> the library is at version 0.9.1 and the guard at version 0.5.1. Both are drafts, published as they are by one author in their own time, with fixes as time allows. The format may still change. Every published version stays on npm and the Python Package Index, so a record made with one version can always be checked by that version. What a record does not prove is stated beside what it does.</p>
 
 <h2 id="contact">Write to the author</h2>
 
