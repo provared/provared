@@ -1,12 +1,15 @@
 // The watch on the network while the library's tests run
-// (helpers/no-network.mjs): it is loaded in every test file and in the
-// programs the tests start, it stops a connection that library code (src/
-// and bin/) opens, and it lets through what net/ and the tests' own helpers
-// do. Nothing here reaches beyond this computer.
+// (helpers/no-network.mjs): it is loaded with --import before every test
+// file and in the programs and workers the tests start, it stops a
+// connection that library code (src/ and bin/) opens, and it lets through
+// what net/ and the tests' own helpers do. This file does not import it,
+// so that it fails where the watch was not loaded that way. Nothing here
+// reaches beyond this computer.
 
 import assert from 'node:assert/strict';
 import dgram from 'node:dgram';
 import dns from 'node:dns';
+import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import http from 'node:http';
 import net from 'node:net';
 import { spawnSync } from 'node:child_process';
@@ -14,10 +17,11 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
-import { libraryFileOf } from './helpers/no-network.mjs';
+import { Worker } from 'node:worker_threads';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const watch = globalThis[Symbol.for('provared.test.no-network')];
+const libraryFileOf = (stack) => watch.libraryFileOf(stack);
 const at = (...parts) => `    at f (${join(root, ...parts)}:1:2)`;
 
 // Runs code as if it were written in a file of the repository, so that its
@@ -46,8 +50,9 @@ async function stopped(call) {
   return found[0];
 }
 
-test('the watch is loaded in this test file, and in the programs the tests start', () => {
+test('the watch is loaded with --import before this test file, and in the programs the tests start', () => {
   assert.ok(watch, 'helpers/no-network.mjs is not loaded: "npm test" and the test workflow load it with --import');
+  assert.equal(watch.preloaded, true, 'helpers/no-network.mjs was loaded, but not by --import on the command line or in NODE_OPTIONS');
   assert.deepEqual(watch.library, ['src/', 'bin/']);
   const child = spawnSync(process.execPath, ['--input-type=module', '-e', 'console.log(typeof globalThis[Symbol.for("provared.test.no-network")])'], { encoding: 'utf8', timeout: 30_000 });
   assert.equal(child.status, 0, child.stderr);
@@ -70,7 +75,7 @@ test('a connection that library code opens is stopped, whatever it goes through'
   const server = net.createServer((socket) => socket.destroy());
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const { port } = server.address();
-  globalThis.__noNetworkProbe = { net, http, dgram, dns, port };
+  globalThis.__noNetworkProbe = { net, http, dgram, dns, port, Worker };
   try {
     const calls = {
       'a socket\'s connect': 'p.net.connect(p.port, "127.0.0.1").on("error", () => {})',
@@ -80,6 +85,11 @@ test('a connection that library code opens is stopped, whatever it goes through'
       'dns.lookup': 'p.dns.lookup("localhost", () => {})',
       'dns/promises.lookup': 'p.dns.promises.lookup("localhost")',
       fetch: 'fetch(`http://127.0.0.1:${p.port}/`)',
+      'fetch, handed to setTimeout': 'setTimeout(fetch, 0, `http://127.0.0.1:${p.port}/`)',
+      'fetch, handed to a promise\'s then': 'Promise.resolve(`http://127.0.0.1:${p.port}/`).then(fetch)',
+      'net.connect, handed to setImmediate': 'setImmediate(p.net.connect, p.port, "127.0.0.1")',
+      'a worker run from a string': 'new p.Worker(`require("node:net").connect(${p.port}, "127.0.0.1")`, { eval: true })',
+      'process.binding("tcp_wrap")': 'process.binding("tcp_wrap")',
     };
     for (const [what, code] of Object.entries(calls)) {
       const found = await stopped(() => runAs(join('src', 'probe-for-a-test.js'), `(() => { const p = globalThis.__noNetworkProbe; return ${code}; })()`));
@@ -108,6 +118,69 @@ test('a library error that is caught still fails the test file, through the exit
     delete globalThis.__noNetworkProbe;
     watch.found.splice(before);
     if (watch.found.length === 0) process.exitCode = undefined;
+  }
+});
+
+test('no test file imports the watch, which is loaded only by --import', () => {
+  const folder = join(root, 'test');
+  const importing = readdirSync(folder, { recursive: true })
+    .filter((name) => /\.(mjs|cjs|js)$/.test(name) && !name.endsWith('no-network.mjs'))
+    .filter((name) => /(?:from\s*|import\s*\(\s*)['"][^'"]*\/no-network\.mjs['"]/.test(readFileSync(join(folder, name), 'utf8')));
+  assert.deepEqual(importing, []);
+});
+
+// Runs code, as if written in bin/, in a program that this test starts.
+function runProgram(code) {
+  const script = `const vm = require("node:vm"); globalThis.net = require("node:net"); vm.runInThisContext(${JSON.stringify(code)}, { filename: ${JSON.stringify(join(root, 'bin', 'probe-for-a-test.mjs'))} });`;
+  return spawnSync(process.execPath, ['-e', script], { encoding: 'utf8', timeout: 30_000 });
+}
+
+// What the programs and workers this file started have written to its
+// file, which is then emptied so that it does not fail this file.
+function takeReported() {
+  if (!existsSync(watch.inbox)) return [];
+  const lines = readFileSync(watch.inbox, 'utf8').split('\n').filter(Boolean);
+  rmSync(watch.inbox, { force: true });
+  return lines;
+}
+
+test('a program in which library code opened the network ends with 1, whatever code it asks for, and tells this file', () => {
+  assert.ok(watch.inbox, 'this process has a file for what the programs it starts find');
+  try {
+    for (const asked of [0, 2]) {
+      const run = runProgram(`try { net.connect(9, "127.0.0.1"); } catch {} process.exit(${asked});`);
+      assert.equal(run.status, 1, `asked for ${asked}: ${run.stderr}`);
+      assert.match(run.stderr, /Library code opened the network \(a socket's connect, from bin\/probe-for-a-test\.mjs\)/);
+      const reported = takeReported();
+      assert.equal(reported.length, 1, reported.join('\n'));
+      assert.match(reported[0], /from bin\/probe-for-a-test\.mjs/);
+    }
+    const clean = runProgram('process.exit(2);');
+    assert.equal(clean.status, 2, 'a program in which nothing was found ends as it asks');
+    assert.deepEqual(takeReported(), []);
+  } finally {
+    takeReported();
+  }
+});
+
+test('a worker in which library code opened the network tells the file that started it', async () => {
+  const workerData = { code: 'try { net.connect(9, "127.0.0.1"); } catch {}', filename: join(root, 'src', 'probe-for-a-test.js') };
+  try {
+    // Started from this file, not from library code, so not stopped here;
+    // its own output is taken, so that the finding made on purpose does not
+    // show among the tests' output.
+    const worker = new Worker(new URL('./helpers/no-network-worker.mjs', import.meta.url), { workerData, stderr: true });
+    worker.stderr.resume();
+    const exitCode = await new Promise((resolve, reject) => {
+      worker.on('error', reject);
+      worker.on('exit', resolve);
+    });
+    assert.equal(exitCode, 1);
+    const reported = takeReported();
+    assert.equal(reported.length, 1, reported.join('\n'));
+    assert.match(reported[0], /a socket's connect, from src\/probe-for-a-test\.js/);
+  } finally {
+    takeReported();
   }
 });
 
