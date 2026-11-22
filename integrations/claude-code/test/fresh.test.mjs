@@ -9,7 +9,7 @@
 
 import './local-library.mjs'; // first: "provared" is this repository's own library
 import assert from 'node:assert/strict';
-import { writeFileSync } from 'node:fs';
+import { existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { test } from 'node:test';
@@ -80,6 +80,100 @@ test('"ensure" starts the waiting recorder in a fresh folder and says that it wa
   assert.equal(r.code, 1, `${r.out} ${r.err}`);
   assert.match(r.err, /no signed permission yet/);
   assert.equal(await answersWithin(other, 1000), null, 'nothing was started');
+});
+
+test('"ensure" in a folder that holds a trusted list and no permission (an admit stopped between its two writes) names what stands in the way and what to do', async () => {
+  const w = await freshWorld();
+  writeFileSync(join(w.folder, 'trusted-passkeys.json'), JSON.stringify({ passkeys: ['A'.repeat(43)] }));
+  const port = await freePort();
+  const r = await runCommand(['ensure'], { folder: w.folder, port });
+  assert.equal(r.code, 1, `${r.out} ${r.err}`);
+  assert.match(r.err, /holds trusted-passkeys\.json/);
+  assert.match(r.err, /not fresh/);
+  assert.match(r.err, /use <the saved file>/);
+  assert.equal(await answersWithin(port, 1000), null, 'nothing was started');
+});
+
+/**
+ * A stand-in on the port for a waiting recorder: it answers /status as one
+ * that waits, with the first "silent" questions left unanswered for
+ * "silentMs" each; "/stop" is answered, and closes it where "stops".
+ */
+async function standIn(port, { silentFirst = 0, silentAfterStop = 0, silentMs = 6000, stops = true } = {}) {
+  const { createServer } = await import('node:http');
+  let asked = 0;
+  let stopped = false;
+  let afterStop = 0;
+  const server = createServer((req, res) => {
+    const answer = (body) => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(body)); };
+    if (req.url === '/stop') {
+      answer({ stopped: true });
+      stopped = true;
+      if (stops) { server.close(); server.closeAllConnections(); }
+      return;
+    }
+    const silent = stopped ? ++afterStop <= silentAfterStop : ++asked <= silentFirst;
+    if (silent) { setTimeout(() => res.destroy(), silentMs).unref(); return; }
+    answer({ waiting: true, version: 'stand-in' });
+  });
+  await new Promise((ok) => server.listen(port, '127.0.0.1', ok));
+  return { close: () => { server.close(); server.closeAllConnections(); } };
+}
+
+test('"use <file>" with a file that is refused leaves the waiting recorder running, and says nothing of stopping it', async () => {
+  const w = await freshWorld();
+  const port = await freePort();
+  try {
+    assert.equal((await runCommand(['ensure'], { folder: w.folder, port })).code, 0);
+    const otherKeys = (await freshWorld()).agent.keys;
+    const file = join(tempFolder('provared-cc-use-'), 'slip.json');
+    writeFileSync(file, JSON.stringify(await signSlip({ agentKeys: otherKeys, passkey: w.passkey })));
+    const r = await runCommand(['use', file], { folder: w.folder, port });
+    assert.notEqual(r.code, 0, `${r.out} ${r.err}`);
+    assert.doesNotMatch(r.out, /was stopped/);
+    assert.equal((await status(port)).waiting, true, 'the waiting recorder still runs');
+    assert.equal(existsSync(join(w.folder, 'slip.json')), false);
+  } finally {
+    await stopService(port);
+  }
+});
+
+test('"use <file>" does not say the recorder runs where what answers after it still waits (its first question went unanswered): it stops it, and the full recorder then runs', async () => {
+  const w = await freshWorld();
+  const port = await freePort();
+  const stand = await standIn(port, { silentFirst: 1 });
+  try {
+    const slip = await signSlip({ agentKeys: w.agent.keys, passkey: w.passkey, purpose: 'Saved from the signing window.' });
+    const file = join(tempFolder('provared-cc-use-'), 'slip.json');
+    writeFileSync(file, JSON.stringify(slip));
+    const r = await runCommand(['use', file], { folder: w.folder, port });
+    const st = await answersWithin(port, 20000);
+    assert.equal(st?.waiting, undefined, `not waiting: ${r.out} ${r.err}`);
+    assert.equal(st.slip, await fingerprint(fromBase64url(slip.payload)));
+    assert.equal(r.code, 0, `${r.out} ${r.err}`);
+    assert.match(r.out, /The recorder is running/);
+    assert.doesNotMatch(r.err, /waits for its first permission: every tool call is refused/);
+  } finally {
+    stand.close();
+    await stopService(port);
+  }
+});
+
+test('"use <file>" does not take the port for free on one unanswered question: a waiting recorder that still answers after that keeps the file from being taken', async () => {
+  const w = await freshWorld();
+  const port = await freePort();
+  // It answers /stop but does not stop; the first question after it goes unanswered for 1.5 seconds.
+  const stand = await standIn(port, { silentAfterStop: 1, silentMs: 1500, stops: false });
+  try {
+    const file = join(tempFolder('provared-cc-use-'), 'slip.json');
+    writeFileSync(file, JSON.stringify(await signSlip({ agentKeys: w.agent.keys, passkey: w.passkey })));
+    const r = await runCommand(['use', file], { folder: w.folder, port });
+    assert.equal(r.code, 1, `${r.out} ${r.err}`);
+    assert.match(r.out, /did not let go of its port/);
+    assert.equal(existsSync(join(w.folder, 'slip.json')), false, 'nothing was taken');
+  } finally {
+    stand.close();
+  }
 });
 
 test('"use <file>" while the recorder waits stops it, waits until the port is free, and takes the file: the full recorder then runs under it', async () => {

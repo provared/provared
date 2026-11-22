@@ -10,7 +10,7 @@
 
 import './local-library.mjs'; // first: "provared" is this repository's own library
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { test } from 'node:test';
@@ -20,7 +20,7 @@ const { developmentPasskey } = await import('provared/dev');
 const { feedReader } = await import('../feed.mjs');
 const { admitWaiting, readTrusted, readWaitingPermissions } = await import('../recorder.mjs');
 const { startWaiting } = await import('../waiting.mjs');
-const { freshWorld, runHook, signSlip, status } = await import('./world.mjs');
+const { freshWorld, runHook, signSlip, status, tempFolder } = await import('./world.mjs');
 
 const LOCAL = { signingOrigins: ['http://localhost'] };
 const read = (folder, name) => readFileSync(join(folder, name), 'utf8');
@@ -146,6 +146,43 @@ test('a start that fails after "yes" (the book cannot be written) answers not-st
     assert.equal(readWaitingPermissions(w.folder).length, 1, 'the permission waits');
     assert.equal((await status(w.port)).waiting, true, 'still waiting');
     assert.equal((await runHook(w.port, 'PreToolUse', 'Read', { file_path: 'README.md' })).decision.permissionDecision, 'deny');
+  } finally {
+    await w.waiting.close();
+  }
+});
+
+test('after a failed start, a file another program holds for a moment (removal refused twice with EBUSY) is still put back', async () => {
+  let refusals = 0;
+  const unlink = (path) => {
+    if (path.endsWith('slip.json') && refusals < 2) {
+      refusals++;
+      throw Object.assign(new Error('resource busy or locked'), { code: 'EBUSY' });
+    }
+    return unlinkSync(path);
+  };
+  const w = await waitingWorld({ unlink });
+  try {
+    const mine = await w.handed();
+    mkdirSync(join(w.folder, 'book.jsonl.tmp'));
+    const r = await w.reader.post('/admit', { fingerprint: mine.fp, thumbprint: mine.T, take: true });
+    assert.equal(r.body.code, 'not-started', JSON.stringify(r.body));
+    assert.equal(refusals, 2);
+    assert.doesNotMatch(r.body.message, /could not be removed/);
+    for (const name of ['slip.json', 'trusted-passkeys.json', 'book.jsonl']) assert.equal(existsSync(join(w.folder, name)), false, `${name} is put back`);
+  } finally {
+    await w.waiting.close();
+  }
+});
+
+test('the options for tests cannot change the folder or the port the full recorder starts on', async () => {
+  const elsewhere = tempFolder('provared-cc-elsewhere-');
+  const w = await waitingWorld({ serviceOptions: { folder: elsewhere, on: null, port: 0 } });
+  try {
+    const mine = await w.handed();
+    const r = await w.reader.post('/admit', { fingerprint: mine.fp, thumbprint: mine.T, take: true });
+    assert.equal(r.body.outcome, 'taken', JSON.stringify(r.body));
+    assert.equal((await status(w.port)).slip, mine.fp, 'the full recorder answers on the same port');
+    assert.equal(existsSync(join(w.folder, 'book.jsonl')), true, 'in the same folder');
   } finally {
     await w.waiting.close();
   }

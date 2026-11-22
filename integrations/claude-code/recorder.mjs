@@ -789,7 +789,7 @@ export async function loadRecorderKeys(folder) {
 // scanner reads each new file as it is closed), so each is tried again for
 // up to ten seconds.
 const BUSY = ['EPERM', 'EBUSY', 'EACCES'];
-function untilFree(step) {
+export function untilFree(step) {
   const pause = new Int32Array(new SharedArrayBuffer(4));
   const deadline = Date.now() + 10000;
   for (let wait = 10; ; wait = Math.min(wait * 2, 200)) {
@@ -2624,8 +2624,12 @@ async function ensure(folder, port, say = (words) => console.error(words), until
     return 0;
   }
   // Without a permission the recorder starts only in a fresh folder, where it waits for the first one.
-  if (!existsSync(files(folder).slip) && !freshFolder(folder).fresh) {
-    say(`The recorder has no signed permission yet (${files(folder).slip}), so it was not started. Sign one and put it in place: ${RUN} use <the saved file>`);
+  const fresh = freshFolder(folder);
+  if (!existsSync(files(folder).slip) && !fresh.fresh) {
+    // Named where it is a file that shows a permission was being taken or was taken here: the recorder does not wait in such a folder.
+    say(fresh.found.length > 0
+      ? `The recorder has no signed permission yet (${files(folder).slip}), and the folder holds ${fresh.found.join(', ')}, so it is not fresh: the recorder was not started, and it does not wait there for a first permission (a permission may have been taken here, or its taking stopped part way). Save the signed permission from the signing window and put it in place: ${RUN} use <the saved file>`
+      : `The recorder has no signed permission yet (${files(folder).slip}), so it was not started. Sign one and put it in place: ${RUN} use <the saved file>`);
     return 1;
   }
   const child = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', SELF, 'start'], { detached: true, stdio: 'ignore', env: process.env });
@@ -2649,7 +2653,8 @@ const waitingWords = () => `The recorder is running and waits for its first perm
 /**
  * Stop the waiting recorder that answers on the port, and wait until the
  * port is free: for 10 seconds at most, measured on the monotonic clock.
- * Gives back whether it is free.
+ * The port is free only where two questions in a row go unanswered: one
+ * alone may be a busy computer. Gives back whether it is free.
  */
 async function stopWaiting(port) {
   try {
@@ -2657,8 +2662,10 @@ async function stopWaiting(port) {
   } catch {
     // It may have stopped before it answered: whether the port is free is what counts.
   }
+  let unanswered = 0;
   for (const until = performance.now() + 10000; performance.now() < until;) {
-    if (!(await running(port, 1000))) return true;
+    unanswered = (await running(port, 1000)) ? 0 : unanswered + 1;
+    if (unanswered >= 2) return true;
     await new Promise((r) => setTimeout(r, 100));
   }
   return false;
@@ -3039,9 +3046,20 @@ export async function main(argv) {
       return 2;
     }
     const file = resolve(named[0]);
-    // A recorder that waits for its first permission is not one that runs with a permission: it is stopped, and
-    // once the port is free the file is taken as it is where nothing runs.
+    // The first slip, checked as the folder stands at the moment it is asked.
+    const checkFirst = async () => {
+      const slip = slipFrom(readFileSync(file, 'utf8'), file);
+      const agent = await loadAgentKeys(folder);
+      const previous = existsSync(f.slip) ? await loadSlip(folder) : null;
+      // The list of trusted passkeys begins here, with this slip's; one there already takes a new passkey only with --new-passkey.
+      const trusted = readTrusted(folder) ?? [];
+      return { trusted, next: await checkNewSlip(slip, { agentKeys: agent.keys, previous, trusted, retired: readRetired(folder), newPasskey }) };
+    };
+    // A recorder that waits for its first permission is not one that runs with a permission: once the file
+    // passed its checks it is stopped, and once the port is free the file is taken as it is where nothing runs.
+    // A file that is refused leaves it running.
     if (command === 'use' && (await running(port, 5000))?.waiting === true) {
+      if (!existsSync(f.book)) await checkFirst();
       if (!(await stopWaiting(port))) {
         console.log(`The recorder that waits for its first permission on 127.0.0.1:${port} did not let go of its port within 10 seconds, so nothing was taken. Run "${RUN} stop", then run use again.`);
         return 1;
@@ -3051,20 +3069,28 @@ export async function main(argv) {
     if (command === 'renew' || existsSync(f.book)) {
       await renewFrom(file, folder, port, newPasskey);
     } else {
-      // The first slip: put in place, and the book begins with it when the service starts.
-      const slip = slipFrom(readFileSync(file, 'utf8'), file);
-      const agent = await loadAgentKeys(folder);
-      const previous = existsSync(f.slip) ? await loadSlip(folder) : null;
-      // The list of trusted passkeys begins here, with this slip's; one there already takes a new passkey only with --new-passkey.
-      const trusted = readTrusted(folder) ?? [];
-      const next = await checkNewSlip(slip, { agentKeys: agent.keys, previous, trusted, retired: readRetired(folder), newPasskey });
+      // The first slip: checked again, as the folder stands now that nothing runs, put in place, and the book
+      // begins with it when the service starts.
+      const { trusted, next } = await checkFirst();
       for (const w of next.warnings) console.log(`Warning: ${w}`);
       if (!trusted.includes(next.issuerKey)) writeTrusted(folder, [...trusted, next.issuerKey]);
       await placeSlip(folder, next);
       console.log(`The permission ${next.fingerprint}, signed by the passkey ${next.issuerKey}, is in place until ${next.content.validUntil}.`);
     }
     if (command === 'renew') return 0;
-    const code = await ensure(folder, port);
+    const said = [];
+    let code = await ensure(folder, port, (words) => said.push(words));
+    // What answers may still be the waiting recorder (it was not seen in time, or did not stop): never told as
+    // running. It is stopped, and the full recorder started under the permission now in place.
+    if (code === 0 && (await running(port, 5000))?.waiting === true) {
+      said.length = 0;
+      if (await stopWaiting(port)) code = await ensure(folder, port, (words) => said.push(words));
+      if ((await running(port, 5000))?.waiting === true) {
+        console.log(`The permission is in place, but the recorder that answers on 127.0.0.1:${port} still waits for its first permission, so every tool call is refused. Restart it once, with both commands on one line: ${RUN} stop; ${RUN} ensure`);
+        return 1;
+      }
+    }
+    for (const words of said) console.error(words);
     if (code === 0) console.log(FROM_PLUGIN
       ? 'The recorder is running. In each Claude Code session in which the plugin is turned on, each tool call is checked and recorded.'
       : `The recorder is running. Start Claude Code in a project where "${RUN} init" was run, or with the Claude Code plugin turned on, and each tool call is checked and recorded.`);
