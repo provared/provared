@@ -1,0 +1,11 @@
+{
+  "name": "agent-with-a-shell-guard",
+  "private": true,
+  "version": "0.0.0",
+  "description": "The guard for the agent-with-a-shell example, installed in its own container with npm ci. Not part of provared-mcp-executor.",
+  "type": "module",
+  "dependencies": {
+    "provared": "0.9.0",
+    "provared-mcp-executor": "0.5.1"
+  }
+}

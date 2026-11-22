@@ -58,11 +58,14 @@ docker exec "$G" mkdir -p /data /sdk /work
 docker exec "$S" mkdir -p /work /secret
 docker exec "$A" mkdir -p /work
 
-step "install provared-mcp-executor@0.3.0 in the guard container"
-docker exec "$G" sh -c 'cd /data && npm init -y >/dev/null && timeout 300 npm install --ignore-scripts provared-mcp-executor@0.3.0 2>&1 | tail -3' || die "npm install of the executor"
+step "install provared-mcp-executor 0.5.1 in the guard container, from its lockfile (guard/package-lock.json: npm checks each package against its hash)"
+docker cp guard/package.json "$G":/data/package.json || die "copy guard/package.json"
+docker cp guard/package-lock.json "$G":/data/package-lock.json || die "copy guard/package-lock.json"
+docker exec "$G" sh -c 'cd /data && timeout 300 npm ci --ignore-scripts 2>&1 | tail -3' || die "npm ci of the executor"
 docker exec "$G" sh -c 'cd /data && ls node_modules' | tr '\n' ' '; echo
 
 step "install the SDK (1.32.2) for the stand-in server and client; the guard has the outside route, the other two do not"
+# The SDK has no lockfile here yet: npm resolves its own dependencies at each run.
 docker cp package.json "$G":/sdk/package.json || die "copy package.json"
 docker exec "$G" sh -c 'cd /sdk && timeout 300 npm install --ignore-scripts 2>&1 | tail -3' || die "npm install of the SDK"
 for c in "$S" "$A"; do
