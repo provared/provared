@@ -47,7 +47,7 @@ export async function portChecks(req, res, listening, feed) {
   if (req.headers.origin !== undefined) return refuse(403, 'the recorder does not answer a web page (the request names an Origin)');
   if (req.headers['sec-fetch-site'] !== undefined && req.headers['sec-fetch-site'] !== 'none') return refuse(403, 'the recorder does not answer a web page (Sec-Fetch-Site)');
   if (!ownHost(req.headers.host)) return refuse(403, `the recorder answers at 127.0.0.1:${listening} only (Host)`);
-  // The feed's own requests (GET /hello, /books and /lines, POST /hand-over), with its token.
+  // The feed's own requests (GET /hello, /books, /lines and /agent, POST /hand-over), with its token.
   if (await feed.handle(req, res)) return true;
   if (req.method === 'POST' && !isJson(req.headers['content-type'])) return refuse(415, 'the recorder takes a body as application/json only (Content-Type)');
   return false;
