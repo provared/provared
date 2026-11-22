@@ -93,7 +93,7 @@ import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { performance } from 'node:perf_hooks';
 import { checkBook, checkSlip, entryLine, fingerprint, fromBase64url, inclusionPath, keySetFingerprint, openRecorder, thumbprint, toBase64url, utf8, verifyInclusion, writeSeal } from 'provared';
-import { isRandom } from './feed.mjs';
+import { FEED_TOKEN, feedReader, isRandom } from './feed.mjs';
 import { portOwner } from './port.mjs';
 import { claudeFolder, doubledWords, filesOf, recorderHooksInSettings, removeInitHooks, within } from './settings-hooks.mjs';
 import { firstLineOfFile, replaceDurably, witnessClient } from './witness.mjs';
@@ -2026,12 +2026,32 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
         });
       }
       if (req.method !== 'POST') return send(404, { error: 'not found' });
-      let body = '';
+      // Every byte as received: the feed's proof, where a route asks for it, is over them.
+      const chunks = [];
+      let size = 0;
       for await (const chunk of req) {
-        body += chunk;
-        if (body.length > MAX_BODY) return send(413, { error: 'too large' });
+        size += chunk.length;
+        if (size > MAX_BODY) return send(413, { error: 'too large' });
+        chunks.push(chunk);
       }
-      const given = body ? JSON.parse(body) : {};
+      const bytes = Buffer.concat(chunks);
+      // A passkey this computer does not trust is taken only from a program
+      // that holds the feed's token, from this folder (feed.mjs): POST /admit,
+      // and POST /renew with a new passkey. Checked before anything is done.
+      const provedAnswer = () => {
+        const answer = feed.checkQuestion(req, res, bytes);
+        return answer && ((code, body) => (gone ? undefined : answer(code, body)));
+      };
+      let reply = send;
+      if (req.url === '/admit') {
+        reply = provedAnswer();
+        if (!reply) return undefined;
+      }
+      const given = bytes.length > 0 ? JSON.parse(bytes.toString('utf8')) : {};
+      if (req.url === '/renew' && given && given.newPasskey === true) {
+        reply = provedAnswer();
+        if (!reply) return undefined;
+      }
       if (req.url === '/before') {
         const answer = await unlessGone(async () => {
           await tidy();
@@ -2082,7 +2102,7 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
       // own checks, with that one passkey admitted for that one permission;
       // "take": false checks only.
       if (req.url === '/admit') {
-        return send(200, await unlessGone(async () => {
+        return reply(200, await unlessGone(async () => {
           const refused = (kind, fingerprint, code, message) => ({ kind, fingerprint, outcome: 'refused', code, message });
           if (typeof given.thumbprint !== 'string' || !THUMBPRINT.test(given.thumbprint) || !given.slip || typeof given.slip !== 'object' || typeof given.slip.payload !== 'string') {
             return refused('renewal', null, 'not-understood', 'What was asked is not a permission and the thumbprint of the passkey to admit.');
@@ -2092,7 +2112,7 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
       }
       if (req.url === '/renew' || req.url === '/new-book') {
         try {
-          return send(200, await unlessGone(async () => {
+          return reply(200, await unlessGone(async () => {
             if (req.url === '/new-book') return newBook();
             const renewed = await renew(given.slip, given.newPasskey === true);
             await whenFull();
@@ -2100,7 +2120,7 @@ export async function startService({ folder = DEFAULT_FOLDER, port = DEFAULT_POR
           }));
         } catch (e) {
           if (e instanceof Gone) return undefined;
-          return send(409, { error: e.message, code: e.code });
+          return reply(409, { error: e.message, code: e.code });
         }
       }
       if (req.url === '/stop') {
@@ -2367,6 +2387,35 @@ async function ask(port, path, method = 'GET', body, waitMs = 60000) {
   return response.json();
 }
 
+/**
+ * A question that must carry the feed's proof (POST /admit, and POST /renew
+ * with a new passkey): asked with the feed's token from the folder, through
+ * the feed's reader (feed.mjs), which takes no answer that does not carry
+ * the recorder's proof. Gives back the answer's body.
+ */
+async function askProved(folder, port, path, body, waitMs = 60000) {
+  const tokenFile = join(folder, FEED_TOKEN);
+  let token;
+  try {
+    token = readFileSync(tokenFile, 'utf8').trim();
+  } catch (e) {
+    throw new Error(`The feed's token (${tokenFile}) could not be read (${e.code ?? e.message}), so nothing was asked of the recorder and nothing was changed: the recorder trusts a new passkey only at the word of a program that can read its folder. Run this command as the person whose recorder it is, with PROVARED_CLAUDE_CODE_DIR naming the recorder's folder if it is not the usual one. Where the file is missing, "${RUN} stop; ${RUN} ensure" makes a new one.`);
+  }
+  if (!THUMBPRINT.test(token)) throw new Error(`The feed's token (${tokenFile}) could not be read (the file does not hold a token: 43 letters, digits, "-" and "_"), so nothing was asked of the recorder and nothing was changed.`);
+  const reader = feedReader({ address: `http://127.0.0.1:${port}`, token, fetchImpl: (url, o) => fetch(url, { ...o, signal: AbortSignal.timeout(waitMs) }) });
+  let answer;
+  try {
+    answer = await reader.post(path, body);
+  } catch (e) {
+    if (e.code === 'not-proved' || e.code === 'not-the-recorder') {
+      throw new Error(`The recorder that answers on 127.0.0.1:${port} did not prove that it holds the feed's token in ${tokenFile} (${e.message}), so nothing it said is taken. If it is an earlier version, restart it once, with both commands on one line so that no tool call falls between them, then run this again: ${RUN} stop; ${RUN} ensure`);
+    }
+    throw e;
+  }
+  if (answer.code === 401) throw new Error(`The recorder refused the question: ${answer.body.error}. Nothing was changed.`);
+  return answer.body;
+}
+
 async function running(port, waitMs = 60000) {
   try {
     return await ask(port, '/status', 'GET', undefined, waitMs);
@@ -2499,7 +2548,7 @@ async function admitWaiting(folder, port, thumb, answer) {
     return 1;
   }
   const admit = async (p, take) => {
-    const said = await ask(port, '/admit', 'POST', { slip: p.slip, thumbprint: thumb, take });
+    const said = await askProved(folder, port, '/admit', { slip: p.slip, thumbprint: thumb, take });
     if (said.error === 'not found') throw new Error(`The recorder that is running is an earlier version, which cannot admit a passkey while it runs. Restart it once, with both commands on one line so that no tool call falls between them, then run admit-passkey again: ${RUN} stop; ${RUN} ensure`);
     if (said.error) throw new Error(said.error);
     return said;
@@ -2586,7 +2635,8 @@ async function renewFrom(file, folder, port, newPasskey = false) {
 
 async function renewWith(slip, folder, port, newPasskey = false) {
   if (await running(port)) {
-    const answer = await ask(port, '/renew', 'POST', { slip, newPasskey });
+    // A new passkey: with the feed's proof, from the token in the folder.
+    const answer = newPasskey ? await askProved(folder, port, '/renew', { slip, newPasskey }) : await ask(port, '/renew', 'POST', { slip, newPasskey });
     if (answer.error === 'not found') {
       throw new Error(`The recorder that is running is an earlier version, which cannot take a new permission while it runs. Restart it once, with both commands on one line so that no tool call falls between them, then run renew again: ${RUN} stop; ${RUN} ensure`);
     }

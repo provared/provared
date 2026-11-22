@@ -9,7 +9,21 @@ import { keySetFingerprint } from 'provared';
 import { portOwner, sendJson } from './port.mjs';
 import { DEFAULT_FOLDER, DEFAULT_PORT, VERSION, loadAgentKeys, makeRecorderKeys, readWaitingPermissions } from './recorder.mjs';
 
-const NO_PERMISSION = 'No permission has been signed for this agent yet: the recorder waits for the first one, so every tool call is refused, and nothing is recorded.';
+const MAX_BODY = 1024 * 1024;
+
+/** Every byte of a request's body, as received; null where it is longer than MAX_BODY. */
+async function bodyOf(req) {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > MAX_BODY) return null;
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
+
+const NO_PERMISSION ='No permission has been signed for this agent yet: the recorder waits for the first one, so every tool call is refused, and nothing is recorded.';
 
 /**
  * The waiting recorder's handler, for the port's owner (port.mjs).
@@ -39,7 +53,15 @@ export async function waitingHandler({ folder, owner, clock = Date.now }) {
     }
     if (req.method !== 'POST') return send(404, { error: 'not found' });
     if (req.url === '/before') return send(200, { allowed: false, waiting: true, breaches: [], problems: [{ code: 'no-permission-yet', message: NO_PERMISSION }] });
-    if (['/record', '/seal', '/renew', '/new-book', '/admit'].includes(req.url)) return send(409, refusedHere);
+    if (['/record', '/seal', '/renew', '/new-book'].includes(req.url)) return send(409, refusedHere);
+    if (req.url === '/admit') {
+      const bytes = await bodyOf(req);
+      if (bytes === null) return send(413, { error: 'too large' });
+      // Only a program that holds the feed's token, from this folder, may have a passkey trusted (feed.mjs).
+      const reply = owner.feed.checkQuestion(req, res, bytes);
+      if (!reply) return undefined;
+      return reply(409, refusedHere);
+    }
     if (req.url === '/stop') {
       send(200, { stopped: true });
       owner.stop();

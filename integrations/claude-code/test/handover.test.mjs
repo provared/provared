@@ -39,7 +39,7 @@ async function running(more = LOCAL) {
     assert.equal(r.proved, true);
     return r.body;
   };
-  return { ...w, service, port: service.port, hand };
+  return { ...w, service, port: service.port, hand, reader };
 }
 
 async function cancel(passkey, slipFingerprint, when = Date.now()) {
@@ -601,8 +601,8 @@ test('"admit-passkey" shows only what that passkey signed, by the permission its
     const shown = await runCommand(['admit-passkey', S], { folder: w.folder, port: w.port, input: 'no\n' });
     assert.match(shown.out, new RegExp(`Passkey \\(thumbprint\\)\\s+${S}`));
     assert.match(shown.out, /The stranger's/);
-    // And the service itself takes nothing for one passkey that another signed.
-    const said = await (await fetch(`http://127.0.0.1:${w.port}/admit`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slip: list.permissions[0].slip, thumbprint: T, take: true }) })).json();
+    // And the service itself takes nothing for one passkey that another signed (asked with the feed's proof, as the command asks).
+    const said = (await w.reader.post('/admit', { slip: list.permissions[0].slip, thumbprint: T, take: true })).body;
     assert.equal(said.code, 'other-passkey');
     assert.deepEqual(kinds(w.folder), ['slip']);
   } finally {

@@ -720,8 +720,31 @@ export function createFeed({ folder, memory, token, handOver = null, now = Date.
     return time - begun >= 0 && time - begun <= FEED_HELLO_MS && sameProof(session, Buffer.from(sessionNumber(theirs, begun), 'base64url'));
   }
 
+  /**
+   * A question to one of the recorder's own routes that must carry the
+   * feed's proof (POST /admit, and POST /renew with a new passkey), checked
+   * as the feed checks its own questions with a body: in a conversation this
+   * recorder began, over the method, the path and every byte of the body,
+   * each question once. Gives back the way to answer it, with the
+   * recorder's proof; or null where it was answered here (refused).
+   * @param {import('node:http').IncomingMessage} req
+   * @param {import('node:http').ServerResponse} res
+   * @param {Buffer} body every byte of the body, as received
+   * @returns {((code: number, answer: object) => boolean)|null}
+   */
+  function checkQuestion(req, res, body) {
+    if (token.problem || !token.token) {
+      plain(res, 503, { error: offWords });
+      return null;
+    }
+    const talk = conversation(req, res, body);
+    if (!talk) return null;
+    return (code, answer, more) => proved(res, talk, code, answer, more);
+  }
+
   return {
     handle,
+    checkQuestion,
     changed,
     /** Every waiting request is answered, and none waits after this. */
     close() {
