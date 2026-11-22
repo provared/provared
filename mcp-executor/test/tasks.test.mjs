@@ -162,6 +162,37 @@ test('Last-Event-ID goes on to the upstream only for an event the executor gave 
   }
 });
 
+test('tasks: without allowTasks, the upstream\'s offer of tasks does not reach the agent (capabilities.tasks, a tool\'s execution.taskSupport), so a client is not asked to use what is refused; with it, the offer passes', async () => {
+  const offered = async (w) => {
+    const init = await request(w, 'alpha', 'initialize', { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'test', version: '0' } }, { id: 'i' });
+    const discover = await request(w, 'alpha', 'server/discover', {}, { id: 'd' });
+    const lists = [await request(w, 'alpha', 'tools/list', {}, { id: 'l' }), await request(w, 'alpha', 'tools/list', { sse: true }, { id: 'ls' })];
+    const order = lists.map((l) => l.json.result.tools.find((t) => t.name === 'order'));
+    return { init: init.json.result.capabilities, discover: discover.json.result.capabilities, order };
+  };
+  for (const hideUnlisted of [true, false]) {
+    const w = await httpWorld({ config: { hideUnlisted } });
+    try {
+      w.upstream.offerTasks();
+      const o = await offered(w);
+      assert.deepEqual(o.init, { tools: {} }, `initialize, hideUnlisted ${hideUnlisted}`);
+      assert.deepEqual(o.discover, { tools: {} }, 'server/discover');
+      for (const order of o.order) assert.equal(order.execution?.taskSupport, undefined, 'tools/list');
+    } finally {
+      await w.close();
+    }
+  }
+  const w = await httpWorld({ config: { allowTasks: true } });
+  try {
+    w.upstream.offerTasks();
+    const o = await offered(w);
+    assert.ok(o.init.tasks && o.discover.tasks);
+    for (const order of o.order) assert.equal(order.execution.taskSupport, 'optional');
+  } finally {
+    await w.close();
+  }
+});
+
 // Tasks of the 2026-07-28 revision, as the review of 0.5.2 describes them: an extension (io.modelcontextprotocol/tasks) a client declares in its _meta's client capabilities; the server decides whether a call becomes a task, answered with a flat handle ({resultType: "task", taskId}); tasks/get, tasks/update and tasks/cancel name it by params.taskId; notifications/tasks come through subscriptions/listen, which names tasks in params.notifications.taskIds.
 const TASKS_EXTENSION = 'io.modelcontextprotocol/tasks';
 const OTHER_EXTENSION = 'example.org/other';

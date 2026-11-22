@@ -288,6 +288,12 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
     `notifications/tasks` of another agent's task is dropped, and a task
     named in answers to two agents is neither's. The README now says
     which revisions are covered. Tests: `test/tasks.test.mjs`.
+  - With tasks not allowed, the upstream's offer of tasks still reached the
+    agent, so a client could be asked by the upstream to call a tool as a
+    task, which the executor then refused. Now, without `allowTasks`, the
+    answer to `initialize` or `server/discover` loses `capabilities.tasks`,
+    and each tool in a `tools/list` loses `execution.taskSupport`. Test:
+    `test/tasks.test.mjs`.
   - A tool server's answer of many small elements (15 MiB of one-item
     lists) ended the executor at the claude.ai recipe's heap, once read:
     the limit of 100,000 elements held only for the agent's messages. Now

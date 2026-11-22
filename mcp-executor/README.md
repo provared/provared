@@ -439,7 +439,12 @@ The settings (`executor-http.example.json` is a start): `name`, `service`,
 - `allowTasks`, in front of an upstream only: `true` lets agents use the
   upstream's tasks, each held to the agent whose call made it; default
   `false`, every task request refused (see "To the upstream all agents are
-  one caller", above).
+  one caller", above). With `false`, the upstream's offer of tasks is not
+  handed on either, so that a client is not asked to use what is refused:
+  the answer to `initialize` or `server/discover` loses
+  `capabilities.tasks`, and each tool in a `tools/list` loses
+  `execution.taskSupport`. A tool the upstream marks as one that must be
+  called as a task may then fail when called.
 - `server`, in place of `upstream` and never beside it: a local program,
   with `shutdownWait` and `sessions` (below).
 - `agents`: one member for each agent, by name (1 to 64 lower-case letters,

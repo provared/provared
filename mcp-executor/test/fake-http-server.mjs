@@ -144,11 +144,13 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
         return res.end();
       }
       const { id, method, params = {} } = m;
-      if (method === 'server/discover') return result(res, id, { resultType: 'complete', supportedVersions: ['2026-07-28'], capabilities: { tools: {} } });
+      // With "offerTasks", the server says it takes tasks (2025-11-25: capabilities.tasks).
+      const capabilities = { tools: {}, ...(state.offerTasks ? { tasks: { list: {}, cancel: {}, requests: { tools: { call: {} } } } } : {}) };
+      if (method === 'server/discover') return result(res, id, { resultType: 'complete', supportedVersions: ['2026-07-28'], capabilities });
       if (method === 'initialize') {
         const session = `sess-${nextSession++}`;
         sessions.add(session);
-        return result(res, id, { protocolVersion: params.protocolVersion ?? '2025-11-25', capabilities: { tools: {} }, serverInfo: { name: 'fake-http-server', version: '0.0.1' } }, { 'mcp-session-id': session });
+        return result(res, id, { protocolVersion: params.protocolVersion ?? '2025-11-25', capabilities, serverInfo: { name: 'fake-http-server', version: '0.0.1' } }, { 'mcp-session-id': session });
       }
       if (method === 'ping') return result(res, id, {});
       // An answer of "count" one-item lists, as a JSON body, or (params.sse) as one event.
@@ -228,7 +230,8 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
         return res.end(text);
       }
       if (method === 'tools/list') {
-        const page = params.cursor === 'page2' ? TOOLS.slice(4) : TOOLS.slice(0, 4);
+        // With "offerTasks", "order" says it may be called as a task (2025-11-25).
+        const page = (params.cursor === 'page2' ? TOOLS.slice(4) : TOOLS.slice(0, 4)).map((t) => (state.offerTasks && t.name === 'order' ? { ...t, execution: { taskSupport: 'optional' } } : t));
         if (params.sse) {
           const send = sse(res);
           send({ jsonrpc: '2.0', id, result: { resultType: 'complete', tools: page } });
@@ -407,6 +410,10 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
         /** Answer tools/list, from now on, with exactly this: {status, headers, body (text or bytes, or a function of the request's id)}; null: as usual. */
         rawList: (answer) => {
           state.rawList = answer;
+        },
+        /** Offer tasks, from now on: capabilities.tasks, and "order" as a tool that may be called as a task. */
+        offerTasks: () => {
+          state.offerTasks = true;
         },
         /** Send, from now on, a request of its own (roots/list) on every GET stream too. */
         askOnStream: () => {

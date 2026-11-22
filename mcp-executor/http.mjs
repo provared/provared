@@ -99,6 +99,8 @@ const TASK_METHODS = ['tasks/get', 'tasks/result', 'tasks/cancel', 'tasks/list',
  * params.notifications.taskIds. (As the review of 0.5.2 describes them.)
  */
 const TASKS_EXTENSION = 'io.modelcontextprotocol/tasks';
+/** The answer, under the agent's id, where the upstream's answer to initialize or server/discover could not be read to take its offer of tasks out. */
+export const CAPABILITIES_NOT_READ = 'The tool server\'s answer could not be read by the executor, which is to take out of it the offer of tasks the settings do not allow (allowTasks). So it was not handed on.';
 const CLIENT_CAPABILITIES = 'io.modelcontextprotocol/clientCapabilities';
 /** The _meta member that ties a message to a task (MCP 2025-11-25). */
 const RELATED_TASK = 'io.modelcontextprotocol/related-task';
@@ -721,6 +723,40 @@ export async function openHttpExecutor(config, more = {}) {
     if (othersTask(m, agent)) return { rpc: CODES.invalidParams, message: 'The message names a task that is not this agent\'s.' };
     return null;
   };
+  /** The text read again with every number kept as the server wrote it, so that a filter changes nothing else; "m" where it cannot be. */
+  const exactly = (text, m) => {
+    try {
+      return JSON.parse(text, (k, v, context) => (typeof v === 'number' ? JSON.rawJSON(context.source) : v));
+    } catch {
+      return m;
+    }
+  };
+  /** "o" without the members named "name" in any capitals. */
+  const without = (o, name) => Object.fromEntries(Object.entries(o).filter(([k]) => foldName(k) !== foldName(name)));
+  /**
+   * Without allowTasks, the upstream's offer of tasks is not handed on, so
+   * that a client is not asked to use what the executor refuses (X457): a
+   * tools/list answer (filtered as hideUnlisted says, too) loses each tool's
+   * execution.taskSupport, and the answer to initialize or server/discover
+   * loses capabilities.tasks; names in other capitals count as themselves.
+   * Gives {text, hidden} under the agent's id, or null where it cannot be
+   * read.
+   */
+  const toolsOffered = (text, m, clientId) => {
+    const listed = settings.hideUnlisted ? filteredList(text, m, clientId, settings) : null;
+    if (settings.hideUnlisted && !listed) return null;
+    if (settings.allowTasks) return listed;
+    if (!Object.hasOwn(m, 'result') || !isObject(m.result) || !Array.isArray(m.result.tools)) return null;
+    const exact = listed ? exactly(listed.text, m) : exactly(text, m);
+    const tools = exact.result.tools.map((t) => (isObject(t) ? Object.fromEntries(Object.entries(t).map(([k, v]) => [k, foldName(k) === foldName('execution') && isObject(v) ? without(v, 'taskSupport') : v])) : t));
+    return { text: JSON.stringify({ ...exact, id: clientId, result: { ...exact.result, tools } }), hidden: listed?.hidden ?? 0 };
+  };
+  const capabilitiesOffered = (text, m, clientId) => {
+    if (!Object.hasOwn(m, 'result') || !isObject(m.result)) return null;
+    const exact = exactly(text, m);
+    const result = Object.fromEntries(Object.entries(exact.result).map(([k, v]) => [k, foldName(k) === foldName('capabilities') && isObject(v) ? without(v, 'tasks') : v]));
+    return { text: JSON.stringify({ ...exact, id: clientId, result }), hidden: 0 };
+  };
   /** A tasks/list answer with only this agent's tasks in it, under the agent's id; null where it cannot be read. */
   const filteredTasks = (text, m, clientId, agent) => {
     if (!Object.hasOwn(m, 'result') || !isObject(m.result) || !Array.isArray(m.result.tasks) || misspelt(m.result, ['tasks']) !== null) return null;
@@ -876,7 +912,9 @@ export async function openHttpExecutor(config, more = {}) {
     // The answer to a list that is to be filtered: a tools/list ("tools": the tools with no rule left out) or a tasks/list ("tasks": other agents' tasks left out). One that cannot be read is not handed on.
     const list = listKind === 'tasks'
       ? { filter: (text, m) => filteredTasks(text, m, clientId, agent), notRead: 'tasks-list-not-read', hidden: 'tasks-hidden', answer: () => responseText(clientId, { error: { code: CODES.internal, message: TASKS_NOT_READ } }) }
-      : (listKind ? { filter: (text, m) => filteredList(text, m, clientId, settings), notRead: 'tools-list-not-read', hidden: 'tools-hidden', answer: () => listNotRead(clientId) } : null);
+      : listKind === 'capabilities'
+        ? { filter: (text, m) => capabilitiesOffered(text, m, clientId), notRead: 'capabilities-not-read', hidden: 'tasks-offer-hidden', answer: () => responseText(clientId, { error: { code: CODES.internal, message: CAPABILITIES_NOT_READ } }) }
+        : (listKind ? { filter: (text, m) => toolsOffered(text, m, clientId), notRead: 'tools-list-not-read', hidden: 'tools-hidden', answer: () => listNotRead(clientId) } : null);
     /** What the response under the executor's id teaches: the upstream's annotations, from a tools/list; the task it made for this agent, from a request that asked for one. */
     const learnFrom = (m) => {
       if (learn) learnAnnotations(m);
@@ -1774,7 +1812,7 @@ export async function openHttpExecutor(config, more = {}) {
       }
       // Every other request goes under an id of the executor's own, and its answer comes back under the agent's.
       const serverId = newServerId();
-      const ex = exchange(ctx, { method: 'POST', headers: h.headers, body: sentText(m, read.text, serverId, agent), kind: 'request', clientId: m.id, serverId, list: m.method === 'tools/list' && settings.hideUnlisted ? 'tools' : (m.method === 'tasks/list' ? 'tasks' : null), learn: m.method === 'tools/list', task: asksTask });
+      const ex = exchange(ctx, { method: 'POST', headers: h.headers, body: sentText(m, read.text, serverId, agent), kind: 'request', clientId: m.id, serverId, list: m.method === 'tools/list' && (settings.hideUnlisted || !settings.allowTasks) ? 'tools' : (m.method === 'tasks/list' ? 'tasks' : ((m.method === 'initialize' || m.method === 'server/discover') && !settings.allowTasks ? 'capabilities' : null)), learn: m.method === 'tools/list', task: asksTask });
       // Its text, as sent, is all the exchange needs: the message as read, which may cost many times its bytes, is let go while the upstream answers.
       read = null;
       m = null;

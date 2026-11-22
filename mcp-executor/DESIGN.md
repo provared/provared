@@ -485,7 +485,12 @@ extension is taken out of the client capabilities of every request sent
 on (names in other capitals counted as themselves), so that the upstream,
 which decides, makes no task (X454). A call the upstream answers with a
 task all the same has its outcome not known, since its result is where
-the executor does not reach it. With `allowTasks`, the extension goes on;
+the executor does not reach it. Nor is the upstream's offer of tasks
+handed on: the answer to `initialize` or `server/discover` loses
+`capabilities.tasks`, and each tool of a `tools/list` loses
+`execution.taskSupport`, in any capitals, every number kept as the
+upstream wrote it; an answer that cannot be read for this is not handed on
+(X457). With `allowTasks`, the extension goes on;
 the task id in the answer to a request that asked for a task, and in any
 answer that is a flat handle (for a call, its outcome), is held for the
 agent that sent the request, up to `MAX_TASKS` (1,000) for each agent,
