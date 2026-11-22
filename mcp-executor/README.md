@@ -266,7 +266,9 @@ What the executor does with each request:
   executor's own credential, a bearer token read from the file
   `upstream.credential.file`. Of the agent's headers only `Accept`,
   `Accept-Language`, `Content-Type`, `Mcp-Session-Id` and `Last-Event-ID`
-  go on, with the `MCP-Protocol-Version` the body states, and the mirrored
+  go on (`Last-Event-ID`, which asks the upstream to replay a stream, only
+  where it names an event the executor gave that agent, among the last
+  1,000), with the `MCP-Protocol-Version` the body states, and the mirrored
   headers of the 2026-07-28 revision where each agrees with the body:
   `Mcp-Method` with the body's `method`, `Mcp-Name` with its
   `params.uri` on a `resources/read` or its `params.name` on a
@@ -311,6 +313,29 @@ What the executor does with each request:
   pass through, and a session belongs to the agent that opened it. Another
   agent's request under it, or an unknown id (after a restart, the executor
   knows none), is answered 404, and the client begins a new session.
+- To the upstream all agents are one caller: each request reaches it with
+  the executor's one credential, and only a session, which belongs to the
+  agent that opened it, tells one agent's requests from another's there.
+  So what the upstream keeps for its caller rather than for a session is
+  shared by every agent: what it sends on a GET stream opened without a
+  session goes to whichever agent opened one, and a task it keeps for its
+  caller could be read or cancelled by any agent. Tasks are therefore
+  refused unless the settings allow them (`allowTasks`): every `tasks/`
+  request is answered with JSON-RPC error -32601, and a request that asks
+  for a task (`params.task`) with -32602, each with 400, and nothing
+  reaches the upstream. With `allowTasks`, a call that asks for a task is
+  checked and receipted as any call (its receipt's result is the task's
+  handle; the later `tasks/result` passes with no receipt), and the task
+  its answer names is held to the agent whose call made it (the last 1,000
+  for each agent): `tasks/get`, `tasks/result` and `tasks/cancel` that
+  name another agent's task, or one the executor did not see made, are
+  refused (400, -32602) and not sent; `tasks/list` comes back with that
+  agent's tasks alone; any other `tasks/` method is refused; and an event
+  of the upstream's that names another agent's task (its
+  `notifications/tasks/status`, or a message whose `_meta` ties it to that
+  task) is dropped from this agent's streams. After a restart the executor
+  knows no task, so the tasks made before it are refused. The methods and
+  fields are those of the 2025-11-25 revision.
 - Cancellation follows the era. On the 2026-07-28 revision, closing the
   response stream is the cancellation: the executor then closes its stream
   to the upstream, the outcome is recorded as not known, as on stdio, and
@@ -378,6 +403,10 @@ The settings (`executor-http.example.json` is a start): `name`, `service`,
   about) and `credential`: `{"file": <path>}`, the file that holds the
   bearer token, readable by the executor alone. Without `credential` the
   upstream is called with none, and the start says so.
+- `allowTasks`, in front of an upstream only: `true` lets agents use the
+  upstream's tasks, each held to the agent whose call made it; default
+  `false`, every task request refused (see "To the upstream all agents are
+  one caller", above).
 - `server`, in place of `upstream` and never beside it: a local program,
   with `shutdownWait` and `sessions` (below).
 - `agents`: one member for each agent, by name (1 to 64 lower-case letters,

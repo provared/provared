@@ -436,6 +436,39 @@ connections close (X115); a stop without warning, followed by a start,
 writes the receipt from the agent's copy before the executor listens
 (section 8).
 
+Tasks in front of an upstream. Every agent reaches the upstream with the
+executor's one credential, so to the upstream they are one caller; only a
+session, owned by the agent that opened it, tells them apart there. An
+upstream that keeps tasks for its caller rather than for a session would
+let one agent list, read or cancel another's (checked against the
+2025-11-25 revision, whose tasks are: `params.task` on a request asks for
+one, answered with `{task: {taskId, …}}`; `tasks/get`, `tasks/result`
+and `tasks/cancel` name it by `params.taskId`; `tasks/list` gives
+`{tasks: [{taskId, …}]}`; `notifications/tasks/status` carries its
+`taskId`; and `_meta["io.modelcontextprotocol/related-task"].taskId` ties
+another message to it). So, unless `allowTasks` is true, every request
+whose method is `tasks/…` (in any capitals) is refused with -32601, and
+every request with a `task` member in its `params` with -32602, each with
+400, before anything reaches the upstream. With `allowTasks`, the task id
+in the answer to a request that asked for a task (for a call, its outcome)
+is held for the agent that sent it, up to `MAX_TASKS`
+(1,000) for each agent, its oldest forgotten first; `tasks/get`,
+`tasks/result` and `tasks/cancel` go on only where `params.taskId` is one
+of that agent's; `tasks/list` comes back with that agent's tasks alone (a
+list that cannot be read is not handed on, as for `tools/list`); another
+`tasks/…` method is refused; a message of the agent's that names another
+agent's task is refused; and an event of the upstream's that names
+another agent's task is dropped from this agent's streams. A task the
+executor did not see made (before a restart, or by another caller of the
+upstream) is refused to every agent, and an event that names one is not
+held back. The `Last-Event-ID` header, by which a client asks for a stream
+to be replayed after an event, goes on only where it names one of the last
+`MAX_EVENT_IDS` (1,000) events the executor gave that agent: an upstream
+that replays by event id alone would otherwise replay one agent's stream
+to another that names its id. A GET with no session id still passes: it
+opens a new stream, and what the upstream sends on it is for its one
+caller.
+
 What it does not do: it speaks plain HTTP, so the agents' secrets and the
 upstream's token are only as safe as the connection (encryption is
 something else's); it binds a session to its agent only while it runs; a
@@ -861,7 +894,12 @@ programs, and that program outlived the executor (the review ran it).
    `tasks/result`, `tasks/cancel`). Such a call is checked and receipted
    as any call; its receipt's result is the task's handle, not the tool's
    result, and the later requests for the result pass with no receipt.
-   The same on every transport.
+   The same on stdio and in front of a local program, where a program
+   serves one agent's session and so keeps its tasks to it. In front of an
+   upstream HTTP server, where every agent is one caller to the upstream,
+   tasks are refused unless the settings allow them, and then each is held
+   to the agent whose call made it (section 10, "Tasks in front of an
+   upstream").
 
 The 204 for a DELETE and the 400 for an `initialize` that names a session
 are the builder's: the text names no status for either.

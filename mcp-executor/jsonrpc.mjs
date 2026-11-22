@@ -11,6 +11,7 @@ export const MAX_LINE_BYTES = 16 * 1024 * 1024;
 export const CODES = Object.freeze({
   parse: -32700,
   invalidRequest: -32600,
+  methodNotFound: -32601,
   invalidParams: -32602,
   // The server's list of tools could not be read, so it was not handed on.
   internal: -32603,

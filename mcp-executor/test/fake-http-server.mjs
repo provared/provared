@@ -33,7 +33,8 @@ const TOOLS = [
 export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
   const seen = [];
   const sessions = new Set();
-  const state = { elsewhere: 0, aborted: 0, fold: false, ran: [], deepList: 0 };
+  const tasks = new Map();
+  const state ={ elsewhere: 0, aborted: 0, fold: false, ran: [], deepList: 0 };
   /** The text of a value nested "depth" lists deep. */
   const deep = (depth) => `${'['.repeat(depth)}1${']'.repeat(depth)}`;
   // With "fold" set, the server reads member names without regard to capitals, the last one winning, as some JSON readers do for the fields they know.
@@ -74,7 +75,7 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
     if (req.method === 'GET') {
       // The stream of server messages (legacy): one notification, then open until the client closes.
       seen.push({ method: 'GET', headers: req.headers });
-      if (req.headers['last-event-id'] === 'fast') {
+      if (req.headers['last-event-id'] === 'fast' || req.headers['mcp-session-id'] === 'fast') {
         // A stream as fast as the client takes it: 64 KiB events for as long as the connection lasts (the review's case of an agent that reads nothing).
         const big = 'y'.repeat(65536);
         state.fastBytes = 0;
@@ -96,6 +97,8 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
       }
       const send = sse(res);
       send({ jsonrpc: '2.0', method: 'notifications/message', params: { level: 'info', data: `hello ${req.headers['mcp-session-id'] ?? 'no-session'}` } }, 'id: ev-1\n');
+      // The status of every task it holds, for whoever opens a stream: it keeps one store of tasks for every caller with its token.
+      for (const t of tasks.values()) send({ jsonrpc: '2.0', method: 'notifications/tasks/status', params: { taskId: t.taskId, status: t.status } }, `id: task-${t.taskId}\n`);
       return;
     }
     if (req.method === 'DELETE') {
@@ -133,6 +136,20 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
         return result(res, id, { protocolVersion: params.protocolVersion ?? '2025-11-25', capabilities: { tools: {} }, serverInfo: { name: 'fake-http-server', version: '0.0.1' } }, { 'mcp-session-id': session });
       }
       if (method === 'ping') return result(res, id, {});
+      // Tasks (2025-11-25), in one store for whoever presents its token, with no sessions: a tools/call that asks for a task is answered with its handle, and tasks/list, tasks/get, tasks/result and tasks/cancel serve any task to any caller.
+      if (method === 'tools/call' && params.task) {
+        const taskId = `task-${tasks.size + 1}-${Math.random().toString(36).slice(2, 10)}`;
+        tasks.set(taskId, { taskId, status: 'completed', result: { content: [{ type: 'text', text: `Ordered for ${params.arguments?.total}.` }] } });
+        return result(res, id, { task: { taskId, status: 'working', createdAt: new Date().toISOString(), ttl: 60000 } });
+      }
+      if (method === 'tasks/list') return result(res, id, { tasks: [...tasks.values()].map((t) => ({ taskId: t.taskId, status: t.status })) });
+      if (['tasks/get', 'tasks/result', 'tasks/cancel'].includes(method)) {
+        const task = tasks.get(params.taskId);
+        if (!task) return failure(res, id, -32602, 'No such task.');
+        if (method === 'tasks/result') return result(res, id, task.result);
+        if (method === 'tasks/cancel') task.status = 'cancelled';
+        return result(res, id, { taskId: task.taskId, status: task.status });
+      }
       if (method === 'hang') return; // never answers
       // Opens a session of the client's naming, with the status it asks for (a session id on a non-2xx answer is the review's case).
       if (method === 'with-session') return json(res, params.status ?? 200, { jsonrpc: '2.0', id, result: {} }, { 'mcp-session-id': params.session });
@@ -288,6 +305,8 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
         port,
         seen,
         sessions,
+        /** The tasks it holds, by id: {taskId, status, result}. */
+        tasks,
         /** Every tools/call the server ran: {name, args}, as it read them. */
         ran: state.ran,
         /** Read member names without regard to capitals from now on. */

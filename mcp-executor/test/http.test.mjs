@@ -626,7 +626,9 @@ test('the reader of server-sent events: line endings, comments, a BOM, data over
 test('attack: an agent that stops reading a fast stream. The upstream is paused, so memory is bounded; the other agent is served meanwhile; after the timeout the exchange is cut and the slot freed', async () => {
   const w = await httpWorld({ config: { timeout: 1500 } });
   try {
-    const s = await rawRequest(w, { method: 'GET', headers: { accept: 'text/event-stream', 'last-event-id': 'fast', ...auth(w, 'alpha') }, stream: true });
+    // The made-up upstream's fast stream is the one of its session "fast", which alpha opens first (Last-Event-ID goes on only for an event alpha was given).
+    await request(w, 'alpha', 'with-session', { session: 'fast' });
+    const s = await rawRequest(w, { method: 'GET', headers: { accept: 'text/event-stream', 'mcp-session-id': 'fast', ...auth(w, 'alpha') }, stream: true });
     assert.equal(s.status, 200);
     s.res.pause(); // the agent reads nothing
     await pause(700);
@@ -652,7 +654,8 @@ test('attack: an agent that stops reading a fast stream. The upstream is paused,
 test('a very slow reader is cut too: the clock stops only when the connection has taken all that is waiting, not at each part read', async () => {
   const w = await httpWorld({ config: { timeout: 1000 } });
   try {
-    const s = await rawRequest(w, { method: 'GET', headers: { accept: 'text/event-stream', 'last-event-id': 'fast', ...auth(w, 'alpha') }, stream: true });
+    await request(w, 'alpha', 'with-session', { session: 'fast' });
+    const s = await rawRequest(w, { method: 'GET', headers: { accept: 'text/event-stream', 'mcp-session-id': 'fast', ...auth(w, 'alpha') }, stream: true });
     assert.equal(s.status, 200);
     s.res.pause();
     let taken = 0;
