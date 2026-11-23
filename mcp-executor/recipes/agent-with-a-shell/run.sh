@@ -58,13 +58,16 @@ docker exec "$G" mkdir -p /data /sdk /work
 docker exec "$S" mkdir -p /work /secret
 docker exec "$A" mkdir -p /work
 
-step "install provared-mcp-executor@0.3.0 in the guard container"
-docker exec "$G" sh -c 'cd /data && npm init -y >/dev/null && timeout 300 npm install --ignore-scripts provared-mcp-executor@0.3.0 2>&1 | tail -3' || die "npm install of the executor"
+step "install provared-mcp-executor 0.5.2 in the guard container, from its lockfile (guard/package-lock.json: npm checks each package against its hash)"
+docker cp guard/package.json "$G":/data/package.json || die "copy guard/package.json"
+docker cp guard/package-lock.json "$G":/data/package-lock.json || die "copy guard/package-lock.json"
+docker exec "$G" sh -c 'cd /data && timeout 300 npm ci --ignore-scripts 2>&1 | tail -3' || die "npm ci of the executor"
 docker exec "$G" sh -c 'cd /data && ls node_modules' | tr '\n' ' '; echo
 
-step "install the SDK (1.32.2) for the stand-in server and client; the guard has the outside route, the other two do not"
+step "install the SDK (1.32.2) for the stand-in server and client, from its lockfile (package-lock.json: npm checks each package against its hash); the guard has the outside route, the other two do not"
 docker cp package.json "$G":/sdk/package.json || die "copy package.json"
-docker exec "$G" sh -c 'cd /sdk && timeout 300 npm install --ignore-scripts 2>&1 | tail -3' || die "npm install of the SDK"
+docker cp package-lock.json "$G":/sdk/package-lock.json || die "copy package-lock.json"
+docker exec "$G" sh -c 'cd /sdk && timeout 300 npm ci --ignore-scripts 2>&1 | tail -3' || die "npm ci of the SDK"
 for c in "$S" "$A"; do
   docker exec "$G" tar -C /sdk -cf - node_modules | docker exec -i "$c" tar -C / -xf - || die "copy SDK to $c"
 done

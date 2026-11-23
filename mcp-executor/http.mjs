@@ -34,13 +34,21 @@ import https from 'node:https';
 import { unfinished } from './copy.mjs';
 import { EXECUTOR_STOPPED, LIST_NOT_READ, NOT_FOR_KEYS, NO_RECORDER_WARNING, SHARED_KEYS, SHORT_NAME, UNLISTED_FORWARD_WARNING, callCore, describeContentRules, describeRecorder, describeSlip, describeTools, filteredList, isObject, isPlaceholder, missingFiles, openAgent, pathFrom, placeholderProblems, prepareAgent, prepareShared, programProblems, readAgentPaths, readCredentialFile, readIdentity, readFormerKeys, readKnobs, readProgramEnvironment, readRecorderSettings, readServerSettings, readShutdownWait, readToolRules, reportFromFiles, resolveProgram, sealTimer, serverIds } from './executor.mjs';
 import { CHALLENGE, identify, plainAddress } from './identity.mjs';
-import { CODES, MAX_LINE_BYTES, errorAnswer, idKey, isId, readMessage, responseText, spliceId, topLevelId, unsafeInteger } from './jsonrpc.mjs';
+import { CODES, MAX_LINE_BYTES, errorAnswer, foldName, idKey, isId, misspelt, readMessage, responseText, spliceId, topLevelId, unsafeInteger } from './jsonrpc.mjs';
 import { openLocalSessions, readSessionSettings } from './local.mjs';
 import { LOCK_WAIT_MS, lockState } from './lock.mjs';
 import { CLIENT_LIMIT, OAUTH_PATH, OAUTH_TIMEOUT, WELL_KNOWN, openFrontDoor, readOAuthSettings } from './oauth.mjs';
 
-/** The most a POST body may be, unless the settings say otherwise: 10 MiB, as the gateway takes. */
-export const BODY_LIMIT = 10 * 1024 * 1024;
+/** The most a POST body may be, unless the settings say otherwise: 4 MiB, the MCP TypeScript SDK's own limit. */
+export const BODY_LIMIT = 4 * 1024 * 1024;
+/**
+ * The most bytes of bodies one agent's requests may hold at once, unless the
+ * settings say otherwise (waitingBytes): 32 MiB, as the gateway's. A body is
+ * counted from its first byte (or its declared length) until its request has
+ * been answered, so that one agent cannot hold the executor's memory, and
+ * with it every other agent's service, with requests each inside bodyLimit.
+ */
+export const WAITING_BYTES = 32 * 1024 * 1024;
 /** The most one answer of the upstream may be (a JSON body, or one event of a stream): 16 MiB, as one line of a stdio server. */
 export const ANSWER_LIMIT = MAX_LINE_BYTES;
 /** The most the executor holds for an agent that is not reading its stream (res.writableLength): one answer's worth. Past it the exchange is cut. The upstream is paused as soon as the agent's connection takes no more, so this is reached only where one event nearly fills it and more follow in the same read of the upstream (X113). */
@@ -75,6 +83,39 @@ export const HELLO_WAIT_MS = 1000;
 export const HELLO_AT_ONCE = 8;
 export const HELLO_PER_CALLER = 4;
 
+/**
+ * The methods of tasks the executor serves in front of an upstream, where
+ * the settings allow tasks (allowTasks): those of MCP 2025-11-25, and
+ * tasks/update of the 2026-07-28 revision's extension. Each names one task
+ * by params.taskId, but tasks/list, whose answer is filtered.
+ */
+const TASK_METHODS = ['tasks/get', 'tasks/result', 'tasks/cancel', 'tasks/list', 'tasks/update'];
+/**
+ * Tasks of MCP 2026-07-28 are an extension, which a client declares in the
+ * client capabilities of its request's _meta, under "extensions"; the
+ * server then decides whether a request becomes a task, and answers with a
+ * flat handle ({resultType: "task", taskId}). Their notifications come
+ * through subscriptions/listen, which names tasks in
+ * params.notifications.taskIds. (As the review of 0.5.2 describes them.)
+ */
+const TASKS_EXTENSION = 'io.modelcontextprotocol/tasks';
+/** The answer, under the agent's id, where the upstream's answer to initialize or server/discover could not be read to take its offer of tasks out. */
+export const CAPABILITIES_NOT_READ = 'The tool server\'s answer could not be read by the executor, which is to take out of it the offer of tasks the settings do not allow (allowTasks). So it was not handed on.';
+const CLIENT_CAPABILITIES = 'io.modelcontextprotocol/clientCapabilities';
+/** The _meta member that ties a message to a task (MCP 2025-11-25). */
+const RELATED_TASK = 'io.modelcontextprotocol/related-task';
+/** The answer, under the agent's id, where the upstream's list of tasks could not be read. */
+export const TASKS_NOT_READ = 'The tool server\'s list of tasks could not be read by the executor, which is to leave out of it the tasks that are not this agent\'s. So the list was not handed on.';
+/** The most tasks the executor remembers for one agent; past it that agent's oldest is forgotten, and asking for it is refused. */
+export const MAX_TASKS = 1000;
+/** The most ids of events (of the upstream's streams) the executor remembers giving one agent, so that a Last-Event-ID it names goes on; past it the oldest is forgotten. */
+export const MAX_EVENT_IDS = 1000;
+/** The most requests of the upstream's own the executor remembers handing on to one agent, unanswered; past it the oldest is forgotten, and an answer to it is refused. */
+export const MAX_ASKS = 1000;
+
+/** What readBody gives where a body would take its agent past waitingBytes. */
+const TOO_MUCH_HELD = Symbol('too much held');
+
 /** The agent's headers that go on to the upstream. Every other is dropped: a header is a way to carry a token, and the upstream must get none but the executor's. */
 const FORWARDED_HEADERS = ['accept', 'accept-language', 'content-type', 'mcp-session-id', 'last-event-id'];
 /** The upstream's headers that come back to the agent. */
@@ -88,7 +129,7 @@ export const LOCAL_VERSIONS = Object.freeze(['2025-11-25', '2025-06-18', '2025-0
 /** How a revision of the specification is written: a date. Only a header value of this form is named in the log (X287). */
 const REVISION = /^\d{4}-\d{2}-\d{2}$/;
 /** The member of params that Mcp-Name mirrors, for each method that has one, as the 2026-07-28 revision's table of standard request headers says (X110). */
-const MIRRORED_NAME = new Map([['tools/call', 'name'], ['prompts/get', 'name'], ['resources/read', 'uri']]);
+const MIRRORED_NAME = new Map([['tools/call', 'name'], ['prompts/get', 'name'], ['resources/read', 'uri'], ['tasks/get', 'taskId'], ['tasks/update', 'taskId'], ['tasks/cancel', 'taskId']]);
 /** A number as JSON writes one (RFC 8259): no hexadecimal, no space, no "Infinity", none of what Number() would take besides. */
 // eslint-disable-next-line security/detect-unsafe-regex -- no repetition inside repetition can match the same text two ways (runs of digits kept apart by a full stop and an "e" the digits cannot match), so matching takes time in step with the text.
 const JSON_NUMBER = /^(-?)(0|[1-9][0-9]*)(?:\.([0-9]+))?(?:[eE]([+-]?[0-9]+))?$/;
@@ -174,6 +215,9 @@ export function readHttpSettings(config, root, { keysOnly = false } = {}) {
     } else if (!isObject(up.credential) || typeof up.credential.file !== 'string' || up.credential.file === '' || Object.keys(up.credential).some((k) => k !== 'file')) at('upstream.credential', 'must be {"file": <path>}: the file that holds the upstream\'s bearer token, readable by the executor alone.');
     else s.upstream.credential = { file: pathFrom(root, up.credential.file) };
     for (const k of Object.keys(up)) if (!['url', 'credential'].includes(k)) warnings.push(`upstream.${k}: not a setting; set aside.`);
+    // Tasks: every agent reaches the upstream as one caller, so they are refused unless the settings allow them, and then each is kept to the agent whose call made it.
+    s.allowTasks = config.allowTasks ?? false;
+    if (typeof s.allowTasks !== 'boolean') at('allowTasks', 'must be true or false: whether agents may use tasks of the upstream (a call that asks for a task; tasks/get, tasks/result, tasks/cancel and tasks/list), each task kept to the agent whose call made it. Default false: refused.');
   }
 
   s.agents = new Map();
@@ -217,6 +261,8 @@ export function readHttpSettings(config, root, { keysOnly = false } = {}) {
       for (const k of Object.keys(a)) if (!['secretHash', 'oauth', 'slip', 'book', 'keys', 'issuerKeys', 'copy', 'copyKey'].includes(k)) warnings.push(`${prefix}.${k}: not a setting; set aside.`);
       s.agents.set(name, paths);
     }
+    // Tasks only for one agent: the ownership kept by the executor is not relied on to keep several agents apart.
+    if (s.allowTasks === true && Object.keys(config.agents).length !== 1) at('allowTasks', 'can be true only where the settings name exactly one agent, because several agents share one caller at the tool server, so one agent could reach another\'s task.');
   }
 
   const ex = config.executor;
@@ -239,10 +285,13 @@ export function readHttpSettings(config, root, { keysOnly = false } = {}) {
   readRecorderSettings(config, s, at, root, warnings);
   s.bodyLimit = config.bodyLimit ?? BODY_LIMIT;
   if (!Number.isInteger(s.bodyLimit) || s.bodyLimit < 1024 || s.bodyLimit > 1024 * 1024 * 1024) at('bodyLimit', 'must be a whole number of bytes from 1,024 to 1,073,741,824.');
+  s.waitingBytes = config.waitingBytes ?? WAITING_BYTES;
+  if (!Number.isInteger(s.waitingBytes) || s.waitingBytes < 0 || s.waitingBytes > 1024 * 1024 * 1024) at('waitingBytes', 'must be a whole number of bytes from 0 to 1,073,741,824: the most the bodies of one agent\'s requests in flight may hold together.');
+  else if (Number.isInteger(s.bodyLimit) && s.waitingBytes < s.bodyLimit) warnings.push('waitingBytes: is less than bodyLimit, so a body of the largest size the executor takes can never be held.');
   s.allowedOrigins = config.allowedOrigins ?? [];
   if (!Array.isArray(s.allowedOrigins) || !s.allowedOrigins.every((o) => typeof o === 'string' && /^https?:\/\/[^/\s]+$/.test(o))) at('allowedOrigins', 'must be a list of origins (scheme, host and port, such as "http://localhost:3000") whose pages may call the executor; with none, a call that names an Origin is refused.');
   for (const k of Object.keys(config)) {
-    if (![...SHARED_KEYS, 'listen', 'path', 'upstream', 'agents', 'executor', 'bodyLimit', 'allowedOrigins', 'admin', 'oauth', ...(local ? ['server', 'shutdownWait', 'sessions'] : [])].includes(k)) warnings.push(`${k}: not a setting${['shutdownWait', 'sessions'].includes(k) ? ' without "server", a local program' : ''}; set aside.`);
+    if (![...SHARED_KEYS, 'listen', 'path', 'upstream', 'agents', 'executor', 'bodyLimit', 'waitingBytes', 'allowedOrigins', 'admin', 'oauth', ...(local ? ['server', 'shutdownWait', 'sessions'] : ['allowTasks'])].includes(k)) warnings.push(`${k}: not a setting${['shutdownWait', 'sessions'].includes(k) ? ' without "server", a local program' : (k === 'allowTasks' ? ' in front of a local program, where each session has a program of its own and so tasks of its own' : '')}; set aside.`);
   }
   if (s.unlisted === 'forward') warnings.push(UNLISTED_FORWARD_WARNING);
   return { settings: problems.length ? null : s, problems, warnings, partial: s };
@@ -330,6 +379,8 @@ export function sseReader({ onEvent, onTooLong, limit = ANSWER_LIMIT }) {
   let over = false;
   let first = true;
   return {
+    /** How many characters are held of the event not yet whole. */
+    pending: () => raw.length + buffer.length,
     feed(text) {
       if (over) return;
       buffer += text;
@@ -421,8 +472,19 @@ export async function openHttpExecutor(config, more = {}) {
       releases[releases.length - 1] = agent.release;
       agent.hash = paths.secretHash ? Buffer.from(paths.secretHash) : null;
       agent.open = 0;
+      /** The bytes of bodies this agent's requests in flight hold, being read or waiting for their answers: at most waitingBytes. */
+      agent.held = 0;
+      /** The bytes of the upstream's answers to this agent the executor holds, read and not yet handed on, or waiting for the agent's connection: at most waitingBytes, counted apart from the bodies. */
+      agent.answers = 0;
       /** The sessions this agent opened, oldest first. */
       agent.sessions = new Set();
+      /** In front of an upstream: the tasks this agent's calls made (allowTasks), and the ids of the events it was given, oldest first. */
+      agent.tasks = new Set();
+      agent.eventIds = new Set();
+      /** In front of an upstream: the requests of the upstream's own handed on to this agent and not yet answered, by session and id, oldest first. */
+      agent.asks = new Set();
+      /** The end of this agent's queue of messages to read (readInTurn). */
+      agent.reading = Promise.resolve();
       agents.set(name, agent);
     }
     // The front door's state file is read only now, with the locks held, its own among them: the command "owner" works on it under the same locks, so what it wrote is what is read, and nothing it writes later is undone. "ownerCheck" is the owner's check at its page: left out (as the command "http" leaves it), the one by the owner's passkey (owner.mjs); null, none.
@@ -502,11 +564,11 @@ export async function openHttpExecutor(config, more = {}) {
     return at;
   };
 
-  // Sessions the upstream opened (Mcp-Session-Id), each owned by the agent that opened it. An agent past its cap loses its own oldest, never another's.
+  // Sessions the upstream opened (Mcp-Session-Id), each owned by the agent that opened it and held to the connection made through OAuth it was begun under (null for an agent's own secret), as a local program's session is (X234). An agent past its cap loses its own oldest, never another's.
   const sessions = new Map();
-  const ownSession = (id, agent) => {
+  const ownSession = (id, agent, connection) => {
     if (sessions.has(id)) return;
-    sessions.set(id, agent.name);
+    sessions.set(id, { agent: agent.name, connection });
     agent.sessions.add(id);
     if (agent.sessions.size > MAX_SESSIONS) {
       const oldest = agent.sessions.values().next().value;
@@ -517,6 +579,239 @@ export async function openHttpExecutor(config, more = {}) {
   const forgetSession = (id, agent) => {
     sessions.delete(id);
     agent.sessions.delete(id);
+  };
+  /** Whether the upstream's session under this id is this agent's, begun under this connection. One used under another connection than its own is forgotten: no connection of the agent's may use it after. */
+  const upstreamSession = (id, agent, connection) => {
+    const s = sessions.get(id);
+    if (!s || s.agent !== agent.name) return false;
+    if (s.connection === connection) return true;
+    agent.log({ event: 'session-ended', why: 'another-connection' });
+    forgetSession(id, agent);
+    return false;
+  };
+  /**
+   * Count for the request's agent what the executor holds of the upstream's
+   * answer to it: "buffered", what has been read and not yet handed on, and
+   * what waits for the agent's connection to take it (res.writableLength).
+   * The count is in agent.answers until the response has gone: apart from
+   * the bodies (agent.held), so that bodies at their budget leave room for
+   * their answers, and against the same limit, waitingBytes. Gives whether
+   * the agent is still within it.
+   */
+  const holdAnswer = (ctx, buffered = ctx.buffered ?? 0) => {
+    const { res, agent } = ctx;
+    ctx.buffered = buffered;
+    const now = buffered + (res.destroyed || res.writableFinished ? 0 : res.writableLength);
+    agent.answers += now - (ctx.answerHeld ?? 0);
+    ctx.answerHeld = now;
+    return agent.answers <= settings.waitingBytes;
+  };
+  /** The key a call in flight is held by, in front of an upstream: its session and its id where a session id is given, since an id is unique only within its session (as in front of a local program, X236); its id alone where none is. */
+  const callKey = (sessionId, id) => (sessionId === undefined ? idKey(id) : `session\n${sessionId}\n${idKey(id)}`);
+
+  // Tasks the upstream made for an agent's call (allowTasks), each held to that agent: to the upstream every agent is one caller, so nothing there keeps one agent's tasks from another. An agent past its cap loses its own oldest, never another's.
+  const taskOwners = new Map();
+  /** The owner of a task two agents' answers named: no agent. */
+  const DISPUTED = Symbol('disputed');
+  const ownTask = (taskId, agent) => {
+    if (typeof taskId !== 'string' || taskId === '' || taskId.length > 512) return;
+    if (taskOwners.has(taskId)) {
+      // A task an answer to another agent named before: neither agent's from now on (X456). Else an agent that got an id named in an answer of its own, before the upstream made that task for another agent's call, would have the other agent's task.
+      const owner = taskOwners.get(taskId);
+      if (owner !== agent.name && owner !== DISPUTED) {
+        agents.get(owner)?.tasks.delete(taskId);
+        taskOwners.set(taskId, DISPUTED);
+        agent.log({ event: 'task-disputed' });
+      }
+      return;
+    }
+    taskOwners.set(taskId, agent.name);
+    agent.tasks.add(taskId);
+    if (agent.tasks.size > MAX_TASKS) {
+      const oldest = agent.tasks.values().next().value;
+      agent.tasks.delete(oldest);
+      taskOwners.delete(oldest);
+    }
+  };
+  /** Whether a value is a JSON object, and not a number kept as written (JSON.rawJSON, which is an object too): only such a value's members are walked. */
+  const members = (v) => isObject(v) && !JSON.isRawJSON(v);
+  /** Whether a result is a task's flat handle (2026-07-28: {resultType: "task", taskId}). */
+  const flatHandle = (result) => isObject(result) && result.resultType === 'task';
+  /** A result that is a task's handle (2025-11-25, CreateTaskResult: {task: {taskId, ...}}, where "asked"; 2026-07-28, the flat handle, in any answer): the task is the agent's. */
+  const learnTask = (result, agent, asked = true) => {
+    if (asked && isObject(result) && isObject(result.task)) ownTask(result.task.taskId, agent);
+    if (flatHandle(result)) ownTask(result.taskId, agent);
+  };
+  /**
+   * The message with the extension of tasks (2026-07-28) taken out of the
+   * client capabilities its _meta declares, names in other capitals counted
+   * as themselves (an upstream that reads without regard to capitals would
+   * take them so); null where it declares none. Without allowTasks, what an
+   * agent sends on declares no tasks, so the upstream, which decides, makes
+   * none and answers at once (X454).
+   */
+  const withoutTasksExtension = (m) => {
+    const meta = isObject(m) && isObject(m.params) && members(m.params._meta) ? m.params._meta : null;
+    if (!meta) return null;
+    let changed = false;
+    const out = { ...meta };
+    for (const [k, caps] of Object.entries(meta)) {
+      if (foldName(k) !== foldName(CLIENT_CAPABILITIES) || !members(caps)) continue;
+      const kept = { ...caps };
+      for (const [e, extensions] of Object.entries(caps)) {
+        if (foldName(e) !== foldName('extensions') || !members(extensions)) continue;
+        const names = Object.keys(extensions).filter((name) => foldName(name) !== foldName(TASKS_EXTENSION));
+        if (names.length === Object.keys(extensions).length) continue;
+        kept[e] = Object.fromEntries(names.map((name) => [name, extensions[name]]));
+        changed = true;
+      }
+      out[k] = kept;
+    }
+    return changed ? { ...m, params: { ...m.params, _meta: out } } : null;
+  };
+  /** The text to send on for an agent's message under the upstream's id "serverId": without allowTasks, with the extension of tasks taken out where it declares it, every number kept as the agent wrote it; else its text with the id spliced in. */
+  const sentText = (m, text, serverId, agent) => {
+    const without = settings.allowTasks || !withoutTasksExtension(m) ? null : withoutTasksExtension(exactly(text, m));
+    if (without) {
+      agent.log({ event: 'tasks-extension-removed' });
+      return JSON.stringify({ ...without, id: serverId });
+    }
+    return spliceId(text, serverId) ?? JSON.stringify({ ...m, id: serverId });
+  };
+  /** The task a message of the upstream's names: the taskId of notifications/tasks/status or notifications/tasks, or of its _meta's related task; undefined where none. */
+  const taskNamed = (m) => {
+    if (!isObject(m)) return undefined;
+    if ((m.method === 'notifications/tasks/status' || m.method === 'notifications/tasks') && isObject(m.params)) return m.params.taskId;
+    const meta = isObject(m.params?._meta) ? m.params._meta : (isObject(m.result?._meta) ? m.result._meta : null);
+    return isObject(meta?.[RELATED_TASK]) ? meta[RELATED_TASK].taskId : undefined;
+  };
+  /** Whether a message names a task the executor holds for another agent. */
+  const othersTask = (m, agent) => {
+    const owner = taskOwners.get(taskNamed(m));
+    return owner !== undefined && owner !== agent.name;
+  };
+  /**
+   * Why an agent's request about tasks is not sent on, or null where it may
+   * be: without allowTasks, every method of tasks and every request that
+   * asks for a task (params.task); with it, a method of tasks the executor
+   * does not know, and one that names a task not this agent's. A method or
+   * name in other capitals counts as itself: an upstream that reads without
+   * regard to capitals would take it so.
+   */
+  const taskRefusal = (m, agent) => {
+    const params = isObject(m.params) ? m.params : {};
+    const tasksMethod = foldName(m.method).startsWith('tasks/');
+    const asks = Object.keys(params).some((k) => foldName(k) === 'task');
+    const why = 'In front of an upstream every agent reaches it with the executor\'s one credential, as one caller, so one agent\'s task could be read or cancelled by another; the settings do not allow tasks (allowTasks).';
+    // A subscription (2026-07-28) that names tasks, in params.notifications.taskIds: without allowTasks, refused; with it, only where every task it names is this agent's (X455).
+    if (foldName(m.method) === foldName('subscriptions/listen')) {
+      if (misspelt(params, ['notifications']) !== null) return { rpc: CODES.invalidParams, message: 'The params name "notifications" in other capitals, which two readers may read differently.' };
+      const n = isObject(params.notifications) ? params.notifications : {};
+      if (Object.keys(n).some((k) => foldName(k) === foldName('taskIds'))) {
+        if (!settings.allowTasks) return { rpc: CODES.invalidParams, message: `This subscription names tasks (notifications.taskIds), which the executor does not send on. ${why}` };
+        if (misspelt(n, ['taskIds']) !== null) return { rpc: CODES.invalidParams, message: 'The notifications name "taskIds" in other capitals, which two readers may read differently.' };
+        if (!Array.isArray(n.taskIds) || n.taskIds.some((t) => taskOwners.get(t) !== agent.name)) return { rpc: CODES.invalidParams, message: 'The subscription names a task that is not known to the executor, or is not this agent\'s.' };
+      }
+    }
+    if (!settings.allowTasks) {
+      if (tasksMethod) return { rpc: CODES.methodNotFound, message: `The executor does not send ${m.method.slice(0, 80)} on. ${why}` };
+      if (asks) return { rpc: CODES.invalidParams, message: `This request asks for a task (params.task), which the executor does not send on. ${why}` };
+      return null;
+    }
+    if (tasksMethod && !TASK_METHODS.includes(m.method)) return { rpc: CODES.methodNotFound, message: `${m.method.slice(0, 80)} is not a method of tasks the executor knows (${TASK_METHODS.join(', ')}), so it cannot keep it to this agent's tasks, and does not send it on.` };
+    if (misspelt(params, ['task']) !== null) return { rpc: CODES.invalidParams, message: 'The params name "task" in other capitals, which two readers may read differently.' };
+    if (tasksMethod && m.method !== 'tasks/list') {
+      if (misspelt(params, ['taskId']) !== null) return { rpc: CODES.invalidParams, message: 'The params name "taskId" in other capitals, which two readers may read differently.' };
+      if (taskOwners.get(params.taskId) !== agent.name) return { rpc: CODES.invalidParams, message: 'The task is not known to the executor, or is not this agent\'s.' };
+    }
+    if (othersTask(m, agent)) return { rpc: CODES.invalidParams, message: 'The message names a task that is not this agent\'s.' };
+    return null;
+  };
+  /** The text read again with every number kept as the server wrote it, so that a filter changes nothing else; "m" where it cannot be. */
+  const exactly = (text, m) => {
+    try {
+      return JSON.parse(text, (k, v, context) => (typeof v === 'number' ? JSON.rawJSON(context.source) : v));
+    } catch {
+      return m;
+    }
+  };
+  /** "o" without the members named "name" in any capitals. */
+  const without = (o, name) => Object.fromEntries(Object.entries(o).filter(([k]) => foldName(k) !== foldName(name)));
+  /**
+   * Without allowTasks, the upstream's offer of tasks is not handed on, so
+   * that a client is not asked to use what the executor refuses (X457): a
+   * tools/list answer (filtered as hideUnlisted says, too) loses each tool's
+   * execution.taskSupport, and the answer to initialize or server/discover
+   * loses capabilities.tasks and the tasks extension of
+   * capabilities.extensions; names in other capitals count as themselves.
+   * Gives {text, hidden} under the agent's id, or null where it cannot be
+   * read.
+   */
+  const toolsOffered = (text, m, clientId) => {
+    const listed = settings.hideUnlisted ? filteredList(text, m, clientId, settings) : null;
+    if (settings.hideUnlisted && !listed) return null;
+    if (settings.allowTasks) return listed;
+    if (!Object.hasOwn(m, 'result') || !isObject(m.result) || !Array.isArray(m.result.tools)) return null;
+    const exact = listed ? exactly(listed.text, m) : exactly(text, m);
+    const tools = exact.result.tools.map((t) => (members(t) ? Object.fromEntries(Object.entries(t).map(([k, v]) => [k, foldName(k) === foldName('execution') && members(v) ? without(v, 'taskSupport') : v])) : t));
+    return { text: JSON.stringify({ ...exact, id: clientId, result: { ...exact.result, tools } }), hidden: listed?.hidden ?? 0 };
+  };
+  const capabilitiesOffered = (text, m, clientId) => {
+    if (!Object.hasOwn(m, 'result') || !isObject(m.result)) return null;
+    const exact = exactly(text, m);
+    // capabilities.tasks (2025-11-25), and the tasks extension in capabilities.extensions (2026-07-28); other extensions are kept.
+    const offered = (caps) => Object.fromEntries(Object.entries(without(caps, 'tasks')).map(([k, v]) => [k, foldName(k) === foldName('extensions') && members(v) ? without(v, TASKS_EXTENSION) : v]));
+    const result = Object.fromEntries(Object.entries(exact.result).map(([k, v]) => [k, foldName(k) === foldName('capabilities') && members(v) ? offered(v) : v]));
+    return { text: JSON.stringify({ ...exact, id: clientId, result }), hidden: 0 };
+  };
+  /** A tasks/list answer with only this agent's tasks in it, under the agent's id; null where it cannot be read. */
+  const filteredTasks = (text, m, clientId, agent) => {
+    if (!Object.hasOwn(m, 'result') || !isObject(m.result) || !Array.isArray(m.result.tasks) || misspelt(m.result, ['tasks']) !== null) return null;
+    // Read again with every number kept as the server wrote it, so that filtering changes nothing else (as filteredList does).
+    let exact;
+    try {
+      exact = JSON.parse(text, (k, v, context) => (typeof v === 'number' ? JSON.rawJSON(context.source) : v));
+    } catch {
+      exact = m;
+    }
+    const tasks = exact.result.tasks.filter((t) => isObject(t) && typeof t.taskId === 'string' && taskOwners.get(t.taskId) === agent.name && misspelt(t, ['taskId']) === null);
+    return { text: JSON.stringify({ ...exact, id: clientId, result: { ...exact.result, tasks } }), hidden: exact.result.tasks.length - tasks.length };
+  };
+
+  /** The id an event gives (its last "id:" line), or undefined. */
+  const eventIdOf = (others) => {
+    let id;
+    for (const line of others) if (line.startsWith('id:')) id = line.slice(line.startsWith('id: ') ? 4 : 3);
+    return id;
+  };
+  /** An event's id given to this agent: a Last-Event-ID that names it may go on. */
+  const gaveEvent = (agent, id) => {
+    if (id === undefined || id === '' || id.length > 512) return;
+    agent.eventIds.delete(id);
+    agent.eventIds.add(id);
+    if (agent.eventIds.size > MAX_EVENT_IDS) agent.eventIds.delete(agent.eventIds.values().next().value);
+  };
+  /**
+   * Read one of an agent's messages in its turn: an agent's messages are read
+   * one at a time, each in a turn of the event loop of its own. Reading takes
+   * time in proportion to a message's member names (a message of 1 MiB with
+   * 95,000 of them, about 150 ms), and the agent's budget lets it have about
+   * 30 such in flight; read back to back, they held the one thread for
+   * seconds while another agent's request waited. Now another agent's
+   * request waits for the message being read and little more (X452).
+   */
+  const readInTurn = (agent, body) => {
+    const turn = agent.reading.then(() => new Promise((done) => setImmediate(done))).then(() => readMessage(body));
+    agent.reading = turn.then(() => {}, () => {});
+    return turn;
+  };
+  /** A request of the upstream's own handed on to this agent, on a stream of a request of its, or of its session: its answer may come from this agent alone, under the same session, once. */
+  const askedOf = (ctx, m) => {
+    if (!isId(m.id)) return;
+    const key = callKey(ctx.sessionId, m.id);
+    ctx.agent.asks.delete(key);
+    ctx.agent.asks.add(key);
+    if (ctx.agent.asks.size > MAX_ASKS) ctx.agent.asks.delete(ctx.agent.asks.values().next().value);
   };
 
   /** Who a bearer secret signs in: {agent, token}, where "token" is null for an agent's own secret and {connection, expires} for an access token; or null. */
@@ -555,11 +850,13 @@ export async function openHttpExecutor(config, more = {}) {
    * body (X110). A header that does not, or that cannot be checked, is a
    * problem, and nothing goes to the upstream.
    */
-  function headersFor(req, message, body) {
+  function headersFor(req, message, body, agent) {
     const dropped = [];
     const headers = {};
     for (const [name, values] of Object.entries(req.headersDistinct)) {
-      if (FORWARDED_HEADERS.includes(name)) headers[name] = values.length === 1 ? values[0] : values;
+      // Last-Event-ID asks the upstream to replay a stream after that event. To the upstream every agent is one caller, so it goes on only where it names an event the executor gave this agent, once.
+      if (name === 'last-event-id' && upstream && !(values.length === 1 && agent?.eventIds.has(values[0]))) dropped.push(name);
+      else if (FORWARDED_HEADERS.includes(name)) headers[name] = values.length === 1 ? values[0] : values;
       else if (name === 'mcp-protocol-version' || name === 'mcp-method' || name === 'mcp-name' || name.startsWith('mcp-param-')) continue;
       else if (!QUIET_HEADERS.includes(name) && !name.startsWith('sec-')) dropped.push(name);
     }
@@ -583,7 +880,7 @@ export async function openHttpExecutor(config, more = {}) {
         if (given !== message.method) return { problem: `The header ${name} (${given}) does not agree with the body's method (${message.method}).` };
       } else if (name === 'mcp-name') {
         const member = MIRRORED_NAME.get(message.method);
-        if (!member) return { problem: `The header ${name} mirrors a member of a tools/call, resources/read or prompts/get, and this message is none of them.` };
+        if (!member) return { problem: `The header ${name} mirrors a member of a request of one of these methods: ${[...MIRRORED_NAME.keys()].join(', ')}; and this message is none of them.` };
         const bodyName = message.params?.[member];
         if (typeof bodyName !== 'string') return { problem: `The header ${name} mirrors the body's params.${member}, which this message does not have as text.` };
         if (given !== bodyName) return { problem: `The header ${name} does not agree with the body's params.${member}.` };
@@ -617,8 +914,21 @@ export async function openHttpExecutor(config, more = {}) {
    * where it answers a tools/list), or "other" (a notification or a
    * response: whatever comes back is relayed). Gives {end: Promise, cancel}.
    */
-  function exchange(ctx, { method, headers, body, kind, clientId, serverId, list, learn, onOutcome }) {
+  function exchange(ctx, { method, headers, body, kind, clientId, serverId, list: listKind = null, learn, task = false, onOutcome }) {
     const { res, agent } = ctx;
+    // The answer to a list that is to be filtered: a tools/list ("tools": the tools with no rule left out) or a tasks/list ("tasks": other agents' tasks left out). One that cannot be read is not handed on.
+    const list = listKind === 'tasks'
+      ? { filter: (text, m) => filteredTasks(text, m, clientId, agent), notRead: 'tasks-list-not-read', hidden: 'tasks-hidden', answer: () => responseText(clientId, { error: { code: CODES.internal, message: TASKS_NOT_READ } }) }
+      : listKind === 'capabilities'
+        ? { filter: (text, m) => capabilitiesOffered(text, m, clientId), notRead: 'capabilities-not-read', hidden: 'tasks-offer-hidden', answer: () => responseText(clientId, { error: { code: CODES.internal, message: CAPABILITIES_NOT_READ } }), noResultGoesOn: true }
+        : (listKind ? { filter: (text, m) => toolsOffered(text, m, clientId), notRead: 'tools-list-not-read', hidden: 'tools-hidden', answer: () => listNotRead(clientId), noResultGoesOn: !settings.hideUnlisted } : null);
+    /** Where only the offer of tasks is taken out (not a list kept to what the agent may see): an answer that holds no result, a message without one or a text that is not JSON, goes on as it came, as before the offer was taken out (K2 of the re-check of 0.5.2). */
+    const passes = (read, m) => list.noResultGoesOn === true && (m ? !Object.hasOwn(m, 'result') : read.refused?.code === CODES.parse);
+    /** What the response under the executor's id teaches: the upstream's annotations, from a tools/list; the task it made for this agent, from a request that asked for one. */
+    const learnFrom = (m) => {
+      if (learn) learnAnnotations(m);
+      if (settings.allowTasks && Object.hasOwn(m, 'result')) learnTask(m.result, agent, task);
+    };
     let finished = false;
     let settledOutcome = false;
     let timer = null;
@@ -629,7 +939,11 @@ export async function openHttpExecutor(config, more = {}) {
     let stallTimer = null;
     let done;
     const end = new Promise((d) => {
-      done = d;
+      // At the end of the exchange, what was read of the answer is held no longer; what waits for the agent's connection still counts (waitingBytes).
+      done = (v) => {
+        holdAnswer(ctx, 0);
+        d(v);
+      };
     });
     const finishAnd = (f) => (...a) => {
       f(...a);
@@ -643,10 +957,18 @@ export async function openHttpExecutor(config, more = {}) {
       res.destroy();
     };
     /** Write to the agent, unless it has gone. Where the agent's connection takes no more, the upstream is paused until it drains; an agent whose connection does not fully drain within the timeout, even one reading slowly, or for which more than the limit is waiting, is cut off (X113). */
+    /** What the executor holds of the upstream's answer would take this agent past waitingBytes: the exchange is cut (a JSON answer is refused, a stream closed). */
+    const tooMuchHeld = () => {
+      agent.log({ event: 'refused', code: 'answer-too-much-held', kind, held: agent.answers });
+      req?.destroy();
+      fail_(503, `The upstream's answer would take what the executor holds of answers for this agent past ${settings.waitingBytes} bytes (waitingBytes), so the exchange with the upstream was cut.`);
+    };
     const toAgent = (text) => {
       if (res.destroyed || res.writableEnded || finished) return;
       if (res.writableLength > BACKLOG_LIMIT) return stalled(`more than ${BACKLOG_LIMIT} bytes waiting`);
-      if (res.write(text) || !up_ || stallTimer) return;
+      const taken = res.write(text);
+      if (!holdAnswer(ctx)) return tooMuchHeld();
+      if (taken || !up_ || stallTimer) return;
       up_.pause();
       stallTimer = setTimeout(() => stalled(`not all taken within ${settings.timeout} ms`), settings.timeout);
       stallTimer.unref();
@@ -708,7 +1030,7 @@ export async function openHttpExecutor(config, more = {}) {
         // The few headers that come back are scrubbed as a body is: a header is a way to carry a token too.
         for (const name of RETURNED_HEADERS) if (up.headers[name] !== undefined && typeof up.headers[name] === 'string') returned[name] = scrub(up.headers[name]);
         const sessionId = up.headers['mcp-session-id'];
-        if (typeof sessionId === 'string' && SESSION_ID.test(sessionId) && status < 300) ownSession(sessionId, agent);
+        if (typeof sessionId === 'string' && SESSION_ID.test(sessionId) && status < 300) ownSession(sessionId, agent, ctx.token?.connection ?? null);
         // Never followed: a redirection would carry the credential elsewhere. And the upstream's refusal of the executor's credential is the executor's problem, not the agent's: nothing of it is relayed.
         if (status >= 300 && status < 400) {
           req.destroy();
@@ -737,9 +1059,18 @@ export async function openHttpExecutor(config, more = {}) {
             },
             onEvent: (event) => {
               if (finished) return;
-              if (event.data === null) return toAgent(scrub(event.raw));
+              if (event.data === null) {
+                gaveEvent(agent, eventIdOf(event.others));
+                return toAgent(scrub(event.raw));
+              }
               const read = readMessage(Buffer.from(event.data), { strictNumbers: false });
               const m = read.refused ? null : read.message;
+              // A message that names a task the executor holds for another agent (its status, or a message tied to it) is not this agent's to see: to the upstream every agent is one caller, so it may send it on any of their streams.
+              if (m && othersTask(m, agent)) {
+                agent.log({ event: 'event-dropped', code: 'another-agents-task' });
+                return;
+              }
+              gaveEvent(agent, eventIdOf(event.others));
               const foundId = read.refused ? topLevelId(event.data)?.value : m?.id;
               if (serverId !== undefined && (read.kind === 'response' || (read.refused && foundId !== undefined))) {
                 if (foundId === serverId) {
@@ -752,22 +1083,28 @@ export async function openHttpExecutor(config, more = {}) {
                     else outcome({ kind: 'server-error', text: read.text, errorText: `The tool server answered with an error: ${JSON.stringify(m.error)}` });
                     return done();
                   }
-                  if (learn && m && read.kind === 'response') learnAnnotations(m);
-                  const filtered = list && m ? filteredList(read.text, m, clientId, settings) : null;
-                  if (filtered?.hidden) agent.log({ event: 'tools-hidden', hidden: filtered.hidden });
-                  // A list of tools that is to be filtered and cannot be read is not handed on: the agent is answered with an error under its id (X250). The upstream's own error goes on as it is.
-                  if (list && !filtered && !(m && Object.hasOwn(m, 'error'))) {
-                    agent.log({ event: 'tools-list-not-read' });
-                    return toAgent(sseEvent(event.others, listNotRead(clientId)));
+                  if (m && read.kind === 'response') learnFrom(m);
+                  const filtered = list && m ? list.filter(read.text, m) : null;
+                  if (filtered?.hidden) agent.log({ event: list.hidden, hidden: filtered.hidden });
+                  // A list that is to be filtered and cannot be read is not handed on: the agent is answered with an error under its id (X250). The upstream's own error goes on as it is.
+                  if (list && !filtered && !(m && Object.hasOwn(m, 'error')) && !passes(read, m)) {
+                    agent.log({ event: list.notRead });
+                    return toAgent(sseEvent(event.others, list.answer()));
                   }
                   return toAgent(scrub(sseEvent(event.others, filtered ? filtered.text : (spliceId(event.data, clientId) ?? event.data))));
                 }
                 if (kind === 'call') agent.log({ event: 'upstream-other-id', id: typeof foundId === 'string' ? foundId.slice(0, 80) : foundId });
               }
+              if (m && read.kind === 'request') askedOf(ctx, m);
               toAgent(scrub(event.raw));
             },
           });
-          up.on('data', (chunk) => reader.feed(decoder.decode(chunk, { stream: true })));
+          up.on('data', (chunk) => {
+            if (finished) return;
+            reader.feed(decoder.decode(chunk, { stream: true }));
+            // The part of an event not yet whole counts for the agent, as what waits for its connection does.
+            if (!finished && !holdAnswer(ctx, reader.pending())) tooMuchHeld();
+          });
           up.on('error', () => fail_(502, 'The upstream closed the stream before it was complete.'));
           up.on('aborted', () => fail_(502, 'The upstream closed the stream before its answer came.'));
           up.on('end', () => {
@@ -783,11 +1120,14 @@ export async function openHttpExecutor(config, more = {}) {
         const chunks = [];
         let size = 0;
         up.on('data', (chunk) => {
+          if (finished) return;
           size += chunk.length;
           if (size > ANSWER_LIMIT) {
             req.destroy();
             return fail_(502, `The upstream's answer was larger than ${ANSWER_LIMIT} bytes, the most the executor takes.`);
           }
+          // What is read of the answer counts for the agent until it has been handed on (waitingBytes).
+          if (!holdAnswer(ctx, size)) return tooMuchHeld();
           chunks.push(chunk);
         });
         up.on('error', () => fail_(502, 'The upstream closed the connection before its answer was complete.'));
@@ -843,18 +1183,19 @@ export async function openHttpExecutor(config, more = {}) {
           let out = text ?? bytes.toString('utf8');
           let filtered = null;
           if (serverId !== undefined && foundId === serverId) {
-            if (learn && m && read.kind === 'response') learnAnnotations(m);
-            filtered = list && m && read.kind === 'response' ? filteredList(read.text, m, clientId, settings) : null;
-            if (filtered?.hidden) agent.log({ event: 'tools-hidden', hidden: filtered.hidden });
+            if (m && read.kind === 'response') learnFrom(m);
+            filtered = list && m && read.kind === 'response' ? list.filter(read.text, m) : null;
+            if (filtered?.hidden) agent.log({ event: list.hidden, hidden: filtered.hidden });
             out = filtered ? filtered.text : (spliceId(out, clientId) ?? out);
           }
-          // A list of tools that is to be filtered and cannot be read (or is under another id, or is no message) is not handed on: the agent is answered with an error under its id (X250). The upstream's own error goes on as it is, with its status: under the request's id; or, under any id or a null one, where it is an error answer and nothing more, which holds no result for any reader and so no list (X260).
+          // A list that is to be filtered and cannot be read (or is under another id, or is no message) is not handed on: the agent is answered with an error under its id (X250). The upstream's own error goes on as it is, with its status: under the request's id; or, under any id or a null one, where it is an error answer and nothing more, which holds no result for any reader and so no list (X260).
           let own = false;
-          if (list && !filtered && !(m && read.kind === 'response' && foundId === serverId && Object.hasOwn(m, 'error')) && !errorAnswer(text)) {
-            agent.log({ event: 'tools-list-not-read' });
-            out = listNotRead(clientId);
+          if (list && !filtered && !(m && read.kind === 'response' && foundId === serverId && Object.hasOwn(m, 'error')) && !errorAnswer(text) && !passes(read, m)) {
+            agent.log({ event: list.notRead });
+            out = list.answer();
             own = true;
           }
+          if (!own && m && read.kind === 'request') askedOf(ctx, m);
           const body_ = Buffer.from(scrub(out));
           // The executor's own error is JSON whatever the upstream sent, and is not to be stored: the upstream's content type and its word on caching were about the body that is not handed on (X260).
           res.writeHead(status, own ? { ...returned, 'content-type': JSON_TYPE, 'cache-control': 'no-store', 'content-length': body_.length } : { ...returned, 'content-type': type || JSON_TYPE, 'content-length': body_.length });
@@ -883,10 +1224,24 @@ export async function openHttpExecutor(config, more = {}) {
    * with code BODY_TIMEOUT: the server's own request timeout is off, since a
    * GET stream or a long answer must not be cut, so the body's reading has
    * a limit of its own (X119).
+   *
+   * With "held" ({agent, bytes}), the body's bytes are counted for the agent
+   * (agent.held) as they arrive, its declared length at once, and kept until
+   * the caller gives them back; a body that would take the agent past
+   * waitingBytes gives TOO_MUCH_HELD, and is read no further.
    */
-  function readBody(req, limit = settings.bodyLimit, wait = settings.timeout) {
+  function readBody(req, limit = settings.bodyLimit, wait = settings.timeout, held = null) {
     const declared = Number(req.headers['content-length']);
     if (Number.isFinite(declared) && declared > limit) return Promise.resolve(null);
+    const share = (more) => {
+      if (!held) return true;
+      if (held.agent.held + more > settings.waitingBytes) return false;
+      held.agent.held += more;
+      held.bytes += more;
+      return true;
+    };
+    const reserved = Number.isFinite(declared) && declared > 0 ? declared : 0;
+    if (!share(reserved)) return Promise.resolve(TOO_MUCH_HELD);
     return new Promise((done, failed) => {
       const chunks = [];
       let size = 0;
@@ -900,6 +1255,11 @@ export async function openHttpExecutor(config, more = {}) {
       req.on('data', (chunk) => {
         if (over) return;
         size += chunk.length;
+        if (size > reserved && !share(Math.min(chunk.length, size - reserved))) {
+          over = true;
+          chunks.length = 0;
+          return settle(done)(TOO_MUCH_HELD);
+        }
         if (size > limit) {
           over = true;
           chunks.length = 0;
@@ -1080,7 +1440,7 @@ export async function openHttpExecutor(config, more = {}) {
     if (sessionIds.length > 1 || (sessionIds.length === 1 && !SESSION_ID.test(sessionIds[0]))) return refuse(res, 400, null, CODES.invalidRequest, 'The Mcp-Session-Id header must be given once, as 1 to 512 visible ASCII characters.');
     // A local program's session is also held to the connection made through OAuth it was begun under (X234).
     const session = local && sessionIds.length === 1 ? local.owned(sessionIds[0], agent.name, who.token?.connection ?? null) : null;
-    if (sessionIds.length === 1 && (local ? !session : sessions.get(sessionIds[0]) !== agent.name)) {
+    if (sessionIds.length === 1 && (local ? !session : !upstreamSession(sessionIds[0], agent, who.token?.connection ?? null))) {
       agent.log({ event: 'refused', code: 'session-not-found' });
       return refuse(res, 404, null, CODES.invalidRequest, 'The session is not known to the executor, or is not this agent\'s. Begin a new one.');
     }
@@ -1089,13 +1449,22 @@ export async function openHttpExecutor(config, more = {}) {
       return refuse(res, 503, null, CODES.notRecorded, `This agent already has ${MAX_OPEN} requests in flight, the most it may have. Try again when one has ended.`, { connection: 'close' });
     }
     agent.open += 1;
-    const ctx = { req, res, agent, token: who.token, upstream: null, streaming: false, finalEvent: null, session, entered: null };
+    // The bytes of this request's body, counted for the agent until the request has been answered (waitingBytes).
+    const held = { agent, bytes: 0 };
+    const ctx = { req, res, agent, token: who.token, upstream: null, streaming: false, finalEvent: null, session, entered: null, held };
+    // What waits for the agent's connection counts in its budget until the connection has taken it, or has gone.
+    res.on('drain', () => holdAnswer(ctx));
+    res.once('finish', () => holdAnswer(ctx));
+    res.once('close', () => holdAnswer(ctx, 0));
     // A message in hand keeps its session from being taken for idle; an open stream of the program's own messages does not (X235).
     if (session && req.method !== 'GET') enter(ctx, session);
     try {
       await one(ctx, sessionIds[0]);
     } finally {
       agent.open -= 1;
+      agent.held -= held.bytes;
+      // The answer as written, where the agent has not yet taken it all.
+      holdAnswer(ctx);
       if (ctx.entered) local.leave(ctx.entered);
     }
   }
@@ -1275,6 +1644,7 @@ export async function openHttpExecutor(config, more = {}) {
 
   async function one(ctx, sessionId) {
     const { req, res, agent } = ctx;
+    ctx.sessionId = sessionId;
     // In front of a local program no one else reads the header, so the executor answers for it: "If the server receives a request with an invalid or unsupported MCP-Protocol-Version, it MUST respond with 400 Bad Request." A request that names no version is taken, as the specification allows (X247).
     const versions = local ? req.headersDistinct['mcp-protocol-version'] ?? [] : [];
     const otherVersion = versions.length === 1 && !LOCAL_VERSIONS.includes(versions[0]) && versions[0] !== ctx.session?.version;
@@ -1288,8 +1658,13 @@ export async function openHttpExecutor(config, more = {}) {
     if (otherVersion && !versionWaits) return refuseVersion();
     if (req.method !== 'POST') {
       // The GET stream of server messages, or the DELETE that ends a session: no message, so no mirrored metadata to check; the same few headers go on.
-      const h = headersFor(req, null, undefined);
+      const h = headersFor(req, null, undefined, agent);
       if (h.problem) return refuse(res, 400, null, HEADER_MISMATCH, h.problem);
+      // In front of an upstream, with more than one agent: a stream of the upstream's messages tied to no session is tied to no agent either, since to the upstream every agent is one caller. What comes on it (its own requests, list changes) could be another agent's, so it is not opened; 405 is the specification's way of saying that no stream is offered (X450).
+      if (!local && req.method === 'GET' && sessionId === undefined && agents.size > 1) {
+        agent.log({ event: 'refused', code: 'stream-not-tied' });
+        return refuse(res, 405, null, CODES.invalidRequest, 'In front of this upstream, with more than one agent, a stream of the server\'s messages is opened only under a session (Mcp-Session-Id): without one, what comes on it is no one agent\'s.', { allow: 'POST, DELETE' });
+      }
       if (h.dropped.length) agent.log({ event: 'headers-dropped', headers: h.dropped });
       if (local) {
         // A local program: the stream is of its session's own messages, and a DELETE ends the session and, with it, its program (X233, X234).
@@ -1329,7 +1704,7 @@ export async function openHttpExecutor(config, more = {}) {
     if (!/^application\/json\s*(;|$)/.test(type)) return refuse(res, 415, null, CODES.invalidRequest, 'A message is sent as application/json.');
     let body;
     try {
-      body = await readBody(req);
+      body = await readBody(req, settings.bodyLimit, settings.timeout, ctx.held);
     } catch (e) {
       if (e.code === 'BODY_TIMEOUT') {
         agent.log({ event: 'refused', code: 'body-timeout' });
@@ -1339,20 +1714,25 @@ export async function openHttpExecutor(config, more = {}) {
       if (e.code === 'BODY_CLOSED') return;
       return refuse(res, 400, null, CODES.invalidRequest, 'The body could not be read.');
     }
+    if (body === TOO_MUCH_HELD) {
+      agent.log({ event: 'refused', code: 'too-much-held', held: agent.held });
+      return refuse(res, 503, null, CODES.notRecorded, `This agent's requests in flight already hold ${settings.waitingBytes} bytes of bodies, or would with this one, the most they may (waitingBytes). Try again when one has been answered.`, { connection: 'close' });
+    }
     if (body === null) {
       agent.log({ event: 'refused', code: 'body-too-large' });
       return refuse(res, 413, null, CODES.invalidRequest, `The body is larger than ${settings.bodyLimit} bytes, the most the executor takes.`, { connection: 'close' });
     }
     // One message, read strictly: a batch, a repeated name or a shape that is not a message goes no further.
-    const read = readMessage(body);
+    // "let": a request that only passes through lets go of its message, read and as bytes, once it has been sent on (below).
+    let read = await readInTurn(agent, body);
     if (read.refused) {
       agent.log({ event: 'client-message-refused', code: read.refused.code });
       return refuse(res, 400, read.id, read.refused.code, read.refused.message);
     }
-    const m = read.message;
+    let m = read.message;
     // The check of MCP-Protocol-Version that waited for the message: an "initialize" with no session id is taken whatever version the header names, since the version is agreed inside "initialize" and the program's answer becomes the session's; any other message is refused as it would have been above (X287).
     if (versionWaits && !(read.kind === 'request' && m.method === 'initialize')) return refuseVersion();
-    const h = headersFor(req, m, read.text);
+    const h = headersFor(req, m, read.text, agent);
     if (h.problem) {
       agent.log({ event: 'refused', code: 'header-mismatch' });
       return refuse(res, 400, read.kind === 'request' ? m.id : null, HEADER_MISMATCH, h.problem);
@@ -1364,10 +1744,23 @@ export async function openHttpExecutor(config, more = {}) {
     // A local program: every message but a session's tool call is carried by localPost; the call goes on below, through the same check, with the session's link.
     if (local && !(ctx.session && read.kind === 'request' && m.method === 'tools/call')) return localPost(ctx, read);
 
+    // In front of an upstream: tasks are refused unless the settings allow them, and then kept to the agent whose call made each.
+    if (!local) {
+      const refusal = read.kind === 'request' ? taskRefusal(m, agent) : (othersTask(m, agent) ? { rpc: CODES.invalidParams, message: 'The message names a task that is not this agent\'s.' } : null);
+      if (refusal) {
+        agent.log({ event: 'refused', code: settings.allowTasks ? 'task-not-this-agents' : 'tasks-refused', method: typeof m.method === 'string' ? m.method.slice(0, 80) : null });
+        // A request is answered 200, as the executor's other refusals of a message it has read, so that the agent's MCP library reads the error as the response (X112); a notification or a response, which has no response, 400.
+        return refuse(res, read.kind === 'request' ? 200 : 400, read.kind === 'request' ? m.id : null, refusal.rpc, refusal.message);
+      }
+    }
+    // A request that asks for a task (allowTasks): the task its answer names is this agent's.
+    const asksTask = !local && read.kind === 'request' && isObject(m.params) && Object.hasOwn(m.params, 'task');
+
     if (read.kind === 'request') {
       if (m.method === 'tools/call') {
         const link = ctx.session ? localLink(ctx, ctx.session) : {
           newServerId,
+          key: (id) => callKey(sessionId, id),
           answer: (text) => {
             if (ctx.streaming) {
               if (!res.writableEnded && !res.destroyed) res.end(scrub(sseEvent(ctx.finalEvent ?? [], text)));
@@ -1377,7 +1770,15 @@ export async function openHttpExecutor(config, more = {}) {
           },
           unavailable: () => (stopping ? 'The executor is stopping, so this call was not sent.' : null),
           send: (call, forwarded) => {
-            const ex = exchange(ctx, { method: 'POST', headers: h.headers, body: JSON.stringify(forwarded), kind: 'call', serverId: call.serverId, onOutcome: (o) => call.settle?.(o) });
+            const ex = exchange(ctx, { method: 'POST', headers: h.headers, body: sentText(forwarded, JSON.stringify(forwarded), call.serverId, agent), kind: 'call', serverId: call.serverId, onOutcome: (o) => {
+              if (settings.allowTasks && o.kind === 'answer') learnTask(o.result, agent, asksTask);
+              // Without allowTasks no task was asked for, nor declared: a call answered with a task all the same is one whose outcome is not known, since its result is with the upstream, where the executor does not reach it (X454).
+              else if (o.kind === 'answer' && (flatHandle(o.result) || (isObject(o.result) && isObject(o.result.task)))) {
+                agent.log({ event: 'upstream-made-task' });
+                return call.settle?.({ kind: 'error', text: 'The tool server answered this call with a task, which the executor does not take (allowTasks is false), so the call\'s outcome is not known.', code: CODES.noAnswer });
+              }
+              call.settle?.(o);
+            } });
             ctx.exchange = ex;
             // Closing the stream to the upstream is the transport's cancellation: on the executor's timeout, the agent's closing of its stream, or its notification.
             call.cancelUpstream = ex.cancel;
@@ -1385,9 +1786,13 @@ export async function openHttpExecutor(config, more = {}) {
           },
           cancel: (call) => call.cancelUpstream?.(),
           forward: (id, serverId, text) => {
-            const ex = exchange(ctx, { method: 'POST', headers: h.headers, body: spliceId(text, serverId) ?? text, kind: 'request', clientId: id, serverId });
+            const ex = exchange(ctx, { method: 'POST', headers: h.headers, body: sentText(m, text, serverId, agent), kind: 'request', clientId: id, serverId, task: asksTask });
             ctx.exchange = ex;
             ctx.forwarded = ex.end;
+            // As a request that only passes through: its text, as sent, is all the exchange needs, and the message as read, which may cost many times its bytes, is let go while the upstream answers.
+            read = null;
+            m = null;
+            body = null;
           },
           track: () => {},
           untrack: () => {},
@@ -1416,7 +1821,11 @@ export async function openHttpExecutor(config, more = {}) {
       }
       // Every other request goes under an id of the executor's own, and its answer comes back under the agent's.
       const serverId = newServerId();
-      const ex = exchange(ctx, { method: 'POST', headers: h.headers, body: spliceId(read.text, serverId) ?? JSON.stringify({ ...m, id: serverId }), kind: 'request', clientId: m.id, serverId, list: m.method === 'tools/list' && settings.hideUnlisted, learn: m.method === 'tools/list' });
+      const ex = exchange(ctx, { method: 'POST', headers: h.headers, body: sentText(m, read.text, serverId, agent), kind: 'request', clientId: m.id, serverId, list: m.method === 'tools/list' && (settings.hideUnlisted || !settings.allowTasks) ? 'tools' : (m.method === 'tasks/list' ? 'tasks' : ((m.method === 'initialize' || m.method === 'server/discover') && !settings.allowTasks ? 'capabilities' : null)), learn: m.method === 'tools/list', task: asksTask });
+      // Its text, as sent, is all the exchange needs: the message as read, which may cost many times its bytes, is let go while the upstream answers.
+      read = null;
+      m = null;
+      body = null;
       res.on('close', () => ex.cancel());
       await ex.end;
       return;
@@ -1426,7 +1835,8 @@ export async function openHttpExecutor(config, more = {}) {
       if (!m.method.startsWith('notifications/')) return notANotification(ctx, m);
       let text = read.text;
       if (m.method === 'notifications/cancelled' && isId(m.params?.requestId)) {
-        const call = agent.calls.get(idKey(m.params.requestId));
+        // The call of this session under that id: a cancellation under another session, or none, names another call.
+        const call = agent.calls.get(callKey(sessionId, m.params.requestId));
         if (call && !call.cancelled) {
           call.cancelled = true;
           const cancelled = () => {
@@ -1449,12 +1859,24 @@ export async function openHttpExecutor(config, more = {}) {
         }
       }
       const ex = exchange(ctx, { method: 'POST', headers: h.headers, body: text, kind: 'other' });
+      read = null;
+      m = null;
+      body = null;
       res.on('close', () => ex.cancel());
       await ex.end;
       return;
     }
-    // The agent's response to a request of the upstream (a legacy session): relayed as it is.
+    // The agent's response to a request of the upstream: relayed as it is, where it answers a request the executor handed on to this agent under this session, once; anything else could answer another agent's, to an upstream that tells no caller from another, and is not sent on (X451).
+    const asked = callKey(sessionId, m.id);
+    if (!agent.asks.has(asked)) {
+      agent.log({ event: 'refused', code: 'response-not-asked' });
+      return refuse(res, 400, null, CODES.invalidRequest, 'The message answers no request the upstream sent to this agent, or one already answered, so it was not sent on.');
+    }
+    agent.asks.delete(asked);
     const ex = exchange(ctx, { method: 'POST', headers: h.headers, body: read.text, kind: 'other' });
+    read = null;
+    m = null;
+    body = null;
     res.on('close', () => ex.cancel());
     await ex.end;
   }
@@ -1467,7 +1889,7 @@ export async function openHttpExecutor(config, more = {}) {
     /** One agent's stub writer and copy, for tests and tools: {writer, stopped, calls}. */
     agent: (name) => {
       const a = agents.get(name);
-      return a ? { writer: a.writer, stopped: a.stopped, slip: { fingerprint: a.about.fingerprint }, calls: () => a.calls.size, open: () => a.open, sessions: () => (local ? local.count(name) : a.sessions.size) } : null;
+      return a ? { writer: a.writer, stopped: a.stopped, slip: { fingerprint: a.about.fingerprint }, calls: () => a.calls.size, open: () => a.open, held: () => ({ bodies: a.held, answers: a.answers }), sessions: () => (local ? local.count(name) : a.sessions.size) } : null;
     },
     /** In front of a local program: how many of its programs are running now, those of sessions just ended among them; null in front of an upstream HTTP server. */
     programs: () => (local ? local.programs() : null),

@@ -185,4 +185,16 @@ export function request(w, agent, method, params, { id, headers } = {}) {
   return post(w, agent, { jsonrpc: '2.0', id: useId, method, ...(params ? { params } : {}) }, { headers });
 }
 
+/**
+ * Begin a legacy session with the upstream, as an agent (its name, or the
+ * value of an Authorization header): gives the session's Mcp-Session-Id.
+ * With more than one agent, a GET stream is opened only under one.
+ */
+export async function beginSession(w, agent) {
+  const r = await post(w, agent, { jsonrpc: '2.0', id: `begin-${nextId++}`, method: 'initialize', params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'test', version: '0.0.1' } } });
+  const session = r.headers.get('mcp-session-id');
+  if (r.status !== 200 || !session) throw new Error(`no session began: ${r.status} ${r.body.slice(0, 200)}`);
+  return session;
+}
+
 export { thumbprint };

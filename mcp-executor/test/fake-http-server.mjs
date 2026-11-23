@@ -33,6 +33,10 @@ const TOOLS = [
 export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
   const seen = [];
   const sessions = new Set();
+  const tasks = new Map();
+  /** The server's own requests waiting for a client's answer, by id: whoever answers under the id settles it, as a server without sessions does. */
+  const asks = new Map();
+  let nextAsk = 1;
   const state = { elsewhere: 0, aborted: 0, fold: false, ran: [], deepList: 0 };
   /** The text of a value nested "depth" lists deep. */
   const deep = (depth) => `${'['.repeat(depth)}1${']'.repeat(depth)}`;
@@ -74,7 +78,7 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
     if (req.method === 'GET') {
       // The stream of server messages (legacy): one notification, then open until the client closes.
       seen.push({ method: 'GET', headers: req.headers });
-      if (req.headers['last-event-id'] === 'fast') {
+      if (req.headers['last-event-id'] === 'fast' || req.headers['mcp-session-id'] === 'fast') {
         // A stream as fast as the client takes it: 64 KiB events for as long as the connection lasts (the review's case of an agent that reads nothing).
         const big = 'y'.repeat(65536);
         state.fastBytes = 0;
@@ -96,6 +100,14 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
       }
       const send = sse(res);
       send({ jsonrpc: '2.0', method: 'notifications/message', params: { level: 'info', data: `hello ${req.headers['mcp-session-id'] ?? 'no-session'}` } }, 'id: ev-1\n');
+      // With "askOnStream" set, a request of the server's own on the stream too (roots/list), whose answer, from whichever client, is kept in "state.answers".
+      if (state.askOnStream) {
+        const askId = `up-${nextAsk++}`;
+        asks.set(askId, (answer) => (state.answers ??= []).push(answer));
+        send({ jsonrpc: '2.0', id: askId, method: 'roots/list' });
+      }
+      // The status of every task it holds, for whoever opens a stream: it keeps one store of tasks for every caller with its token.
+      for (const t of tasks.values()) send({ jsonrpc: '2.0', method: 'notifications/tasks/status', params: { taskId: t.taskId, status: t.status } }, `id: task-${t.taskId}\n`);
       return;
     }
     if (req.method === 'DELETE') {
@@ -115,24 +127,92 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
       } catch {
         return json(res, 400, { jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } });
       }
-      seen.push({ method: 'POST', headers: req.headers, body: m });
+      seen.push({ method: 'POST', headers: req.headers, body: m, text: Buffer.concat(chunks).toString('utf8') });
       if (state.fold && !Array.isArray(m)) {
         m = fold(m);
         if (m.params) m.params = { ...fold(m.params), arguments: fold(fold(m.params).arguments) };
       }
       if (Array.isArray(m)) return json(res, 400, { jsonrpc: '2.0', id: null, error: { code: -32600, message: 'No batches' } });
       if (Object.hasOwn(m, 'result') || Object.hasOwn(m, 'error') || m.id === undefined) {
+        // A client's answer to a request of the server's own ("ask", below): it settles the call that asked.
+        const asked = asks.get(m.id);
+        if (asked) {
+          asks.delete(m.id);
+          asked(m);
+        }
         res.writeHead(202);
         return res.end();
       }
       const { id, method, params = {} } = m;
-      if (method === 'server/discover') return result(res, id, { resultType: 'complete', supportedVersions: ['2026-07-28'], capabilities: { tools: {} } });
+      if (state.raw?.[method]) {
+        // An answer to this method exactly as the test gives it: {status, headers, body (text, or a function of the request's id that gives it)}.
+        const { status, headers, body } = state.raw[method];
+        res.writeHead(status, headers);
+        return res.end(typeof body === 'function' ? body(id) : body);
+      }
+      // With "offerTasks", the server says it takes tasks (2025-11-25: capabilities.tasks; 2026-07-28: the tasks extension in capabilities.extensions of server/discover, beside another extension).
+      const capabilities = { tools: {}, ...(state.offerTasks ? { tasks: { list: {}, cancel: {}, requests: { tools: { call: {} } } } } : {}) };
+      if (method === 'server/discover') return result(res, id, { resultType: 'complete', supportedVersions: ['2026-07-28'], capabilities: { ...capabilities, ...(state.offerTasks ? { extensions: { 'io.modelcontextprotocol/tasks': {}, 'example.org/other': {} } } : {}) } });
       if (method === 'initialize') {
         const session = `sess-${nextSession++}`;
         sessions.add(session);
-        return result(res, id, { protocolVersion: params.protocolVersion ?? '2025-11-25', capabilities: { tools: {} }, serverInfo: { name: 'fake-http-server', version: '0.0.1' } }, { 'mcp-session-id': session });
+        return result(res, id, { protocolVersion: params.protocolVersion ?? '2025-11-25', capabilities, serverInfo: { name: 'fake-http-server', version: '0.0.1' } }, { 'mcp-session-id': session });
       }
       if (method === 'ping') return result(res, id, {});
+      // An answer of "count" one-item lists, as a JSON body, or (params.sse) as one event.
+      if (method === 'dense') {
+        const r = `{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"rows":[${new Array(params.count ?? 10).fill('[0]').join(',')}]}}`;
+        if (params.sse) {
+          sse(res)(r);
+          return res.end();
+        }
+        res.writeHead(200, { 'content-type': 'application/json' });
+        return res.end(r);
+      }
+      // An answer of "size" bytes of text, as a JSON body, or (params.sse) as one event.
+      if (method === 'big') {
+        const r = { text: 'x'.repeat(params.size ?? 100) };
+        if (params.sse) {
+          sse(res)({ jsonrpc: '2.0', id, result: r });
+          return res.end();
+        }
+        return result(res, id, r);
+      }
+      // Tasks (2025-11-25), in one store for whoever presents its token, with no sessions: a tools/call that asks for a task is answered with its handle, and tasks/list, tasks/get, tasks/result and tasks/cancel serve any task to any caller.
+      // Tasks of the 2026-07-28 revision (the extension io.modelcontextprotocol/tasks), as the review of 0.5.2 describes them: a client that declares the extension in its _meta's client capabilities asks for nothing, and the server decides; here, a call to "order" is made a task, answered with the flat handle {resultType: "task", taskId}. tasks/get and tasks/update name it by params.taskId; subscriptions/listen gives notifications/tasks for the tasks in params.notifications.taskIds, or for every task it holds where none are named (one store for its one caller).
+      const extensions = params._meta?.['io.modelcontextprotocol/clientCapabilities']?.extensions;
+      const declares = extensions !== null && typeof extensions === 'object' && Object.hasOwn(params._meta['io.modelcontextprotocol/clientCapabilities'].extensions, 'io.modelcontextprotocol/tasks');
+      if (method === 'tools/call' && declares && params.name === 'order') {
+        const taskId = `task-${tasks.size + 1}-${Math.random().toString(36).slice(2, 10)}`;
+        tasks.set(taskId, { taskId, status: 'completed', result: { resultType: 'complete', content: [{ type: 'text', text: `Ordered for ${params.arguments?.total}. Delivery code 4471.` }] } });
+        return result(res, id, { resultType: 'task', taskId, status: 'working', ttlMs: 60000 });
+      }
+      // An answer that gives back, as a task's flat handle, the id the client named: a server whose answer an agent can shape.
+      if (method === 'claim') return result(res, id, { resultType: 'task', taskId: params.taskId });
+      if (method === 'tasks/update') {
+        if (!tasks.has(params.taskId)) return failure(res, id, -32602, 'No such task.');
+        return result(res, id, { resultType: 'complete' });
+      }
+      if (method === 'subscriptions/listen') {
+        const named = params.notifications?.taskIds;
+        const send = sse(res);
+        for (const t of Array.isArray(named) ? named.filter((x) => tasks.has(x)) : [...tasks.keys()]) send({ jsonrpc: '2.0', method: 'notifications/tasks', params: { ...tasks.get(t) } });
+        send({ jsonrpc: '2.0', id, result: { resultType: 'complete' } });
+        return res.end();
+      }
+      if (method === 'tools/call' && params.task) {
+        const taskId = `task-${tasks.size + 1}-${Math.random().toString(36).slice(2, 10)}`;
+        tasks.set(taskId, { taskId, status: 'completed', result: { content: [{ type: 'text', text: `Ordered for ${params.arguments?.total}.` }] } });
+        return result(res, id, { task: { taskId, status: 'working', createdAt: new Date().toISOString(), ttl: 60000 } });
+      }
+      if (method === 'tasks/list') return result(res, id, { tasks: [...tasks.values()].map((t) => ({ taskId: t.taskId, status: t.status })) });
+      if (['tasks/get', 'tasks/result', 'tasks/cancel'].includes(method)) {
+        const task = tasks.get(params.taskId);
+        if (!task) return failure(res, id, -32602, 'No such task.');
+        if (method === 'tasks/result') return result(res, id, task.result);
+        if (method === 'tasks/cancel') task.status = 'cancelled';
+        return result(res, id, { taskId: task.taskId, status: task.status });
+      }
       if (method === 'hang') return; // never answers
       // Opens a session of the client's naming, with the status it asks for (a session id on a non-2xx answer is the review's case).
       if (method === 'with-session') return json(res, params.status ?? 200, { jsonrpc: '2.0', id, result: {} }, { 'mcp-session-id': params.session });
@@ -156,7 +236,8 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
         return res.end(text);
       }
       if (method === 'tools/list') {
-        const page = params.cursor === 'page2' ? TOOLS.slice(4) : TOOLS.slice(0, 4);
+        // With "offerTasks", "order" says it may be called as a task (2025-11-25).
+        const page = (params.cursor === 'page2' ? TOOLS.slice(4) : TOOLS.slice(0, 4)).map((t) => (state.offerTasks && t.name === 'order' ? { ...t, execution: { taskSupport: 'optional' } } : t));
         if (params.sse) {
           const send = sse(res);
           send({ jsonrpc: '2.0', id, result: { resultType: 'complete', tools: page } });
@@ -169,6 +250,7 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
       const args = params.arguments ?? {};
       state.ran.push({ name, args });
       const text = (t) => result(res, id, { resultType: 'complete', content: [{ type: 'text', text: t }] });
+      if (name === 'hang') return; // a call never answered
       if (name === 'echo') return result(res, id, { resultType: 'complete', content: [{ type: 'text', text: JSON.stringify(args) }], structuredContent: { args, meta: params._meta ?? null, headers: req.headers } });
       if (name === 'order') return text(`Ordered for ${args.total}.`);
       if (name === 'fail') return result(res, id, { resultType: 'complete', content: [{ type: 'text', text: 'It did not work.' }], isError: true });
@@ -203,6 +285,23 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
           send(`${JSON.stringify({ jsonrpc: '2.0', id, result: { resultType: 'complete', content: [{ type: 'text', text: 'first' }] } })}\n\nid: ev-2\ndata: ${JSON.stringify({ jsonrpc: '2.0', id, result: { resultType: 'complete', content: [{ type: 'text', text: 'second' }] } })}`, 'id: ev-1\n');
           return res.end();
         }
+        // A task's flat handle (2026-07-28) whether or not the client declared the extension: a server that does not keep to it.
+        if (how === 'task-anyway') {
+          const taskId = args.taskId ?? `task-${tasks.size + 1}-${Math.random().toString(36).slice(2, 10)}`;
+          tasks.set(taskId, { taskId, status: 'completed', result: { resultType: 'complete', content: [{ type: 'text', text: 'made anyway' }] } });
+          return result(res, id, { resultType: 'task', taskId, status: 'working', ttlMs: 60000 });
+        }
+        if (how === 'ask') {
+          // A request of the server's own on the call's stream (elicitation), under an id it numbers itself; the call is answered with whatever answer comes under that id, from whichever client.
+          const send = sse(res);
+          const askId = `up-${nextAsk++}`;
+          asks.set(askId, (answer) => {
+            send({ jsonrpc: '2.0', id, result: { resultType: 'complete', content: [{ type: 'text', text: `answered: ${JSON.stringify(answer.result ?? answer.error)}` }] } });
+            res.end();
+          });
+          res.on('close', () => asks.delete(askId));
+          return send({ jsonrpc: '2.0', id: askId, method: 'elicitation/create', params: { message: 'Which account?', requestedSchema: { type: 'object', properties: {} } } });
+        }
         if (how === 'drop') {
           const send = sse(res);
           send({ jsonrpc: '2.0', method: 'notifications/progress', params: { progressToken: 'p', progress: 1 } });
@@ -220,6 +319,16 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
           return res.end();
         }
         if (how === 'big-json') return text('x'.repeat(args.size ?? 100));
+        // A result of "count" one-item lists, which costs many times its bytes once read; as one event with "sse".
+        if (how === 'dense') {
+          const r = `{"jsonrpc":"2.0","id":${JSON.stringify(id)},"result":{"resultType":"complete","content":[{"type":"text","text":"dense"}],"structuredContent":{"rows":[${new Array(args.count ?? 10).fill('[0]').join(',')}]}}}`;
+          if (args.sse) {
+            sse(res)(r);
+            return res.end();
+          }
+          res.writeHead(200, { 'content-type': 'application/json' });
+          return res.end(r);
+        }
         if (how === 'redirect') {
           res.writeHead(302, { location: `http://127.0.0.1:${server.address().port}/elsewhere` });
           return res.end();
@@ -288,6 +397,8 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
         port,
         seen,
         sessions,
+        /** The tasks it holds, by id: {taskId, status, result}. */
+        tasks,
         /** Every tools/call the server ran: {name, args}, as it read them. */
         ran: state.ran,
         /** Read member names without regard to capitals from now on. */
@@ -305,6 +416,22 @@ export function startFakeUpstream({ token = null, path = '/mcp' } = {}) {
         /** Answer tools/list, from now on, with exactly this: {status, headers, body (text or bytes, or a function of the request's id)}; null: as usual. */
         rawList: (answer) => {
           state.rawList = answer;
+        },
+        /** Answer this method (initialize, server/discover), from now on, with exactly this: {status, headers, body (text, or a function of the request's id)}; null: as usual. */
+        rawAnswer: (method, answer) => {
+          state.raw = { ...state.raw, [method]: answer };
+        },
+        /** Offer tasks, from now on: capabilities.tasks, and "order" as a tool that may be called as a task. */
+        offerTasks: () => {
+          state.offerTasks = true;
+        },
+        /** Send, from now on, a request of its own (roots/list) on every GET stream too. */
+        askOnStream: () => {
+          state.askOnStream = true;
+        },
+        /** The answers that came to the requests it sent on GET streams. */
+        get answers() {
+          return state.answers ?? [];
         },
         get elsewhere() {
           return state.elsewhere;

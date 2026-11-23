@@ -12,7 +12,7 @@ import fs, { readFileSync, writeFileSync } from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
 import { test } from 'node:test';
 
-const { call, rawRequest } = await import('./http-world.mjs');
+const { call, rawRequest, beginSession } = await import('./http-world.mjs');
 const { openHttpExecutor, secretHash } = await import('../http.mjs');
 const { ACCESS_LIFE, DOCUMENT_KEPT, DOCUMENT_RETRY, REQUEST_LIFE } = await import('../oauth.mjs');
 const { openPasskeyCheck } = await import('../owner.mjs');
@@ -198,7 +198,9 @@ test('a note that a setup or a recovery code approved the request passes only fo
 
 /** The GET stream of server messages, opened as an agent: {res, closed (a promise)}. */
 async function openStream(w, authorization) {
-  const s = await rawRequest(w, { method: 'GET', headers: { accept: 'text/event-stream', authorization }, stream: true });
+  // Under a session begun with the same authorization: with more than one agent, a GET without one is not opened.
+  const session = await beginSession(w, authorization);
+  const s = await rawRequest(w, { method: 'GET', headers: { accept: 'text/event-stream', authorization, 'mcp-session-id': session }, stream: true });
   assert.equal(s.status, 200);
   s.closed = new Promise((done) => s.res.on('close', done));
   s.res.resume();

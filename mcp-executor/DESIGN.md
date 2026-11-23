@@ -406,8 +406,9 @@ countersignature, the copy) is the same code, `callCore` in
    the body's `_meta` value where both are given; the body's value is what
    goes on. `Mcp-Method` goes on only where it is the body's `method`;
    `Mcp-Name` only where it is the body's `params.uri` on a
-   `resources/read` or its `params.name` on a `tools/call` or
-   `prompts/get`, and on any other method it is refused. An
+   `resources/read`, its `params.name` on a `tools/call` or
+   `prompts/get`, or its `params.taskId` on a `tasks/get`, `tasks/update`
+   or `tasks/cancel`, and on any other method it is refused. An
    `Mcp-Param-<name>` header goes on
    only where the upstream's `tools/list` annotated a property of the
    tool's `inputSchema` with `x-mcp-header: <name>` and the call's
@@ -420,19 +421,104 @@ countersignature, the copy) is the same code, `callCore` in
    text on the `Origin` rule was not among the sources of section 3, so
    X109 takes the safest reading and names what is to be checked.
 
-Limits (X107): the agent's body up to `bodyLimit` (10 MiB); an upstream
+Limits (X107): the agent's body up to `bodyLimit` (4 MiB); the bodies of
+one agent's requests in flight up to `waitingBytes` together (32 MiB); one
+message of the agent's up to 100,000 elements (`MAX_ELEMENTS`); an upstream
 JSON body or one event up to 16 MiB, as a line on stdio; the executor's
 `timeout` on every POST exchange; 256 requests of one agent in flight at
 once, beside `maxWaiting` for its calls; an `Origin` refused unless the
 settings allow it, and the local address listened on unless they say
-otherwise (X109). A JSON answer nobody reads is held after its place among
-the 256 is freed, up to 16 MiB for each connection (`ANSWER_LIMIT`), until
-that connection closes: the exchange has ended, so neither `timeout` nor
-X113 reaches it, and the number of connections is not limited. A stop on request with a call in flight settles the call
+otherwise (X109). In front of an upstream, what the executor holds of the
+upstream's answers to one agent (read and not yet handed on, or waiting
+for that agent's connections to take it) is held to `waitingBytes` too,
+counted apart from the bodies: past it a JSON answer is refused with 503
+and a stream is closed. A JSON answer nobody reads is still held after
+its place among the 256 is freed, until its connection closes (neither
+`timeout` nor X113 reaches it), but it counts in that budget until then,
+so an agent that leaves answers unread is refused further ones. A stop on request with a call in flight settles the call
 as the executor's stop, writes its receipt and answers the agent before the
 connections close (X115); a stop without warning, followed by a start,
 writes the receipt from the agent's copy before the executor listens
 (section 8).
+
+The upstream's own messages in front of an upstream. Every agent reaches
+the upstream with the executor's one credential, so to the upstream they
+are one caller; only a session, owned by the agent that opened it, tells
+them apart there. A GET stream opened without a session is tied to no
+request and no session, so what the upstream sends on it (its own
+requests, list changes) may be any agent's: where the settings name more
+than one agent, such a GET is answered 405 with `Allow: POST, DELETE`,
+the specification's answer of a server that offers no stream there, and
+does not reach the upstream (X450). A request of the upstream's own that
+comes on a stream of one agent's (the answer to its request, or a GET
+under its session) is remembered for that agent, by session and id, up
+to `MAX_ASKS` (1,000) for each agent, its oldest forgotten first; an
+agent's response goes on only where it answers one of these, under the
+same session, and the request is then forgotten, so it is answered once.
+Any other response is refused with 400 and does not reach the upstream
+(X451).
+
+Tasks in front of an upstream. As above, to the upstream every agent is
+one caller. An
+upstream that keeps tasks for its caller rather than for a session would
+let one agent list, read or cancel another's (checked against the
+2025-11-25 revision, whose tasks are: `params.task` on a request asks for
+one, answered with `{task: {taskId, …}}`; `tasks/get`, `tasks/result`
+and `tasks/cancel` name it by `params.taskId`; `tasks/list` gives
+`{tasks: [{taskId, …}]}`; `notifications/tasks/status` carries its
+`taskId`; and `_meta["io.modelcontextprotocol/related-task"].taskId` ties
+another message to it). The 2026-07-28 revision's tasks are taken as the
+review of 0.5.2 describes them, the specification not being within reach
+here: an extension, `io.modelcontextprotocol/tasks`, declared in
+`_meta["io.modelcontextprotocol/clientCapabilities"].extensions` of a
+request; the server decides whether a request becomes a task, answered
+with the flat handle `{resultType: "task", taskId, …}`; `tasks/get`,
+`tasks/update` and `tasks/cancel` name it by `params.taskId`; and
+`notifications/tasks`, carrying `params.taskId`, come through
+`subscriptions/listen`, which names tasks in
+`params.notifications.taskIds`. So, unless `allowTasks` is true, every
+request whose method is `tasks/…` (in any capitals) is refused with
+-32601; every request with a `task` member in its `params`, and every
+`subscriptions/listen` that names `taskIds`, with -32602, each under the
+request's id with 200 as X112 says of the executor's other refusals of a
+request it has read, before anything reaches the upstream; and the
+extension is taken out of the client capabilities of every request sent
+on (names in other capitals counted as themselves, every number kept as
+the agent wrote it), so that the upstream,
+which decides, makes no task (X454). A call the upstream answers with a
+task all the same has its outcome not known, since its result is where
+the executor does not reach it. Nor is the upstream's offer of tasks
+handed on: the answer to `initialize` or `server/discover` loses
+`capabilities.tasks` and `capabilities.extensions["io.modelcontextprotocol/tasks"]`
+(other extensions kept), and each tool of a `tools/list` loses
+`execution.taskSupport`, in any capitals, every number kept as the
+upstream wrote it; an answer with a result that cannot be read for this is
+not handed on (X457), and one that holds no result (a JSON-RPC error, an
+empty body, or a page that is not JSON) goes on as it came, with its
+status, unless it answers a `tools/list` that `hideUnlisted` filters
+(X463). `allowTasks` is a settings error unless the settings name
+exactly one agent: several agents share one caller at the tool server, so
+one agent could reach another's task (X461). With `allowTasks`, the
+extension goes on; the task id in the answer to a request that asked for
+a task, and in any answer that is a flat handle (for a call, its
+outcome), is held for the agent, up to `MAX_TASKS` (1,000), its oldest
+forgotten first; `tasks/get`, `tasks/result`, `tasks/cancel` and
+`tasks/update` go on only where `params.taskId` is one of those, and
+`subscriptions/listen` only where every task it names is (X455);
+`tasks/list` comes back with those tasks alone (a list that cannot be
+read is not handed on, as for `tools/list`); and another `tasks/…` method
+is refused. A task the executor did not see made (before a restart, or by
+another caller of the upstream) is refused, and an event that names one
+is not held back. The code still holds each task under the name of its
+agent (X456 and the checks between agents are kept), but with one agent
+those checks have nothing to keep apart. The
+`Last-Event-ID` header, by which a client asks for a stream to be
+replayed after an event, goes on only where it names one of the last
+`MAX_EVENT_IDS` (1,000) events the executor gave that agent: an upstream
+that replays by event id alone would otherwise replay one agent's stream
+to another that names its id. A GET with no session id is refused with
+405 where the settings name more than one agent (X450, above); with one
+agent it passes, and what the upstream sends on it is for that agent.
 
 What it does not do: it speaks plain HTTP, so the agents' secrets and the
 upstream's token are only as safe as the connection (encryption is
@@ -587,8 +673,11 @@ agent that asked. The numbers are the builder's: no source gives them.
 session and its id, so two sessions of one agent may each have a call
 under the same id at once (`link.key`). By the specification: a request's
 id is unique within a session, and a client numbers each session from the
-start. In front of an upstream HTTP server the calls are still held by
-the agent and the id alone, as before.
+start. In front of an upstream HTTP server the same holds where the
+request names a session (`Mcp-Session-Id`): a call is held by that
+session and its id, and the agent's `notifications/cancelled` under a
+session names a call of that session only. A request with no session id
+(the 2026-07-28 revision) is held by the agent and the id alone.
 
 **X237. Cancellation and time, as on stdio.** The agent's
 `notifications/cancelled` for a call is written to the program under the
@@ -859,7 +948,12 @@ programs, and that program outlived the executor (the review ran it).
    `tasks/result`, `tasks/cancel`). Such a call is checked and receipted
    as any call; its receipt's result is the task's handle, not the tool's
    result, and the later requests for the result pass with no receipt.
-   The same on every transport.
+   The same on stdio and in front of a local program, where a program
+   serves one agent's session and so keeps its tasks to it. In front of an
+   upstream HTTP server, where every agent is one caller to the upstream,
+   tasks are refused unless the settings allow them, which they may only
+   where they name exactly one agent (section 10, "Tasks in front of an
+   upstream").
 
 The 204 for a DELETE and the 400 for an `initialize` that names a session
 are the builder's: the text names no status for either.
@@ -2375,8 +2469,29 @@ Notifications and the agent's responses are relayed as they are, with the
 upstream's status (202). A `tools/list` answer is filtered in a JSON body
 and in a stream alike (`filteredList`, shared with stdio).
 
-**X107. Limits.** The agent's POST body up to `bodyLimit`, 10 MiB by
-default as the gateway's, refused with 413 whether declared or not; an
+**X107. Limits.** The agent's POST body up to `bodyLimit`, 4 MiB by
+default as the MCP TypeScript SDK's, refused with 413 whether declared or not; the bodies of one agent's
+requests in flight up to `waitingBytes` together, 32 MiB by default as the
+gateway's, each counted from its declared length or its first byte until
+its request has been answered, past which the request is refused with 503
+and read no further; what is held of the upstream's answers to one agent
+up to `waitingBytes` as well, counted apart so that bodies at their budget
+leave room for their answers, past which a JSON answer is refused with 503
+and a stream is closed; one message of the agent's, on stdio as over HTTP, up
+to 100,000 elements (`MAX_ELEMENTS`: the items of every list and the
+names of every object, counted in one walk of the text before it is read),
+past which it is refused before anything of it is built, since a message
+of many small elements costs many times its bytes once read; a message
+of the tool server's held to the same number, past which it is not read
+(X453): a call's answer is handed on as it came, its receipt naming the
+unreadable answer, as for any answer the executor cannot read, and a list
+to be filtered is answered with an error (X250); a request, or a call sent
+on unchecked (`"unlisted": "forward"`), that only passes through lets go
+of the message as read once it has been sent on, keeping its text alone;
+one agent's messages read one at a time,
+each in a turn of the event loop of its own (X452), so that another
+agent's request waits for about one of them for each step of its own
+exchange, not for all of them in flight; an
 upstream JSON body, or one event, up to 16 MiB (`ANSWER_LIMIT`, the stdio
 line limit), past which the exchange is cut and a call gets "no answer";
 the executor's `timeout` on every POST exchange, and on the reading of a
@@ -2396,7 +2511,11 @@ agent whose request it answered; a request, GET or DELETE carrying a
 session id is served only where the executor remembers it for this agent,
 else 404, which the specification makes the client's cue to begin a new
 session; a DELETE by the owner forgets it; a restart forgets all, so every
-client begins anew. A header given twice, or an id outside 1 to 512
+client begins anew. For an agent that signs in through OAuth, the session
+is also held to the connection it was begun under, as a local program's
+is (X234): used under another connection of the same agent it is
+forgotten, and answered 404, so that no connection of the agent's uses it
+after. A header given twice, or an id outside 1 to 512
 visible ASCII characters, is refused (400). Why: a session id is a
 capability the upstream handed to one agent, and passing an unknown one
 on would let an agent use another's after a restart. The other way: pass
@@ -2446,8 +2565,9 @@ that `42.00000000000000000001`, which rounds to 42, is refused; the body's
 number is compared as `JSON.parse` read it, so a body number with more
 digits than a double holds is compared after that rounding. `Mcp-Method` only where it is the body's `method`;
 `Mcp-Name` only where it is, as text, the body's `params.uri` on a
-`resources/read`, or its `params.name` on a `tools/call` or `prompts/get`.
-Anything else (no annotation seen, a disagreement, a GET or DELETE, a
+`resources/read`, its `params.name` on a `tools/call` or `prompts/get`, or
+its `params.taskId` on a `tasks/get`, `tasks/update` or `tasks/cancel` (as
+the 2026-07-28 tasks extension asks of a client over HTTP). Anything else (no annotation seen, a disagreement, a GET or DELETE, a
 response, an `Mcp-Name` on any other method, whatever its params hold, a
 Base64 form that does not decode, a header given twice) is refused with
 400 and -32020 before anything reaches the upstream, as is a
@@ -2495,15 +2615,20 @@ as on stdio, so the agent's MCP library reads it as a response; a body
 that cannot be read as one message is 400 with a JSON-RPC error (the id
 where one was read, else null); the transport's own refusals are 401 (not
 signed in), 403 (`Origin`), 404 (the path, a session), 405 (a method other
-than POST, GET or DELETE), 408 (a body not whole within `timeout`), 413
-(the body), 415 (not `application/json`), 503 (too many in flight, or the
-executor stopping), each with a JSON-RPC error body and id null; a
-mirrored header that disagrees with the body or cannot be checked is 400
-with -32020 (X110);
+than POST, GET or DELETE; and, in front of an upstream with more than one
+agent, a GET with no session id, X450), 408 (a body not whole within
+`timeout`), 413 (the body), 415 (not `application/json`), 503 (too many in
+flight, a body past `waitingBytes`, or the executor stopping), each with a
+JSON-RPC error body and id null; an upstream's answer past what one agent
+may hold of answers (`waitingBytes`, X107) is 503 with the JSON-RPC error
+under the agent's id; an agent's response that answers no request the
+upstream sent it is 400 (X451); a mirrored header that disagrees with the
+body or cannot be checked is 400 with -32020 (X110);
 an upstream failure on a request that is not a call is 502 or 504 with the
-same. A duplicate id is counted for each agent (on stdio, for the one
-session), so two concurrent calls of one agent under one id are refused
-and two agents may use the same ids. The tests' client speaks to the
+same. A duplicate id is counted for each agent and, where a request names
+a session, for that session (X236; on stdio, for the one session), so two
+concurrent calls of one agent under one id in one session are refused, two
+sessions of one agent may use the same ids, and two agents may. The tests' client speaks to the
 executor over `node:http` on one connection for each request: the
 built-in `fetch` keeps connections alive, which kept the test process
 from ending and tripped an assertion in Node.js on Windows at exit.
