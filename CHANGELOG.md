@@ -213,6 +213,17 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
       404 under another connection of the same agent; the client begins a
       new session.
   - The security advisory: https://github.com/provared/provared/security/advisories/GHSA-2frr-c2h5-hcwc
+  - **Versions.** 0.5.2 in `package.json`, its lockfile and `server.json`
+    (both fields); the `npm pack` file name in the README. The root
+    README, the home page and "Provared in three minutes" name 0.5.2 as
+    the guard's version, and the home page's "What is new" has an entry
+    for it. Both recipes build 0.5.2: their `package.json` files name it,
+    and their lockfiles were made from npm after 0.5.2 was published, with
+    npm's hash
+    (`sha512-MCN+r5eYBDQu8VvW8hNyZMSA/l+wiXsNRmv8JlLiYXRhxfY0CoSj0DV3Pg/6UNCy/1U1N54Jf+rTp2M8q0p4gA==`);
+    `node tools/release/check-recipe-lock.mjs --registry` passes. The
+    claude.ai recipe's README, the Dockerfile's comment and the Docker
+    check's examples name 0.5.2. Still asks for `provared` 0.9.0.
   - **What one agent's messages may hold (F1).** With 0.5.1 each request
     was bounded (a body of 10 MiB, no batch, 256 levels of nesting, 256
     requests in flight for an agent) but nothing bounded the number of
@@ -288,11 +299,13 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
     the whole of any body, with no limit, before it checked the token; now
     it checks the token first, refuses a body over 4 MiB (413) and reads
     no further. The recipe installed the guard 0.3.0 by name, with no
-    lockfile; now it installs 0.5.1, the version the claude.ai recipe
+    lockfile; now it installs 0.5.2, the version the claude.ai recipe
     builds, with `npm ci` from `guard/package-lock.json`, whose hashes are
-    the claude.ai recipe's, npm's own (`npm ci --offline` from a local
-    cache passed with it, and the recipe's set-up of the guard gave
-    settings that 0.5.1's `check` reads with no problem). The SDK
+    the claude.ai recipe's, npm's own (`npm ci` from npm's registry
+    passed with it on 23 November 2026; with the 0.5.1 lockfile,
+    `npm ci --offline` from a local cache passed, and the recipe's set-up
+    of the guard gave settings that 0.5.1's `check` reads with no
+    problem). The SDK
     (1.32.2) is installed the same way, with `npm ci` from the recipe's
     `package-lock.json` (95 packages, each with npm's hash), made from
     npm's registry. The recipe has not been run since. Test:
