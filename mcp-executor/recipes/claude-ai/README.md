@@ -18,8 +18,8 @@ has been tried by the package's own tests, on one computer, with a
 stand-in client, and by the Docker check described under "What has been
 tried". The recipe has not been tried on a real server, with a publicly
 signed certificate, or with claude.ai. The guard itself has been, without
-Docker or this recipe: on 15 November 2026 an earlier build of this
-version ran on a server on the internet, behind Caddy with a Let's
+Docker or this recipe: on 15 November 2026 an earlier build of
+version 0.5.0 ran on a server on the internet, behind Caddy with a Let's
 Encrypt certificate. claude.ai connected to it after one passkey prompt
 (Windows Hello, in Chrome on Windows); the guard took two tool calls,
 saving a countersigned receipt for each, and refused a third under its
