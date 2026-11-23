@@ -19,6 +19,20 @@
 //     it; where this page was not opened as a window, by a link back to
 //     that address with the result after "#"; last, as a file.
 //
+// A first permission (a request of kind "permission", which names no
+// earlier permission) is handed back only when the person presses the
+// button that says they copied the passkey's thumbprint from this window,
+// and its window stays open after the page that asked says it kept it, so
+// that the thumbprint can be read here until the agent's computer has
+// taken the permission. Renewals and cancellations go back at once, and
+// their window closes, as before.
+//
+// Before an agent's key set this device has not signed for is signed for,
+// the person pastes the fingerprint the agent's software (init) printed,
+// the whole of it or at least its first 16 characters, and the page signs
+// only if it matches the start of the fingerprint of the key set in the
+// permission (fingerprintStartRefusal).
+//
 // What signs is exactly what was read and shown: the permission and the
 // name as they stood when "Read the permission" was pressed. Any change
 // after that (in the box, in the name, or a new link opened in the same
@@ -40,7 +54,8 @@
 // The parts that need no page are plain functions, so that they can be
 // tested on their own: readStartingPermission, readRequest, returnAddress,
 // whatChanged, agentKeySet, serviceWords, shownByItself, signedMessage,
-// receivedReply, replyFrom, startRefusal, clockWarning. The rest runs only
+// receivedReply, replyFrom, startRefusal, clockWarning, firstPermission,
+// fingerprintStartRefusal, newAgentWords. The rest runs only
 // in a browser. A page shown inside another page offers nothing to sign or
 // cancel.
 //
@@ -359,6 +374,64 @@ export async function agentKeySet(keys) {
 }
 
 /**
+ * Whether a request asks for a first permission: one of kind "permission",
+ * which names no earlier permission. Only for it is the signed permission
+ * handed back on a press, not at once, and does the window stay open after
+ * the application says it kept it, so that the person reads the passkey's
+ * thumbprint here, the one place it can be trusted, before the application
+ * holds anything. Renewals and cancellations are handed back as before.
+ * @param {any} request what readRequest gave, or null where no page asked
+ * @returns {boolean}
+ */
+export function firstPermission(request) {
+  return Boolean(request) && request.kind === 'permission' && !Object.hasOwn(request, 'earlier');
+}
+
+/**
+ * The least number of characters of the fingerprint of the agent's key set
+ * the person gives, for a key set new to this device: 16 characters of
+ * base64url are 96 bits, out of reach of trying key sets for a matching
+ * start.
+ */
+export const FINGERPRINT_START = 16;
+
+/**
+ * Why the start of the fingerprint the person gave, for a key set new to
+ * this device, does not let the permission be signed; null where it does.
+ * It must be at least FINGERPRINT_START characters, or the whole
+ * fingerprint, and match the start of the fingerprint of the key set in
+ * the permission exactly, upper and lower case told apart. The agent's
+ * software prints the fingerprint at the end of a line, so spaces and line
+ * breaks around what is given are left out; the fingerprint holds none
+ * inside it, so anything inside counts.
+ * @param {unknown} typed what the person gave
+ * @param {string} fingerprint the fingerprint of the agent's key set in the permission
+ * @returns {string|null}
+ */
+export function fingerprintStartRefusal(typed, fingerprint) {
+  const given = typeof typed === 'string' ? typed.trim() : '';
+  if (!given) return `Paste the fingerprint init printed on the agent's computer in the box above, the whole of it or at least its first ${FINGERPRINT_START} characters: this permission is signed only once it matches.`;
+  if (given.length < FINGERPRINT_START) return `That is ${given.length} character${given.length === 1 ? '' : 's'}: give at least ${FINGERPRINT_START}, or paste the whole fingerprint init printed on the agent's computer.`;
+  if (given.length > fingerprint.length || !fingerprint.startsWith(given)) return 'That is not the start of the fingerprint of the agent\'s key set in this permission, so nothing is signed. If you pasted what init printed on the agent\'s computer, these are not your agent\'s keys: do not sign.';
+  return null;
+}
+
+/**
+ * The warning for an agent's key set this device has not signed a
+ * permission for. For a first permission that is to be expected, and the
+ * person compares the fingerprint with the one init printed on the agent's
+ * computer, never with the application, whose server can put any keys in
+ * the request.
+ * @param {string} fp the fingerprint of the agent's key set
+ * @param {boolean} first whether the request is for a first permission
+ * @returns {string}
+ */
+export function newAgentWords(fp, first) {
+  if (first) return `This is the first permission for this agent's key set on this device, as is expected for a new agent: ${fp}. Compare it with the fingerprint init printed on the agent's computer, never with the application: the application's server could have put another agent's keys here. A permission for someone else's keys lets their agent act in your name.`;
+  return `You have not signed a permission for this agent's key set on this device before: ${fp}. Compare it with the fingerprint the agent's software printed when it made its keys. A permission for someone else's keys lets their agent act in your name.`;
+}
+
+/**
  * Whether the page is shown by itself, not inside another page (a frame).
  * Another site could show this page in a frame of its own, filled from a
  * link it chose, and lead the person to sign there. The page's own policy
@@ -616,6 +689,8 @@ function page() {
     $('changed-box').hidden = true;
     $('warnings').hidden = true;
     $('warnings').replaceChildren();
+    $('agent-check-line').hidden = true;
+    $('agent-check').value = '';
     say('sign-status', '');
   }
 
@@ -808,13 +883,13 @@ function page() {
   // Each warning has a code (what it is about) and its words.
   async function warningsBefore(f) {
     const list = [];
-    const add = (code, text) => list.push({ code, text });
+    const add = (code, text, more = {}) => list.push({ code, text, ...more });
     const agentFp = await keySetFingerprint(f.agent.keys);
     // The earlier permission vouches for the agent's keys only where its
     // passkey is the person's own here (expected is set).
     const sameAsEarlier = Boolean(expected) && earlier && (await keySetFingerprint(earlier.content.agent.keys).catch(() => null)) === agentFp;
     if (!agentKnown(agentFp) && !sameAsEarlier) {
-      add('new-agent', `You have not signed a permission for this agent's key set on this device before: ${agentFp}. Compare it with the fingerprint the agent's software printed when it made its keys. A permission for someone else's keys lets their agent act in your name.`);
+      add('new-agent', newAgentWords(agentFp, firstPermission(request)), { fingerprint: agentFp });
     }
     if (expected) {
       if (!(await rememberedFor(expected.thumbprint))) add('not-remembered', `This browser does not remember the passkey that ${earlier ? 'signed the earlier permission' : 'the request names'}. Your device will offer the passkeys it holds for this website; choose the one you signed with before. The page checks that the passkey you chose is the one expected (${expected.thumbprint}), and signs with no other.`);
@@ -917,13 +992,27 @@ function page() {
       // where every warning that stands now was shown and confirmed.
       const list = await warningsBefore(what);
       if (at !== generation) return;
+      // A key set new to this device is signed for only once the person
+      // gives the start of the fingerprint init printed on the agent's
+      // computer, and it matches: the field is shown with the warnings.
+      const newAgent = list.find((w) => w.code === 'new-agent');
+      $('agent-check-line').hidden = !newAgent;
       if (!allConfirmed(list, confirmed)) {
         showWarnings('warnings', list);
         confirmed = new Set(list.map((w) => w.text));
         $('sign').textContent = 'I have read the warnings: sign this permission';
-        say('sign-status', 'Read the warnings above, then press the button again to sign.');
+        say('sign-status', newAgent ? 'Read the warnings above, paste the fingerprint init printed on the agent\'s computer, then press the button again to sign.' : 'Read the warnings above, then press the button again to sign.');
         $('sign').disabled = false;
         return;
+      }
+      if (newAgent) {
+        const refusal = fingerprintStartRefusal($('agent-check').value, newAgent.fingerprint);
+        if (refusal) {
+          say('sign-status', refusal);
+          $('sign').disabled = false;
+          $('agent-check').focus();
+          return;
+        }
       }
       const found = await findPasskey(name, { mayMake: list.some((w) => w.code === 'new-passkey') });
       const prepared = await prepareSlip({ ...what, issuer: { name, key: found.passkey.key, rpId: location.hostname, origin: location.origin } });
@@ -947,6 +1036,25 @@ function page() {
       $('fingerprint').textContent = result.fingerprint;
       $('fingerprint-line').hidden = false;
       $('step3').classList.remove('waiting');
+      if (firstPermission(request) && request.returnTo) {
+        // A first permission is handed back only on the person's press,
+        // after the thumbprint was shown here: before it, the page that
+        // opened this window has nothing to keep, so closing this window
+        // early gains it nothing. The file is offered throughout.
+        $('save-line').hidden = false;
+        say('save-status', '');
+        say('sign-status', 'Signed. On the agent\'s computer, run admit-passkey with this thumbprint. Copy it now: this window is the one place it can be trusted. Then press the button to hand the permission to the application.');
+        $('back-line').hidden = false;
+        $('back').textContent = 'I have copied it: hand it to the application';
+        $('back').onclick = () => {
+          if (at !== generation || slip !== signed) return;
+          $('back').onclick = null;
+          $('back-line').hidden = true;
+          handBack('permission', slip, 'sign-status', 'save-status', 'save-line', 'back-line', 'back', 'save');
+        };
+        $('back').focus();
+        return;
+      }
       handBack(request ? request.kind : 'permission', slip, 'sign-status', 'save-status', 'save-line', 'back-line', 'back', 'save');
     } catch (e) {
       // A prompt that failed, or a passkey forgotten, takes the warnings
@@ -964,6 +1072,8 @@ function page() {
   function handBack(kind, record, statusId, saveStatusId, saveLineId, backLineId, backId, saveId) {
     const to = request && request.returnTo;
     const message = request ? signedMessage(kind, record, request.state) : null;
+    // Settled now, whatever the page is asked afterwards.
+    const first = kind === 'permission' && firstPermission(request);
     $(saveLineId).hidden = false;
     if (!to) {
       say(statusId, 'Signed.');
@@ -986,8 +1096,10 @@ function page() {
       // Sent, not yet handed over: a browser delivers it only where the
       // page that opened this window is at the return address, and says
       // nothing where it is not. It counts as handed over once that page
-      // answers. The window closes once that page says it kept the record;
-      // until then, and if it never says so, the file stays offered.
+      // answers. The window closes once that page says it kept the record,
+      // except for a first permission, whose window stays open until the
+      // agent's computer has taken it; until then, and if it never says
+      // so, the file stays offered.
       say(statusId, `Signed, and sent to the page that opened this window, for ${to.address}. Waiting for it to confirm that it kept the signed ${what}.`);
       say(saveStatusId, '');
       let timer = null;
@@ -996,7 +1108,9 @@ function page() {
         if (!answer) return;
         window.removeEventListener('message', reply);
         clearTimeout(timer);
-        if (answer === 'kept') {
+        if (answer === 'kept' && first) {
+          say(statusId, 'Kept by the application. Keep this window open until the agent\'s computer has taken the permission.');
+        } else if (answer === 'kept') {
           say(statusId, `Signed, handed to ${to.address}, and kept there. This window closes itself; if it stays open, close it.`);
           setTimeout(() => window.close(), 1000);
         } else {

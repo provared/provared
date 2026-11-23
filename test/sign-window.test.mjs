@@ -169,7 +169,20 @@ const waitForResult = (page) => page.waitForFunction(() => window.result !== nul
 // What the first test signs, for the ones after it.
 let first = null;
 
-test('a new permission: the warnings shown first, a passkey made on the second press, the record handed back by postMessage to the exact address, and the window closes', async (t) => {
+// For a key set new to this device (design P-19, 6.C(b)): the start of the
+// fingerprint init printed, typed in the field the window shows with the
+// warnings; and a first permission is handed back only on the press of the
+// button that says the thumbprint was copied (2.8 item 1).
+const giveFingerprint = async (p, keys) => {
+  await p.waitForFunction(() => !document.getElementById('agent-check-line').hidden, null, { timeout: 20000 });
+  await p.fill('#agent-check', await keySetFingerprint(keys));
+};
+const handOver = async (p) => {
+  await p.waitForFunction(() => !document.getElementById('back-line').hidden && /I have copied it/.test(document.getElementById('back').textContent), null, { timeout: 20000 });
+  await p.click('#back');
+};
+
+test('a new permission: the warnings shown first, a passkey made on the second press, the record handed back by postMessage to the exact address on the press, and the window stays open', async (t) => {
   if (skip(t)) return;
   const { context, problems, outside } = await newContext();
   const page = await context.newPage();
@@ -197,14 +210,17 @@ test('a new permission: the warnings shown first, a passkey made on the second p
   await popup.waitForFunction(() => !document.getElementById('warnings').hidden, null, { timeout: 20000 });
   const warnings = await popup.$$eval('#warnings li', (items) => items.map((li) => li.textContent));
   assert.equal(warnings.length, 3, warnings.join('\n'));
-  assert.match(warnings[0], /not signed a permission for this agent's key set on this device before/);
+  assert.match(warnings[0], /first permission for this agent's key set on this device/);
   assert.match(warnings[1], /A new passkey will be made for this website/);
   assert.match(warnings[2], /not a known address of the Provared application/);
   assert.equal(await text(popup, '#sign'), 'I have read the warnings: sign this permission');
   assert.equal((await holder.credentials()).length, 0, 'no passkey made yet');
 
-  // The second press makes the passkey and signs.
+  // The second press, with the fingerprint given, makes the passkey and
+  // signs; the press of the hand-over button hands it back.
+  await giveFingerprint(popup, agent.keys);
   await popup.click('#sign');
+  await handOver(popup);
   const { result, events } = await waitForResult(page);
   assert.equal(events.length, 1);
   assert.equal(events[0].origin, sign.origin);
@@ -223,8 +239,9 @@ test('a new permission: the warnings shown first, a passkey made on the second p
   assert.equal(checked.content.issuer.origin, sign.origin);
   assert.equal((await checkSlip(result.record, { issuerOrigins: [opener.origin] })).problems[0].code, 'issuer-origin-not-expected');
   first = { record: result.record, content: checked.content, thumbprint: checked.issuerKey, credential: credentials[0], agent };
-  // The window says so and closes itself.
-  await popup.waitForEvent('close', { timeout: 20000 });
+  // The window says so and stays open (design P-19, 2.8 item 2).
+  await popup.waitForFunction(() => /^Kept by the application\./.test(document.getElementById('sign-status').textContent), null, { timeout: 20000 });
+  assert.equal(popup.isClosed(), false);
   assert.deepEqual(problems, []);
   assert.deepEqual(outside, []);
   await context.close();
@@ -336,8 +353,11 @@ test('a page not opened as a window goes back by a link with the signed record a
   await page.waitForFunction(() => !document.getElementById('sign').disabled, null, { timeout: 20000 });
   await page.click('#sign');
   await page.waitForFunction(() => !document.getElementById('warnings').hidden, null, { timeout: 20000 });
+  await giveFingerprint(page, agent.keys);
   await page.click('#sign');
-  await page.waitForFunction(() => !document.getElementById('back-line').hidden, null, { timeout: 20000 });
+  // A first permission: the hand-over button first (design P-19, 2.8 item 1), then the way back by a link.
+  await handOver(page);
+  await page.waitForFunction(() => !document.getElementById('back-line').hidden && /^Then go back/.test(document.getElementById('back').textContent), null, { timeout: 20000 });
   assert.match(await text(page, '#sign-status'), /not opened as a window by .*back\.html, so the signed permission is not handed back by itself\. Save it first as a file, then go back there with it\./);
   assert.equal(await text(page, '#back'), `Then go back to ${opener.origin}/back.html with the signed permission`);
   // The file is offered first: it comes before the way back on the page, and has the focus.
@@ -409,6 +429,8 @@ test('a renewal of a permission whose passkey belongs to another website: the pa
   // The earlier permission's passkey is not the person's own here, so it vouches for nothing: the agent's key set is warned of.
   assert.ok(warnings.some((w) => /not signed a permission for this agent's key set on this device before/.test(w)), warnings.join('\n'));
   assert.equal((await holder.credentials()).length, 0, 'nothing made before the second press');
+  // A key set new to this device: the fingerprint is asked for a renewal too (design P-19, 6.C(b)).
+  await giveFingerprint(popup, agent.keys);
   await popup.click('#sign');
   const { result } = await waitForResult(page);
   assert.equal(result.kind, 'renewal');
