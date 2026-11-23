@@ -28,7 +28,13 @@
 // closes, as before; a new link in the address after reading cannot be
 // signed; and for a key set new to this device, nothing is signed until
 // the start of the fingerprint init printed, of 16 characters or more, is
-// given.
+// given. After the review of step 9, as the founder decided: only a true
+// renewal (the same passkey, the same keys) goes back at once; a forged
+// "renewal" for other keys gets the field, the press and the window that
+// stays open; a page opened from a "#permission=" link asks the field too;
+// a new address after signing leaves the hand-over button sending nothing;
+// and what happens after "kept" is settled when the permission is handed
+// over.
 //
 // Skipped with one line where playwright-core (or the folder that
 // PROVARED_PLAYWRIGHT_CORE names) or its browser is missing.
@@ -203,10 +209,11 @@ const giveFingerprint = async (p, value) => {
   await p.waitForFunction(() => !document.getElementById('agent-check-line').hidden, null, { timeout: 20000 });
   await p.fill('#agent-check', value);
 };
-// A first permission is handed to the application only on the press of the
-// button that says the thumbprint was copied (design P-19, 2.8 item 1).
+// A permission no earlier one vouches for is handed to the application only
+// on the press of the button that says the thumbprint and the fingerprint
+// were copied (design P-19, 2.8 item 1, as decided after the review).
 const handOver = async (p) => {
-  await p.waitForFunction(() => !document.getElementById('back-line').hidden && /I have copied it/.test(document.getElementById('back').textContent), null, { timeout: 20000 });
+  await p.waitForFunction(() => !document.getElementById('back-line').hidden && /I have copied them/.test(document.getElementById('back').textContent), null, { timeout: 20000 });
   await p.click('#back');
 };
 
@@ -442,10 +449,23 @@ test('a cancellation signed in the window by another passkey is refused there, a
 
 // --- the signing window for a first permission (design P-19, 2.8 and 6.C(b)) ---
 
-const FIRST_WORDS = 'Signed. On the agent\'s computer, run admit-passkey with this thumbprint. Copy it now: this window is the one place it can be trusted. Then press the button to hand the permission to the application.';
+const FIRST_WORDS = 'Signed. Copy the thumbprint and the permission\'s fingerprint below now: this window is the one place they can be trusted. On the agent\'s computer, give the thumbprint to your agent\'s software, and check that the permission\'s fingerprint it shows is the one here. Then press the button to hand the permission to the application.';
 const KEPT_WORDS = 'Kept by the application. Keep this window open until the agent\'s computer has taken the permission.';
+const NEW_AGENT_WORDS = (fp) => `This is the first permission for this agent's key set on this device, as is expected for a new agent: ${fp}. Compare it with the fingerprint your agent's software printed on the agent's computer (for Claude Code, the one init printed), never with the application or another page: whoever filled in this permission could have put another agent's keys in it. A permission for someone else's keys lets their agent act in your name.`;
 
-test('a first permission: signed only with the start of the fingerprint init printed, nothing sent before the press, the file offered throughout, and the window open after "kept"', async (t) => {
+// The window up to the hand-over press: read, the warnings shown, the
+// fingerprint given where it is asked, and signed.
+async function signUpToThePress(popup, keys) {
+  await popup.click('#read');
+  await enabled(popup, 'sign');
+  await popup.click('#sign');
+  await popup.waitForFunction(() => !document.getElementById('warnings').hidden, null, { timeout: 20000 });
+  if (await popup.isVisible('#agent-check-line')) await popup.fill('#agent-check', await keySetFingerprint(keys));
+  await popup.click('#sign');
+  await popup.waitForFunction(() => !document.getElementById('back-line').hidden, null, { timeout: 20000 });
+}
+
+test('a first permission: signed only with the start of the fingerprint the agent\'s software printed, nothing sent before the press, the file offered throughout, and the window open after "kept"', async (t) => {
   if (skip(t)) return;
   const { context, problems } = await newContext();
   t.after(() => context.close());
@@ -461,14 +481,14 @@ test('a first permission: signed only with the start of the fingerprint init pri
   await popup.waitForFunction(() => !document.getElementById('warnings').hidden, null, { timeout: 20000 });
   const warnings = await warningsOf(popup);
   assert.equal(warnings.length, 2, warnings.join('\n'));
-  assert.equal(warnings[0], `This is the first permission for this agent's key set on this device, as is expected for a new agent: ${fp}. Compare it with the fingerprint init printed on the agent's computer, never with the application: the application's server could have put another agent's keys here. A permission for someone else's keys lets their agent act in your name.`);
+  assert.equal(warnings[0], NEW_AGENT_WORDS(fp));
   assert.match(warnings[1], /A new passkey will be made for this website/);
   assert.equal(await popup.isHidden('#agent-check-line'), false, 'the field is shown with the warnings');
-  assert.match(await text(popup, 'label[for="agent-check"]'), /^Paste the fingerprint init printed on the agent's computer/);
+  assert.match(await text(popup, 'label[for="agent-check"]'), /^Paste the fingerprint your agent's software printed on the agent's computer \(for Claude Code, the one init printed\).*Copy it there after this window has opened, not before, and check that what this box then shows is what was printed there\./);
 
   // An empty field, a start of 15 characters and a start that does not
   // match each stop the signing: no passkey is made or asked, nothing is sent.
-  for (const [given, words] of [['', '^Paste the fingerprint init printed'], [fp.slice(0, 15), '^That is 15 characters: give at least 16'], [other.slice(0, 16), '^That is not the start of the fingerprint']]) {
+  for (const [given, words] of [['', '^Paste the fingerprint your agent'], [fp.slice(0, 15), '^That is 15 characters: give at least 16'], [other.slice(0, 16), '^That is not the start of the fingerprint']]) {
     await popup.fill('#agent-check', given);
     await popup.click('#sign');
     await popup.waitForFunction((w) => new RegExp(w).test(document.getElementById('sign-status').textContent) && !document.getElementById('sign').disabled, words, { timeout: 20000 });
@@ -478,17 +498,25 @@ test('a first permission: signed only with the start of the fingerprint init pri
   }
   assert.equal(await page.evaluate(() => window.events.length), 0);
 
-  // The whole fingerprint, pasted with spaces around it, is taken.
-  await popup.fill('#agent-check', `  ${fp} `);
+  // The whole line init prints, pasted, is taken.
+  await popup.fill('#agent-check', `The fingerprint of the agent's key set: ${fp}`);
   await popup.click('#sign');
   await popup.waitForFunction(() => !document.getElementById('back-line').hidden, null, { timeout: 20000 });
   assert.equal(await text(popup, '#sign-status'), FIRST_WORDS);
-  assert.equal(await text(popup, '#back'), 'I have copied it: hand it to the application');
+  assert.equal(await text(popup, '#back'), 'I have copied them: hand the permission to the application');
   assert.equal((await holder.credentials()).length, 1, 'signed with the passkey made');
   assert.equal(await popup.isHidden('#passkey-line'), false, 'the thumbprint is shown');
   assert.equal(await popup.isHidden('#fingerprint-line'), false, 'the permission\'s fingerprint is shown');
   assert.equal(await popup.isHidden('#save-line'), false, 'the file is offered before the press');
   const shownThumbprint = await text(popup, '#thumbprint');
+  // Straight under the status: the thumbprint, the permission's fingerprint
+  // and the command for Claude Code; the focus is there, not on the button.
+  assert.equal(await popup.isHidden('#copy-box'), false);
+  assert.equal(await popup.evaluate(() => document.getElementById('sign-status').nextElementSibling.id), 'copy-box');
+  assert.equal(await text(popup, '#copy-thumbprint'), shownThumbprint);
+  assert.equal(await text(popup, '#copy-fingerprint'), await text(popup, '#fingerprint'));
+  assert.equal(await text(popup, '#copy-command'), `provared-claude-code admit-passkey ${shownThumbprint}`);
+  assert.equal(await popup.evaluate(() => document.activeElement && document.activeElement.id), 'copy-box');
   // Nothing goes to the opener before the press.
   await settle(1500);
   assert.equal(await page.evaluate(() => window.events.length), 0, 'nothing sent before the press');
@@ -500,6 +528,8 @@ test('a first permission: signed only with the start of the fingerprint init pri
   const checked = await checkSlip(data.record, { issuerOrigins: [SIGN] });
   assert.deepEqual(checked.problems, []);
   assert.equal(checked.issuerKey, shownThumbprint, 'the thumbprint shown is the one that signed');
+  assert.equal(await keySetFingerprint(checked.content.agent.keys), fp, 'the key set signed is the one whose fingerprint was given');
+  assert.equal(checked.fingerprint, await text(popup, '#copy-fingerprint'));
   await popup.waitForFunction((w) => document.getElementById('sign-status').textContent === w, KEPT_WORDS, { timeout: 20000 });
   // The window stays open after "kept", with the thumbprint and the file.
   await settle(1500);
@@ -560,7 +590,7 @@ test('a first permission for a key set this device has signed for needs no finge
   assert.deepEqual(problems, []);
 });
 
-test('a renewal behaves as before: handed back at once, with no press and no fingerprint asked, and the window closes after "kept"', async (t) => {
+test('a true renewal (the same passkey, the same keys) behaves as before: handed back at once, with no press and no fingerprint asked, and the window closes after "kept"', async (t) => {
   if (skip(t)) return;
   const { context, problems } = await newContext();
   t.after(() => context.close());
@@ -580,6 +610,128 @@ test('a renewal behaves as before: handed back at once, with no press and no fin
   assert.equal(await page.evaluate(() => window.events[0].data.kind), 'renewal');
   assert.equal(await popup.isHidden('#back-line'), true, 'no button to press');
   await popup.waitForEvent('close', { timeout: 20000 });
+  assert.deepEqual(problems, []);
+});
+
+test('a forged "renewal": the person\'s own earlier permission, for other keys, vouches for nothing, so the fingerprint is asked, the permission goes back only on the press, and the window stays open', async (t) => {
+  if (skip(t)) return;
+  const { context, problems } = await newContext();
+  t.after(() => context.close());
+  const agent = await generateKeySet();
+  const stranger = await generateKeySet();
+  const fp = await keySetFingerprint(stranger.keys);
+  const person = heldPasskey();
+  const earlier = await slipBy(person, SIGN, fields(agent.keys));
+  const { page, popup, holder } = await openFrom(context, APP, { kind: 'renewal', fields: fields(stranger.keys, 'Renewed, for other keys.'), earlier, returnTo: `${APP}/opener.html` }, [person.credential]);
+  await page.evaluate(() => { window.answer = true; });
+  await popup.click('#read');
+  await enabled(popup, 'sign');
+  await popup.click('#sign');
+  await popup.waitForFunction(() => !document.getElementById('warnings').hidden, null, { timeout: 20000 });
+  const warnings = await warningsOf(popup);
+  assert.equal(warnings[0], NEW_AGENT_WORDS(fp), warnings.join('\n'));
+  assert.equal(await popup.isHidden('#agent-check-line'), false, 'the field is asked');
+  const uses = async () => (await holder.credentials())[0].signCount;
+  const before = await uses();
+  for (const [given, words] of [['', '^Paste the fingerprint your agent'], [(await keySetFingerprint(agent.keys)).slice(0, 16), '^That is not the start of the fingerprint']]) {
+    await popup.fill('#agent-check', given);
+    await popup.click('#sign');
+    await popup.waitForFunction((w) => new RegExp(w).test(document.getElementById('sign-status').textContent) && !document.getElementById('sign').disabled, words, { timeout: 20000 });
+    assert.equal(await uses(), before, `the passkey was not asked: ${words}`);
+    assert.equal(await popup.isHidden('#passkey-line'), true, 'nothing signed');
+  }
+  await popup.fill('#agent-check', fp.slice(0, 16));
+  await popup.click('#sign');
+  await popup.waitForFunction(() => !document.getElementById('back-line').hidden, null, { timeout: 20000 });
+  assert.equal(await text(popup, '#sign-status'), FIRST_WORDS);
+  await settle(1500);
+  assert.equal(await page.evaluate(() => window.events.length), 0, 'nothing sent before the press');
+  await handOver(popup);
+  await page.waitForFunction(() => window.events.length > 0, null, { timeout: 20000 });
+  const { data } = await page.evaluate(() => window.events[0]);
+  assert.equal(data.kind, 'renewal');
+  const checked = await checkSlip(data.record, { issuerOrigins: [SIGN] });
+  assert.deepEqual(checked.problems, []);
+  assert.equal(await keySetFingerprint(checked.content.agent.keys), fp, 'the key set signed is the one whose fingerprint was given');
+  await popup.waitForFunction((w) => document.getElementById('sign-status').textContent === w, KEPT_WORDS, { timeout: 20000 });
+  await settle(1500);
+  assert.equal(popup.isClosed(), false, 'the window stays open');
+  assert.deepEqual(problems, []);
+});
+
+test('a page opened from a "#permission=" link asks for the fingerprint too: an empty field and a wrong start sign nothing', async (t) => {
+  if (skip(t)) return;
+  const { context, problems } = await newContext();
+  t.after(() => context.close());
+  const agent = await generateKeySet();
+  const fp = await keySetFingerprint(agent.keys);
+  const page = await context.newPage();
+  await page.goto(`${SIGN}/page/sign.html#permission=${toBase64url(utf8(JSON.stringify(fields(agent.keys))))}`);
+  const holder = await authenticator(context, page);
+  await page.waitForFunction((x) => document.getElementById('fields').value.includes(x), agent.keys[0].x, { timeout: 20000 });
+  await page.fill('#issuer-name', 'P');
+  await page.click('#read');
+  await enabled(page, 'sign');
+  await page.click('#sign');
+  await page.waitForFunction(() => !document.getElementById('warnings').hidden, null, { timeout: 20000 });
+  assert.equal((await warningsOf(page))[0], NEW_AGENT_WORDS(fp));
+  assert.equal(await page.isHidden('#agent-check-line'), false);
+  for (const [given, words] of [['', '^Paste the fingerprint your agent'], [(await keySetFingerprint((await generateKeySet()).keys)).slice(0, 16), '^That is not the start of the fingerprint']]) {
+    await page.fill('#agent-check', given);
+    await page.click('#sign');
+    await page.waitForFunction((w) => new RegExp(w).test(document.getElementById('sign-status').textContent) && !document.getElementById('sign').disabled, words, { timeout: 20000 });
+    assert.equal((await holder.credentials()).length, 0, `no passkey made: ${words}`);
+    assert.equal(await page.isHidden('#save-line'), true, 'nothing offered');
+  }
+  await page.fill('#agent-check', fp);
+  await page.click('#sign');
+  await page.waitForFunction(() => !document.getElementById('save-line').hidden, null, { timeout: 20000 });
+  assert.equal(await text(page, '#sign-status'), 'Signed.');
+  assert.equal((await holder.credentials()).length, 1);
+  assert.equal(await page.isHidden('#back-line'), true, 'nothing to hand back: no page asked');
+  assert.deepEqual(problems, []);
+});
+
+test('after signing and before the press, a new address takes the page back, and a forced press of the hand-over button sends nothing', async (t) => {
+  if (skip(t)) return;
+  const { context, problems } = await newContext();
+  t.after(() => context.close());
+  const agent = await generateKeySet();
+  const stranger = await generateKeySet();
+  const { page, popup } = await openFrom(context, APP, { kind: 'permission', fields: fields(agent.keys), name: 'P', returnTo: `${APP}/opener.html`, state: 's' });
+  await page.evaluate(() => { window.answer = true; });
+  await signUpToThePress(popup, agent.keys);
+  const hash = new URL(link({ kind: 'permission', fields: fields(stranger.keys), name: 'P', returnTo: `${APP}/opener.html`, state: 's2' })).hash;
+  await popup.evaluate((h) => { location.hash = h; }, hash);
+  await popup.waitForFunction((x) => document.getElementById('fields').value.includes(x), stranger.keys[0].x, { timeout: 20000 });
+  assert.equal(await popup.isHidden('#back-line'), true);
+  assert.equal(await popup.isHidden('#copy-box'), true);
+  await popup.evaluate(() => document.getElementById('back').click());
+  await settle(1500);
+  assert.equal(await page.evaluate(() => window.events.length), 0, 'nothing was sent');
+  assert.deepEqual(problems, []);
+});
+
+test('what the window does after "kept" is settled when the permission is handed over: a new address in between does not close it or change the answer awaited', async (t) => {
+  if (skip(t)) return;
+  const { context, problems } = await newContext();
+  t.after(() => context.close());
+  const agent = await generateKeySet();
+  const person = heldPasskey();
+  const { page, popup } = await openFrom(context, APP, { kind: 'permission', fields: fields(agent.keys), name: 'P', returnTo: `${APP}/opener.html`, state: 's' });
+  await signUpToThePress(popup, agent.keys);
+  await handOver(popup);
+  await page.waitForFunction(() => window.events.length > 0, null, { timeout: 20000 });
+  // Before the page that opened the window answers, the address becomes a
+  // true renewal, which would be handed back at once and closed.
+  const earlier = await slipBy(person, SIGN, fields(agent.keys));
+  const hash = new URL(link({ kind: 'renewal', fields: fields(agent.keys, 'Renewed.'), earlier, returnTo: `${APP}/opener.html` })).hash;
+  await popup.evaluate((h) => { location.hash = h; }, hash);
+  await popup.waitForFunction(() => /asks you to renew/.test(document.getElementById('read-status').textContent), null, { timeout: 20000 });
+  await page.evaluate(() => window.tell({ provared: 'received', kind: 'permission', state: 's', kept: true }));
+  await popup.waitForFunction((w) => document.getElementById('sign-status').textContent === w, KEPT_WORDS, { timeout: 20000 });
+  await settle(1500);
+  assert.equal(popup.isClosed(), false, 'the window stays open');
   assert.deepEqual(problems, []);
 });
 
