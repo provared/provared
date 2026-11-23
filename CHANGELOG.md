@@ -171,9 +171,7 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
 
 ## Not yet released
 
-- **`provared-mcp-executor`, after 0.5.1: the faults found by the check
-  against the MCP TypeScript SDK's advisories of October 2026.** The
-  version is not yet raised.
+- **`provared-mcp-executor` 0.5.2 (published by hand to npm on 23 November 2026): a security fix, and the faults found by the check against the MCP TypeScript SDK's advisories of October 2026.**
   - **Upgrade notes: what a user may notice after 0.5.1.**
     - A body over 4 MiB is refused (413): the default `bodyLimit` was
       10 MiB. Set `bodyLimit` to take larger ones.
@@ -214,6 +212,7 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
     - A session the upstream opened under one OAuth connection is answered
       404 under another connection of the same agent; the client begins a
       new session.
+  - The security advisory: https://github.com/provared/provared/security/advisories/GHSA-TODO
   - **What one agent's messages may hold (F1).** With 0.5.1 each request
     was bounded (a body of 10 MiB, no batch, 256 levels of nesting, 256
     requests in flight for an agent) but nothing bounded the number of

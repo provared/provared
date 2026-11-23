@@ -124,7 +124,7 @@ npm install -g provared-mcp-executor
 ```
 
 Or from a copy of the repository: in `mcp-executor`, `npm pack`, then
-`npm install -g ./provared-mcp-executor-0.5.1.tgz`.
+`npm install -g ./provared-mcp-executor-0.5.2.tgz`.
 
 Use version 0.4.2 or later. Every version from 0.1.0 to 0.4.1 has two
 weaknesses: in front of a tool server whose JSON reader ignores capitals
