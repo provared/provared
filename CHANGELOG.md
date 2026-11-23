@@ -212,7 +212,7 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
     - A session the upstream opened under one OAuth connection is answered
       404 under another connection of the same agent; the client begins a
       new session.
-  - The security advisory: https://github.com/provared/provared/security/advisories/GHSA-TODO
+  - The security advisory: https://github.com/provared/provared/security/advisories/GHSA-2frr-c2h5-hcwc
   - **What one agent's messages may hold (F1).** With 0.5.1 each request
     was bounded (a body of 10 MiB, no batch, 256 levels of nesting, 256
     requests in flight for an agent) but nothing bounded the number of
