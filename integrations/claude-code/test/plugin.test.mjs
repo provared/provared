@@ -602,40 +602,46 @@ test('init, through the plugin\'s entry, with --no-hooks, or from Claude Code\'s
   // recorder.mjs run directly finds the library as the other tests' programs do (local-library.mjs).
   const env = { PROVARED_CLAUDE_CODE_DIR: folder, PROVARED_CLAUDE_CODE_PORT: String(port), CLAUDE_CONFIG_DIR: home, CLAUDE_PLUGIN_DATA: dataWithLibrary(), NODE_OPTIONS: process.env.NODE_OPTIONS ?? '' };
   const run = (script, args) => runPlugin(['--disable-warning=ExperimentalWarning', script, ...args], { cwd: project, env });
-  let r = await run(join(pluginRoot, 'recorder.mjs'), ['init', '--no-hook']);
-  assert.equal(r.code, 2, 'a misspelt switch writes nothing');
-  assert.ok(!existsSync(join(folder, 'agent-keys.jwk')));
-  r = await run(join(pluginRoot, 'recorder.mjs'), ['init', '--no-hooks']);
-  assert.equal(r.code, 0, r.err);
-  assert.match(r.out, /No hooks were written \(--no-hooks\)/);
-  assert.match(r.out, /https:\/\/sign\.prova\.red\/#permission=/);
-  assert.ok(!existsSync(join(project, '.claude')));
-  r = await run(join(pluginRoot, 'plugin.mjs'), ['init']);
-  assert.equal(r.code, 0, r.err);
-  assert.match(r.out, /No hooks were written: this copy of the recorder is the Claude Code plugin's/);
-  assert.match(r.out, /plugin\.mjs use <the saved file>/, 'the next command, through the plugin\'s entry');
-  // A copy of the plugin as Claude Code installs it, in its cache, run directly.
-  const cached = cachedCopy(home);
-  r = await run(join(cached, 'recorder.mjs'), ['init']);
-  assert.equal(r.code, 0, r.err);
-  assert.match(r.out, /No hooks were written: this copy of the recorder is the Claude Code plugin's/);
-  assert.ok(!existsSync(join(project, '.claude')));
-  // init from another copy, with the plugin installed: the hooks are written, and the person is warned.
-  writeFileSync(join(home, 'plugins', 'installed_plugins.json'), JSON.stringify({ version: 2, plugins: { [`${manifest.name}@provared`]: [{ scope: 'user', installPath: cached }] } }));
-  r = await run(join(pluginRoot, 'recorder.mjs'), ['init']);
-  assert.equal(r.code, 0, r.err);
-  assert.match(r.out, /The hooks are in /);
-  assert.match(r.out, /Warning: the Claude Code plugin provared-recorder is installed too/);
-  // remove-hooks takes them out again, and says where others are still.
-  writeFileSync(join(project, '.claude', 'settings.json'), JSON.stringify({ hooks: { PostToolUse: [{ hooks: [{ type: 'command', command: `node ${relative(project, join(pluginRoot, 'hook.mjs'))}` }] }] } }));
-  r = await run(join(pluginRoot, 'recorder.mjs'), ['remove-hooks']);
-  assert.equal(r.code, 0, r.err);
-  assert.match(r.out, /Took 4 of the recorder's hooks out of /);
-  assert.match(r.out, /other formatting in it is not kept/);
-  assert.match(r.out, /still in .*settings\.json/);
-  assert.deepEqual(readJson(join(project, '.claude', 'settings.local.json')), { hooks: {} });
-  r = await run(join(pluginRoot, 'recorder.mjs'), ['remove-hooks']);
-  assert.match(r.out, /holds none of the hooks init writes/);
+  // The first init starts the recorder that waits in this fresh folder; the test stops it at the end.
+  try {
+    let r = await run(join(pluginRoot, 'recorder.mjs'), ['init', '--no-hook']);
+    assert.equal(r.code, 2, 'a misspelt switch writes nothing');
+    assert.ok(!existsSync(join(folder, 'agent-keys.jwk')));
+    r = await run(join(pluginRoot, 'recorder.mjs'), ['init', '--no-hooks', '--link']);
+    assert.equal(r.code, 0, r.err);
+    assert.match(r.out, /No hooks were written \(--no-hooks\)/);
+    assert.match(r.out, /https:\/\/sign\.prova\.red\/#permission=/);
+    assert.ok(!existsSync(join(project, '.claude')));
+    r = await run(join(pluginRoot, 'plugin.mjs'), ['init']);
+    assert.equal(r.code, 0, r.err);
+    assert.match(r.out, /No hooks were written: this copy of the recorder is the Claude Code plugin's/);
+    assert.match(r.out, /plugin\.mjs admit-passkey <the thumbprint>/, 'the next command, through the plugin\'s entry');
+    assert.match(r.out, /plugin\.mjs use <the saved file>/, 'and the other way, through the plugin\'s entry');
+    // A copy of the plugin as Claude Code installs it, in its cache, run directly.
+    const cached = cachedCopy(home);
+    r = await run(join(cached, 'recorder.mjs'), ['init']);
+    assert.equal(r.code, 0, r.err);
+    assert.match(r.out, /No hooks were written: this copy of the recorder is the Claude Code plugin's/);
+    assert.ok(!existsSync(join(project, '.claude')));
+    // init from another copy, with the plugin installed: the hooks are written, and the person is warned.
+    writeFileSync(join(home, 'plugins', 'installed_plugins.json'), JSON.stringify({ version: 2, plugins: { [`${manifest.name}@provared`]: [{ scope: 'user', installPath: cached }] } }));
+    r = await run(join(pluginRoot, 'recorder.mjs'), ['init']);
+    assert.equal(r.code, 0, r.err);
+    assert.match(r.out, /The hooks are in /);
+    assert.match(r.out, /Warning: the Claude Code plugin provared-recorder is installed too/);
+    // remove-hooks takes them out again, and says where others are still.
+    writeFileSync(join(project, '.claude', 'settings.json'), JSON.stringify({ hooks: { PostToolUse: [{ hooks: [{ type: 'command', command: `node ${relative(project, join(pluginRoot, 'hook.mjs'))}` }] }] } }));
+    r = await run(join(pluginRoot, 'recorder.mjs'), ['remove-hooks']);
+    assert.equal(r.code, 0, r.err);
+    assert.match(r.out, /Took 4 of the recorder's hooks out of /);
+    assert.match(r.out, /other formatting in it is not kept/);
+    assert.match(r.out, /still in .*settings\.json/);
+    assert.deepEqual(readJson(join(project, '.claude', 'settings.local.json')), { hooks: {} });
+    r = await run(join(pluginRoot, 'recorder.mjs'), ['remove-hooks']);
+    assert.match(r.out, /holds none of the hooks init writes/);
+  } finally {
+    await stopService(port);
+  }
 });
 
 test('paths are compared as Windows compares them there, and exactly elsewhere', () => {

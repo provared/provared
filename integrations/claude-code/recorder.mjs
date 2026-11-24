@@ -8,7 +8,10 @@
 // the one before ends.
 //
 //   provared-claude-code init          make the keys if they are missing, write the hooks into this
-//                                      project's .claude/settings.local.json, and print a link that
+//                                      project's .claude/settings.local.json, and, in a fresh folder,
+//                                      start the service in the background, waiting for the first
+//                                      permission (waiting.mjs); print the fingerprint of the agent's
+//                                      key set and what to do next. With --link, also print a link that
 //                                      opens the signing page with a starting permission filled in
 //   provared-claude-code use <file>    put a signed slip in place and start the service in the
 //                                      background; where a book exists already, renew
@@ -2688,8 +2691,26 @@ async function ensureStatus(folder, port, say = (words) => console.error(words),
   return { code: 1, status: null };
 }
 
-// What "ensure" says where the recorder that answers waits for its first permission (waiting.mjs).
-const waitingWords = () => `The recorder is running and waits for its first permission: every tool call is refused until one is taken, and nothing is recorded. When you have signed it, run "${RUN} admit-passkey <the thumbprint>" here, pasting the thumbprint from the signing window; or save the signed file from the signing window and run "${RUN} use <the saved file>".`;
+/**
+ * The steps from a recorder that waits to its first permission, the same
+ * wherever they are said: after "init", and by "ensure", "status" and the
+ * start of a session (the hook before a tool call says them in short, in
+ * hook.mjs). They follow the application's first screen. "where" says
+ * where the fingerprint of the agent's key set is to be found.
+ */
+const waitingSteps = (where = `the one init printed ("${RUN} keys" prints it again)`) => `Next:
+  1. Open the application, make a book, copy its one line, and run that line here, on this computer.
+  2. In the application, under "Approve what it may do", choose what the agent may do, and confirm it in the signing window with your passkey. When the signing window asks for the fingerprint of the agent's key set, paste ${where}.
+  3. Keep the signing window open, and run this here, with the thumbprint the signing window shows pasted in (the whole of it, or at least its first ${ADMIT_THUMBPRINT_LEAST} characters):
+
+       ${RUN} admit-passkey <the thumbprint>
+
+     It shows the permission handed over: compare its fingerprint with the one the signing window shows, then type yes.`;
+
+// What "ensure", "status" and the start of a session say where the recorder that answers waits for its first permission (waiting.mjs).
+const waitingWords = () => `The recorder is running and waits for its first permission: every tool call is refused until one is taken, and nothing is recorded.
+${waitingSteps()}
+Or save the signed permission from the signing window as a file, and run "${RUN} use <the saved file>".`;
 
 /**
  * Stop the recorder that answers on the port, only if it waits for its first
@@ -2741,13 +2762,14 @@ async function stopWaiting(port) {
 // What "use" says where it is not known what answers on the port, and nothing more is done.
 const notKnownWords = (port, taken) => `It is not known whether the recorder on 127.0.0.1:${port} still waits for its first permission: it was asked to stop, did not, and then gave no answer twice. ${taken ? 'The permission is in place, but until the recorder runs with it every tool call is refused.' : 'Nothing was taken.'} Run "${RUN} status" to see what answers, then run use again.`;
 
-// What the person must do before anything is recorded: nothing signs for them.
+// What the person must do before anything is recorded, where the agent's keys are not made yet: nothing signs for them.
 const firstRunWords = () => `Provared: no permission has been signed for this agent yet, so the recorder is not running and every tool call is refused: no record, no action. To set it up, in a terminal:
   1. ${RUN} init
-     (it makes the agent's keys and prints a link to https://sign.prova.red/, the signing page)
-  2. Open the link, write your name, read the permission and compare the fingerprint of the agent's key set with the one init printed. Sign with your passkey, and save the file the page gives you.
-  3. ${RUN} use <the saved file>
-Nothing signs for you. Once "use" says the recorder is running, each tool call is checked against the permission and recorded.`;
+     (it makes the agent's keys, starts the recorder, which waits for the agent's first permission, and prints the fingerprint of the agent's key set and what to do next)
+  2. Open the application, make a book, copy its one line, and run that line on this computer. In the application, approve what the agent may do, confirm it in the signing window with your passkey, and keep that window open.
+  3. ${RUN} admit-passkey <the thumbprint>, with the thumbprint the signing window shows pasted in, then type yes.
+Or, without the application: "${RUN} init --link" also prints a link to https://sign.prova.red/, the signing page; sign there, save the file the page gives you, and run "${RUN} use <the saved file>".
+Nothing signs for you. Once a permission is taken, each tool call is checked against it and recorded.`;
 
 /**
  * What the Claude Code plugin runs when a session starts: the recorder is
@@ -2767,7 +2789,8 @@ async function sessionStart(folder, port) {
   const { found, problem } = recorderHooksInSettings(project);
   if (problem) said.push(`Provared: ${problem}. Before each call the plugin looks there for the recorder's hooks, which would ask about and record each call twice, so every tool call is refused until the file is smaller or the plugin is turned off.`);
   if (found.length > 0) said.push(doubledWords(found, RUN, project));
-  if (!existsSync(files(folder).slip) && !(await running(port, Math.max(250, Math.min(2000, Math.round(until - Date.now())))))) said.push(firstRunWords());
+  // With no keys yet, "init" is the first step. Where the keys are there, "ensure" starts the recorder: in a fresh folder it waits for the first permission, and says so.
+  if (!existsSync(files(folder).slip) && !existsSync(files(folder).agentKeys) && !(await running(port, Math.max(250, Math.min(2000, Math.round(until - Date.now())))))) said.push(firstRunWords());
   else {
     const problems = [];
     const started = await ensure(folder, port, (words) => problems.push(words), until);
@@ -3065,9 +3088,16 @@ async function slipsListed(text) {
 
 const USAGE = `Usage: ${RUN} <command>
 
-  init          make the keys if they are missing, write the hooks into this project's
-                .claude/settings.local.json, and print a link to sign the permission; with
-                --no-hooks (or as the Claude Code plugin's copy), write no hooks
+  init [--link] [--no-hooks]
+                make the keys if they are missing, and write the hooks into this project's
+                .claude/settings.local.json (with --no-hooks, or as the Claude Code plugin's
+                copy, write none); then, in a fresh folder (where no permission was ever
+                taken), start the recorder in the background, as ensure does, waiting for the
+                agent's first permission, and print the fingerprint of the agent's key set
+                and what to do next: the application, then admit-passkey; in any other folder,
+                start nothing, change nothing in the record, and say what is there. With
+                --link, also print a link to sign the permission on the signing page, for
+                use <file>. Ends with 1 where the recorder did not start (ensure tries again)
   remove-hooks  take the hooks init wrote out of this project's .claude/settings.local.json,
                 for a project where the Claude Code plugin brings them
   use <file>    put a signed permission (slip.json from the signing page) in place, and start
@@ -3083,7 +3113,8 @@ const USAGE = `Usage: ${RUN} <command>
                 the application and waits here, and take both only once you type "yes" at a
                 terminal ("no" declines it); with no thumbprint, list what waits
   start         run the recorder in this terminal
-  ensure        start the recorder in the background, if it is not running
+  ensure        start the recorder in the background, if it is not running (in a fresh
+                folder it waits for the agent's first permission, and says what to do next)
   status        what the recorder holds
   seal          seal the book now, with the recorder's three keys
   new-book      seal the book, keep it as book-<n>.jsonl, and start a new one that begins with
@@ -3116,10 +3147,11 @@ export async function main(argv) {
     return 0;
   }
   if (command === 'init') {
-    if (rest.some((a) => a !== '--no-hooks')) {
+    if (rest.some((a) => a !== '--no-hooks' && a !== '--link')) {
       console.log(USAGE);
       return 2;
     }
+    const withLink = rest.includes('--link');
     const agent = await makeAgentKeys(folder);
     await makeRecorderKeys(folder);
     // The plugin's copy, or --no-hooks: no hooks are written, since the plugin brings its own.
@@ -3140,14 +3172,56 @@ export async function main(argv) {
       if (pluginInstalled()) console.log(`Warning: the Claude Code plugin provared-recorder is installed too. Where it is turned on, its hooks and these both run, and the plugin refuses every tool call in this project until one of the two is taken out: "${RUN} remove-hooks" takes these out again.`);
     }
     if (SELF.split(sep).includes('_npx')) console.log(`Warning: the hooks point into npm's temporary folder (${dirname(SELF)}), which npm may clear. Install the package (npm install -g provared-claude-code) and run init again.`);
-    console.log('\nNext, sign the permission with your passkey. Open this link in a browser: the page is filled in with a');
-    console.log('starting permission for this agent, which you can change before you sign. The part after "#" stays in');
-    console.log('your browser: it is never sent to any server.\n');
-    console.log(signingLink(startingPermission(agent.keys)));
-    console.log(`\nThe fingerprint of the agent's key set: ${await keySetFingerprint(agent.keys)}`);
-    console.log('The signing page shows the same fingerprint before you sign: compare the two. If they differ, the page holds other keys than this agent\'s: do not sign.');
-    console.log(`\nSave the signed file the page gives you, then put it in place:\n\n  ${RUN} use <the saved file>`);
-    return 0;
+    // In a fresh folder the recorder is started as "ensure" starts it, and waits for the agent's first permission.
+    // Elsewhere nothing is started, and nothing in the record is changed.
+    const fresh = freshFolder(folder);
+    let code = 0;
+    let waiting = false;
+    console.log('');
+    if (fresh.fresh) {
+      const said = [];
+      const { code: ensured, status: answering } = await ensureStatus(folder, port, (words) => said.push(words));
+      if (ensured === 0 && answering?.waiting === true && typeof answering.folder === 'string' && samePath(resolve(answering.folder), resolve(folder))) {
+        waiting = true;
+        // What "ensure" said beside its own words for the waiting state (such as a recorder of an earlier version), said here too.
+        for (const words of said) if (words !== waitingWords()) console.log(words);
+        console.log(`The recorder is running on 127.0.0.1:${port}, and waits for the agent's first permission: until one is taken, every tool call is refused, and nothing is recorded.`);
+      } else {
+        code = 1;
+        const why = ensured === 0
+          ? `what answers on 127.0.0.1:${port} is not the recorder of this folder waiting for its first permission${typeof answering?.folder === 'string' ? ` (it names the folder ${printable(answering.folder)})` : ''}`
+          : `the recorder did not answer on 127.0.0.1:${port} within 20 seconds (another program may hold that port; "${RUN} start" shows why)`;
+        console.log(`The recorder was not started: ${why}. The keys${written ? ' and the hooks' : ''} are in place. Put right what stands in the way, then start it: ${RUN} ensure`);
+      }
+    } else if (existsSync(f.slip)) {
+      const answering = await running(port, 2000);
+      console.log(!answering
+        ? `A permission is in place here already (slip.json), so init started nothing, and nothing in the record was changed. To start the recorder with it: ${RUN} ensure`
+        : answering.waiting === true
+          ? `A permission is in place here already (slip.json), but the recorder that answers on 127.0.0.1:${port} waits for a first permission, so every tool call is refused. init started nothing, and nothing in the record was changed. Restart the recorder once, with both commands on one line: ${RUN} stop; ${RUN} ensure`
+          : `A permission is in place here already (slip.json), and the recorder runs with it (127.0.0.1:${port}), so init started nothing, and nothing in the record was changed.`);
+    } else {
+      console.log(fresh.found.length > 0
+        ? `The folder ${folder} holds ${fresh.found.join(', ')}, so it is not fresh: a permission was taken here before, or its taking stopped part way. The recorder waits for a first permission only in a fresh folder, so init started nothing, and nothing in the record was changed. Save the signed permission from the signing window, and put it in place: ${RUN} use <the saved file>`
+        : `The folder ${folder} could not be read, so init started nothing, and nothing in the record was changed.`);
+    }
+    const fingerprintWords = `The fingerprint of the agent's key set: ${await keySetFingerprint(agent.keys)}
+When the signing window asks for the fingerprint of the agent's key set, paste this one there: the whole of it, or at least its first 16 characters. If the window says it does not match, the keys it holds are not this agent's: do not sign.`;
+    if (withLink) {
+      console.log('\nNext, sign the permission with your passkey. Open this link in a browser: the page is filled in with a');
+      console.log('starting permission for this agent, which you can change before you sign. The part after "#" stays in');
+      console.log('your browser: it is never sent to any server.\n');
+      console.log(signingLink(startingPermission(agent.keys)));
+      console.log(`\n${fingerprintWords}`);
+      console.log(`\nSave the signed file the page gives you, then put it in place:\n\n  ${RUN} use <the saved file>`);
+    } else {
+      console.log(`\n${fingerprintWords}`);
+      if (waiting) {
+        console.log(`\n${waitingSteps('the one printed above')}`);
+        console.log(`\nWithout the application: "${RUN} init --link" prints a link to the signing page, and "${RUN} use <the saved file>" puts the signed permission in place.`);
+      }
+    }
+    return code;
   }
   if (command === 'use' || command === 'renew') {
     const newPasskey = rest.includes('--new-passkey');
@@ -3422,6 +3496,8 @@ export async function main(argv) {
     }
     // Every text in it, from a permission or from what answers, escaped where it does not print; still JSON.
     console.log(printableJson(JSON.stringify(status, null, 2)));
+    // The steps of the waiting state, said apart from the JSON, which stays JSON.
+    if (status.waiting === true) console.error(waitingWords());
     return 0;
   }
   if (command === 'seal') {

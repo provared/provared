@@ -1,4 +1,4 @@
-// Setting the recorder up as a stranger would: "init" makes the keys,
+// Setting the recorder up as a stranger would: "init --link" makes the keys,
 // writes the hooks beside a project's own and prints a link to the signing
 // page; the person signs; "use" puts the slip in place and starts the
 // service; Claude Code's calls are recorded; "check" gives the checker's
@@ -123,8 +123,8 @@ test('from nothing to a recorded, checked session: init, sign, use, the calls, s
   const project = tempFolder('provared-project-');
   const port = await freePort();
   try {
-    // 1. init, in the project's folder
-    const setUp = await runCommand(['init'], { folder, port, cwd: project });
+    // 1. init, in the project's folder, with the link to the signing page (it starts the recorder that waits, too, which "use" stops)
+    const setUp = await runCommand(['init', '--link'], { folder, port, cwd: project });
     assert.equal(setUp.code, 0, setUp.err);
     assert.match(setUp.out, /The hooks are in /);
     const settings = JSON.parse(readFileSync(join(project, '.claude', 'settings.local.json'), 'utf8'));
