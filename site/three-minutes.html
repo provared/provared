@@ -191,171 +191,163 @@
 
 <h2>In a large company</h2>
 
-<p>The drawing below shows how the parts fit together in a large company that uses AI agents. Read it from the top: the company's own people and processes, its AI, the one point its tool calls pass, the systems the AI uses (tool servers that speak the Model Context Protocol, MCP, and stores of documents that an AI model looks things up in, called RAG), the book that is kept, and the proof handed out. It shows what each part does, as built. As far as the author knows, no company has yet run all of them together.</p>
+<p>When a company lets AI agents act in its systems, three questions matter: what is each agent allowed to do, what stops it doing more, and how can both be proved later? The drawing answers them from the top down: the company's people, its AI, Provared's checkpoint, the company's systems, the book of receipts that is kept, and the proof handed to an auditor.</p>
+
+<p>Two words used below. An action is one thing the AI asks a company system to do, such as raising an order, changing a record or sending an email. The checkpoint is Provared's software that stands between the AI and the company's systems and checks each action. It comes in two versions, the guard and the gateway.</p>
 
 <figure>
-  <svg class="dr" fill="#1c1b1f" color="#1c1b1f" viewBox="0 0 372 1403" role="img" aria-label="A large company's people and processes at the top: task owners, IT and security, and audit, risk and legal. Task owners sign a permission, the slip, at the Provared signing page; the Provared application, not yet open to others, lets them see each agent's book and renew or cancel. Below sit the company's own AI models, its assistants and agents, and the Provared recorders beside agents the company runs itself. Tool calls pass the Provared control point: the guard for tool servers that speak the Model Context Protocol (MCP), and the gateway for web services. They check each call against the slip, refuse what it does not allow, and write a signed receipt. Allowed calls reach the company's tool servers, its knowledge stores that use retrieval-augmented generation (RAG), and its business systems. The receipts go to the book: a recorder, a sealer run by another team, and an outside clock. One page of the book, a Show, and the free checker then give proof to audit, a regulator, a customer or a court.">
+  <svg class="dr" fill="#1c1b1f" color="#1c1b1f" viewBox="0 0 372 1230" role="img" aria-label="At the top, the company's people: managers sign on their phone what an AI agent may do, and later a cancellation; IT puts Provared's checkpoint in front of the company's systems and gives the systems' passwords to it, not to the AI; audit, risk and legal check each agent's book and hand pages of it to a regulator or a customer. The manager's signature makes the permission, the Slip, at sign.prova.red. Provared's application, not yet open to others, is where managers are to read each book and sign a renewal or a cancellation. Below sit the company's AI assistants and agents. Every action the AI asks for passes Provared's checkpoint, which checks it against the permission: an allowed action is passed on with a signed receipt; any other is blocked before it reaches the system, and a signed note of the block usually goes in the book. The AI cannot go round the checkpoint unless it can read the checkpoint's files or has another way in. The checkpoint comes in two versions: the guard, for the add-on tools that AI assistants use to act, and the gateway, for business systems the AI reaches with no add-on tool. Allowed actions reach the company's business systems and data. The receipts go into a sealed book; where the guard is used, the keys that seal it can be held by another team; an outside clock dates each seal where one is set up. Chosen pages of the book, the Show, and the free checker then give proof to audit, a regulator, a customer or a court: the whole book shows whether the agent kept to its permission; a few pages show only whether any one of them, on its own, went outside it.">
   <defs><marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5 0 10z" fill="currentColor"/></marker><marker id="ah-slip" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path class="ink-slip" d="M0 0L10 5 0 10z" fill="#1d5fbf"/></marker><marker id="ah-stub" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path class="ink-stub" d="M0 0L10 5 0 10z" fill="#1f7a3f"/></marker></defs>
   <g font-size="11">
-  <rect class="band" fill="none" stroke="#d0d0d7" x="4" y="4" width="364" height="213" rx="9" stroke-width="1.2"/>
-  <text class="mute" fill="#5c5c66" x="13" y="20" font-size="10" font-weight="700">THE COMPANY: ITS PEOPLE AND PROCESSES</text>
+  <rect class="band" fill="none" stroke="#d0d0d7" x="4" y="4" width="364" height="192" rx="9" stroke-width="1.2"/>
+  <text class="mute" fill="#5c5c66" x="13" y="20" font-size="10" font-weight="700">THE COMPANY'S PEOPLE</text>
   <rect class="box" fill="#f6f6f8" stroke="#d0d0d7" x="12" y="28" width="348" height="50" rx="6" stroke-width="1.4"/>
   <circle class="ring" fill="none" stroke="currentColor" cx="36" cy="53" r="15" stroke-width="1.4"/>
   <use href="#i-person" x="25.125" y="42.125" width="21.75" height="21.75"/>
-  <text x="58" y="44" font-weight="700">Task owners</text>
-  <text x="58" y="58" font-size="10">A manager decides what an agent may do: limits,</text>
-  <text x="58" y="71" font-size="10">with whom, until when. Renews or cancels it.</text>
+  <text x="58" y="44" font-weight="700">Managers who own a task</text>
+  <text x="58" y="58" font-size="10">Sign, on their phone, what an AI agent may do:</text>
+  <text x="58" y="71" font-size="10">how much, with whom, until when; later, a cancellation.</text>
   <rect class="box" fill="#f6f6f8" stroke="#d0d0d7" x="12" y="83" width="348" height="50" rx="6" stroke-width="1.4"/>
   <circle class="ring" fill="none" stroke="currentColor" cx="36" cy="108" r="15" stroke-width="1.4"/>
   <use href="#i-server" x="25.125" y="97.125" width="21.75" height="21.75"/>
   <text x="58" y="99" font-weight="700">IT and security</text>
-  <text x="58" y="113" font-size="10">Run the guard and the gateway, and give them the</text>
-  <text x="58" y="126" font-size="10">tools' passwords. Another team runs the sealer.</text>
+  <text x="58" y="113" font-size="10">Put Provared's checkpoint in front of the company's</text>
+  <text x="58" y="126" font-size="10">systems, and give the passwords to it, not to the AI.</text>
   <rect class="box" fill="#f6f6f8" stroke="#d0d0d7" x="12" y="138" width="348" height="50" rx="6" stroke-width="1.4"/>
   <circle class="ring" fill="none" stroke="currentColor" cx="36" cy="163" r="15" stroke-width="1.4"/>
   <use href="#i-glass" x="25.125" y="152.125" width="21.75" height="21.75"/>
   <text x="58" y="154" font-weight="700">Audit, risk and legal</text>
-  <text x="58" y="168" font-size="10">Read each agent's book with the free checker, and</text>
-  <text x="58" y="181" font-size="10">hand a page of it to a regulator or a customer.</text>
-  <text class="mute" fill="#5c5c66" x="18" y="204" font-size="10">Their processes: approve a task, renew it, cancel it, audit it.</text>
-  <line x1="90" y1="217" x2="90" y2="239" stroke="currentColor" stroke-width="1.4" marker-end="url(#ah2)"/>
-  <text class="mute" fill="#5c5c66" x="98" y="231" font-size="10">a manager signs</text>
-  <rect class="box-slip" fill="#f6f6f8" stroke="#1d5fbf" x="4" y="239" width="178" height="90" rx="6" stroke-width="1.4"/>
-  <text class="ink-slip" fill="#1d5fbf" color="#1d5fbf" x="13" y="255" font-weight="700">SIGNING PAGE</text>
-  <text x="13" y="269" font-size="10">A passkey signs each permission</text>
-  <text x="13" y="282" font-size="10">here, at sign.prova.red.</text>
-  <text x="13" y="295" font-size="10">The result is the SLIP.</text>
-  <rect class="box dash" fill="#f6f6f8" stroke="#d0d0d7" x="190" y="239" width="178" height="90" rx="6" stroke-width="1.4" stroke-dasharray="5 3"/>
-  <text x="199" y="255" font-weight="700">THE APPLICATION</text>
-  <text x="199" y="269" font-size="10">Owners see each agent's book,</text>
-  <text x="199" y="282" font-size="10">and renew or cancel. Books reach</text>
-  <text x="199" y="295" font-size="10">it encrypted; its server cannot</text>
-  <text x="199" y="308" font-size="10">read them.</text>
-  <text class="mute" fill="#5c5c66" x="199" y="321" font-size="10">Not yet open to others.</text>
-  <rect class="band" fill="none" stroke="#d0d0d7" x="26" y="341" width="320" height="205" rx="9" stroke-width="1.2"/>
-  <text class="mute" fill="#5c5c66" x="35" y="357" font-size="10" font-weight="700">THE COMPANY'S AI</text>
-  <rect class="box" fill="#f6f6f8" stroke="#d0d0d7" x="34" y="365" width="304" height="50" rx="6" stroke-width="1.4"/>
-  <circle class="ring" fill="none" stroke="currentColor" cx="58" cy="390" r="15" stroke-width="1.4"/>
-  <use href="#i-chip" x="47.125" y="379.125" width="21.75" height="21.75"/>
-  <text x="80" y="381" font-weight="700">AI models</text>
-  <text x="80" y="395" font-size="10">AI models of the company's choice, which the</text>
-  <text x="80" y="408" font-size="10">assistants and agents below run on.</text>
-  <rect class="box" fill="#f6f6f8" stroke="#d0d0d7" x="34" y="420" width="304" height="50" rx="6" stroke-width="1.4"/>
-  <circle class="ring" fill="none" stroke="currentColor" cx="58" cy="445" r="15" stroke-width="1.4"/>
-  <use href="#i-agent" x="47.125" y="434.125" width="21.75" height="21.75"/>
-  <text x="80" y="436" font-weight="700">Assistants and agents</text>
-  <text x="80" y="450" font-size="10">Staff chat assistants (such as claude.ai),</text>
-  <text x="80" y="463" font-size="10">coding agents, and agents built in-house.</text>
-  <rect class="box-stub" fill="#f6f6f8" stroke="#1f7a3f" x="34" y="475" width="304" height="63" rx="6" stroke-width="1.4"/>
-  <circle class="ring-stub" fill="#f6f6f8" stroke="#1f7a3f" cx="58" cy="506.5" r="15" stroke-width="1.4"/>
-  <use class="ink-stub" fill="#1f7a3f" color="#1f7a3f" href="#i-shield" x="47.125" y="495.625" width="21.75" height="21.75"/>
-  <text class="ink-stub" fill="#1f7a3f" color="#1f7a3f" x="80" y="491" font-weight="700">RECORDERS BESIDE THE AGENT</text>
-  <text x="80" y="505" font-size="10">For agents the company runs itself: the</text>
-  <text x="80" y="518" font-size="10">library, add-ons and Claude Code recorder</text>
-  <text x="80" y="531" font-size="10">check the slip first, write a receipt after.</text>
-  <line x1="186" y1="546" x2="186" y2="568" stroke="currentColor" stroke-width="1.4" marker-end="url(#ah2)"/>
-  <text class="mute" fill="#5c5c66" x="194" y="560" font-size="10">tool calls pass here</text>
-  <rect class="band" fill="none" stroke="#d0d0d7" x="4" y="568" width="364" height="158" rx="9" stroke-width="1.2"/>
-  <text class="mute" fill="#5c5c66" x="13" y="584" font-size="10" font-weight="700">THE PROVARED CONTROL POINT</text>
-  <text class="mute" fill="#5c5c66" x="18" y="596" font-size="10">Blue line: the slip arrives. Green line: receipts leave.</text>
-  <rect class="box-stub" fill="#f6f6f8" stroke="#1f7a3f" x="12" y="604" width="230" height="92" rx="6" stroke-width="1.4"/>
-  <text class="ink-stub" fill="#1f7a3f" color="#1f7a3f" x="21" y="620" font-weight="700">THE GUARD</text>
-  <text class="mute" fill="#5c5c66" x="87.8536" y="620" font-size="10">for MCP tool servers</text>
-  <text x="21" y="634" font-size="10">Holds the tools' passwords instead of the</text>
-  <text x="21" y="647" font-size="10">agent. Refuses any call the slip does not</text>
-  <text x="21" y="660" font-size="10">allow. Signs a receipt for each call it</text>
-  <text x="21" y="673" font-size="10">lets through, and countersigns it. Can be</text>
-  <text x="21" y="686" font-size="10">added to claude.ai as a connector.</text>
-  <rect class="box-stub" fill="#f6f6f8" stroke="#1f7a3f" x="248" y="604" width="112" height="92" rx="6" stroke-width="1.4"/>
-  <text class="ink-stub" fill="#1f7a3f" color="#1f7a3f" x="256" y="620" font-weight="700">THE GATEWAY</text>
-  <text x="256" y="634" font-size="10">Same job, for</text>
-  <text x="256" y="647" font-size="10">web services.</text>
-  <text x="256" y="660" font-size="10">Can countersign</text>
-  <text x="256" y="673" font-size="10">each call it</text>
-  <text x="256" y="686" font-size="10">lets through.</text>
-  <text class="warn" fill="#b3261e" x="18" y="712" font-size="10" font-weight="700">Normally, a refused call never reaches the system; it is signed.</text>
-  <line x1="186" y1="726" x2="186" y2="746" stroke="currentColor" stroke-width="1.4" marker-end="url(#ah2)"/>
-  <text class="mute" fill="#5c5c66" x="194" y="739" font-size="10">allowed calls</text>
-  <rect class="band" fill="none" stroke="#d0d0d7" x="26" y="746" width="320" height="192" rx="9" stroke-width="1.2"/>
-  <text class="mute" fill="#5c5c66" x="35" y="762" font-size="10" font-weight="700">THE COMPANY'S SYSTEMS AND AI TOOLS</text>
-  <rect class="box" fill="#f6f6f8" stroke="#d0d0d7" x="34" y="770" width="304" height="50" rx="6" stroke-width="1.4"/>
-  <circle class="ring" fill="none" stroke="currentColor" cx="58" cy="795" r="15" stroke-width="1.4"/>
-  <use href="#i-server" x="47.125" y="784.125" width="21.75" height="21.75"/>
-  <text x="80" y="786" font-weight="700">Tool servers (MCP)</text>
-  <text x="80" y="800" font-size="10">Programs an agent calls, by the common MCP</text>
-  <text x="80" y="813" font-size="10">way: files, search, a shop. Via the guard.</text>
-  <rect class="box" fill="#f6f6f8" stroke="#d0d0d7" x="34" y="825" width="304" height="50" rx="6" stroke-width="1.4"/>
-  <circle class="ring" fill="none" stroke="currentColor" cx="58" cy="850" r="15" stroke-width="1.4"/>
-  <use href="#i-docs" x="47.125" y="839.125" width="21.75" height="21.75"/>
-  <text x="80" y="841" font-weight="700">Knowledge stores (RAG)</text>
-  <text x="80" y="855" font-size="10">RAG: the model looks things up in the company's</text>
-  <text x="80" y="868" font-size="10">documents. Checked if offered as a tool.</text>
-  <rect class="box" fill="#f6f6f8" stroke="#d0d0d7" x="34" y="880" width="304" height="50" rx="6" stroke-width="1.4"/>
-  <circle class="ring" fill="none" stroke="currentColor" cx="58" cy="905" r="15" stroke-width="1.4"/>
-  <use href="#i-grid" x="47.125" y="894.125" width="21.75" height="21.75"/>
-  <text x="80" y="896" font-weight="700">Business systems</text>
-  <text x="80" y="910" font-size="10">Finance, HR, customer records, tickets, mail:</text>
-  <text x="80" y="923" font-size="10">reached through the gateway, by web interface.</text>
-  <rect class="band" fill="none" stroke="#d0d0d7" x="4" y="960" width="364" height="205" rx="9" stroke-width="1.2"/>
-  <text class="mute" fill="#5c5c66" x="13" y="976" font-size="10" font-weight="700">THE BOOK: RECEIPTS ARRIVE BY THE GREEN LINE</text>
-  <rect class="box-seal" fill="#f6f6f8" stroke="#b85c00" x="12" y="984" width="348" height="50" rx="6" stroke-width="1.4"/>
-  <circle class="ring-seal" fill="#f6f6f8" stroke="#b85c00" cx="36" cy="1009" r="15" stroke-width="1.4"/>
-  <use class="ink-seal" fill="#b85c00" color="#b85c00" href="#i-book" x="25.125" y="998.125" width="21.75" height="21.75"/>
-  <text class="ink-seal" fill="#b85c00" color="#b85c00" x="58" y="1000" font-weight="700">RECORDER</text>
-  <text x="58" y="1014" font-size="10">Chains each agent's receipts into its book, in</text>
-  <text x="58" y="1027" font-size="10">order, so a later edit shows when it is checked.</text>
-  <rect class="box-seal dash" fill="#f6f6f8" stroke="#b85c00" x="12" y="1039" width="348" height="63" rx="6" stroke-width="1.4" stroke-dasharray="5 3"/>
-  <circle class="ring-seal" fill="#f6f6f8" stroke="#b85c00" cx="36" cy="1070.5" r="15" stroke-width="1.4"/>
-  <use class="ink-seal" fill="#b85c00" color="#b85c00" href="#i-seal" x="25.125" y="1059.625" width="21.75" height="21.75"/>
-  <text class="ink-seal" fill="#b85c00" color="#b85c00" x="58" y="1055" font-weight="700">SEALER, run by another team</text>
-  <text x="58" y="1069" font-size="10">Holds the guard's sealing keys, away from the agent's</text>
-  <text x="58" y="1082" font-size="10">computer. The gateway uses its own keys for now.</text>
-  <text x="58" y="1095" font-size="10">In the repository, not yet published.</text>
-  <rect class="box" fill="#f6f6f8" stroke="#d0d0d7" x="12" y="1107" width="348" height="50" rx="6" stroke-width="1.4"/>
-  <circle class="ring" fill="none" stroke="currentColor" cx="36" cy="1132" r="15" stroke-width="1.4"/>
-  <use href="#i-clock" x="25.125" y="1121.125" width="21.75" height="21.75"/>
-  <text x="58" y="1123" font-weight="700">Outside clock</text>
-  <text x="58" y="1137" font-size="10">A time-stamp service, where one is set up, dates</text>
-  <text x="58" y="1150" font-size="10">each seal: evidence the book existed by then.</text>
-  <line x1="186" y1="1165" x2="186" y2="1187" stroke="currentColor" stroke-width="1.4" marker-end="url(#ah2)"/>
-  <text class="mute" fill="#5c5c66" x="194" y="1179" font-size="10">a page is handed over</text>
-  <rect class="band" fill="none" stroke="#d0d0d7" x="4" y="1187" width="364" height="150" rx="9" stroke-width="1.2"/>
-  <text class="mute" fill="#5c5c66" x="13" y="1203" font-size="10" font-weight="700">THE PROOF, HANDED OUT</text>
-  <rect class="box-show" fill="#f6f6f8" stroke="#6b3fa0" x="12" y="1211" width="348" height="50" rx="6" stroke-width="1.4"/>
-  <circle class="ring-show" fill="#f6f6f8" stroke="#6b3fa0" cx="36" cy="1236" r="15" stroke-width="1.4"/>
-  <use class="ink-show" fill="#6b3fa0" color="#6b3fa0" href="#i-docs" x="25.125" y="1225.125" width="21.75" height="21.75"/>
-  <text class="ink-show" fill="#6b3fa0" color="#6b3fa0" x="58" y="1227" font-weight="700">SHOW</text>
-  <text x="58" y="1241" font-size="10">One page from the book, with proof that it belongs</text>
-  <text x="58" y="1254" font-size="10">to it. Names the reader does not need stay covered.</text>
-  <rect class="box" fill="#f6f6f8" stroke="#d0d0d7" x="12" y="1266" width="348" height="63" rx="6" stroke-width="1.4"/>
-  <circle class="ring" fill="none" stroke="currentColor" cx="36" cy="1297.5" r="15" stroke-width="1.4"/>
-  <use href="#i-glass" x="25.125" y="1286.625" width="21.75" height="21.75"/>
-  <text x="58" y="1282" font-weight="700">CHECKER, free</text>
-  <text x="58" y="1296" font-size="10">Runs on the reader's own device and asks nobody:</text>
-  <text x="58" y="1309" font-size="10">did the agent stay within its slip, and where not?</text>
-  <text x="58" y="1322" font-size="10">For audit, a regulator, a customer or a court.</text>
-  <line class="rail-slip" stroke="#1d5fbf" x1="16" y1="329" x2="16" y2="567" stroke-width="2.4" marker-end="url(#ah-slip)"/>
-  <line class="rail-stub" stroke="#1f7a3f" x1="356" y1="726" x2="356" y2="959" stroke-width="2.4" marker-end="url(#ah-stub)"/>
-  <rect fill="none" stroke="#1d5fbf" x="8" y="1349" width="14" height="10" rx="2" stroke-width="1.4"/><rect fill="none" stroke="#1f7a3f" x="24" y="1349" width="14" height="10" rx="2" stroke-width="1.4"/><rect fill="none" stroke="#b85c00" x="40" y="1349" width="14" height="10" rx="2" stroke-width="1.4"/><rect fill="none" stroke="#6b3fa0" x="56" y="1349" width="14" height="10" rx="2" stroke-width="1.4"/>
-  <text x="78" y="1358" font-size="10">Provared: permission, receipts, book, proof</text>
-  <rect class="box" fill="#f6f6f8" stroke="#d0d0d7" x="8" y="1367" width="14" height="10" rx="2" stroke-width="1.4"/>
-  <text x="78" y="1376" font-size="10">Grey: the company's own, or other makers'</text>
-  <rect class="box dash" fill="none" stroke="currentColor" x="8" y="1385" width="14" height="10" rx="2" stroke-width="1.4" stroke-dasharray="3 2"/>
-  <text x="78" y="1394" font-size="10">Dashed: built, but not yet published or open to others</text>
+  <text x="58" y="168" font-size="10">Check each agent's book on their own computer,</text>
+  <text x="58" y="181" font-size="10">and hand pages of it to a regulator or a customer.</text>
+  <line x1="90" y1="196" x2="90" y2="217" stroke="currentColor" stroke-width="1.4" marker-end="url(#ah2)"/>
+  <text class="mute" fill="#5c5c66" x="98" y="210" font-size="10">a manager signs</text>
+  <rect class="box-slip" fill="#f6f6f8" stroke="#1d5fbf" x="4" y="218" width="178" height="78" rx="6" stroke-width="1.4"/>
+  <text class="ink-slip" fill="#1d5fbf" color="#1d5fbf" x="13" y="234" font-weight="700">THE PERMISSION (the Slip)</text>
+  <text x="13" y="248" font-size="10">What the agent may do,</text>
+  <text x="13" y="261" font-size="10">signed with a fingerprint</text>
+  <text x="13" y="274" font-size="10">or face at sign.prova.red.</text>
+  <rect class="box-slip dash" fill="#f6f6f8" stroke="#1d5fbf" x="190" y="218" width="178" height="78" rx="6" stroke-width="1.4" stroke-dasharray="5 3"/>
+  <text class="ink-slip" fill="#1d5fbf" color="#1d5fbf" x="199" y="234" font-weight="700">THE APPLICATION</text>
+  <text x="199" y="248" font-size="10">Managers read each agent's</text>
+  <text x="199" y="261" font-size="10">book there, and sign a</text>
+  <text x="199" y="274" font-size="10">renewal or a cancellation.</text>
+  <text class="mute" fill="#5c5c66" x="199" y="287" font-size="10">Not yet open to others.</text>
+  <rect class="band" fill="none" stroke="#d0d0d7" x="26" y="308" width="320" height="95" rx="9" stroke-width="1.2"/>
+  <text class="mute" fill="#5c5c66" x="35" y="324" font-size="10" font-weight="700">THE COMPANY'S AI</text>
+  <rect class="box" fill="#f6f6f8" stroke="#d0d0d7" x="34" y="332" width="304" height="63" rx="6" stroke-width="1.4"/>
+  <circle class="ring" fill="none" stroke="currentColor" cx="58" cy="363.5" r="15" stroke-width="1.4"/>
+  <use href="#i-agent" x="47.125" y="352.625" width="21.75" height="21.75"/>
+  <text x="80" y="348" font-weight="700">AI assistants and agents</text>
+  <text x="80" y="362" font-size="10">Staff chat assistants (such as claude.ai),</text>
+  <text x="80" y="375" font-size="10">and agents built in-house, on AI models of</text>
+  <text x="80" y="388" font-size="10">the company's choice.</text>
+  <line x1="186" y1="403" x2="186" y2="424" stroke="currentColor" stroke-width="1.4" marker-end="url(#ah2)"/>
+  <text class="mute" fill="#5c5c66" x="194" y="417" font-size="10">every action the AI asks for</text>
+  <rect class="band" fill="none" stroke="#d0d0d7" x="4" y="425" width="364" height="211" rx="9" stroke-width="1.2"/>
+  <text class="mute" fill="#5c5c66" x="13" y="441" font-size="10" font-weight="700">PROVARED'S CHECKPOINT</text>
+  <text class="mute" fill="#5c5c66" x="18" y="453" font-size="10">Blue line: the permission arrives. Green line: receipts leave.</text>
+  <rect class="box-stub" fill="#f6f6f8" stroke="#1f7a3f" x="12" y="461" width="348" height="80" rx="6" stroke-width="1.4"/>
+  <text class="ink-stub" fill="#1f7a3f" color="#1f7a3f" x="21" y="477" font-weight="700">CHECKS EACH ACTION AGAINST THE PERMISSION</text>
+  <text x="21" y="491" font-size="10">Allowed: passed on to the system, with a signed receipt.</text>
+  <text x="21" y="504" font-size="10">Not allowed: blocked; a signed note usually goes in the book.</text>
+  <text x="21" y="517" font-size="10">It holds the systems' passwords; the AI cannot go round it</text>
+  <text x="21" y="530" font-size="10">unless it can read its files or has another way in.</text>
+  <rect class="box-stub" fill="#f6f6f8" stroke="#1f7a3f" x="12" y="547" width="172" height="63" rx="6" stroke-width="1.4"/>
+  <text class="ink-stub" fill="#1f7a3f" color="#1f7a3f" x="21" y="563" font-weight="700">THE GUARD</text>
+  <text x="21" y="577" font-size="10">for the add-on tools that AI</text>
+  <text x="21" y="590" font-size="10">assistants use to act.</text>
+  <text x="21" y="603" font-size="10">Can be added to claude.ai.</text>
+  <rect class="box-stub" fill="#f6f6f8" stroke="#1f7a3f" x="190" y="547" width="170" height="63" rx="6" stroke-width="1.4"/>
+  <text class="ink-stub" fill="#1f7a3f" color="#1f7a3f" x="199" y="563" font-weight="700">THE GATEWAY</text>
+  <text x="199" y="577" font-size="10">for business systems the AI</text>
+  <text x="199" y="590" font-size="10">reaches with no add-on tool,</text>
+  <text x="199" y="603" font-size="10">such as finance or HR.</text>
+  <text class="warn" fill="#b3261e" x="18" y="626" font-size="10" font-weight="700">A blocked action never reaches the system.</text>
+  <line x1="186" y1="636" x2="186" y2="657" stroke="currentColor" stroke-width="1.4" marker-end="url(#ah2)"/>
+  <text class="mute" fill="#5c5c66" x="194" y="650" font-size="10">allowed actions only</text>
+  <rect class="band" fill="none" stroke="#d0d0d7" x="26" y="658" width="320" height="95" rx="9" stroke-width="1.2"/>
+  <text class="mute" fill="#5c5c66" x="35" y="674" font-size="10" font-weight="700">THE COMPANY'S SYSTEMS</text>
+  <rect class="box" fill="#f6f6f8" stroke="#d0d0d7" x="34" y="682" width="304" height="63" rx="6" stroke-width="1.4"/>
+  <circle class="ring" fill="none" stroke="currentColor" cx="58" cy="713.5" r="15" stroke-width="1.4"/>
+  <use href="#i-grid" x="47.125" y="702.625" width="21.75" height="21.75"/>
+  <text x="80" y="698" font-weight="700">Business systems and data</text>
+  <text x="80" y="712" font-size="10">Finance, HR, customer records, email, files,</text>
+  <text x="80" y="725" font-size="10">document search, an online shop: reached</text>
+  <text x="80" y="738" font-size="10">through the checkpoint.</text>
+  <rect class="band" fill="none" stroke="#d0d0d7" x="4" y="773" width="364" height="218" rx="9" stroke-width="1.2"/>
+  <text class="mute" fill="#5c5c66" x="13" y="789" font-size="10" font-weight="700">THE BOOK: RECEIPTS ARRIVE BY THE GREEN LINE</text>
+  <rect class="box-seal" fill="#f6f6f8" stroke="#b85c00" x="12" y="797" width="348" height="63" rx="6" stroke-width="1.4"/>
+  <circle class="ring-seal" fill="#f6f6f8" stroke="#b85c00" cx="36" cy="828.5" r="15" stroke-width="1.4"/>
+  <use class="ink-seal" fill="#b85c00" color="#b85c00" href="#i-book" x="25.125" y="817.625" width="21.75" height="21.75"/>
+  <text class="ink-seal" fill="#b85c00" color="#b85c00" x="58" y="813" font-weight="700">THE SEALED BOOK (the Seal)</text>
+  <text x="58" y="827" font-size="10">Each agent's receipts, chained in order and sealed,</text>
+  <text x="58" y="840" font-size="10">so a receipt changed, moved or taken out of the middle</text>
+  <text x="58" y="853" font-size="10">shows when the book is checked.</text>
+  <rect class="box-seal dash" fill="#f6f6f8" stroke="#b85c00" x="12" y="865" width="348" height="63" rx="6" stroke-width="1.4" stroke-dasharray="5 3"/>
+  <circle class="ring-seal" fill="#f6f6f8" stroke="#b85c00" cx="36" cy="896.5" r="15" stroke-width="1.4"/>
+  <use class="ink-seal" fill="#b85c00" color="#b85c00" href="#i-seal" x="25.125" y="885.625" width="21.75" height="21.75"/>
+  <text class="ink-seal" fill="#b85c00" color="#b85c00" x="58" y="881" font-weight="700">SEALING BY A SEPARATE TEAM</text>
+  <text x="58" y="895" font-size="10">The keys that seal the book are held by another team,</text>
+  <text x="58" y="908" font-size="10">not by those who run the AI. Works with the guard only,</text>
+  <text x="58" y="921" font-size="10">not yet published; the gateway seals with its own keys.</text>
+  <rect class="box" fill="#f6f6f8" stroke="#d0d0d7" x="12" y="933" width="348" height="50" rx="6" stroke-width="1.4"/>
+  <circle class="ring" fill="none" stroke="currentColor" cx="36" cy="958" r="15" stroke-width="1.4"/>
+  <use href="#i-clock" x="25.125" y="947.125" width="21.75" height="21.75"/>
+  <text x="58" y="949" font-weight="700">Outside clock</text>
+  <text x="58" y="963" font-size="10">An independent time service, where one is set up,</text>
+  <text x="58" y="976" font-size="10">dates each seal: evidence the book existed by then.</text>
+  <line x1="186" y1="991" x2="186" y2="1012" stroke="currentColor" stroke-width="1.4" marker-end="url(#ah2)"/>
+  <text class="mute" fill="#5c5c66" x="194" y="1005" font-size="10">chosen pages are handed over</text>
+  <rect class="band" fill="none" stroke="#d0d0d7" x="4" y="1013" width="364" height="150" rx="9" stroke-width="1.2"/>
+  <text class="mute" fill="#5c5c66" x="13" y="1029" font-size="10" font-weight="700">THE PROOF, HANDED OVER</text>
+  <rect class="box-show" fill="#f6f6f8" stroke="#6b3fa0" x="12" y="1037" width="348" height="50" rx="6" stroke-width="1.4"/>
+  <circle class="ring-show" fill="#f6f6f8" stroke="#6b3fa0" cx="36" cy="1062" r="15" stroke-width="1.4"/>
+  <use class="ink-show" fill="#6b3fa0" color="#6b3fa0" href="#i-docs" x="25.125" y="1051.125" width="21.75" height="21.75"/>
+  <text class="ink-show" fill="#6b3fa0" color="#6b3fa0" x="58" y="1053" font-weight="700">CHOSEN PAGES, WITH PROOF (the Show)</text>
+  <text x="58" y="1067" font-size="10">The pages a reader needs, with proof that they belong</text>
+  <text x="58" y="1080" font-size="10">to the book. The rest stays closed.</text>
+  <rect class="box-show" fill="#f6f6f8" stroke="#6b3fa0" x="12" y="1092" width="348" height="63" rx="6" stroke-width="1.4"/>
+  <circle class="ring-show" fill="#f6f6f8" stroke="#6b3fa0" cx="36" cy="1123.5" r="15" stroke-width="1.4"/>
+  <use class="ink-show" fill="#6b3fa0" color="#6b3fa0" href="#i-glass" x="25.125" y="1112.625" width="21.75" height="21.75"/>
+  <text class="ink-show" fill="#6b3fa0" color="#6b3fa0" x="58" y="1108" font-weight="700">FREE CHECKER</text>
+  <text x="58" y="1122" font-size="10">Runs on the reader's own computer and asks nobody.</text>
+  <text x="58" y="1135" font-size="10">Whole book: did the agent keep to its permission?</text>
+  <text x="58" y="1148" font-size="10">A few pages: did any one, on its own, go outside it?</text>
+  <line class="rail-slip" stroke="#1d5fbf" x1="16" y1="296" x2="16" y2="424" stroke-width="2.4" marker-end="url(#ah-slip)"/>
+  <line class="rail-stub" stroke="#1f7a3f" x1="356" y1="636" x2="356" y2="772" stroke-width="2.4" marker-end="url(#ah-stub)"/>
+  <rect fill="none" stroke="#1d5fbf" x="8" y="1175" width="14" height="10" rx="2" stroke-width="1.4"/><rect fill="none" stroke="#1f7a3f" x="24" y="1175" width="14" height="10" rx="2" stroke-width="1.4"/><rect fill="none" stroke="#b85c00" x="40" y="1175" width="14" height="10" rx="2" stroke-width="1.4"/><rect fill="none" stroke="#6b3fa0" x="56" y="1175" width="14" height="10" rx="2" stroke-width="1.4"/>
+  <text x="78" y="1184" font-size="10">Coloured: Provared's parts</text>
+  <rect class="box" fill="#f6f6f8" stroke="#d0d0d7" x="8" y="1193" width="14" height="10" rx="2" stroke-width="1.4"/>
+  <text x="78" y="1202" font-size="10">Grey: the company's own, or other makers'</text>
+  <rect class="box dash" fill="none" stroke="currentColor" x="8" y="1211" width="14" height="10" rx="2" stroke-width="1.4" stroke-dasharray="3 2"/>
+  <text x="78" y="1220" font-size="10">Dashed: built, but not yet published or open to others</text>
   </g>
   </svg>
-  <figcaption>Colour marks Provared's own parts; grey is the company's own, or other makers'. Provared records actions, at the one point they pass. It does not read the model's thinking, does not judge what a knowledge store returns, and proves nothing about a system the agent can reach by another route.</figcaption>
+  <figcaption>Provared checks and records each action where it passes the checkpoint. Some things pass it unchecked, such as a document the AI only reads. Provared does not see what the AI is thinking, does not judge whether what the AI finds in the company's documents is right, and proves nothing about a system the AI can reach another way.</figcaption>
 </figure>
+
+<p>For the checkpoint to work, the AI must reach the company's systems only through it. IT gives the systems' passwords to the checkpoint, not to the AI; runs the checkpoint where the AI cannot read its files; and blocks any other route to the systems. IT also writes the rules that tell the checkpoint what each request to a system means, such as "an order of £8,000": the check is only as right as those rules. A cancellation the manager signs does not yet reach the checkpoint by itself; IT has to carry it out by hand, for example by stopping the agent's access. Agents the company builds itself can also have the check built in, with Provared's ready-made code, but there it works only if the agent's own software asks for it.</p>
 
 <p>One task, in an invented example:</p>
 
 <ol>
-  <li>A finance director signs, on their phone, a permission for an agent that answers supplier queries and raises purchase orders: up to £10,000 in total, at most ten orders, only the finance system and the document search, never delete, until the end of the quarter.</li>
-  <li>The IT team gives the guard the password of the company's document search, and the gateway the password of its finance system, and takes both away from the agent. Another team runs the sealer for the guard, so that those who run the agent do not hold the guard's sealing keys. The gateway seals with keys of its own for now.</li>
-  <li>The agent searches the policy documents and raises an order for £8,000. Each call gets a signed receipt. It then asks for an order of £14,000. The gateway refuses it before the finance system sees it, and signs a note of the refusal.</li>
-  <li>The receipts go into the agent's books, in order, and each book is sealed. Where a time-stamp service is set up, it dates each seal. The application, which is not yet open to others and not yet fed by the gateway, is where the finance director is meant to see the books and renew or cancel the permission.</li>
-  <li>Months later an auditor asks who allowed the £8,000 order. The company hands over one page of the book, and the auditor's checker says whether the agent stayed within the permission, and where it did not. Evidence, not a verdict.</li>
+  <li>The finance director signs, on their phone, what a purchasing agent may do: raise purchase orders, up to £10,000 in total and at most ten orders, using only the finance system and the document search, never deleting anything, until the end of the quarter.</li>
+  <li>IT gives Provared's checkpoint the passwords of the finance system and the document search, takes them away from the agent, runs the checkpoint where the agent cannot read its files, and blocks any other route to the two systems. It also writes the rules that tell the checkpoint what each request means.</li>
+  <li>The agent looks up the purchasing policy in the document search and raises an order for £8,000. Each action is passed on with a signed receipt. It then asks to raise an order for £14,000, over the limit. The checkpoint blocks it before the finance system sees it, and signs a note of the block.</li>
+  <li>Each checkpoint puts its receipts into a book, in order, and seals it at the times IT has set. Where an outside time service is set up, it dates each seal.</li>
+  <li>Months later an auditor asks who allowed the £8,000 order. The company hands over two pages of the book: the permission and that order's receipt. The auditor's checker, on the auditor's own computer, shows the signed permission and whether that order, on its own, went outside it. Whether the £10,000 total was kept, and the permission not cancelled first, needs the whole book. Evidence, not a verdict.</li>
 </ol>
+
+<p>Where each part stands today:</p>
+
+<ul>
+  <li>Published, and free for anyone to use: the signing page, the checkpoint in both versions, Provared's ready-made code for agents, and the checker.</li>
+  <li>The application, where a manager is to read each agent's book and sign a renewal or a cancellation, is not yet open to others, and cannot yet pass either back to the checkpoint.</li>
+  <li>Sealing by a separate team works with the guard only, on the guard's own computer, and is not yet a published package. The gateway seals with keys of its own for now.</li>
+  <li>The checking page in a web browser cannot yet check a sealed book in full; the checker installed on a computer can.</li>
+  <li>As far as the author knows, no company has yet run all of these together. The section "Where it is today", below, says how far each part has been tried.</li>
+</ul>
+
 <h2>Why it is different</h2>
 
 <ol>
@@ -456,6 +448,7 @@
   <p><b>Guard:</b> software that stands between an agent and its tools, holds the tools' credentials in place of the agent (it keeps them from the agent only where the agent cannot read the guard's files), and refuses any call the permission does not allow. Provared's guard is the package provared-mcp-executor.</p>
   <p><b>Sealer:</b> a program, run apart from the agent, that holds the keys that seal a book.</p>
   <p><b>Gateway:</b> the guard's counterpart for web services: it stands in front of each service an agent uses, holds its credential, refuses any call the permission does not allow, and receipts each call.</p>
+  <p><b>Checkpoint:</b> the guard and the gateway together: Provared's software between an AI agent and a company's systems, which checks each action against the permission.</p>
   <p><b>Tool server:</b> a program an agent calls to do one kind of thing, such as reading files, searching documents or changing a shop's prices.</p>
   <p><b>RAG, retrieval-augmented generation:</b> a way of making an AI model look things up in a store of the company's own documents before it answers. Where the search is offered to the agent as a tool, Provared sees it as one more tool call: it can allow or refuse it, and receipts it, but it does not judge what comes back. Documents offered as MCP resources, and searches that do not pass the guard, are not checked.</p>
   <p><b>MCP, the Model Context Protocol:</b> the common way for AI agents to reach tools, such as reading files or searching the web.</p>
