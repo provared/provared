@@ -45,13 +45,14 @@ test('keys that are not a key set get no fingerprint, and the library\'s own wor
 // Design P-19, 2.8, as the founder decided after the review of step 9: a
 // permission goes back at once only where a checked earlier permission
 // vouches for both the passkey that signs and the agent's key set, whatever
-// kind the page that asked names; a cancellation always does.
-test('handed back at once: a cancellation, and a permission only where an earlier one vouches for passkey and key set', () => {
-  assert.equal(handedBackAtOnce('cancellation', false), true);
-  assert.equal(handedBackAtOnce('renewal', true), true, 'a true renewal');
-  assert.equal(handedBackAtOnce('renewal', false), false, 'a "renewal" nothing vouches for');
-  assert.equal(handedBackAtOnce('permission', false), false, 'a first permission');
-  assert.equal(handedBackAtOnce('permission', 'yes'), false, 'only true vouches');
+// kind the page that asked names (a cancellation, signed by its own button,
+// always goes back at once).
+test('handed back at once: a permission only where an earlier one vouches for passkey and key set, whatever the request is called', () => {
+  assert.equal(handedBackAtOnce(true), true, 'a true renewal');
+  assert.equal(handedBackAtOnce(false), false, 'a first permission, or a "renewal" nothing vouches for');
+  assert.equal(handedBackAtOnce('yes'), false, 'only true vouches');
+  assert.equal(handedBackAtOnce(), false);
+  assert.equal(handedBackAtOnce.length, 1, 'it is given nothing but whether the permission is vouched for');
 });
 
 // 6.B and 6.C(b): for a key set new to this device, the signing window signs
@@ -105,4 +106,12 @@ test('the warning for a key set new to this device: expected, and compared with 
     newAgentWords(fp),
     `This is the first permission for this agent's key set on this device, as is expected for a new agent: ${fp}. Compare it with the fingerprint your agent's software printed on the agent's computer (for Claude Code, the one init printed), never with the application or another page: whoever filled in this permission could have put another agent's keys in it. A permission for someone else's keys lets their agent act in your name.`,
   );
+  // Where a checked earlier permission names another key set, new keys are
+  // not to be expected: the words say so, and do not reassure.
+  const renewing = newAgentWords(fp, true);
+  assert.equal(
+    renewing,
+    `These are not the keys of the permission being renewed: the earlier permission names another key set, and this device has not signed a permission for this one before: ${fp}. Go on only if you changed the agent's keys yourself. Compare it with the fingerprint your agent's software printed on the agent's computer (for Claude Code, the one init printed), never with the application or another page: whoever filled in this permission could have put another agent's keys in it. A permission for someone else's keys lets their agent act in your name.`,
+  );
+  assert.doesNotMatch(renewing, /expected/);
 });

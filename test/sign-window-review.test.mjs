@@ -128,6 +128,19 @@ async function newContext() {
       return get(options);
     };
   });
+  // A check of a signature that can be held by the test (window.__holdCheck),
+  // to change the page while a request's earlier permission is checked.
+  await context.addInitScript(() => {
+    if (!globalThis.crypto || !crypto.subtle) return;
+    const verify = crypto.subtle.verify.bind(crypto.subtle);
+    crypto.subtle.verify = async (...args) => {
+      if (window.__holdCheck) {
+        window.__checking = true;
+        await new Promise((resolve) => { window.__releaseCheck = resolve; });
+      }
+      return verify(...args);
+    };
+  });
   return { context, problems };
 }
 
@@ -629,7 +642,8 @@ test('a forged "renewal": the person\'s own earlier permission, for other keys, 
   await popup.click('#sign');
   await popup.waitForFunction(() => !document.getElementById('warnings').hidden, null, { timeout: 20000 });
   const warnings = await warningsOf(popup);
-  assert.equal(warnings[0], NEW_AGENT_WORDS(fp), warnings.join('\n'));
+  // Not "expected for a new agent": these are not the keys of the permission being renewed.
+  assert.equal(warnings[0], `These are not the keys of the permission being renewed: the earlier permission names another key set, and this device has not signed a permission for this one before: ${fp}. Go on only if you changed the agent's keys yourself. Compare it with the fingerprint your agent's software printed on the agent's computer (for Claude Code, the one init printed), never with the application or another page: whoever filled in this permission could have put another agent's keys in it. A permission for someone else's keys lets their agent act in your name.`, warnings.join('\n'));
   assert.equal(await popup.isHidden('#agent-check-line'), false, 'the field is asked');
   const uses = async () => (await holder.credentials())[0].signCount;
   const before = await uses();
@@ -773,6 +787,36 @@ test('a new link in the address after the permission was read cannot be signed: 
   await popup.click('#sign');
   await popup.waitForFunction(() => /^That is not the start of the fingerprint/.test(document.getElementById('sign-status').textContent), null, { timeout: 20000 });
   assert.equal((await holder.credentials()).length, 0);
+  assert.equal(await page.evaluate(() => window.events.length), 0);
+  assert.deepEqual(problems, []);
+});
+
+test('while a new request is being settled, "Read" is off, and a change to the page meanwhile leaves nothing of that request to sign with', async (t) => {
+  if (skip(t)) return;
+  const { context, problems } = await newContext();
+  t.after(() => context.close());
+  const agent = await generateKeySet();
+  const person = heldPasskey();
+  const earlier = await slipBy(person, SIGN, fields(agent.keys));
+  const { page, popup } = await openFrom(context, APP, { kind: 'permission', fields: fields(agent.keys), name: 'P', returnTo: `${APP}/opener.html`, state: 's' });
+  assert.equal(await popup.isDisabled('#read'), false, 'the first request is settled');
+  // A new address, a renewal, whose earlier permission's check is held.
+  await popup.evaluate(() => { window.__holdCheck = true; });
+  const hash = new URL(link({ kind: 'renewal', fields: fields(agent.keys, 'Renewed.'), earlier, returnTo: `${APP}/opener.html` })).hash;
+  await popup.evaluate((h) => { location.hash = h; }, hash);
+  await popup.waitForFunction(() => window.__checking === true, null, { timeout: 20000 });
+  assert.equal(await popup.isDisabled('#read'), true, '"Read" is off while the request is settled');
+  // Pressed anyway, as a script would press it, and the box typed in.
+  await popup.evaluate(() => document.getElementById('read').click());
+  await popup.evaluate(() => { const f = document.getElementById('fields'); f.value += ' '; f.dispatchEvent(new Event('input')); });
+  await popup.evaluate(() => { window.__holdCheck = false; window.__releaseCheck(); });
+  await popup.waitForFunction(() => /^The page was changed while the request was being read\. Nothing is offered to sign\./.test(document.getElementById('read-status').textContent), null, { timeout: 20000 });
+  await settle();
+  assert.match(await text(popup, '#read-status'), /^The page was changed while the request was being read\. Nothing is offered to sign\./, 'and it stays so');
+  assert.equal(await popup.isDisabled('#read'), true, 'nothing to read');
+  assert.equal(await popup.inputValue('#fields'), '');
+  assert.equal(await popup.isDisabled('#sign'), true);
+  assert.equal(await popup.isHidden('#changed-box'), true);
   assert.equal(await page.evaluate(() => window.events.length), 0);
   assert.deepEqual(problems, []);
 });

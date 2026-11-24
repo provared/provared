@@ -22,7 +22,7 @@
 // A permission goes back at once, and its window closes after the page that
 // asked says it kept it, only where an earlier permission checked here
 // vouches for both the passkey that signs and the agent's key set (a true
-// renewal), and a cancellation always does (handedBackAtOnce). Any other
+// renewal; handedBackAtOnce), and a cancellation always does. Any other
 // permission, whatever kind the page that asked names, is handed back only
 // when the person presses the button that says they copied the passkey's
 // thumbprint and the permission's fingerprint from this window, and its
@@ -376,23 +376,22 @@ export async function agentKeySet(keys) {
 }
 
 /**
- * Whether what was signed for a request goes back at once, with the window
- * closing after the page that asked says it kept it. That is so for a
- * cancellation, and for a permission only where this page itself found
- * that an earlier permission vouches for both the passkey that signs and
- * the agent's key set: the earlier permission's passkey signature checked
- * here, its passkey the one that must sign (so a checker refuses any other
- * here), and its key set the same as the new one's. What the page that
- * asked calls its request ("permission" or "renewal") decides nothing:
- * that page is not trusted. Every other permission is handed back only on
- * the person's press, after the passkey's thumbprint was shown here, the
- * one place it can be trusted, and its window stays open.
- * @param {string} kind the kind of record signed: "permission", "renewal" or "cancellation"
+ * Whether a signed permission goes back at once, with the window closing
+ * after the page that asked says it kept it: only where this page itself
+ * found that an earlier permission vouches for both the passkey that signs
+ * and the agent's key set (the earlier permission's passkey signature
+ * checked here, its passkey the one that must sign, so that a checker
+ * refuses any other here, and its key set the same as the new one's).
+ * What the page that asked calls its request ("permission" or "renewal")
+ * is not asked: that page is not trusted. Every other permission is handed
+ * back only on the person's press, after the passkey's thumbprint was shown
+ * here, the one place it can be trusted, and its window stays open. (A
+ * cancellation is signed by its own button and always goes back at once.)
  * @param {boolean} vouched whether a checked earlier permission vouches for the passkey and the key set
  * @returns {boolean}
  */
-export function handedBackAtOnce(kind, vouched) {
-  return kind === 'cancellation' || vouched === true;
+export function handedBackAtOnce(vouched) {
+  return vouched === true;
 }
 
 /**
@@ -436,10 +435,15 @@ export function fingerprintStartRefusal(typed, fingerprint) {
  * the one the agent's software printed on the agent's computer, never with
  * the application or another page, which can put any keys in what it asks
  * this page to sign.
+ * Where the request carries an earlier permission, checked here, whose key
+ * set is another, new keys are not to be expected: the words say that these
+ * are not the keys of the permission being renewed.
  * @param {string} fp the fingerprint of the agent's key set
+ * @param {boolean} [otherThanEarlier] whether a checked earlier permission names another key set
  * @returns {string}
  */
-export function newAgentWords(fp) {
+export function newAgentWords(fp, otherThanEarlier = false) {
+  if (otherThanEarlier) return `These are not the keys of the permission being renewed: the earlier permission names another key set, and this device has not signed a permission for this one before: ${fp}. Go on only if you changed the agent's keys yourself. Compare it with the fingerprint your agent's software printed on the agent's computer (for Claude Code, the one init printed), never with the application or another page: whoever filled in this permission could have put another agent's keys in it. A permission for someone else's keys lets their agent act in your name.`;
   return `This is the first permission for this agent's key set on this device, as is expected for a new agent: ${fp}. Compare it with the fingerprint your agent's software printed on the agent's computer (for Claude Code, the one init printed), never with the application or another page: whoever filled in this permission could have put another agent's keys in it. A permission for someone else's keys lets their agent act in your name.`;
 }
 
@@ -751,8 +755,10 @@ function page() {
       $('read').disabled = false;
       return;
     }
-    request = asked.request;
     const at = generation;
+    // Whether this filling is still the current one and nothing changed
+    // since it began: only then is what it settled kept.
+    const current = () => mine === fills && at === generation;
     // Nothing of a request that could not be used stays to sign with.
     const giveUp = (message) => {
       request = null;
@@ -771,26 +777,37 @@ function page() {
     const changedMeanwhile = () => {
       if (mine === fills) giveUp('The page was changed while the request was being read.');
     };
+    let settled;
     try {
-      await settleRequest();
+      settled = await settleRequest(asked.request);
     } catch (e) {
-      if (at !== generation) return changedMeanwhile();
+      if (!current()) return changedMeanwhile();
       giveUp(e && e.message ? e.message : 'The request could not be used.');
       return;
     }
-    if (at !== generation) return changedMeanwhile();
-    $('read').disabled = false;
-    if (request.kind === 'cancellation') {
+    if (!current()) return changedMeanwhile();
+    if (asked.request.kind === 'cancellation') {
+      // The words are worked out before anything is kept, so that nothing
+      // waits between the last check for a change and the keeping.
+      const agentFp = await agentKeySet(settled.earlier.content.agent.keys).then((k) => k.fingerprint);
+      const services = await serviceWords(settled.earlier.content.with);
+      if (!current()) return changedMeanwhile();
+      ({ earlier, expected, elsewhereNote } = settled);
+      request = asked.request;
+      $('read').disabled = false;
       $('steps').hidden = true;
       $('cancel-details').open = true;
       $('cancel-of').value = earlier.fingerprint;
       $('cancel-of').readOnly = true;
       say('cancel-status', `The page that opened this window asks you to cancel the permission below, signed by ${expected.name}. Read it, then sign the cancellation with the passkey ${expected.thumbprint}, the one that signed it.`);
-      showWords($('cancel-words'), earlier.content, null, await agentKeySet(earlier.content.agent.keys).then((k) => k.fingerprint), '', await serviceWords(earlier.content.with));
+      showWords($('cancel-words'), earlier.content, null, agentFp, '', services);
       showReturn('cancel-return-line', 'cancel-return-address', 'cancel-return-warning');
       $('cancel').focus();
       return;
     }
+    ({ earlier, expected, elsewhereNote } = settled);
+    request = asked.request;
+    $('read').disabled = false;
     $('fields').value = JSON.stringify(request.fields, null, 2);
     $('issuer-name').value = request.name ?? (earlier ? String(earlier.content.issuer.name) : '');
     say('read-status', (request.kind === 'renewal'
@@ -800,8 +817,13 @@ function page() {
 
   // What a request settles before anything is shown: the earlier
   // permission, trusted only once its passkey signature checks here, and
-  // the passkey expected to sign, by its public key.
-  async function settleRequest() {
+  // the passkey expected to sign, by its public key. It writes nothing of
+  // the page's own: it gives back what it found, which fill keeps only
+  // where its filling is still the current one.
+  async function settleRequest(request) {
+    let earlier = null;
+    let expected = null;
+    let elsewhereNote = '';
     let key = request.issuerKey ?? null;
     if (request.earlier) {
       const result = await checkSlip(request.earlier, {});
@@ -832,6 +854,7 @@ function page() {
       }
     }
     if (request.kind === 'cancellation' && !expected) throw new Error('The request names no permission to cancel.');
+    return { earlier, expected, elsewhereNote };
   }
 
   fill();
@@ -905,11 +928,6 @@ function page() {
     $('sign').focus();
   });
 
-  // The warnings before the passkey is asked: a new passkey, an agent's key
-  // set signed for the first time on this device, a passkey other than the
-  // one that signed the earlier permission, a clock that may be behind, a
-  // return address that is not known. They are shown on the first press, and the second press signs.
-  // Each warning has a code (what it is about) and its words.
   // Whether a checked earlier permission vouches for both the passkey that
   // signs and the agent's key set: its passkey is the person's own here
   // (expected is set, and a checker then refuses any other passkey), and
@@ -920,12 +938,18 @@ function page() {
     return (await keySetFingerprint(earlier.content.agent.keys).catch(() => null)) === agentFp;
   }
 
+  // The warnings before the passkey is asked: a new passkey, an agent's key
+  // set signed for the first time on this device, a passkey other than the
+  // one that signed the earlier permission, a clock that may be behind, a
+  // return address that is not known. They are shown on the first press, and the second press signs.
+  // Each warning has a code (what it is about) and its words.
   async function warningsBefore(f) {
     const list = [];
     const add = (code, text, more = {}) => list.push({ code, text, ...more });
     const agentFp = await keySetFingerprint(f.agent.keys);
     if (!agentKnown(agentFp) && !(await vouchedFor(f))) {
-      add('new-agent', newAgentWords(agentFp), { fingerprint: agentFp });
+      const otherThanEarlier = Boolean(earlier) && (await keySetFingerprint(earlier.content.agent.keys).catch(() => null)) !== agentFp;
+      add('new-agent', newAgentWords(agentFp, otherThanEarlier), { fingerprint: agentFp });
     }
     if (expected) {
       if (!(await rememberedFor(expected.thumbprint))) add('not-remembered', `This browser does not remember the passkey that ${earlier ? 'signed the earlier permission' : 'the request names'}. Your device will offer the passkeys it holds for this website; choose the one you signed with before. The page checks that the passkey you chose is the one expected (${expected.thumbprint}), and signs with no other.`);
@@ -1055,7 +1079,7 @@ function page() {
       // after the last check for a change below.
       const agentFp = await keySetFingerprint(what.agent.keys);
       const kind = request ? request.kind : 'permission';
-      const atOnce = handedBackAtOnce(kind, await vouchedFor(what));
+      const atOnce = handedBackAtOnce(await vouchedFor(what));
       if (at !== generation) return;
       const found = await findPasskey(name, { mayMake: list.some((w) => w.code === 'new-passkey') });
       const prepared = await prepareSlip({ ...what, issuer: { name, key: found.passkey.key, rpId: location.hostname, origin: location.origin } });
@@ -1097,12 +1121,12 @@ function page() {
           if (at !== generation || slip !== signed) return;
           $('back').onclick = null;
           $('back-line').hidden = true;
-          handBack(kind, slip, 'sign-status', 'save-status', 'save-line', 'back-line', 'back', 'save', { stayOpen: true });
+          handBack(kind, slip, 'sign-status', 'save-status', 'save-line', 'back-line', 'back', 'save');
         };
         $('copy-box').focus();
         return;
       }
-      handBack(kind, slip, 'sign-status', 'save-status', 'save-line', 'back-line', 'back', 'save', { stayOpen: !atOnce });
+      handBack(kind, slip, 'sign-status', 'save-status', 'save-line', 'back-line', 'back', 'save', { closeAfterKept: atOnce });
     } catch (e) {
       // A prompt that failed, or a passkey forgotten, takes the warnings
       // confirmed back: they are worked out and shown again at the next press.
@@ -1116,7 +1140,10 @@ function page() {
   // one: by postMessage to the window that opened this one, to its exact
   // address; where this page was not opened as a window, by a link back
   // with the record after "#"; last, as a file, which stays offered.
-  function handBack(kind, record, statusId, saveStatusId, saveLineId, backLineId, backId, saveId, { stayOpen = false } = {}) {
+  // The window stays open after "kept" unless the caller asks for it to
+  // close (closeAfterKept): a cancellation, or a permission an earlier one
+  // vouches for.
+  function handBack(kind, record, statusId, saveStatusId, saveLineId, backLineId, backId, saveId, { closeAfterKept = false } = {}) {
     const to = request && request.returnTo;
     // Settled now, whatever the page is asked afterwards: the answer
     // awaited is to this request.
@@ -1156,7 +1183,7 @@ function page() {
         if (!answer) return;
         window.removeEventListener('message', reply);
         clearTimeout(timer);
-        if (answer === 'kept' && stayOpen) {
+        if (answer === 'kept' && !closeAfterKept) {
           say(statusId, 'Kept by the application. Keep this window open until the agent\'s computer has taken the permission.');
         } else if (answer === 'kept') {
           say(statusId, `Signed, handed to ${to.address}, and kept there. This window closes itself; if it stays open, close it.`);
@@ -1240,7 +1267,7 @@ function page() {
         if (at !== generation) return;
         cancellation = record;
         say('cancel-status', `Signed, dated ${held.content.when}.`);
-        handBack('cancellation', record, 'cancel-status', 'cancel-save-status', 'cancel-save-line', 'cancel-back-line', 'cancel-back', 'cancel-save');
+        handBack('cancellation', record, 'cancel-status', 'cancel-save-status', 'cancel-save-line', 'cancel-back-line', 'cancel-back', 'cancel-save', { closeAfterKept: true });
         // Handed back, or offered to take back: the button stays off, so that
         // a second press does not sign a second cancellation without a new
         // warning, while the page that asked waits or after it says it did
