@@ -1,7 +1,8 @@
 // The waiting recorder: what answers on the recorder's port in a fresh
 // folder, from "start" on, before any permission is in force. It writes no
-// book and no line. Every tool call is refused; nothing is recorded, sealed
-// or renewed. It is apart from startService (recorder.mjs), which assumes a
+// book and no line. Each tool call the hook asks about is refused (the hook
+// never asks about those in NOT_RECORDED, actions.mjs); nothing is recorded,
+// sealed or renewed. It is apart from startService (recorder.mjs), which assumes a
 // permission in force throughout, and it answers on the same port and with
 // the same feed (port.mjs), behind the same checks.
 
@@ -28,7 +29,7 @@ async function bodyOf(req) {
   return Buffer.concat(chunks);
 }
 
-const NO_PERMISSION ='No permission has been signed for this agent yet: the recorder waits for the first one, so every tool call is refused, and nothing is recorded.';
+const NO_PERMISSION ='No permission has been signed for this agent yet: the recorder waits for the first one, so each tool call it checks is refused, and nothing is recorded.';
 
 /**
  * The waiting recorder's handler, for the port's owner (port.mjs).
@@ -146,7 +147,7 @@ export async function waitingHandler({ folder, owner, clock = Date.now, signingO
       } catch {
         // Not a signed cancellation: refused all the same.
       }
-      return refused('cancellation', fp, 'nothing-in-force', 'No permission is in force on this computer yet, so there is nothing to cancel: the recorder waits for its first permission, and every tool call is refused.');
+      return refused('cancellation', fp, 'nothing-in-force', 'No permission is in force on this computer yet, so there is nothing to cancel: the recorder waits for its first permission, and each tool call it checks is refused.');
     }
     if (!(given.kind === 'renewal' && names.length === 2 && names.includes('slip'))) {
       return refused(null, null, 'not-understood', 'What was handed over is not a renewal ({kind: "renewal", slip}) or a cancellation ({kind: "cancellation", cancellation}).');

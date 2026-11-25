@@ -749,15 +749,42 @@ async function importWebKey(privateJwk) {
   return subtle.importKey('jwk', privateJwk, { name }, false, ['sign']);
 }
 
-/** Make the agent's keys, if the file does not exist, and give back the public key set. */
-export async function makeAgentKeys(folder) {
-  const path = files(folder).agentKeys;
-  if (!existsSync(path)) {
-    mkdirSync(folder, { recursive: true });
-    const jwks = [await newWebKey('Ed25519'), await newWebKey('ML-DSA-87')];
-    writeFileSync(path, JSON.stringify({ about: 'The private keys of the agent recorded by Provared. Never share this file.', keys: jwks }), { mode: 0o600 });
+/**
+ * Write a key file only where there is none ("wx", as the feed's token is
+ * made, feed.mjs), so that two runs at once cannot each write keys of their
+ * own. Gives back "made" where this run wrote it, "there" where it was
+ * there already, and "raced" where another run made it meanwhile.
+ */
+async function writeKeyFileOnce(folder, path, text) {
+  if (existsSync(path)) return 'there';
+  mkdirSync(folder, { recursive: true });
+  const written = await text();
+  try {
+    writeFileSync(path, written, { flag: 'wx', mode: 0o600 });
+    return 'made';
+  } catch (e) {
+    if (e.code !== 'EEXIST') throw e;
+    return 'raced';
   }
-  return loadAgentKeys(folder);
+}
+
+// The keys of a file another run has just made: read again, for 2 seconds at most on the monotonic clock, while that run still writes it.
+async function readKeysMadeElsewhere(load) {
+  for (const until = performance.now() + 2000; ;) {
+    try {
+      return await load();
+    } catch (e) {
+      if (performance.now() >= until) throw e;
+    }
+    await new Promise((r) => setTimeout(r, 50));
+  }
+}
+
+/** Make the agent's keys, if the file does not exist, and give back the public key set; "made" says whether this run made them. */
+export async function makeAgentKeys(folder) {
+  const got = await writeKeyFileOnce(folder, files(folder).agentKeys, async () => JSON.stringify({ about: 'The private keys of the agent recorded by Provared. Never share this file.', keys: [await newWebKey('Ed25519'), await newWebKey('ML-DSA-87')] }));
+  const keys = got === 'raced' ? await readKeysMadeElsewhere(() => loadAgentKeys(folder)) : await loadAgentKeys(folder);
+  return { ...keys, made: got === 'made' };
 }
 
 export async function loadAgentKeys(folder) {
@@ -767,16 +794,15 @@ export async function loadAgentKeys(folder) {
   return { keys: keys.map(publicOf), privateKeys: await Promise.all(keys.map(importWebKey)) };
 }
 
-/** Make the recorder's three keys, if the file does not exist, and give back the key set. */
+/** Make the recorder's three keys, if the file does not exist, and give back the key set; "made" says whether this run made them. */
 export async function makeRecorderKeys(folder) {
-  const path = files(folder).recorderKeys;
-  if (!existsSync(path)) {
-    mkdirSync(folder, { recursive: true });
+  const got = await writeKeyFileOnce(folder, files(folder).recorderKeys, async () => {
     const slh = nodeCrypto.generateKeyPairSync('slh-dsa-sha2-256s');
     const jwks = [await newWebKey('Ed25519'), await newWebKey('ML-DSA-87'), { ...slh.privateKey.export({ format: 'jwk' }), alg: SLH }];
-    writeFileSync(path, JSON.stringify({ about: 'The private keys of the recorder that seals the book. Never share this file.', keys: jwks }), { mode: 0o600 });
-  }
-  return loadRecorderKeys(folder);
+    return JSON.stringify({ about: 'The private keys of the recorder that seals the book. Never share this file.', keys: jwks });
+  });
+  const keys = got === 'raced' ? await readKeysMadeElsewhere(() => loadRecorderKeys(folder)) : await loadRecorderKeys(folder);
+  return { ...keys, made: got === 'made' };
 }
 
 export async function loadRecorderKeys(folder) {
@@ -2641,30 +2667,66 @@ async function running(port, waitMs = 60000) {
   }
 }
 
+/** How long "ensure" takes at most, in all, on the monotonic clock: the question to the port, the start and the wait for an answer ("init" starts the recorder through it). */
+const ENSURE_MS = 20000;
+
 /**
  * Start the recorder in the background if it is not running, and wait for
- * it to answer: for 20 seconds, or until "until" (a time) where that comes
- * first. 0 where it answers, 1 where it does not, and "starting" where it
- * was started and the time ran out before it answered. Where the recorder
+ * it to answer: for 20 seconds in all (ENSURE_MS), or until "until" (a time
+ * on the monotonic clock, performance.now()) where that comes first. 0 where
+ * it answers, 1 where it does not or where the recorder that answers waits
+ * with other keys than the agent's keys in the folder, and "starting" where
+ * it was started and "until" came before it answered. Where the recorder
  * that answers is not this version (one before 0.1.1 gives none), it is
  * said, with how to restart it; it is not stopped here.
  */
 async function ensure(folder, port, say = (words) => console.error(words), until = Infinity) {
-  return (await ensureStatus(folder, port, say, until)).code;
+  const { code, otherKeys } = await ensureStatus(folder, port, say, until);
+  return otherKeys ? 1 : code;
+}
+
+// The fingerprint of the key set a recorder's status names, as it is where it has a fingerprint's form, else in quotes.
+const heldKeySet = (status) => (typeof status.agentKeySet !== 'string' ? 'not given' : THUMBPRINT.test(status.agentKeySet) ? status.agentKeySet : printable(status.agentKeySet));
+
+/**
+ * The words for a recorder that waits holding other keys than the agent's
+ * keys in the folder (they were made again while it ran), with the cure;
+ * null where it holds those keys.
+ */
+async function otherKeysWords(folder, port, status) {
+  let here = null;
+  try {
+    here = await keySetFingerprint((await loadAgentKeys(folder)).keys);
+  } catch {
+    here = null;
+  }
+  if (here !== null && status.agentKeySet === here) return null;
+  const held = heldKeySet(status);
+  return `The recorder that answers on 127.0.0.1:${port} waits for its first permission, but holds other keys than the agent's keys in ${folder}: the fingerprint of the key set it holds is ${held}, and ${here ? `that of the keys in the folder is ${here}` : 'the keys in the folder could not be read'}. Until it is restarted, the application is given the keys it holds, and the signing window says that the fingerprint of the keys in the folder does not match. Restart it once, with both commands on one line: ${RUN} stop; ${RUN} ensure`;
 }
 
 /**
  * "ensure", giving back with its code the status of what answered (null
  * where nothing did), so that "use" decides from the answer "ensure" was
  * given, not from a question asked later that may go unanswered.
- * @returns {Promise<{code: 0|1|'starting', status: object|null}>}
+ * "otherKeys": the recorder that answers waits with other keys than the
+ * agent's keys in the folder (otherKeysWords, said in place of the steps).
+ * @returns {Promise<{code: 0|1|'starting', status: object|null, otherKeys?: boolean}>}
  */
 async function ensureStatus(folder, port, say = (words) => console.error(words), until = Infinity) {
-  const left = () => Math.max(250, Math.min(60000, Math.round(until - Date.now())));
+  const began = performance.now();
+  // One limit for the whole start: "until", or ENSURE_MS from now where that comes first.
+  const end = Math.min(until, began + ENSURE_MS);
+  const left = () => Math.max(250, Math.min(60000, Math.round(end - performance.now())));
+  const waits = async (status) => {
+    const other = await otherKeysWords(folder, port, status);
+    say(other ?? waitingWords());
+    return { code: 0, status, ...(other ? { otherKeys: true } : {}) };
+  };
   const answering = await running(port, left());
   if (answering) {
     if (answering.version !== VERSION) say(`The recorder that is running is ${typeof answering.version === 'string' ? `version ${answering.version.slice(0, 40)}` : 'an earlier version, which does not give its version'}, not ${VERSION ?? 'this one'}, the one installed here: it keeps the code it started with until it is restarted. Restart it once, with both commands on one line so that no tool call falls between them: ${RUN} stop; ${RUN} ensure`);
-    if (answering.waiting === true) say(waitingWords());
+    if (answering.waiting === true) return waits(answering);
     return { code: 0, status: answering };
   }
   // Without a permission the recorder starts only in a fresh folder, where it waits for the first one.
@@ -2676,18 +2738,27 @@ async function ensureStatus(folder, port, say = (words) => console.error(words),
       : `The recorder has no signed permission yet (${files(folder).slip}), so it was not started. Sign one and put it in place: ${RUN} use <the saved file>`);
     return { code: 1, status: null };
   }
+  // The time went on a question nothing answered (a program that takes the connection and never answers, or a
+  // recorder that has stopped answering): no recorder is started, since none could be seen to answer.
+  if (performance.now() + 250 > end) {
+    say(`Nothing answered on 127.0.0.1:${port} within ${Math.round((performance.now() - began) / 1000)} seconds, so no recorder was started: another program may hold that port, or a recorder there may have stopped answering. Run "${RUN} status" to see what answers.`);
+    return { code: 1, status: null };
+  }
   const child = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', SELF, 'start'], { detached: true, stdio: 'ignore', env: process.env });
   child.unref();
-  for (let i = 0; i < 80; i++) {
-    if (Date.now() + 250 > until) return { code: 'starting', status: null };
+  for (;;) {
+    if (performance.now() + 250 > end) {
+      if (end === until) return { code: 'starting', status: null };
+      break;
+    }
     await new Promise((r) => setTimeout(r, 250));
     const started = await running(port, left());
     if (started) {
-      if (started.waiting === true) say(waitingWords());
+      if (started.waiting === true) return waits(started);
       return { code: 0, status: started };
     }
   }
-  say(`The recorder did not start. Run "${RUN} start" to see why.`);
+  say(`The recorder did not start: it did not answer on 127.0.0.1:${port} within ${ENSURE_MS / 1000} seconds. Run "${RUN} start" to see why.`);
   return { code: 1, status: null };
 }
 
@@ -2707,8 +2778,11 @@ const waitingSteps = (where = `the one init printed ("${RUN} keys" prints it aga
 
      It shows the permission handed over: compare its fingerprint with the one the signing window shows, then type yes.`;
 
+// The tools the hook never asks the recorder about (NOT_RECORDED, in actions.mjs), in plain words: they go ahead whatever the recorder says.
+const NOT_ASKED = 'The recorder is never asked about a question to the person, the plan, the list of tasks, a skill, a search for tools or the end of the conversation: those go ahead.';
+
 // What "ensure", "status" and the start of a session say where the recorder that answers waits for its first permission (waiting.mjs).
-const waitingWords = () => `The recorder is running and waits for its first permission: every tool call is refused until one is taken, and nothing is recorded.
+const waitingWords = () => `The recorder is running and waits for its first permission: each tool call it checks is refused until one is taken, and nothing is recorded. ${NOT_ASKED}
 ${waitingSteps()}
 Or save the signed permission from the signing window as a file, and run "${RUN} use <the saved file>".`;
 
@@ -2760,10 +2834,10 @@ async function stopWaiting(port) {
 }
 
 // What "use" says where it is not known what answers on the port, and nothing more is done.
-const notKnownWords = (port, taken) => `It is not known whether the recorder on 127.0.0.1:${port} still waits for its first permission: it was asked to stop, did not, and then gave no answer twice. ${taken ? 'The permission is in place, but until the recorder runs with it every tool call is refused.' : 'Nothing was taken.'} Run "${RUN} status" to see what answers, then run use again.`;
+const notKnownWords = (port, taken) => `It is not known whether the recorder on 127.0.0.1:${port} still waits for its first permission: it was asked to stop, did not, and then gave no answer twice. ${taken ? 'The permission is in place, but until the recorder runs with it each tool call it checks is refused.' : 'Nothing was taken.'} Run "${RUN} status" to see what answers, then run use again.`;
 
 // What the person must do before anything is recorded, where the agent's keys are not made yet: nothing signs for them.
-const firstRunWords = () => `Provared: no permission has been signed for this agent yet, so the recorder is not running and every tool call is refused: no record, no action. To set it up, in a terminal:
+const firstRunWords = () => `Provared: no permission has been signed for this agent yet, so the recorder is not running and each tool call it would check is refused: no record, no action. ${NOT_ASKED} To set it up, in a terminal:
   1. ${RUN} init
      (it makes the agent's keys, starts the recorder, which waits for the agent's first permission, and prints the fingerprint of the agent's key set and what to do next)
   2. Open the application, make a book, copy its one line, and run that line on this computer. In the application, approve what the agent may do, confirm it in the signing window with your passkey, and keep that window open.
@@ -2784,18 +2858,19 @@ Nothing signs for you. Once a permission is taken, each tool call is checked aga
  * nothing.
  */
 async function sessionStart(folder, port) {
-  // The hook has 30 seconds: everything here ends 27 seconds after the program started.
-  const until = performance.timeOrigin + 27000;
+  // The hook has 30 seconds: everything here ends 27 seconds after the program started (performance.now() counts from its start, on the monotonic clock).
+  const until = 27000;
   const said = [];
   const project = process.env.CLAUDE_PROJECT_DIR || process.cwd();
   const { found, problem } = recorderHooksInSettings(project);
   if (problem) said.push(`Provared: ${problem}. Before each call the plugin looks there for the recorder's hooks, which would ask about and record each call twice, so every tool call is refused until the file is smaller or the plugin is turned off.`);
   if (found.length > 0) said.push(doubledWords(found, RUN, project));
   // With no keys yet, "init" is the first step. Where the keys are there, "ensure" starts the recorder: in a fresh folder it waits for the first permission, and says so.
-  if (!existsSync(files(folder).slip) && !existsSync(files(folder).agentKeys) && !(await running(port, Math.max(250, Math.min(2000, Math.round(until - Date.now())))))) said.push(firstRunWords());
+  if (!existsSync(files(folder).slip) && !existsSync(files(folder).agentKeys) && !(await running(port, Math.max(250, Math.min(2000, Math.round(until - performance.now())))))) said.push(firstRunWords());
   else {
     const problems = [];
-    const started = await ensure(folder, port, (words) => problems.push(words), until);
+    // A recorder that waits with other keys than the folder's is said as a problem (otherKeysWords), not as one that does not run.
+    const { code: started } = await ensureStatus(folder, port, (words) => problems.push(words), until);
     if (started === 'starting') said.push(`Provared: the recorder is still starting. Until it answers, tool calls are refused; if they still are in a minute, run "${RUN} status", or "${RUN} start" to see why.`);
     else if (started !== 0) said.push(`Provared: ${problems.join(' ')} Until it runs, every tool call is refused.`);
     else if (problems.length > 0) said.push(`Provared: ${problems.join(' ')}`);
@@ -3097,9 +3172,12 @@ const USAGE = `Usage: ${RUN} <command>
                 taken), start the recorder in the background, as ensure does, waiting for the
                 agent's first permission, and print the fingerprint of the agent's key set
                 and what to do next: the application, then admit-passkey; in any other folder,
-                start nothing, change nothing in the record, and say what is there. With
-                --link, also print a link to sign the permission on the signing page, for
-                use <file>. Ends with 1 where the recorder did not start (ensure tries again)
+                start nothing, change nothing in the record but keys it had to make (and say
+                so), and say what is there. With --link, also print a link to sign the
+                permission on the signing page, for use <file>. Ends with 1 where the
+                recorder did not start within 20 seconds (ensure tries again), where the
+                recorder that waits holds other keys, or where what answers is another
+                folder's
   remove-hooks  take the hooks init wrote out of this project's .claude/settings.local.json,
                 for a project where the Claude Code plugin brings them
   use <file>    put a signed permission (slip.json from the signing page) in place, and start
@@ -3133,6 +3211,16 @@ const USAGE = `Usage: ${RUN} <command>
   stop          stop the recorder
   keys          make the keys, and print the agent's public keys`;
 
+/**
+ * The fingerprint of the agent's key set and what to do with it, as "init"
+ * and "keys" print it: the signing window asks for it to be pasted before it
+ * signs for keys new to the device. It is copied after the window has opened
+ * (design section 3: a page could write its own key set's fingerprint to the
+ * clipboard in the click that opens the window).
+ */
+const fingerprintWords = async (keys) => `The fingerprint of the agent's key set: ${await keySetFingerprint(keys)}
+When the signing window asks for the fingerprint of the agent's key set, paste this one there: the whole of it, or at least its first 16 characters. Copy it from here only once the signing window has opened, and check that what the box then shows is the one printed here. If the window says it does not match, the keys it holds are not this agent's: do not sign.`;
+
 export async function main(argv) {
   const [command, ...rest] = argv;
   const folder = DEFAULT_FOLDER;
@@ -3144,8 +3232,7 @@ export async function main(argv) {
     console.log(`The agent's keys are in ${f.agentKeys}, and the recorder's in ${f.recorderKeys}. Never share either file.`);
     console.log('\nThe agent\'s two public keys, to paste into the signing page as "agent.keys":\n');
     console.log(JSON.stringify(agent.keys));
-    console.log(`\nThe fingerprint of the agent's key set: ${await keySetFingerprint(agent.keys)}`);
-    console.log('The signing page shows the same fingerprint before you sign: compare the two.');
+    console.log(`\n${await fingerprintWords(agent.keys)}`);
     return 0;
   }
   if (command === 'init') {
@@ -3155,7 +3242,9 @@ export async function main(argv) {
     }
     const withLink = rest.includes('--link');
     const agent = await makeAgentKeys(folder);
-    await makeRecorderKeys(folder);
+    const sealer = await makeRecorderKeys(folder);
+    // The keys this run made, named where the folder is not fresh: they are then part of a record that was there.
+    const madeKeys = [agent.made ? 'the agent\'s' : null, sealer.made ? 'the recorder\'s' : null].filter(Boolean);
     // The plugin's copy, or --no-hooks: no hooks are written, since the plugin brings its own.
     const noHooks = FROM_PLUGIN || rest.includes('--no-hooks');
     const written = noHooks ? null : writeHooks(process.cwd());
@@ -3175,49 +3264,66 @@ export async function main(argv) {
     }
     if (SELF.split(sep).includes('_npx')) console.log(`Warning: the hooks point into npm's temporary folder (${dirname(SELF)}), which npm may clear. Install the package (npm install -g provared-claude-code) and run init again.`);
     // In a fresh folder the recorder is started as "ensure" starts it, and waits for the agent's first permission.
-    // Elsewhere nothing is started, and nothing in the record is changed.
+    // Elsewhere nothing is started, and nothing in the record is changed but the keys made just now, if any.
     const fresh = freshFolder(folder);
     let code = 0;
     let waiting = false;
+    const sameFolder = (status) => typeof status?.folder === 'string' && samePath(resolve(status.folder), resolve(folder));
+    const namesFolder = (status) => (typeof status?.folder === 'string' ? ` (it names the folder ${printable(status.folder)})` : '');
     console.log('');
     if (fresh.fresh) {
       const said = [];
-      const { code: ensured, status: answering } = await ensureStatus(folder, port, (words) => said.push(words));
-      if (ensured === 0 && answering?.waiting === true && typeof answering.folder === 'string' && samePath(resolve(answering.folder), resolve(folder))) {
+      const { code: ensured, status: answering, otherKeys } = await ensureStatus(folder, port, (words) => said.push(words));
+      const ours = ensured === 0 && answering?.waiting === true && sameFolder(answering);
+      if (ours && !otherKeys) {
         waiting = true;
         // What "ensure" said beside its own words for the waiting state (such as a recorder of an earlier version), said here too.
         for (const words of said) if (words !== waitingWords()) console.log(words);
-        console.log(`The recorder is running on 127.0.0.1:${port}, and waits for the agent's first permission: until one is taken, every tool call is refused, and nothing is recorded.`);
+        console.log(`The recorder is running on 127.0.0.1:${port}, and waits for the agent's first permission: until one is taken, each tool call it checks is refused, and nothing is recorded. ${NOT_ASKED}`);
+      } else if (ours) {
+        // It was started with keys that are no longer the folder's (made again while it ran): the fingerprint printed below is not the one it holds.
+        code = 1;
+        console.log(`The recorder that answers on 127.0.0.1:${port} waits for the agent's first permission, but holds other keys than the ones whose fingerprint is printed below: the fingerprint of the key set it holds is ${heldKeySet(answering)}. It was started with keys that have since been made again. Until it is restarted, the application is given the keys it holds, and the signing window says that the fingerprint printed below does not match. Restart it once, with both commands on one line: ${RUN} stop; ${RUN} ensure`);
       } else {
         code = 1;
         const why = ensured === 0
-          ? `what answers on 127.0.0.1:${port} is not the recorder of this folder waiting for its first permission${typeof answering?.folder === 'string' ? ` (it names the folder ${printable(answering.folder)})` : ''}`
-          : `the recorder did not answer on 127.0.0.1:${port} within 20 seconds (another program may hold that port; "${RUN} start" shows why)`;
+          ? `what answers on 127.0.0.1:${port} is not the recorder of this folder waiting for its first permission${namesFolder(answering)}`
+          : `the recorder did not answer on 127.0.0.1:${port} within ${ENSURE_MS / 1000} seconds (another program may hold that port; "${RUN} start" shows why)`;
         console.log(`The recorder was not started: ${why}. The keys${written ? ' and the hooks' : ''} are in place. Put right what stands in the way, then start it: ${RUN} ensure`);
       }
-    } else if (existsSync(f.slip)) {
-      const answering = await running(port, 2000);
-      console.log(!answering
-        ? `A permission is in place here already (slip.json), so init started nothing, and nothing in the record was changed. To start the recorder with it: ${RUN} ensure`
-        : answering.waiting === true
-          ? `A permission is in place here already (slip.json), but the recorder that answers on 127.0.0.1:${port} waits for a first permission, so every tool call is refused. init started nothing, and nothing in the record was changed. Restart the recorder once, with both commands on one line: ${RUN} stop; ${RUN} ensure`
-          : `A permission is in place here already (slip.json), and the recorder runs with it (127.0.0.1:${port}), so init started nothing, and nothing in the record was changed.`);
     } else {
-      console.log(fresh.found.length > 0
-        ? `The folder ${folder} holds ${fresh.found.join(', ')}, so it is not fresh: a permission was taken here before, or its taking stopped part way. The recorder waits for a first permission only in a fresh folder, so init started nothing, and nothing in the record was changed. Save the signed permission from the signing window, and put it in place: ${RUN} use <the saved file>`
-        : `The folder ${folder} could not be read, so init started nothing, and nothing in the record was changed.`);
+      // Keys made here, where a record was there before: said, and the permission in place does not name the agent's new ones.
+      const unchanged = madeKeys.length > 0 ? 'and changed nothing in the record but the keys it made' : 'and nothing in the record was changed';
+      const slip = existsSync(f.slip);
+      const madeWords = madeKeys.length === 0
+        ? ''
+        : ` init made new keys here (${madeKeys.join(' and ')}), as there were none.${slip && agent.made ? ' The permission in place (slip.json) does not name the agent\'s new keys, so the recorder does not use it with them. If the earlier key file was moved out of the folder, put it back; otherwise sign a new permission, for the fingerprint printed below.' : ''}`;
+      if (slip) {
+        const answering = await running(port, 2000);
+        if (answering && !sameFolder(answering)) code = 1;
+        console.log(!answering
+          ? `A permission is in place here already (slip.json), so init started nothing, ${unchanged}.${madeWords} To start the recorder with it: ${RUN} ensure`
+          : !sameFolder(answering)
+            ? `A permission is in place here already (slip.json), but what answers on 127.0.0.1:${port} is not the recorder of this folder${namesFolder(answering)}, so init started nothing, ${unchanged}.${madeWords} Put right what stands in the way, then start the recorder with this permission: ${RUN} ensure`
+            : answering.waiting === true
+              ? `A permission is in place here already (slip.json), but the recorder that answers on 127.0.0.1:${port} waits for a first permission, so each tool call it checks is refused. init started nothing, ${unchanged}.${madeWords} Restart the recorder once, with both commands on one line: ${RUN} stop; ${RUN} ensure`
+              : `A permission is in place here already (slip.json), and the recorder runs with it (127.0.0.1:${port}), so init started nothing, ${unchanged}.${madeWords}`);
+      } else {
+        console.log(fresh.found.length > 0
+          ? `The folder ${folder} holds ${fresh.found.join(', ')}, so it is not fresh: a permission was taken here before, or its taking stopped part way. The recorder waits for a first permission only in a fresh folder, so init started nothing, ${unchanged}.${madeWords} Save the signed permission from the signing window, and put it in place: ${RUN} use <the saved file>`
+          : `The folder ${folder} could not be read, so init started nothing, ${unchanged}.${madeWords}`);
+      }
     }
-    const fingerprintWords = `The fingerprint of the agent's key set: ${await keySetFingerprint(agent.keys)}
-When the signing window asks for the fingerprint of the agent's key set, paste this one there: the whole of it, or at least its first 16 characters. If the window says it does not match, the keys it holds are not this agent's: do not sign.`;
+    const fingerprintText = await fingerprintWords(agent.keys);
     if (withLink) {
       console.log('\nNext, sign the permission with your passkey. Open this link in a browser: the page is filled in with a');
       console.log('starting permission for this agent, which you can change before you sign. The part after "#" stays in');
       console.log('your browser: it is never sent to any server.\n');
       console.log(signingLink(startingPermission(agent.keys)));
-      console.log(`\n${fingerprintWords}`);
+      console.log(`\n${fingerprintText}`);
       console.log(`\nSave the signed file the page gives you, then put it in place:\n\n  ${RUN} use <the saved file>`);
     } else {
-      console.log(`\n${fingerprintWords}`);
+      console.log(`\n${fingerprintText}`);
       if (waiting) {
         console.log(`\n${waitingSteps('the one printed above')}`);
         console.log(`\nWithout the application: "${RUN} init --link" prints a link to the signing page, and "${RUN} use <the saved file>" puts the signed permission in place.`);
@@ -3288,7 +3394,7 @@ When the signing window asks for the fingerprint of the agent's key set, paste t
         return 1;
       }
       if (code === 0 && answering.waiting === true) {
-        console.log(`The permission is in place, but the recorder that answers on 127.0.0.1:${port} still waits for its first permission, so every tool call is refused. Restart it once, with both commands on one line: ${RUN} stop; ${RUN} ensure`);
+        console.log(`The permission is in place, but the recorder that answers on 127.0.0.1:${port} still waits for its first permission, so each tool call it checks is refused. Restart it once, with both commands on one line: ${RUN} stop; ${RUN} ensure`);
         return 1;
       }
     }
@@ -3333,7 +3439,7 @@ When the signing window asks for the fingerprint of the agent's key set, paste t
     if (!existsSync(f.slip) && freshFolder(folder).fresh) {
       const waiting = await startWaiting({ folder, port });
       console.log(`The Provared recorder beside Claude Code is running on http://127.0.0.1:${waiting.port}, and waits for its first permission.`);
-      console.log('  Until one is taken, every tool call Claude Code makes is refused, and nothing is recorded. Press Ctrl and C to stop.');
+      console.log(`  Until one is taken, each tool call of Claude Code that it checks is refused, and nothing is recorded. ${NOT_ASKED} Press Ctrl and C to stop.`);
       return null;
     }
     const service = await startService({ folder, port });

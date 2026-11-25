@@ -76,22 +76,42 @@ test('"ensure" starts the waiting recorder in a fresh folder and says that it wa
   const used = await freshWorld();
   writeFileSync(join(used.folder, 'trusted-passkeys.json'), JSON.stringify({ passkeys: ['A'.repeat(43)] }));
   const other = await freePort();
-  const r = await runCommand(['ensure'], { folder: used.folder, port: other });
-  assert.equal(r.code, 1, `${r.out} ${r.err}`);
-  assert.match(r.err, /no signed permission yet/);
-  assert.equal(await answersWithin(other, 1000), null, 'nothing was started');
+  try {
+    const r = await runCommand(['ensure'], { folder: used.folder, port: other });
+    assert.equal(r.code, 1, `${r.out} ${r.err}`);
+    assert.match(r.err, /no signed permission yet/);
+    assert.equal(await answersWithin(other, 1000), null, 'nothing was started');
+  } finally {
+    // A recorder started where none should be (the rule undone) is stopped all the same.
+    await stopUnexpected(other);
+  }
 });
+
+/** Stop a recorder that answers on the port where the test expected none, and wait, 20 seconds at most, until the port is quiet. */
+async function stopUnexpected(port) {
+  if ((await answersWithin(port, 500)) === null) return;
+  await stopService(port);
+  for (const until = performance.now() + 20000; performance.now() < until;) {
+    if ((await answersWithin(port, 200)) === null) return;
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  throw new Error(`A recorder the test did not expect still answers on 127.0.0.1:${port} after it was asked to stop.`);
+}
 
 test('"ensure" in a folder that holds a trusted list and no permission (an admit stopped between its two writes) names what stands in the way and what to do', async () => {
   const w = await freshWorld();
   writeFileSync(join(w.folder, 'trusted-passkeys.json'), JSON.stringify({ passkeys: ['A'.repeat(43)] }));
   const port = await freePort();
-  const r = await runCommand(['ensure'], { folder: w.folder, port });
-  assert.equal(r.code, 1, `${r.out} ${r.err}`);
-  assert.match(r.err, /holds trusted-passkeys\.json/);
-  assert.match(r.err, /not fresh/);
-  assert.match(r.err, /use <the saved file>/);
-  assert.equal(await answersWithin(port, 1000), null, 'nothing was started');
+  try {
+    const r = await runCommand(['ensure'], { folder: w.folder, port });
+    assert.equal(r.code, 1, `${r.out} ${r.err}`);
+    assert.match(r.err, /holds trusted-passkeys\.json/);
+    assert.match(r.err, /not fresh/);
+    assert.match(r.err, /use <the saved file>/);
+    assert.equal(await answersWithin(port, 1000), null, 'nothing was started');
+  } finally {
+    await stopUnexpected(port);
+  }
 });
 
 test('"renew <file>", with or without --new-passkey, against the waiting recorder says that it waits for its first permission, and what to do; nothing is taken', async () => {
@@ -169,7 +189,7 @@ async function plannedStandIn(port, plan, { stop = { code: 200, body: { stopped:
   return { asked, close: () => { server.close(); server.closeAllConnections(); } };
 }
 
-test('"use <file>" ends with 1 and says every tool call is still refused where what answers still waits after it was stopped and the recorder started again', async () => {
+test('"use <file>" ends with 1 and says each tool call it checks is still refused where what answers still waits after it was stopped and the recorder started again', async () => {
   const w = await freshWorld();
   const port = await freePort();
   // It answers /stop and goes on; after each stop two questions in a row go unanswered, so the port seems free.
@@ -179,7 +199,7 @@ test('"use <file>" ends with 1 and says every tool call is still refused where w
     writeFileSync(file, JSON.stringify(await signSlip({ agentKeys: w.agent.keys, passkey: w.passkey })));
     const r = await runCommand(['use', file], { folder: w.folder, port });
     assert.equal(r.code, 1, `${r.out} ${r.err} ${stand.asked.join(' ')}`);
-    assert.match(r.out, /The permission is in place, but the recorder that answers on 127\.0\.0\.1:\d+ still waits for its first permission, so every tool call is refused/);
+    assert.match(r.out, /The permission is in place, but the recorder that answers on 127\.0\.0\.1:\d+ still waits for its first permission, so each tool call it checks is refused/);
     assert.doesNotMatch(r.out, /The recorder is running/);
   } finally {
     stand.close();
@@ -197,7 +217,7 @@ test('"use <file>" decides from the status "ensure" was given: its first questio
     const r = await runCommand(['use', file], { folder: w.folder, port });
     assert.equal(r.code, 1, `${r.out} ${r.err} ${stand.asked.join(' ')}`);
     assert.doesNotMatch(r.out, /The recorder is running/);
-    assert.match(r.out, /still waits for its first permission, so every tool call is refused/);
+    assert.match(r.out, /still waits for its first permission, so each tool call it checks is refused/);
   } finally {
     stand.close();
   }
@@ -320,7 +340,7 @@ test('"use <file>" does not say the recorder runs where what answers after it st
     assert.equal(st.slip, await fingerprint(fromBase64url(slip.payload)));
     assert.equal(r.code, 0, `${r.out} ${r.err}`);
     assert.match(r.out, /The recorder is running/);
-    assert.doesNotMatch(r.err, /waits for its first permission: every tool call is refused/);
+    assert.doesNotMatch(r.err, /waits for its first permission: each tool call it checks is refused/);
   } finally {
     stand.close();
     await stopService(port);
