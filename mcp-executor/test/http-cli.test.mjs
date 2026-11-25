@@ -11,7 +11,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-const { checkBook, identifierFingerprint } = await import('provared');
+const { checkBook, identifierFingerprint, keySetFingerprint } = await import('provared');
 const { httpWorld, call, request, rawRequest, auth } = await import('./http-world.mjs');
 const { EXECUTOR_STOPPED, OUTCOME_UNKNOWN, WRITTEN_LATE_DOCUMENT } = await import('../executor.mjs');
 const { secretHash } = await import('../http.mjs');
@@ -175,6 +175,8 @@ test('secret prints a secret and its hash; check and keys read the HTTP settings
     assert.equal(printed.alpha.with.id, 'executor');
     assert.deepEqual(printed.alpha.with.keys, printed.beta.with.keys, 'one executor for both');
     assert.notDeepEqual(printed.alpha.agent.keys, printed.beta.agent.keys, 'each agent its own keys');
+    // The fingerprint of each agent's key set, which the signing window asks for, with no central sealer named.
+    for (const name of ['alpha', 'beta']) assert.ok(keys.stderr.includes(`the fingerprint of the key set of the agent "${name}" is ${await keySetFingerprint(printed[name].agent.keys)}: the signing window asks for it`), keys.stderr);
     assert.equal(printed.alpha.agent.name, 'alpha, through The test HTTP executor');
     assert.deepEqual(printed.alpha.requires, [{ need: 'countersignature' }]);
     const again = JSON.parse((await run(['keys', '--config', 'fresh.json'], { cwd: w.folder })).stdout);

@@ -3,7 +3,8 @@
 # "python -m provared_hermes <command>"):
 #
 #   init                     make the agent's keys if they are missing, and print a link that opens
-#                            the signing page with a starting permission filled in
+#                            the signing page with a starting permission filled in, and the
+#                            fingerprint of the agent's key set, which the signing window asks for
 #   use <file>               put a signed permission (the slip.json the signing page saves) in place;
 #                            Hermes takes it in at its next tool call. The first "use" writes the
 #                            list of the passkeys the plugin trusts, with this permission's
@@ -19,7 +20,7 @@ import argparse
 import json
 import sys
 
-from provared import check_book, from_base64url
+from provared import check_book, from_base64url, key_set_fingerprint
 
 from .folder import Folder, FolderError, _Lock, signing_link, starting_permission
 
@@ -49,6 +50,10 @@ def _init(folder):
          '',
          'Open this link, check the permission, and sign it with your passkey:',
          signing_link(starting_permission(keys)),
+         '',
+         # The same fingerprint as the JavaScript library's keySetFingerprint, which the signing window works out.
+         f'The fingerprint of the agent\'s key set: {key_set_fingerprint(keys)}',
+         'The signing window asks for this fingerprint before you sign: paste it there, the whole of it or at least its first 16 characters. If the window says it does not match, the keys it holds are not this agent\'s: do not sign.',
          '',
          'Then put the saved file in place:',
          '  hermes provared use <the saved slip.json>')

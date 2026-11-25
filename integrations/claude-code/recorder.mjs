@@ -2773,8 +2773,10 @@ Nothing signs for you. Once a permission is taken, each tool call is checked aga
 
 /**
  * What the Claude Code plugin runs when a session starts: the recorder is
- * started if it is not running, as "ensure" does; and where something
- * stands in the way (no permission yet, a recorder that does not start, or
+ * started if it is not running, as "ensure" does (in a fresh folder, the
+ * recorder that waits for the first permission); and where something
+ * stands in the way (no keys yet, no permission yet, a recorder that waits
+ * for its first permission or does not start, or
  * the recorder's hooks in force twice), it is said to the person (Claude
  * Code's "systemMessage") and to Claude ("additionalContext"), so that
  * neither takes the refusals that follow for a fault. It always ends with

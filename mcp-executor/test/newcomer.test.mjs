@@ -13,7 +13,7 @@ import { createInterface } from 'node:readline';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-const { checkBook } = await import('provared');
+const { checkBook, keySetFingerprint } = await import('provared');
 const { tempFolder } = await import('./world.mjs');
 const { isPlaceholder, PLACEHOLDERS } = await import('../executor.mjs');
 
@@ -261,7 +261,7 @@ test('check takes a value of a person\'s own in angle brackets for what it is, a
   assert.ok(all.some((p) => /^agents\.research\.slip: .*in the folder .*slips, which does not exist yet: make it first\.$/.test(p)), all.join('\n'));
 });
 
-test('keys needs no passkey thumbprint yet, says in one line what to do with what it prints, and can write it to a new file', () => {
+test('keys needs no passkey thumbprint yet, says in one line what to do with what it prints, and in another the fingerprint of the agent\'s key set, and can write it to a new file', async () => {
   const folder = tempFolder();
   examples(folder);
   const r = run(['keys', '--config', 'executor.json'], folder);
@@ -269,8 +269,11 @@ test('keys needs no passkey thumbprint yet, says in one line what to do with wha
   const printed = JSON.parse(r.stdout);
   assert.equal(printed.with.id, 'executor');
   assert.deepEqual(printed.requires, [{ need: 'countersignature' }]);
-  assert.equal(r.stderr.trim().split('\n').length, 1, `one line, and no warning:\n${r.stderr}`);
-  assert.match(r.stderr, /^provared-mcp-executor: What to do with this: it goes into the permission/);
+  const lines = r.stderr.trim().split('\n');
+  assert.equal(lines.length, 2, `two lines, and no warning:\n${r.stderr}`);
+  assert.match(lines[0], /^provared-mcp-executor: What to do with this: it goes into the permission/);
+  // The fingerprint the signing window asks for, as the library works it out, with no central sealer named.
+  assert.equal(lines[1].trim(), `provared-mcp-executor: the fingerprint of the key set of the agent is ${await keySetFingerprint(printed.agent.keys)}: the signing window asks for it before the person signs a permission for these keys, the whole of it or at least its first 16 characters.`);
 
   const out = run(['keys', '--config', 'executor.json', '--out', 'for-the-permission.json'], folder);
   assert.equal(out.status, 0, out.stderr);
