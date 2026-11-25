@@ -189,7 +189,11 @@ prints that notice.
    agent's keys; the printed `with` entry (the executor's id, name and
    keys) goes into the permission's `with`; and `requires` should hold
    `{"need": "countersignature"}`, so that a receipt without the executor's
-   countersignature is a finding. Where the settings name a recorder
+   countersignature is a finding. On its standard error `keys` always
+   says the fingerprint of each agent's key set: the signing window asks
+   for it before the person signs a permission for keys it has not seen,
+   the whole of it or at least its first 16 characters. Where the settings
+   name a recorder
    (`recorder`, see "Sealing, acknowledging, and what the executor says
    about itself"), `keys` also makes the recorder's key file, with the
    three keys a seal is signed with, and says on its standard error the
@@ -198,7 +202,12 @@ prints that notice.
 3. The person signs the permission with their passkey (on the signing page
    at https://sign.prova.red, or from a web page of your own with the
    library's browser part, `provared/passkey-browser`) and saves it where
-   the settings say (`agent.slip`). The thumbprint of the passkey goes into
+   the settings say (`agent.slip`). Where the signing window asks for the
+   fingerprint of the agent's key set, paste the one `keys` printed,
+   copied once the window has opened, and check that the box then shows
+   it; if the window says it does not match, do not sign. (The signing
+   page as this repository holds it asks for it; that copy is not yet on
+   `sign.prova.red`, which is published apart.) The thumbprint of the passkey goes into
    `agent.issuerKeys`.
 
 4. Check the settings. This reads every rule, the keys, the slip and the
@@ -1463,9 +1472,10 @@ provared-sealer start --folder /srv/sealer
 ```
 
 `init` prints the fingerprint of the sealer's key set, for `keySet`.
-Where the settings name a sealer, `keys` says on its standard error the
-fingerprint of each agent's key set, which `add-recorder` takes with
-`--agent`: the sealer starts a recorder's books only from permissions
+`keys` always says on its standard error the fingerprint of each agent's
+key set (the signing window asks for it too); where the settings name a
+sealer, the same line says that the sealer is told it, which
+`add-recorder` takes with `--agent`: the sealer starts a recorder's books only from permissions
 for the agents it was told. `add-recorder` prints the token, once; put
 it in the token file. Then start the sealer, and then the executor.
 

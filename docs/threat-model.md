@@ -91,6 +91,65 @@ follows the checking steps of the Web Authentication standard.
   section 6b. Slips should still be short-lived.
 - Who the issuer is. The slip proves which key signed, not whose key it
   is.
+- **Which passkey a recorder trusts first.** The recorder beside Claude
+  Code (`integrations/claude-code/`) can take its first permission
+  through its feed, handed over by the application's uploader, while it
+  waits in a fresh folder. The application's server can put a permission
+  signed by any passkey where the uploader reads, and the uploader hands
+  it over: the recorder keeps it waiting
+  (`waits-for-yes`) and takes nothing by itself. For a first passkey,
+  with no earlier passkey to compare with, the only guard is the person:
+  they copy the passkey's thumbprint from the signing window, not from
+  the application, give it to `admit-passkey` on the agent's computer
+  (the whole of it, or at least its first 16 characters, 96 bits), compare
+  the permission's fingerprint it shows with the signing window's, and
+  type `yes` at a terminal there. A permission from another passkey is
+  caught only by the thumbprint the person copied, and an older one of
+  the person's, put there again, only by the fingerprint. The person must see `sign.prova.red` in the window's address
+  bar: a hostile application could open a look-alike window at another
+  address, which could show a stranger's thumbprint. The server can also
+  hold the person's permission back, or push it out of the waiting list
+  (eight at most) with strangers' permissions; the command then says so,
+  and the file saved from the signing window still works (`use <file>`).
+  Tests: `integrations/claude-code/test/admit-rules.test.mjs`,
+  `waiting.test.mjs`, `waiting-admit.test.mjs`,
+  `end-to-end-first-permission.test.mjs`.
+  - *A program on the same computer.* A web page in a browser cannot use
+    the recorder's port: every route refuses a request that names a web
+    page or another address (`local-port.test.mjs`, and
+    `waiting-port.test.mjs` for the recorder that waits). The two routes
+    that would make the recorder trust a new passkey (`/admit`, and
+    `/renew` with a new passkey) ask for the proof of the feed's token,
+    which is in the recorder's folder (`admit-proof.test.mjs`). So a
+    program that cannot read that folder, such as one run by another
+    account on the computer, cannot have a passkey trusted. Any program
+    run under the person's own account can read and write the folder,
+    and so can always make the recorder trust a passkey, with nobody
+    typing anything. The agent is such a program. That `yes` must be
+    typed at a terminal raises the bar for the command; it does not stop
+    a program that drives a terminal, nor one that asks the recorder
+    directly with the token. The evidence that holds is a checker that
+    names the person's own passkey (`--issuer`). Any program can still
+    ask the recorder to stop, which only fails closed: each call the
+    recorder would check is then refused.
+  - *The fingerprint check in the signing window.* For a key set new to
+    the device, the signing page as this repository holds it
+    (`page/sign-page.js`) signs only once the person has pasted at least
+    the first 16 characters of the fingerprint of the key set in the
+    request, and they match exactly (`test/sign-page.test.mjs`,
+    `test/sign-window-review.test.mjs`). It protects against a key set
+    replaced by the server or the application, where the person pastes
+    the fingerprint the agent's software printed on the agent's computer.
+    It proves only that what was pasted is the start of that fingerprint,
+    not where it came from: the application can write its own key set's
+    fingerprint to the clipboard in the click that opens the window. So
+    the words ask the person to copy the fingerprint on the agent's
+    computer only once the window has opened, and to check what the box
+    shows against what was printed there. It does not protect a person
+    who pastes what the application gave them, nor one who signs anyway.
+    A key set the device has signed for before, or that a checked earlier
+    permission vouches for, is not asked about. That copy of the page is
+    not yet served at `sign.prova.red`, which is published apart.
 - Against a page that has the passkey sign a record dressed as a sign-in,
   where the passkey's website name (its `rpId`) serves anything but the
   signing page. A passkey signs only a challenge, and the challenge for a

@@ -2,6 +2,10 @@
 
 ## Not yet released
 
+- **The README** says what the uploader hands over again
+  (`waits-for-yes`, `nothing-in-force`), the agent note, the pause where
+  the recorder has no book, and that the recorder beside Claude Code
+  writes its feed's token before any permission is signed.
 - **The records no longer wait for the agent note.** A hand-over round
   (`handOverRound`) hands the records over first and puts the note after
   them; `putAgent` takes the server's `unknown-type` refusal at once,
@@ -22,8 +26,9 @@
   current key only. `bookSide.putAgent` sends it as `provared-put-agent`,
   with the append capability; `createAgentNote` puts it at each hand-over
   round where its text differs from the last one put. An earlier recorder,
-  which does not give the key set, is said once, and nothing is put. The
-  application's server does not take the note yet. Tests: nine, in
+  which does not give the key set, is said once, and nothing is put. An
+  application server that does not take the note refuses it, and that is
+  said once. Tests: nine, in
   `test/agent-note.test.mjs`.
 - **One conversation with the recorder at a time.** Questions the
   uploader asks its feed at once share one conversation, begun once,

@@ -200,7 +200,17 @@ that opens the signing page with a starting permission filled in, naming
 those keys. (The link begins `https://sign.prova.red/`, the signing page's
 own address since 25 October 2026; a link printed by an earlier version
 begins `https://prova.red/sign/`, which now says so: open the same link
-with that part replaced by `https://sign.prova.red/`.) Change the permission there if you wish,
+with that part replaced by `https://sign.prova.red/`.) It also prints
+**the fingerprint of the agent's key set**, worked out as the JavaScript
+library's `keySetFingerprint` works it out. The signing window asks for
+it before it signs a permission for keys it has not seen: paste it
+there, the whole of it or at least its first 16 characters, copied once
+the window has opened, and check that the box then shows it. If the
+window says it does not match, the keys it holds are not this agent's:
+do not sign. (The signing page as the public repository holds it asks
+for it. That copy is not yet on `sign.prova.red`, which is published
+apart; the copy at version 0.9.1 of the repository does not ask, and
+shows the fingerprint for you to compare.) Change the permission there if you wish,
 sign it with your passkey, and put the saved file in place:
 
 ```

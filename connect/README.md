@@ -63,9 +63,10 @@ line, and to nothing else.
    beside Claude Code ("A feed of the books, for an uploader on this
    computer"). Where the
    token file is not there, it says to start the recorder once (which
-   writes the token; the recorder beside Claude Code starts only once its
-   first permission is signed, as its README sets out), or to name the
-   token file. For a recorder that
+   writes the token at its first start), or to name the token file. The
+   recorder beside Claude Code writes it before any permission is signed:
+   `init` starts it, waiting for the agent's first permission, as its
+   README sets out. For a recorder that
    offers no feed, `--book <file>` names its book file instead: the fragile
    way, which reads the file.
 3. **Saves the connection** as `provared-app-connection.json` in the
@@ -142,6 +143,39 @@ checks each itself and takes it or refuses it; what it refuses or holds,
 the uploader says in one sealed note for each book, which the page shows as an
 unproved hint. Through the feed only: with `--book`, nothing is handed
 over.
+
+A record the recorder refuses for a reason that can be put right on the
+agent's computer, or cannot take for now, is handed over again a minute
+later (`AGAIN`, in `handover.mjs`). Two of those codes come from a
+recorder that waits for its first permission: `waits-for-yes`, where it
+keeps a first permission until the person gives the passkey's thumbprint
+and types `yes` there (`admit-passkey`), and `nothing-in-force`, where a
+cancellation comes while no permission is in force, so that it reaches
+the recorder once one is. In a round, at most one new permission for
+each passkey is handed over: the one that starts latest, as the waiting
+recorder keeps one for each passkey; where its hand-over fails, the
+passkey's next, by its start. A record larger than the recorder's feed
+takes (256 KiB) is not sent, and is noted as `too-large`.
+
+**The agent note.** At each hand-over round, after the records, the
+uploader asks the recorder for the agent's public key set (`GET /agent`,
+proved as every answer of the feed is) and puts it with the book in a
+sealed note of its own, `{ version: 1, agent: { name, keys } }`
+(`agent.mjs`), where its text differs from the last one put. It is sealed
+under the book's key with the book's id bound in, as the note of
+outcomes is, and it opens with the book's current key only. The
+application's page reads it to fill in the agent's keys for a first
+permission. The note is not proved to be the uploader's: anyone given a
+read-only link to the book holds the key it is sealed under. Where the
+recorder does not give its key set (an earlier version), the uploader
+says once to update the recorder, puts nothing, and goes on uploading;
+where the application's server does not take the note, the uploader says
+so once.
+
+**No book yet.** Where a round through the feed finds no book in force,
+as while the recorder waits for its first permission, the uploader waits
+25 seconds before it asks again, or less where the book's content changes
+on the server.
 
 ## The line's format
 
@@ -283,8 +317,8 @@ Numbered on from the application's and the executor's choices.
       import it; the tests that run the real recorder resolve the name to
       the repository's own library (`test/local-library.mjs`).
 1073. **Exports**: `provared-connect` (the command's parts), `./line`,
-      `./store`, `./upload`, `./handover`, `./entry`, `./outcomes` and
-      `./book`, so the application and the tests use the same code through
+      `./store`, `./upload`, `./handover`, `./entry`, `./outcomes`,
+      `./agent` and `./book`, so the application and the tests use the same code through
       the package's interface.
 1074. **In the application, the page offers the whole command**
       (`npx provared-connect <line>`) to copy, not the bare line, so that

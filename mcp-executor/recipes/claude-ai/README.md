@@ -152,7 +152,15 @@ folder `mcp-executor/recipes/claude-ai/compose`.
      `sudo cat guard-data/permission-entries.json` (public keys only);
    - the person who answers for the guard signs a permission with their
      passkey, at https://sign.prova.red, for the agent `connection-1` and
-     the actions `demo.echo` and `demo.add`, holding those entries;
+     the actions `demo.echo` and `demo.add`, holding those entries. The
+     log gives the fingerprint of the agent's key set, worked out from
+     that file: the signing window asks for it before it signs a
+     permission for keys it has not seen. Paste it there (the whole of it,
+     or at least its first 16 characters), copied from the log only once
+     the window has opened, and check that the box then shows it; if the
+     window says it does not match, do not sign. Where the file cannot be
+     read, the log says so, and not to sign until you have the
+     fingerprint from the server;
    - put it on the server as `guard-data/slips/connection-1.json`, owned
      by the guard's user:
      `sudo install -o 10001 -g 10001 -m 600 connection-1.json guard-data/slips/connection-1.json`;
