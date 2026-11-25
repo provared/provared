@@ -225,7 +225,7 @@ test('with no library for the plugin, it is never taken from a folder above, and
   const said = JSON.parse(start.out);
   assert.equal(said.systemMessage, said.hookSpecificOutput.additionalContext);
   assert.match(said.systemMessage, /library is not installed for the plugin \(npm could not install/);
-  assert.match(said.systemMessage, /every tool call is refused/);
+  assert.match(said.systemMessage, /each tool call the recorder would check is refused/);
   assert.match(said.systemMessage, /plugin\.mjs install-library/);
   // The person's own command: the same words, and code 1.
   const init = await runPlugin([join(cached, 'plugin.mjs'), 'init'], { env, cwd: project });
@@ -471,7 +471,7 @@ test('the start of a session, as the plugin, says so where the recorder that ans
     assert.equal(said.systemMessage, said.hookSpecificOutput.additionalContext, 'told to the person and to Claude alike');
     assert.match(said.systemMessage, /The recorder that is running is an earlier version, which does not give its version/);
     assert.match(said.systemMessage, /plugin\.mjs"? stop; .*plugin\.mjs"? ensure/);
-    assert.doesNotMatch(said.systemMessage, /every tool call is refused/);
+    assert.doesNotMatch(said.systemMessage, /tool call it would check is refused|every tool call is refused/);
     assert.deepEqual(asked, ['GET /status'], 'asked its status, and not told to stop');
   } finally {
     earlier.closeAllConnections();
@@ -500,7 +500,7 @@ test('the start of a session says so where the recorder does not start, and keep
     assert.equal(r.code, 0, r.err);
     let said = JSON.parse(r.out);
     assert.match(said.systemMessage, /The recorder did not start/);
-    assert.match(said.systemMessage, /every tool call is refused/);
+    assert.match(said.systemMessage, /each tool call it would check is refused\. The recorder is never asked about a question to the person/);
     // Held back 12 seconds before its own code runs: it still ends within 27 seconds of its start, and says the recorder is still starting.
     started = Date.now();
     r = await runPlugin(pluginArgs('SessionStart'), { env: { ...env, NODE_OPTIONS: delayFor(12000) }, cwd: project });
@@ -558,7 +558,7 @@ test('whatever stops the plugin\'s entry, a call is refused before it is taken, 
     }
     const start = await runPlugin(pluginArgs('SessionStart', copy), { env });
     assert.equal(start.code, 0, what);
-    assert.match(JSON.parse(start.out).systemMessage, /every tool call is refused/, what);
+    assert.match(JSON.parse(start.out).systemMessage, /each tool call the recorder would check is refused/, what);
   }
 });
 

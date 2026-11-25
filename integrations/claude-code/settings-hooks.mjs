@@ -243,7 +243,7 @@ export function doubledWords(found, run, project) {
   const others = filesOf(found).filter((f) => !local || !samePath(f, local));
   if (others.length > 0) fixes.push(`take the hooks that run a recorder's hook.mjs out of ${others.join(' and ')} by hand`);
   fixes.push('or turn the plugin off (/plugin, or "claude plugin disable provared-recorder@provared")');
-  return `Provared: the recorder's hooks are in force twice, from the plugin provared-recorder and from ${filesOf(found).join(' and ')}, so each tool call would be asked about and recorded twice. Until one of the two is taken out, every tool call is refused. To take one out: ${fixes.join('; ')}. Then start Claude Code again, since it reads hooks when a session starts.`;
+  return `Provared: the recorder's hooks are in force twice, from the plugin provared-recorder and from ${filesOf(found).join(' and ')}, so each tool call would be asked about and recorded twice. Until one of the two is taken out, each tool call the recorder checks is refused. To take one out: ${fixes.join('; ')}. Then start Claude Code again, since it reads hooks when a session starts.`;
 }
 
 /**

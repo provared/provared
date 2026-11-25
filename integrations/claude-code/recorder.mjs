@@ -1156,7 +1156,7 @@ export async function checkNewSlip(slip, { agentKeys, previous = null, trusted =
   }
   if (Date.parse(content.validUntil) <= now) throw refuse('ended', `The permission ended at ${content.validUntil}, so it is not used. Sign a new one.`);
   const warnings = [];
-  if (Date.parse(content.validFrom) > now) warnings.push(`The permission is in force only from ${content.validFrom}: until then every tool call is refused.`);
+  if (Date.parse(content.validFrom) > now) warnings.push(`The permission is in force only from ${content.validFrom}: until then each tool call the recorder checks is refused.`);
   // A passkey that signed no permission before is refused, so that no
   // program on this computer, the agent included, can bring in a permission
   // of its own making. The person's own new passkey is taken at their word.
@@ -2863,7 +2863,7 @@ async function sessionStart(folder, port) {
   const said = [];
   const project = process.env.CLAUDE_PROJECT_DIR || process.cwd();
   const { found, problem } = recorderHooksInSettings(project);
-  if (problem) said.push(`Provared: ${problem}. Before each call the plugin looks there for the recorder's hooks, which would ask about and record each call twice, so every tool call is refused until the file is smaller or the plugin is turned off.`);
+  if (problem) said.push(`Provared: ${problem}. Before each call the plugin looks there for the recorder's hooks, which would ask about and record each call twice, so each tool call the recorder checks is refused until the file is smaller or the plugin is turned off.`);
   if (found.length > 0) said.push(doubledWords(found, RUN, project));
   // With no keys yet, "init" is the first step. Where the keys are there, "ensure" starts the recorder: in a fresh folder it waits for the first permission, and says so.
   if (!existsSync(files(folder).slip) && !existsSync(files(folder).agentKeys) && !(await running(port, Math.max(250, Math.min(2000, Math.round(until - performance.now())))))) said.push(firstRunWords());
@@ -2872,7 +2872,7 @@ async function sessionStart(folder, port) {
     // A recorder that waits with other keys than the folder's is said as a problem (otherKeysWords), not as one that does not run.
     const { code: started } = await ensureStatus(folder, port, (words) => problems.push(words), until);
     if (started === 'starting') said.push(`Provared: the recorder is still starting. Until it answers, tool calls are refused; if they still are in a minute, run "${RUN} status", or "${RUN} start" to see why.`);
-    else if (started !== 0) said.push(`Provared: ${problems.join(' ')} Until it runs, every tool call is refused.`);
+    else if (started !== 0) said.push(`Provared: ${problems.join(' ')} Until it runs, each tool call it would check is refused. ${NOT_ASKED}`);
     else if (problems.length > 0) said.push(`Provared: ${problems.join(' ')}`);
   }
   if (said.length > 0) {
@@ -3260,7 +3260,7 @@ export async function main(argv) {
         : `The hooks were in ${written.path} already. Nothing was changed.`);
       for (const other of written.others) console.log(`Warning: another hook there names Provared: ${other}. If it is an older copy of this recorder, take it out by hand, or each tool call is asked about and recorded twice.`);
       if (written.switchedOff) console.log(`Warning: a settings file of this project says "disableAllHooks": true, so Claude Code runs no hook, these included, and nothing is checked or recorded. Take that setting out to record.`);
-      if (pluginInstalled()) console.log(`Warning: the Claude Code plugin provared-recorder is installed too. Where it is turned on, its hooks and these both run, and the plugin refuses every tool call in this project until one of the two is taken out: "${RUN} remove-hooks" takes these out again.`);
+      if (pluginInstalled()) console.log(`Warning: the Claude Code plugin provared-recorder is installed too. Where it is turned on, its hooks and these both run, and the plugin refuses each tool call the recorder checks in this project until one of the two is taken out: "${RUN} remove-hooks" takes these out again.`);
     }
     if (SELF.split(sep).includes('_npx')) console.log(`Warning: the hooks point into npm's temporary folder (${dirname(SELF)}), which npm may clear. Install the package (npm install -g provared-claude-code) and run init again.`);
     // In a fresh folder the recorder is started as "ensure" starts it, and waits for the agent's first permission.
