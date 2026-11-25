@@ -20,13 +20,10 @@ const { developmentPasskey } = await import('provared/dev');
 const { feedReader } = await import('../feed.mjs');
 const { admitWaiting, readTrusted, readWaitingPermissions } = await import('../recorder.mjs');
 const { startWaiting } = await import('../waiting.mjs');
-const { freshWorld, runCommand, runHook, signSlip, status, tempFolder } = await import('./world.mjs');
+const { freshWorld, runCommand, runHook, signSlip, status, tempFolder, within } = await import('./world.mjs');
 
 const LOCAL = { signingOrigins: ['http://localhost'] };
 const read = (folder, name) => readFileSync(join(folder, name), 'utf8');
-
-/** A promise, or a failure once "ms" have passed without it (measured on the monotonic clock by the timer). */
-const within = (promise, ms, what) => Promise.race([promise, new Promise((resolve, reject) => setTimeout(() => reject(new Error(`${what}: not within ${ms} ms`)), ms).unref())]);
 
 /** A gate a test opens: "faults" waits at the step named until it is opened. */
 function gateAt(step) {

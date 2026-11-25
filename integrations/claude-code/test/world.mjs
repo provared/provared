@@ -118,14 +118,19 @@ export async function freshWorld() {
   return { folder, agent, passkey };
 }
 
-function run(args, { env = {}, cwd, input } = {}) {
+/** A promise, or a failure once "ms" have passed without it (measured on the monotonic clock by the timer). */
+export const within = (promise, ms, what) => Promise.race([promise, new Promise((resolve, reject) => setTimeout(() => reject(new Error(`${what}: not within ${ms} ms`)), ms).unref())]);
+
+// "ms": a time limit, on the monotonic clock, after which the process is ended
+// (its code is then null, and "signal" names how it was ended).
+function run(args, { env = {}, cwd, input, ms } = {}) {
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', ...args], { cwd, env: { ...process.env, ...env } });
+    const child = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', ...args], { cwd, env: { ...process.env, ...env }, ...(ms ? { timeout: ms } : {}) });
     let out = '';
     let err = '';
     child.stdout.on('data', (d) => (out += d));
     child.stderr.on('data', (d) => (err += d));
-    child.on('close', (code) => resolve({ code, out: out.trim(), err: err.trim() }));
+    child.on('close', (code, signal) => resolve({ code, out: out.trim(), err: err.trim(), ...(signal ? { signal } : {}) }));
     child.stdin.end(input ?? '');
   });
 }
@@ -139,19 +144,20 @@ let calls = 0;
  * @param {{file?: string, env?: object, input?: string, more?: object}} [o] another copy of the hook, other
  *   surroundings, input written as it is, or more members of the input (such as a failed call's "error")
  */
-export async function runHook(port, event, toolName, toolInput, { file = hook, env = {}, input, more = {} } = {}) {
+export async function runHook(port, event, toolName, toolInput, { file = hook, env = {}, input, more = {}, ms } = {}) {
   // Each call has an identifier of its own, as in Claude Code, unless the test gives one (in more).
   const text = input ?? JSON.stringify({ session_id: 'test', hook_event_name: event, tool_name: toolName, tool_input: toolInput, tool_use_id: `toolu_${++calls}`, cwd: here, ...more });
-  const r = await run([file], { env: { PROVARED_CLAUDE_CODE_PORT: String(port), ...env }, input: text });
+  const r = await run([file], { env: { PROVARED_CLAUDE_CODE_PORT: String(port), ...env }, input: text, ms });
   return { ...r, decision: r.out ? JSON.parse(r.out).hookSpecificOutput : null };
 }
 
 /** A command of the recorder, run as a person runs it, on a temporary folder and a port of the test's own. */
-export function runCommand(args, { folder, port, cwd = folder, input }) {
+export function runCommand(args, { folder, port, cwd = folder, input, env = {}, ms }) {
   if (!resolve(folder).startsWith(temporary + sep) || !resolve(cwd).startsWith(temporary + sep)) throw new Error('A test runs the commands in a temporary folder only.');
   if (!Number.isInteger(port) || port === LIVE_PORT) throw new Error('A test runs the commands on a port of its own only.');
   // "input": what the person types (admit-passkey asks before it takes a passkey never trusted).
-  return run([recorderFile, ...args], { cwd, input, env: { PROVARED_CLAUDE_CODE_DIR: folder, PROVARED_CLAUDE_CODE_PORT: String(port) } });
+  // "env": more settings (the folder and the port are always the test's own); "ms": a time limit, as for run.
+  return run([recorderFile, ...args], { cwd, input, ms, env: { ...env, PROVARED_CLAUDE_CODE_DIR: folder, PROVARED_CLAUDE_CODE_PORT: String(port) } });
 }
 
 /** A port that nothing listens on, at the moment it is asked for. */
