@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 // The first-start program of the guard's container, in the Docker Compose
 // recipe for claude.ai (README.md, one folder up). It runs the guard's own
-// commands (provared-mcp-executor), in the data folder, and nothing else:
-// it makes no request to anyone, and it never fills in what a person must
-// give (the permission, and the thumbprint of the passkey that signed it).
+// commands (provared-mcp-executor), in the data folder, and nothing else
+// (beside them, it works out with the library the fingerprint of each
+// agent's key set that its steps show): it makes no request to anyone, and
+// it never fills in what a person must give (the permission, and the
+// thumbprint of the passkey that signed it).
 //
 //   node start.mjs                   set up what is missing, wait for the
 //                                    permission, check, write the owner's
@@ -30,6 +32,8 @@ import { chmodSync, chownSync, existsSync, lstatSync, mkdirSync, readFileSync, r
 import net from 'node:net';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+// The library the recipe's package.json names: the fingerprint of each agent's key set, as "keys" prints it.
+import { keySetFingerprint } from 'provared';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -137,8 +141,33 @@ export function unlisted(settings, folder, agents) {
   });
 }
 
-/** What the business does next, for the agents that wait. */
-export function nextSteps(settings, agents) {
+/**
+ * The fingerprint of each agent's key set, by the agent's name, worked out
+ * with the library's keySetFingerprint from the keys the file of entries
+ * names (as "keys" prints it). An agent whose entry cannot be read is left
+ * out; so is every agent where the file cannot be read.
+ */
+export async function agentFingerprints(folder) {
+  let listed = {};
+  try {
+    listed = JSON.parse(readFileSync(join(folder, ENTRIES), 'utf8')) ?? {};
+  } catch {
+    return {};
+  }
+  const out = {};
+  for (const [name, entry] of Object.entries(listed)) {
+    if (!Array.isArray(entry?.agent?.keys)) continue;
+    try {
+      out[name] = await keySetFingerprint(entry.agent.keys);
+    } catch {
+      // Not an agent's key set: no fingerprint, and the steps say so.
+    }
+  }
+  return out;
+}
+
+/** What the business does next, for the agents that wait; "fingerprints" (agentFingerprints) gives each agent's key set's fingerprint, which the signing window asks for. */
+export function nextSteps(settings, agents, fingerprints = {}) {
   const actions = [...new Set(Object.values(settings.tools ?? {}).map((t) => t?.action).filter((a) => typeof a === 'string'))];
   const lines = [`The guard is set up for ${settings.oauth.issuer}, and waits for the permission. On the server, in the folder of compose.yaml:`];
   lines.push(`  1. Read what the permission must hold: sudo cat ${HOST_FOLDER}/${ENTRIES}`);
@@ -146,6 +175,10 @@ export function nextSteps(settings, agents) {
     lines.push(`  For the agent "${a.name}":`);
     if (a.lacks.includes('slip')) {
       lines.push(`  2. The person who answers for the guard signs a permission with their passkey, at https://sign.prova.red, for the agent "${a.name}" and the actions ${actions.join(' and ') || '(those of "tools")'}, holding the entries of "${a.name}" in that file: its "agent" as the agent, the "with" entry in "with", and "requires" as it is.`);
+      const fp = Object.hasOwn(fingerprints, a.name) ? fingerprints[a.name] : null;
+      lines.push(fp
+        ? `     The fingerprint of the key set of the agent "${a.name}": ${fp}. The signing window asks for it before it signs a permission for keys it has not seen: paste this one there, the whole of it or at least its first 16 characters, copied from here only once the signing window has opened, and check that the box then shows it. If the window says it does not match, the keys it holds are not this agent's: do not sign.`
+        : `     The fingerprint of the key set of the agent "${a.name}" could not be worked out from ${HOST_FOLDER}/${ENTRIES}, and the signing window asks for it before it signs a permission for keys it has not seen: do not sign until you have it from this server.`);
       lines.push(`  3. Put the signed permission on the server, owned by the guard's user: sudo install -o ${GUARD_USER} -g ${GUARD_USER} -m 600 ${a.name}.json ${HOST_FOLDER}/${a.slip}`);
     }
     if (a.lacks.includes('thumbprint')) lines.push(`  4. In ${HOST_FOLDER}/${SETTINGS}, under agents."${a.name}".issuerKeys, put the thumbprint of the passkey that signed it in place of the value written <like this> (sudo nano ${HOST_FOLDER}/${SETTINGS}).`);
@@ -278,7 +311,7 @@ async function start() {
     const agents = waiting(settings, folder);
     const mark = marks(settings);
     if (agents.length) {
-      if (shown !== mark) say(nextSteps(settings, agents));
+      if (shown !== mark) say(nextSteps(settings, agents, await agentFingerprints(folder)));
       shown = mark;
       await sleep(WAIT);
       continue;

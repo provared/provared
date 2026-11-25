@@ -20,7 +20,8 @@ const START = join(RECIPE, 'start.mjs');
 const BIN = fileURLToPath(new URL('../bin.mjs', import.meta.url));
 const SIGN = fileURLToPath(new URL('./recipe-compose/sign-test-permission.mjs', import.meta.url));
 const read = (name) => readFileSync(join(RECIPE, name), 'utf8');
-const { checkDomain, fillSettings, waiting, nextSteps, ownerState, watchPeer, guardRunning, markRunning, writes, CLIENT } = await import('../recipes/claude-ai/compose/start.mjs');
+const { agentFingerprints, checkDomain, fillSettings, waiting, nextSteps, ownerState, watchPeer, guardRunning, markRunning, writes, CLIENT } = await import('../recipes/claude-ai/compose/start.mjs');
+const { generateKeySet, keySetFingerprint } = await import('provared');
 const POSIX = process.platform !== 'win32';
 
 function folder() {
@@ -104,7 +105,7 @@ test('fillSettings: the issuer and claude.ai\'s document are put in where writte
   assert.match(fillSettings({ agents: {} }, 'guard.example.com').problem, /names no "oauth"/);
 });
 
-test('waiting and nextSteps: what each OAuth agent lacks, and the exact steps for it', () => {
+test('waiting and nextSteps: what each OAuth agent lacks, and the exact steps for it, with the fingerprint of its key set', async () => {
   const data = folder();
   try {
     const settings = {
@@ -122,6 +123,16 @@ test('waiting and nextSteps: what each OAuth agent lacks, and the exact steps fo
     assert.match(steps, /for the agent "connection-1" and the actions demo\.echo and demo\.add/);
     assert.match(steps, /sudo install -o 10001 -g 10001 -m 600 connection-1\.json guard-data\/slips\/connection-1\.json/);
     assert.match(steps, /agents\."connection-1"\.issuerKeys/);
+    // No file of entries: no fingerprint, and the steps say not to sign without it (review M2).
+    assert.deepEqual(await agentFingerprints(data), {});
+    assert.match(steps, /The fingerprint of the key set of the agent "connection-1" could not be worked out from guard-data\/permission-entries\.json, and the signing window asks for it/);
+    // With the file: each agent's fingerprint, as the library gives it, and the sentence that the signing window asks for it.
+    const set = await generateKeySet();
+    writeFileSync(join(data, 'permission-entries.json'), JSON.stringify({ 'connection-1': { agent: { name: 'connection-1', keys: set.keys } }, broken: { agent: { keys: 'none' } } }));
+    const expected = await keySetFingerprint(set.keys);
+    assert.deepEqual(await agentFingerprints(data), { 'connection-1': expected });
+    const withFingerprint = nextSteps(settings, waiting(settings, data), await agentFingerprints(data));
+    assert.ok(withFingerprint.includes(`The fingerprint of the key set of the agent "connection-1": ${expected}. The signing window asks for it before it signs a permission for keys it has not seen: paste this one there`), withFingerprint);
 
     mkdirSync(join(data, 'slips'));
     writeFileSync(join(data, 'slips', 'connection-1.json'), '{}');
@@ -197,6 +208,8 @@ test('the start, from an empty folder to the guard answering: init, the issuer, 
     assert.ok(entries['connection-1'].agent.keys, 'what the permission holds');
     assert.ok(existsSync(join(data, 'slips')));
     assert.match(run.out(), /for the agent "connection-1" and the actions demo\.echo and demo\.add/);
+    // The steps show the fingerprint the signing window asks for, of the keys in the file of entries (review M2).
+    assert.ok(run.out().includes(`The fingerprint of the key set of the agent "connection-1": ${await keySetFingerprint(entries['connection-1'].agent.keys)}. The signing window asks for it`), run.out());
     assert.equal(existsSync(join(data, 'owner-link.txt')), false, 'no link before the permission');
 
     // Another port, so the test does not depend on 8796 being free; the start reads the settings again.
