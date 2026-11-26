@@ -51,6 +51,8 @@ class InitFingerprint(unittest.TestCase):
         public, _ = Folder(self.folder).agent_keys()
         self.assertEqual(found.group(1), key_set_fingerprint(public))
         self.assertIn('The signing window asks for this fingerprint before you sign', said)
+        # Copied only once the window is open, as the recorder's init says it.
+        self.assertIn('Copy it from here only once the signing window has opened, and check that what the box then shows is the one printed here.', said)
         # Run again, with the keys there: the same fingerprint.
         self.assertEqual(PRINTED.search(init(self.folder)[1]).group(1), found.group(1))
 

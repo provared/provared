@@ -53,7 +53,7 @@ def _init(folder):
          '',
          # The same fingerprint as the JavaScript library's keySetFingerprint, which the signing window works out.
          f'The fingerprint of the agent\'s key set: {key_set_fingerprint(keys)}',
-         'The signing window asks for this fingerprint before you sign: paste it there, the whole of it or at least its first 16 characters. If the window says it does not match, the keys it holds are not this agent\'s: do not sign.',
+         'The signing window asks for this fingerprint before you sign: paste it there, the whole of it or at least its first 16 characters. Copy it from here only once the signing window has opened, and check that what the box then shows is the one printed here. If the window says it does not match, the keys it holds are not this agent\'s: do not sign.',
          '',
          'Then put the saved file in place:',
          '  hermes provared use <the saved slip.json>')

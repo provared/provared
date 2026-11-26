@@ -226,3 +226,12 @@ These change what the entries above describe.
   the book file unwritable both fail, the call stays listed, and after a
   start with the file writable the stub the acknowledgement writes is in
   the file.
+
+### The fingerprint of the agent's key set (26 November 2026)
+
+- **`keys --agent`** now says on its standard error the fingerprint of the
+  agent's key set, worked out with the library's `keySetFingerprint`, in
+  the guard's words: the signing window asks for it, and it is to be copied
+  only once the window has opened. `keys --recorder` and `keys --gateway`
+  give none. The README says so. Test: `test/cli.test.mjs` (fails without
+  the change).

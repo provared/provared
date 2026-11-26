@@ -273,7 +273,7 @@ test('keys needs no passkey thumbprint yet, says in one line what to do with wha
   assert.equal(lines.length, 2, `two lines, and no warning:\n${r.stderr}`);
   assert.match(lines[0], /^provared-mcp-executor: What to do with this: it goes into the permission/);
   // The fingerprint the signing window asks for, as the library works it out, with no central sealer named.
-  assert.equal(lines[1].trim(), `provared-mcp-executor: the fingerprint of the key set of the agent is ${await keySetFingerprint(printed.agent.keys)}: the signing window asks for it before the person signs a permission for these keys, the whole of it or at least its first 16 characters.`);
+  assert.equal(lines[1].trim(), `provared-mcp-executor: the fingerprint of the key set of the agent is ${await keySetFingerprint(printed.agent.keys)}: the signing window asks for it before the person signs a permission for these keys, the whole of it or at least its first 16 characters. Copy it from here only once the signing window has opened, and check that what the box then shows is the one printed here.`);
 
   const out = run(['keys', '--config', 'executor.json', '--out', 'for-the-permission.json'], folder);
   assert.equal(out.status, 0, out.stderr);
