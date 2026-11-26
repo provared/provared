@@ -3604,8 +3604,9 @@ export async function main(argv) {
     }
     // Every text in it, from a permission or from what answers, escaped where it does not print; still JSON.
     console.log(printableJson(JSON.stringify(status, null, 2)));
-    // The steps of the waiting state, said apart from the JSON, which stays JSON.
-    if (status.waiting === true) console.error(waitingWords());
+    // The steps of the waiting state, said apart from the JSON, which stays JSON; where the recorder that waits
+    // holds other keys than the folder's, that and the cure in their place, as "init" and "ensure" say it.
+    if (status.waiting === true) console.error((await otherKeysWords(folder, port, status)) ?? waitingWords());
     return 0;
   }
   if (command === 'seal') {

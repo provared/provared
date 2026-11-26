@@ -252,8 +252,8 @@ JSON only, and leaves any other file as it is.
 
 A hook that reaches the recorder in any other way (a script of your own
 that calls it, a variable of your own, an organisation's managed
-settings) is not recognised, and each call is then asked about and
-recorded twice. Where it finds one, it refuses the call and says how to
+settings) is not recognised, and each call the recorder checks is then
+asked about and recorded twice. Where it finds one, it refuses the call and says how to
 take one of the two out:
 
 - `remove-hooks`, run in the project's folder, takes out of
@@ -936,11 +936,11 @@ waits, the recorder writes no book and no line:
 
 `ensure`, `status` (on its standard error, beside the JSON) and the start
 of a session say that the recorder waits, with the steps. Where the agent's
-keys were made again while the recorder waited, `init`, `ensure` and the
-start of a session say instead that it holds other keys than the
+keys were made again while the recorder waited, `init`, `ensure`, `status`
+and the start of a session say instead that it holds other keys than the
 folder's, give both fingerprints and the cure (`stop`, then `ensure`),
-and give no steps; `init` and `ensure` then end with 1. (`status` does
-not compare the keys: it gives the steps.) `ensure`, and `init` through it,
+and give no steps; `init` and `ensure` then end with 1. (`status` still
+prints the JSON and ends with 0.) `ensure`, and `init` through it,
 keep to 20 seconds in all, on the monotonic clock: where nothing answers
 on the port in that time, no recorder is started, they say so, and end
 with 1.
@@ -1263,7 +1263,7 @@ version too (`npx provared-check` takes the latest).
 | `admit-passkey [<thumbprint>]` | Take new permissions from a retired passkey again; for a passkey this recorder has never trusted (with the recorder running), named by its thumbprint or at least its first 16 characters, pasted from the signing window, check the permission it signed that was handed over and waits here as every record handed over is checked, show it, and take both only once you type `yes` at a terminal (`no` declines it); with no thumbprint, list what waits. It asks the recorder with the feed's proof |
 | `start` | Run the recorder in this terminal, and see what it says |
 | `ensure` | Start the recorder in the background if it is not running (the hooks run this when a session starts), within 20 seconds in all; in a fresh folder it waits for the agent's first permission, and `ensure` says so, with the steps; where the recorder that answers is not the version installed, say so, with the commands to restart it |
-| `status` | Where the recorder waits for its first permission: `waiting: true`, the fingerprint of the agent's key set it holds and how many permissions wait, with the steps on the standard error. Otherwise, what the recorder holds: the permission, until when, the number of entries, the passkeys whose permissions are in the record and those retired (`trusted`, `retired`), the calls allowed and not yet recorded (`callsNotYetRecorded`), the books kept (`keptBooks`), when a new one is started (`newBookAt`), the feed's token file and how many questions wait (`feed`), and for each witness what it holds and why it is behind (`witnesses`), and whether the permission in force is cancelled (`cancelled`) |
+| `status` | Where the recorder waits for its first permission: `waiting: true`, the fingerprint of the agent's key set it holds and how many permissions wait, with the steps on the standard error (or, where it holds other keys than the agent's keys in the folder, that and the cure in their place). Otherwise, what the recorder holds: the permission, until when, the number of entries, the passkeys whose permissions are in the record and those retired (`trusted`, `retired`), the calls allowed and not yet recorded (`callsNotYetRecorded`), the books kept (`keptBooks`), when a new one is started (`newBookAt`), the feed's token file and how many questions wait (`feed`), and for each witness what it holds and why it is behind (`witnesses`), and whether the permission in force is cancelled (`cancelled`) |
 | `seal` | Seal the book now, with the recorder's three keys, and ask the witnesses named, waiting up to five seconds while no other request waits |
 | `new-book` | Seal the book, keep it as `book-<n>.jsonl`, and start a new one that begins with the permission in force (done by itself at 90,000 entries, or at 100 MB of text) |
 | `check [file]` | The checker's answer for the book, or, given a name such as `book-1.jsonl`, for a book kept before it. Name your passkey with `--issuer <its thumbprint>`, once for each passkey of yours; without it, `check` lists the passkeys the book's permissions name, as read from the book, and the checker takes none of them as one you trust. It names the witnesses in `witnesses.json` (`--witness`) and hands over the statements kept beside the book (`--seal`), unless you give your own |

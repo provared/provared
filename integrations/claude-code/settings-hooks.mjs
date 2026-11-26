@@ -5,11 +5,14 @@
 // them into a project's .claude/settings.local.json, or the Claude Code
 // plugin (hooks/hooks.json, beside this file) brings them. Where both are
 // in force, Claude Code runs both, since it keeps a plugin's hook apart
-// from the same hook in a settings file, and each tool call would be asked
-// about, and recorded, twice. The plugin's hook looks for the other kind
-// here, and refuses the call where it finds one (hook.mjs); the start of a
-// session says so (recorder.mjs, "session-start"); "remove-hooks" takes
-// out the ones "init" wrote.
+// from the same hook in a settings file, and each tool call the recorder
+// checks would be asked about, and recorded, twice. The plugin's hook looks
+// for the other kind here before each such call and, where it finds one,
+// refuses the call without asking the recorder (hook.mjs); the settings
+// file's hook still asks. The tools the recorder is never asked about
+// (NOT_RECORDED, in actions.mjs) go ahead, as they do with one hook. The
+// start of a session says so (recorder.mjs, "session-start");
+// "remove-hooks" takes out the ones "init" wrote.
 //
 // A hook counts as the recorder's where one word of its command names a
 // file "hook.mjs" with "recorder.mjs" and "actions.mjs" beside it: any copy
@@ -243,7 +246,7 @@ export function doubledWords(found, run, project) {
   const others = filesOf(found).filter((f) => !local || !samePath(f, local));
   if (others.length > 0) fixes.push(`take the hooks that run a recorder's hook.mjs out of ${others.join(' and ')} by hand`);
   fixes.push('or turn the plugin off (/plugin, or "claude plugin disable provared-recorder@provared")');
-  return `Provared: the recorder's hooks are in force twice, from the plugin provared-recorder and from ${filesOf(found).join(' and ')}, so each tool call would be asked about and recorded twice. Until one of the two is taken out, each tool call the recorder checks is refused. To take one out: ${fixes.join('; ')}. Then start Claude Code again, since it reads hooks when a session starts.`;
+  return `Provared: the recorder's hooks are in force twice, from the plugin provared-recorder and from ${filesOf(found).join(' and ')}, so each tool call the recorder checks would be asked about and recorded twice. Until one of the two is taken out, each tool call the recorder checks is refused. To take one out: ${fixes.join('; ')}. Then start Claude Code again, since it reads hooks when a session starts.`;
 }
 
 /**

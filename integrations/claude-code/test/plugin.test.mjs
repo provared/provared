@@ -25,6 +25,8 @@ const { dataFolder, installLibrary, lockFingerprint, lockedVersion, NPM_WORDS, n
 const pluginRoot = resolve(here, '..');
 const repository = resolve(pluginRoot, '..', '..');
 const readJson = (path) => JSON.parse(readFileSync(path, 'utf8'));
+// How the messages name a command run with node: the script, between quotation marks where its path has a space.
+const asRun = (script) => `node ${script.includes(' ') ? `"${script}"` : script}`;
 const manifest = readJson(join(pluginRoot, '.claude-plugin', 'plugin.json'));
 const hooksFile = readJson(join(pluginRoot, 'hooks', 'hooks.json'));
 const marketplace = readJson(join(repository, '.claude-plugin', 'marketplace.json'));
@@ -286,6 +288,8 @@ test('with the recorder\'s hooks also in a settings file (the project\'s local o
       assert.match(doubled.decision.permissionDecisionReason, /claude plugin disable provared-recorder@provared/);
       if (where === 'local') assert.match(doubled.decision.permissionDecisionReason, /plugin\.mjs remove-hooks/);
       else assert.match(doubled.decision.permissionDecisionReason, /by hand/);
+      // Word for word: only the calls the recorder checks would be asked about twice, and those are refused.
+      if (where === 'local') assert.equal(doubled.decision.permissionDecisionReason, `Provared: the recorder's hooks are in force twice, from the plugin provared-recorder and from ${join(project, '.claude', 'settings.local.json')}, so each tool call the recorder checks would be asked about and recorded twice. Until one of the two is taken out, each tool call the recorder checks is refused. To take one out: in the project's folder (${resolve(project)}), run: ${asRun(join(pluginRoot, 'plugin.mjs'))} remove-hooks (it takes the recorder's hooks out of .claude/settings.local.json, and changes nothing else there); or turn the plugin off (/plugin, or "claude plugin disable provared-recorder@provared"). Then start Claude Code again, since it reads hooks when a session starts.`);
       if (where !== 'local') continue;
       // The hook of the settings file, which Claude Code runs without naming this plugin's folder, is not refused: with no plugin folder, or another plugin's.
       for (const root of ['', tempFolder('provared-another-plugin-')]) {
@@ -367,6 +371,10 @@ test('before each call the plugin looks only so far: a settings file too large, 
     assert.ok(Date.now() - started < 10000);
     assert.equal(r.decision.permissionDecision, 'deny');
     assert.match(r.decision.permissionDecisionReason, /larger than 1024 KB/);
+    // The start of a session says so, word for word, with the recorder running under its permission.
+    const s = await runPlugin(pluginArgs('SessionStart'), { env: { ...asPlugin(folder, project), PROVARED_CLAUDE_CODE_PORT: String(service.port) }, cwd: project });
+    assert.equal(s.code, 0, s.err);
+    assert.equal(JSON.parse(s.out).systemMessage, `Provared: the settings file ${local} is larger than 1024 KB, so it was not looked through for the recorder's hooks. Before each call the plugin looks there for the recorder's hooks, which would ask about and record each call twice, so each tool call the recorder checks is refused until the file is smaller or the plugin is turned off.`);
   } finally {
     await service.close();
   }
@@ -629,6 +637,8 @@ test('init, through the plugin\'s entry, with --no-hooks, or from Claude Code\'s
     assert.equal(r.code, 0, r.err);
     assert.match(r.out, /The hooks are in /);
     assert.match(r.out, /Warning: the Claude Code plugin provared-recorder is installed too/);
+    // Word for word: the plugin refuses only the calls the recorder checks.
+    assert.ok(r.out.split('\n').includes(`Warning: the Claude Code plugin provared-recorder is installed too. Where it is turned on, its hooks and these both run, and the plugin refuses each tool call the recorder checks in this project until one of the two is taken out: "${asRun(join(pluginRoot, 'recorder.mjs'))} remove-hooks" takes these out again.`), r.out);
     // remove-hooks takes them out again, and says where others are still.
     writeFileSync(join(project, '.claude', 'settings.json'), JSON.stringify({ hooks: { PostToolUse: [{ hooks: [{ type: 'command', command: `node ${relative(project, join(pluginRoot, 'hook.mjs'))}` }] }] } }));
     r = await run(join(pluginRoot, 'recorder.mjs'), ['remove-hooks']);

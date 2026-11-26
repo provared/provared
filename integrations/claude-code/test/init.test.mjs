@@ -307,7 +307,7 @@ test('"init" where what answers names this folder but does not say it waits coun
   }
 });
 
-test('"init" and "ensure" where the keys were made again under the recorder that waits: they say it holds other keys, give "stop" then "ensure", end with 1, and stop nothing (review M1)', async () => {
+test('"init" and "ensure" where the keys were made again under the recorder that waits: they say it holds other keys, give "stop" then "ensure", end with 1, and stop nothing (review M1); "status" says the same and ends with 0', async () => {
   const folder = join(tempFolder(), 'claude-code');
   const project = tempFolder('provared-project-');
   const port = await freePort();
@@ -337,6 +337,14 @@ test('"init" and "ensure" where the keys were made again under the recorder that
     assert.equal(s.code, 0, `${s.out}\n${s.err}`);
     assert.match(JSON.parse(s.out).systemMessage, /^Provared: The recorder that answers on 127\.0\.0\.1:\d+ waits for its first permission, but holds other keys than the agent's keys in /);
     assert.doesNotMatch(JSON.parse(s.out).systemMessage, /admit-passkey|Until it runs/);
+    // "status" says it too, on the standard error, in place of the steps; its JSON and its code are as before.
+    const st = await runCommand(['status'], { folder, port });
+    assert.equal(st.code, 0, `${st.out}\n${st.err}`);
+    assert.equal(JSON.parse(st.out).agentKeySet, before.agentKeySet);
+    assert.equal(JSON.parse(st.out).waiting, true);
+    assert.match(st.err, new RegExp(`holds other keys than the agent's keys in .*: the fingerprint of the key set it holds is ${before.agentKeySet}, and that of the keys in the folder is ${printed}`));
+    assert.match(st.err, /Restart it once, with both commands on one line: .*stop; .*ensure/);
+    assert.doesNotMatch(st.err, /admit-passkey|first permission: each tool call/, 'no steps: they would not work with this recorder');
     const after = await status(port);
     assert.equal(after.started, before.started, 'the same recorder: nothing was stopped or started');
     assert.equal(after.agentKeySet, before.agentKeySet);
