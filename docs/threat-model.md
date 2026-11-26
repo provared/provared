@@ -121,8 +121,13 @@ follows the checking steps of the Web Authentication standard.
     that would make the recorder trust a new passkey (`/admit`, and
     `/renew` with a new passkey) ask for the proof of the feed's token,
     which is in the recorder's folder (`admit-proof.test.mjs`). So a
-    program that cannot read that folder, such as one run by another
-    account on the computer, cannot have a passkey trusted. Any program
+    program that cannot read that folder cannot have a passkey trusted.
+    That keeps out a program run by another standard account where the
+    folder is the default one under the person's home. The token file is
+    written for its owner only; Windows does not apply that, and there
+    the file takes the folder's access list, so a folder named with
+    `PROVARED_CLAUDE_CODE_DIR` elsewhere may be open to other accounts.
+    An administrator can read it anywhere. Any program
     run under the person's own account can read and write the folder,
     and so can always make the recorder trust a passkey, with nobody
     typing anything. The agent is such a program. That `yes` must be

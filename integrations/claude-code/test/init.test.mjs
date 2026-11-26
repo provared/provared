@@ -458,8 +458,8 @@ test('"ensure", "status" and the start of a session say the steps of the waiting
     assert.match(e.err, /never asked about a question to the person, the plan, the list of tasks/);
     assert.doesNotMatch(e.err, /every tool call/);
     saysTheSteps(e.err);
-    assert.match(e.err, /keys" prints it again/);
-    const st = await runCommand(['status'], { folder: w.folder, port });
+    assert.match(e.err, /keys" prints it again\), copied only once the signing window has opened; if the window says it does not match, do not sign\./);
+    const st =await runCommand(['status'], { folder: w.folder, port });
     assert.equal(st.code, 0, `${st.out}\n${st.err}`);
     assert.equal(JSON.parse(st.out).waiting, true, 'the status itself is still JSON');
     saysTheSteps(st.err);

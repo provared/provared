@@ -61,7 +61,7 @@ test('the commands: secret, keys, check, start, status, seal, and seal --offline
   const agentKeys = JSON.parse(keys.out.slice(keys.out.indexOf('[')));
   assert.deepEqual(agentKeys.map((k) => k.alg), ['Ed25519', 'ML-DSA-87']);
   // The fingerprint of the agent's key set, which the signing window asks for, on the standard error in the guard's words.
-  assert.ok(keys.err.includes(`provared-gateway: the fingerprint of the key set of the agent "patching" is ${await keySetFingerprint(agentKeys)}: the signing window asks for it before the person signs a permission for these keys, the whole of it or at least its first 16 characters. Copy it from here only once the signing window has opened, and check that what the box then shows is the one printed here.\n`), keys.err);
+  assert.ok(keys.err.includes(`provared-gateway: the fingerprint of the key set of the agent "patching" is ${await keySetFingerprint(agentKeys)}: the signing window asks for it before the person signs a permission for these keys, the whole of it or at least its first 16 characters. Copy it from here only once the signing window has opened, and check that what the box then shows is the one printed here. If the window says it does not match, the keys it holds are not this agent's: do not sign.\n`), keys.err);
   const again = await run(['keys', '--config', configPath, '--agent', 'patching']);
   assert.deepEqual(JSON.parse(again.out.slice(again.out.indexOf('['))), agentKeys, 'a key file that exists is kept');
   const rkeys = await run(['keys', '--config', configPath, '--recorder']);

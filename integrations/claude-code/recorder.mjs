@@ -2771,7 +2771,7 @@ async function ensureStatus(folder, port, say = (words) => console.error(words),
  */
 const waitingSteps = (where = `the one init printed ("${RUN} keys" prints it again)`) => `Next:
   1. Open the application, make a book, copy its one line, and run that line here, on this computer.
-  2. In the application, under "Approve what it may do", choose what the agent may do, and confirm it in the signing window with your passkey. When the signing window asks for the fingerprint of the agent's key set, paste ${where}.
+  2. In the application, under "Approve what it may do", choose what the agent may do, and confirm it in the signing window with your passkey. When the signing window asks for the fingerprint of the agent's key set, paste ${where}, copied only once the signing window has opened; if the window says it does not match, do not sign.
   3. Keep the signing window open, and run this here, with the thumbprint the signing window shows pasted in (the whole of it, or at least its first ${ADMIT_THUMBPRINT_LEAST} characters):
 
        ${RUN} admit-passkey <the thumbprint>

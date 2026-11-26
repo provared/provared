@@ -194,7 +194,7 @@ async function main(args) {
     console.log(JSON.stringify(keys, null, 2));
     // The fingerprint of the agent's key set, in the guard's words: the signing window asks for it before the person
     // signs a permission for keys it has not seen. The recorder's keys go into no permission.
-    if (!forRecorder) process.stderr.write(`provared-gateway: the fingerprint of the key set of the agent "${agent}" is ${await keySetFingerprint(keys)}: the signing window asks for it before the person signs a permission for these keys, the whole of it or at least its first 16 characters. Copy it from here only once the signing window has opened, and check that what the box then shows is the one printed here.\n`);
+    if (!forRecorder) process.stderr.write(`provared-gateway: the fingerprint of the key set of the agent "${agent}" is ${await keySetFingerprint(keys)}: the signing window asks for it before the person signs a permission for these keys, the whole of it or at least its first 16 characters. Copy it from here only once the signing window has opened, and check that what the box then shows is the one printed here. If the window says it does not match, the keys it holds are not this agent's: do not sign.\n`);
     return 0;
   }
   if (command === 'status') {

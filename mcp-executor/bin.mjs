@@ -573,7 +573,7 @@ async function main(args) {
     // the agents it was named with, each by the same fingerprint.
     const named = http ? Object.entries(result).map(([name, e]) => [`the agent "${name}"`, e.agent.keys]) : [['the agent', result.agent.keys]];
     const sealer = config.recorder?.sealer !== undefined ? ' The central sealer is told it too, when this recorder is added (provared-sealer add-recorder --agent).' : '';
-    for (const [who, keys] of named) process.stderr.write(`provared-mcp-executor: the fingerprint of the key set of ${who} is ${await keySetFingerprint(keys)}: the signing window asks for it before the person signs a permission for these keys, the whole of it or at least its first 16 characters. Copy it from here only once the signing window has opened, and check that what the box then shows is the one printed here.${sealer}\n`);
+    for (const [who, keys] of named) process.stderr.write(`provared-mcp-executor: the fingerprint of the key set of ${who} is ${await keySetFingerprint(keys)}: the signing window asks for it before the person signs a permission for these keys, the whole of it or at least its first 16 characters. Copy it from here only once the signing window has opened, and check that what the box then shows is the one printed here. If the window says it does not match, the keys it holds are not this agent's: do not sign.${sealer}\n`);
     if (recorderAt) {
       // The recorder's keys go into no permission: what a reader needs is the fingerprint of the key set.
       const fingerprint = await keySetFingerprint(await makeRecorderKeyFile(recorderAt));
