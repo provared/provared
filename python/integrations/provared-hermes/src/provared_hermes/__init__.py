@@ -32,7 +32,7 @@ from .actions import action_for
 from .folder import BookChanged, Folder, FolderError
 
 __all__ = ['HermesRecorder', 'register']
-__version__ = '0.1.0'
+__version__ = '0.1.1'
 
 logger = logging.getLogger(__name__)
 

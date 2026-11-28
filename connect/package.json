@@ -1,6 +1,6 @@
 {
   "name": "provared-connect",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Connects a Provared recorder to a book in the Provared application with one line copied from the book's page: the uploader beside the recorder sends each line of the agent's book, sealed, to the application's server, and hands the person's signed renewals and cancellations to the recorder. No file is saved or moved by the person.",
   "author": "Pavel Izmaylov",
   "license": "Apache-2.0 AND CC-BY-4.0",

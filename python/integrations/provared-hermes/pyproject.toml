@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "provared-hermes"
-version = "0.1.0"
+version = "0.1.1"
 description = "A Hermes Agent plugin that checks each tool call against the permission a person signed, and records it with Provared. Evidence, not a verdict."
 readme = "README.md"
 authors = [{ name = "Pavel Izmaylov" }]

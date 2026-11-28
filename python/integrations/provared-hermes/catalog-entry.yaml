@@ -22,7 +22,7 @@ category: tools
 # loads and refuses every recorded tool call until the person says otherwise
 # (its setting untested_hermes), rather than being skipped.
 docs_url: https://github.com/provared/provared/tree/0000000000000000000000000000000000000000/python/integrations/provared-hermes
-version: "0.1.0"
+version: "0.1.1"
 platforms: []
 capabilities:
   provides_tools: []

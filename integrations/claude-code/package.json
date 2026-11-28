@@ -1,6 +1,6 @@
 {
   "name": "provared-claude-code",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Records a Claude Code agent with Provared: its tool calls are checked against a permission a person signed with a passkey, refused if they are outside it, and receipted if they are taken. Eight tools that only talk to the person or change what the model itself holds are not recorded. Evidence, not a verdict.",
   "author": "Pavel Izmaylov",
   "license": "Apache-2.0 AND CC-BY-4.0",
