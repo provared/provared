@@ -1,6 +1,8 @@
 # Changelog: provared-connect
 
-## Not yet released
+## 0.2.0 (28 November 2026)
+
+Works with the recorder beside Claude Code 0.2.0. With an application server that does not yet take the agent note, it says so once and hands the records over as before; with an earlier recorder, which gives no key set, it says so once and puts no note.
 
 - **The README** says what the uploader hands over again
   (`waits-for-yes`, `nothing-in-force`), the agent note, the pause where

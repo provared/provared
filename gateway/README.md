@@ -131,8 +131,8 @@ agent did was right.
    agent's key set, paste the one `keys --agent` printed, copied once the
    window has opened, and check that the box then shows it; if the window
    says it does not match, do not sign. (The signing page as this
-   repository holds it asks for it; that copy is not yet on
-   `sign.prova.red`, which is published apart.) The passkey's thumbprint
+   repository holds it asks for it; `sign.prova.red` serves
+   that copy from version 0.9.2.) The passkey's thumbprint
    goes into `issuerKeys`.
 
 5. Check the settings. This reads every rule and says what it maps to, and

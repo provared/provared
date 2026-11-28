@@ -27,7 +27,7 @@ The first line installs the package from npm, with its one dependency,
 the library `provared`. To install it from a copy of the repository
 instead: `git clone https://github.com/provared/provared.git`, then, in
 `provared/integrations/claude-code`, `npm pack` and
-`npm install -g provared-claude-code-0.1.1.tgz` (`npm pack` makes the
+`npm install -g provared-claude-code-0.2.0.tgz` (`npm pack` makes the
 package as npm would, so that `provared` is installed with it).
 
 `init` makes the agent's keys and writes the hooks into the project's
@@ -80,7 +80,7 @@ its own page: open it in a tab of its own.
 The signing page as this repository holds it (`page/`) asks for the
 fingerprint, and hands a first permission back to the application only
 when you press its button, so that you can copy the thumbprint first. It
-is not yet on `sign.prova.red`, which is published apart. The copy of the
+is served at `sign.prova.red` from version 0.9.2. The copy of the
 page at version 0.9.1 of this repository does not ask for the
 fingerprint: it shows it, for you to compare with the one `init` printed.
 It hands the permission back as soon as it is signed, and closes its
@@ -123,7 +123,7 @@ Adding the marketplace downloads a copy of this repository (about 60 MB);
 integrations/claude-code` downloads only the two folders the plugin uses.
 
 Claude Code copies this folder into its plugin cache
-(`~/.claude/plugins/cache/provared/provared-recorder/0.1.1/`). The library
+(`~/.claude/plugins/cache/provared/provared-recorder/0.2.0/`). The library
 `provared` comes separately:
 
 - Some versions of Claude Code install it beside the plugin, from

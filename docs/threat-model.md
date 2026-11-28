@@ -153,8 +153,8 @@ follows the checking steps of the Web Authentication standard.
     shows against what was printed there. It does not protect a person
     who pastes what the application gave them, nor one who signs anyway.
     A key set the device has signed for before, or that a checked earlier
-    permission vouches for, is not asked about. That copy of the page is
-    not yet served at `sign.prova.red`, which is published apart.
+    permission vouches for, is not asked about. `sign.prova.red` serves
+    that copy from version 0.9.2.
 - Against a page that has the passkey sign a record dressed as a sign-in,
   where the passkey's website name (its `rpId`) serves anything but the
   signing page. A passkey signs only a challenge, and the challenge for a

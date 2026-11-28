@@ -112,7 +112,7 @@ checker:
 - **[The gateway](gateway/README.md)**, for agents that act through web
   interfaces: it stands in front of each system an agent uses, holds
   that system's credential and receipts each call. On npm as
-  `provared-gateway` (version 0.1.0, since 22 November 2026).
+  `provared-gateway` (version 0.1.1, since 28 November 2026; first published on 22 November 2026).
 
 ## The checker, and the sample record
 
@@ -282,7 +282,7 @@ each part protects against, is in
 
 ## Status
 
-**The library at version 0.9.1 and the guard at 0.5.2, both drafts.**
+**The library at version 0.9.2 and the guard at 0.5.3, both drafts.**
 Published as they are, by one author in their
 own time, built with AI tools since 3 October 2026; fixes as time
 allows. The code has been through more than 80 rounds of review by AI

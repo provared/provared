@@ -6,7 +6,7 @@ it, and records it with [Provared](https://github.com/provared/provared).
 
 *Evidence, not a verdict.*
 
-**Version 0.1.0, a draft**, as Provared itself is, by one author in their
+**Version 0.1.1, a draft**, as Provared itself is, by one author in their
 own time; fixes as time allows. It is not on the Python Package Index
 yet: see "Install" below.
 
@@ -208,8 +208,7 @@ there, the whole of it or at least its first 16 characters, copied once
 the window has opened, and check that the box then shows it. If the
 window says it does not match, the keys it holds are not this agent's:
 do not sign. (The signing page as the public repository holds it asks
-for it. That copy is not yet on `sign.prova.red`, which is published
-apart; the copy at version 0.9.1 of the repository does not ask, and
+for it. `sign.prova.red` serves that copy from version 0.9.2; the copy at version 0.9.1 of the repository does not ask, and
 shows the fingerprint for you to compare.) Change the permission there if you wish,
 sign it with your passkey, and put the saved file in place:
 

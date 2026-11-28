@@ -124,7 +124,7 @@ npm install -g provared-mcp-executor
 ```
 
 Or from a copy of the repository: in `mcp-executor`, `npm pack`, then
-`npm install -g ./provared-mcp-executor-0.5.2.tgz`.
+`npm install -g ./provared-mcp-executor-0.5.3.tgz`.
 
 Use version 0.4.2 or later. Every version from 0.1.0 to 0.4.1 has two
 weaknesses: in front of a tool server whose JSON reader ignores capitals
@@ -206,8 +206,8 @@ prints that notice.
    fingerprint of the agent's key set, paste the one `keys` printed,
    copied once the window has opened, and check that the box then shows
    it; if the window says it does not match, do not sign. (The signing
-   page as this repository holds it asks for it; that copy is not yet on
-   `sign.prova.red`, which is published apart.) The thumbprint of the passkey goes into
+   page as this repository holds it asks for it; `sign.prova.red` serves
+   that copy from version 0.9.2.) The thumbprint of the passkey goes into
    `agent.issuerKeys`.
 
 4. Check the settings. This reads every rule, the keys, the slip and the
