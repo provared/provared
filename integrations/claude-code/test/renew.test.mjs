@@ -221,7 +221,7 @@ test('a slip that has ended is refused; one not yet in force is taken, with a wa
     assert.equal(l.code, 0, l.err);
     assert.match(l.out, /Warning: The permission is in force only from/);
     // Word for word: only the calls the recorder checks are refused until then.
-    assert.match(l.out, /^Warning: The permission is in force only from \d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?Z: until then each tool call the recorder checks is refused\.$/m);
+    assert.match(l.out, /^Warning: The permission is in force only from \d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:Z|\.\d+Z): until then each tool call the recorder checks is refused\.$/m);
     // Until then, a call is refused, not taken.
     const call = await runHook(service.port, 'PreToolUse', 'Bash', { command: 'npm test' });
     assert.equal(call.decision.permissionDecision, 'deny');

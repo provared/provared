@@ -173,7 +173,7 @@ test('"admit-passkey" shows control and other characters that do not print as es
     const T = await thumbprint(passkey.key);
     // An escape sequence, a carriage return, a C1 control, a right-to-left override, a line break, a line separator
     // and a zero-width space (a lone surrogate cannot be signed: the library refuses it).
-    const hostile = 'Read only.\u001b[2K\r\u0085‮line one\nFingerprint fake ​';
+    const hostile = 'Read only.\u001b[2K\r\u0085\u202eline one\nFingerprint fake\u2028\u200b';
     const slip = await signSlip({ agentKeys: w.agent.keys, passkey, purpose: hostile, issuerName: `Sam${hostile}`, agentName: `Agent${hostile}` });
     assert.equal((await w.hand({ kind: 'renewal', slip })).code, 'passkey-not-trusted');
     const r = await admitAt(w, T, 'leave it');
@@ -265,7 +265,9 @@ test('printable shows a value between quotation marks, with the quotation mark a
 test('printable escapes the blank-looking spaces, the characters that are ignored when shown, private-use and unassigned code points', () => {
   const escaped = (ch) => {
     const shown = printable(`a${ch}b`);
-    return !shown.includes(ch) && /^"a(\\u[0-9a-f]{4})+b"$/.test(shown);
+    // "a", then one or more \uXXXX escapes and nothing else, then "b", in quotation marks.
+    const between = shown.startsWith('"a') && shown.endsWith('b"') ? shown.slice(2, -2) : '';
+    return !shown.includes(ch) && between !== '' && between.replace(/\\u[0-9a-f]{4}/g, '') === '';
   };
   // Every space separator but the plain space: no-break, en quad to hair space, narrow no-break, medium mathematical, ideographic, Ogham.
   for (const ch of ['\u{a0}', '\u{1680}', '\u{2000}', '\u{2007}', '\u{200a}', '\u{202f}', '\u{205f}', '\u{3000}']) assert.ok(escaped(ch), `U+${ch.codePointAt(0).toString(16)}`);

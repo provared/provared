@@ -2985,7 +2985,7 @@ export async function admitWaiting(folder, port, given, { answer = firstLineType
     say(`Nothing is taken without a thumbprint. ${fromSigningWindow} Then: ${RUN} admit-passkey <the thumbprint>`);
     return 0;
   }
-  if (!new RegExp(`^[A-Za-z0-9_-]{${least},43}$`).test(given)) {
+  if (!/^[A-Za-z0-9_-]*$/.test(given) || given.length < least || given.length > 43) {
     say(`Give at least ${least} characters of the passkey's thumbprint, as the signing window shows it after you sign (letters, digits, "-" and "_"): paste it from the signing window, where it can be trusted. Nothing was changed.`);
     return 2;
   }

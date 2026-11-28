@@ -224,7 +224,8 @@ test('the options for tests cannot change the folder or the port the full record
 test('tool calls sent throughout the switch are each answered, refused or allowed, and none finds the port closed', async () => {
   const gate = gateAt('checked');
   const w = await waitingWorld({ faults: gate.faults });
-  let going = true;
+  // Aborted to stop the callers below.
+  const stop = new AbortController();
   try {
     const mine = await w.handed();
     const answers = [];
@@ -237,7 +238,7 @@ test('tool calls sent throughout the switch are each answered, refused or allowe
       }
     };
     const callers = Array.from({ length: 4 }, async () => {
-      while (going) await ask();
+      while (!stop.signal.aborted) await ask();
     });
     const taking = w.reader.post('/admit', { fingerprint: mine.fp, thumbprint: mine.T, take: true });
     await within(gate.reached, 20000, 'the admit at its checks');
@@ -246,7 +247,7 @@ test('tool calls sent throughout the switch are each answered, refused or allowe
     // A little longer, under the full recorder, measured on the monotonic clock.
     const after = answers.length;
     for (const until = performance.now() + 10000; answers.length < after + 8 && performance.now() < until;) await new Promise((r) => setTimeout(r, 20));
-    going = false;
+    stop.abort();
     await within(Promise.all(callers), 20000, 'the callers');
     assert.deepEqual(answers.filter((a) => a.error), [], 'every call was answered');
     assert.ok(answers.every((a) => a.code === 200), JSON.stringify(answers.filter((a) => a.code !== 200)));
@@ -255,7 +256,7 @@ test('tool calls sent throughout the switch are each answered, refused or allowe
     assert.equal(answers.at(-1).allowed, true);
   } finally {
     // The callers stop whatever happened above, so that a failure here never leaves them asking.
-    going = false;
+    stop.abort();
     gate.open();
     await w.waiting.close();
   }
