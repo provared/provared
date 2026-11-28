@@ -97,6 +97,9 @@ test('a witness that does not sign now is asked only what it holds: it is shown 
       res.writeHead(back.statusCode, back.headers);
       back.pipe(res);
     });
+    // A connection reset as the test closes the proxy is not a fault of the recorder: end the pair quietly.
+    out.on('error', () => res.destroy());
+    req.on('error', () => out.destroy());
     req.pipe(out);
   });
   await new Promise((done) => proxy.listen(0, '127.0.0.1', done));
