@@ -832,8 +832,8 @@ POST http://127.0.0.1:8794/hand-over      {"kind": "renewal", "slip": …} or {"
   page could open the signing page by such a link. The limit is measured
   by the same clock, so the case of a fast clock above stands. A copy of
   the signing page from before that limit sets none
-  (the page served at https://sign.prova.red is such a copy until it is
-  brought up to date), and there the rule also rests on the
+  (the page served at https://sign.prova.red was such a copy before
+  version 0.9.2), and there the rule also rests on the
   application's page, which could ask for a start further ahead and hold
   the renewal back. A start refused as `starts-later` is remembered in memory
   only, for the last 1,000 refused: after a restart of the recorder, or
