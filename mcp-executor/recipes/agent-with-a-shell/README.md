@@ -18,7 +18,7 @@ not been tried on separate computers.
 | Container | Network | Holds |
 |---|---|---|
 | `provared-example-agent` | the agent's network | a shell (root in its own container), its own secret, and the certificate of the guard's proxy |
-| `provared-example-guard` | both networks | `provared-mcp-executor` 0.5.2 from npm, installed with `npm ci` from `guard/package-lock.json`, so that npm checks each package against its hash; listening on 127.0.0.1; its keys, the permission, the book and the copy; the tool server's token; a TLS proxy on port 8443 |
+| `provared-example-guard` | both networks | `provared-mcp-executor` 0.5.3 from npm, installed with `npm ci` from `guard/package-lock.json`, so that npm checks each package against its hash; listening on 127.0.0.1; its keys, the permission, the book and the copy; the tool server's token; a TLS proxy on port 8443 |
 | `provared-example-tools-server` | the tools network only, which has no route out (`--internal`) | a stand-in tool server that asks for the token, checks it before it reads a body, and reads no body over 4 MiB |
 
 The guard speaks plain HTTP, so something else must encrypt the link to
@@ -61,7 +61,7 @@ hold. Do not run it where those names are in use.
 All seven passed on 7 November 2026, with the official MCP software
 (`@modelcontextprotocol/sdk` 1.32.2) on protocol version 2025-11-25 and
 the guard at 0.3.0. The recipe has not been run since it moved to the
-guard 0.5.2. The SDK and its own dependencies are installed with
+guard 0.5.3. The SDK and its own dependencies are installed with
 `npm ci` from `package-lock.json`, so npm checks each package against its
 hash.
 

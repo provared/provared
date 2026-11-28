@@ -7,7 +7,7 @@
 #
 #   RECIPE=mcp-executor/recipes/claude-ai/compose \
 #   HELPERS=mcp-executor/test/recipe-compose \
-#   TGZ=<folder>/provared-mcp-executor-0.5.2.tgz \
+#   TGZ=<folder>/provared-mcp-executor-0.5.3.tgz \
 #   sh mcp-executor/test/recipe-compose/docker-check.sh
 #
 # It can also run in the official image of the Docker command (docker:cli),
@@ -20,7 +20,7 @@
 #     -v <repository>:/src:ro -v <folder with the .tgz>:/pack:ro \
 #     -e RECIPE=/src/mcp-executor/recipes/claude-ai/compose \
 #     -e HELPERS=/src/mcp-executor/test/recipe-compose \
-#     -e TGZ=/pack/provared-mcp-executor-0.5.2.tgz \
+#     -e TGZ=/pack/provared-mcp-executor-0.5.3.tgz \
 #     docker:29.7.2-cli sh /src/mcp-executor/test/recipe-compose/docker-check.sh
 #
 # What it does: builds the guard's image from the packed file, starts the
