@@ -25,6 +25,8 @@ const { dataFolder, installLibrary, lockFingerprint, lockedVersion, NPM_WORDS, n
 const pluginRoot = resolve(here, '..');
 const repository = resolve(pluginRoot, '..', '..');
 const readJson = (path) => JSON.parse(readFileSync(path, 'utf8'));
+// How the messages name a command run with node: the script, between quotation marks where its path has a space.
+const asRun = (script) => `node ${script.includes(' ') ? `"${script}"` : script}`;
 const manifest = readJson(join(pluginRoot, '.claude-plugin', 'plugin.json'));
 const hooksFile = readJson(join(pluginRoot, 'hooks', 'hooks.json'));
 const marketplace = readJson(join(repository, '.claude-plugin', 'marketplace.json'));
@@ -225,7 +227,7 @@ test('with no library for the plugin, it is never taken from a folder above, and
   const said = JSON.parse(start.out);
   assert.equal(said.systemMessage, said.hookSpecificOutput.additionalContext);
   assert.match(said.systemMessage, /library is not installed for the plugin \(npm could not install/);
-  assert.match(said.systemMessage, /every tool call is refused/);
+  assert.match(said.systemMessage, /each tool call the recorder would check is refused/);
   assert.match(said.systemMessage, /plugin\.mjs install-library/);
   // The person's own command: the same words, and code 1.
   const init = await runPlugin([join(cached, 'plugin.mjs'), 'init'], { env, cwd: project });
@@ -286,6 +288,8 @@ test('with the recorder\'s hooks also in a settings file (the project\'s local o
       assert.match(doubled.decision.permissionDecisionReason, /claude plugin disable provared-recorder@provared/);
       if (where === 'local') assert.match(doubled.decision.permissionDecisionReason, /plugin\.mjs remove-hooks/);
       else assert.match(doubled.decision.permissionDecisionReason, /by hand/);
+      // Word for word: only the calls the recorder checks would be asked about twice, and those are refused.
+      if (where === 'local') assert.equal(doubled.decision.permissionDecisionReason, `Provared: the recorder's hooks are in force twice, from the plugin provared-recorder and from ${join(project, '.claude', 'settings.local.json')}, so each tool call the recorder checks would be asked about and recorded twice. Until one of the two is taken out, each tool call the recorder checks is refused. To take one out: in the project's folder (${resolve(project)}), run: ${asRun(join(pluginRoot, 'plugin.mjs'))} remove-hooks (it takes the recorder's hooks out of .claude/settings.local.json, and changes nothing else there); or turn the plugin off (/plugin, or "claude plugin disable provared-recorder@provared"). Then start Claude Code again, since it reads hooks when a session starts.`);
       if (where !== 'local') continue;
       // The hook of the settings file, which Claude Code runs without naming this plugin's folder, is not refused: with no plugin folder, or another plugin's.
       for (const root of ['', tempFolder('provared-another-plugin-')]) {
@@ -367,6 +371,10 @@ test('before each call the plugin looks only so far: a settings file too large, 
     assert.ok(Date.now() - started < 10000);
     assert.equal(r.decision.permissionDecision, 'deny');
     assert.match(r.decision.permissionDecisionReason, /larger than 1024 KB/);
+    // The start of a session says so, word for word, with the recorder running under its permission.
+    const s = await runPlugin(pluginArgs('SessionStart'), { env: { ...asPlugin(folder, project), PROVARED_CLAUDE_CODE_PORT: String(service.port) }, cwd: project });
+    assert.equal(s.code, 0, s.err);
+    assert.equal(JSON.parse(s.out).systemMessage, `Provared: the settings file ${local} is larger than 1024 KB, so it was not looked through for the recorder's hooks. Before each call the plugin looks there for the recorder's hooks, which would ask about and record each call twice, so each tool call the recorder checks is refused until the file is smaller or the plugin is turned off.`);
   } finally {
     await service.close();
   }
@@ -471,7 +479,7 @@ test('the start of a session, as the plugin, says so where the recorder that ans
     assert.equal(said.systemMessage, said.hookSpecificOutput.additionalContext, 'told to the person and to Claude alike');
     assert.match(said.systemMessage, /The recorder that is running is an earlier version, which does not give its version/);
     assert.match(said.systemMessage, /plugin\.mjs"? stop; .*plugin\.mjs"? ensure/);
-    assert.doesNotMatch(said.systemMessage, /every tool call is refused/);
+    assert.doesNotMatch(said.systemMessage, /tool call it would check is refused|every tool call is refused/);
     assert.deepEqual(asked, ['GET /status'], 'asked its status, and not told to stop');
   } finally {
     earlier.closeAllConnections();
@@ -500,7 +508,7 @@ test('the start of a session says so where the recorder does not start, and keep
     assert.equal(r.code, 0, r.err);
     let said = JSON.parse(r.out);
     assert.match(said.systemMessage, /The recorder did not start/);
-    assert.match(said.systemMessage, /every tool call is refused/);
+    assert.match(said.systemMessage, /each tool call it would check is refused\. The recorder is never asked about a question to the person/);
     // Held back 12 seconds before its own code runs: it still ends within 27 seconds of its start, and says the recorder is still starting.
     started = Date.now();
     r = await runPlugin(pluginArgs('SessionStart'), { env: { ...env, NODE_OPTIONS: delayFor(12000) }, cwd: project });
@@ -558,7 +566,7 @@ test('whatever stops the plugin\'s entry, a call is refused before it is taken, 
     }
     const start = await runPlugin(pluginArgs('SessionStart', copy), { env });
     assert.equal(start.code, 0, what);
-    assert.match(JSON.parse(start.out).systemMessage, /every tool call is refused/, what);
+    assert.match(JSON.parse(start.out).systemMessage, /each tool call the recorder would check is refused/, what);
   }
 });
 
@@ -602,40 +610,48 @@ test('init, through the plugin\'s entry, with --no-hooks, or from Claude Code\'s
   // recorder.mjs run directly finds the library as the other tests' programs do (local-library.mjs).
   const env = { PROVARED_CLAUDE_CODE_DIR: folder, PROVARED_CLAUDE_CODE_PORT: String(port), CLAUDE_CONFIG_DIR: home, CLAUDE_PLUGIN_DATA: dataWithLibrary(), NODE_OPTIONS: process.env.NODE_OPTIONS ?? '' };
   const run = (script, args) => runPlugin(['--disable-warning=ExperimentalWarning', script, ...args], { cwd: project, env });
-  let r = await run(join(pluginRoot, 'recorder.mjs'), ['init', '--no-hook']);
-  assert.equal(r.code, 2, 'a misspelt switch writes nothing');
-  assert.ok(!existsSync(join(folder, 'agent-keys.jwk')));
-  r = await run(join(pluginRoot, 'recorder.mjs'), ['init', '--no-hooks']);
-  assert.equal(r.code, 0, r.err);
-  assert.match(r.out, /No hooks were written \(--no-hooks\)/);
-  assert.match(r.out, /https:\/\/sign\.prova\.red\/#permission=/);
-  assert.ok(!existsSync(join(project, '.claude')));
-  r = await run(join(pluginRoot, 'plugin.mjs'), ['init']);
-  assert.equal(r.code, 0, r.err);
-  assert.match(r.out, /No hooks were written: this copy of the recorder is the Claude Code plugin's/);
-  assert.match(r.out, /plugin\.mjs use <the saved file>/, 'the next command, through the plugin\'s entry');
-  // A copy of the plugin as Claude Code installs it, in its cache, run directly.
-  const cached = cachedCopy(home);
-  r = await run(join(cached, 'recorder.mjs'), ['init']);
-  assert.equal(r.code, 0, r.err);
-  assert.match(r.out, /No hooks were written: this copy of the recorder is the Claude Code plugin's/);
-  assert.ok(!existsSync(join(project, '.claude')));
-  // init from another copy, with the plugin installed: the hooks are written, and the person is warned.
-  writeFileSync(join(home, 'plugins', 'installed_plugins.json'), JSON.stringify({ version: 2, plugins: { [`${manifest.name}@provared`]: [{ scope: 'user', installPath: cached }] } }));
-  r = await run(join(pluginRoot, 'recorder.mjs'), ['init']);
-  assert.equal(r.code, 0, r.err);
-  assert.match(r.out, /The hooks are in /);
-  assert.match(r.out, /Warning: the Claude Code plugin provared-recorder is installed too/);
-  // remove-hooks takes them out again, and says where others are still.
-  writeFileSync(join(project, '.claude', 'settings.json'), JSON.stringify({ hooks: { PostToolUse: [{ hooks: [{ type: 'command', command: `node ${relative(project, join(pluginRoot, 'hook.mjs'))}` }] }] } }));
-  r = await run(join(pluginRoot, 'recorder.mjs'), ['remove-hooks']);
-  assert.equal(r.code, 0, r.err);
-  assert.match(r.out, /Took 4 of the recorder's hooks out of /);
-  assert.match(r.out, /other formatting in it is not kept/);
-  assert.match(r.out, /still in .*settings\.json/);
-  assert.deepEqual(readJson(join(project, '.claude', 'settings.local.json')), { hooks: {} });
-  r = await run(join(pluginRoot, 'recorder.mjs'), ['remove-hooks']);
-  assert.match(r.out, /holds none of the hooks init writes/);
+  // The first init starts the recorder that waits in this fresh folder; the test stops it at the end.
+  try {
+    let r = await run(join(pluginRoot, 'recorder.mjs'), ['init', '--no-hook']);
+    assert.equal(r.code, 2, 'a misspelt switch writes nothing');
+    assert.ok(!existsSync(join(folder, 'agent-keys.jwk')));
+    r = await run(join(pluginRoot, 'recorder.mjs'), ['init', '--no-hooks', '--link']);
+    assert.equal(r.code, 0, r.err);
+    assert.match(r.out, /No hooks were written \(--no-hooks\)/);
+    assert.match(r.out, /https:\/\/sign\.prova\.red\/#permission=/);
+    assert.ok(!existsSync(join(project, '.claude')));
+    r = await run(join(pluginRoot, 'plugin.mjs'), ['init']);
+    assert.equal(r.code, 0, r.err);
+    assert.match(r.out, /No hooks were written: this copy of the recorder is the Claude Code plugin's/);
+    assert.match(r.out, /plugin\.mjs admit-passkey <the thumbprint>/, 'the next command, through the plugin\'s entry');
+    assert.match(r.out, /plugin\.mjs use <the saved file>/, 'and the other way, through the plugin\'s entry');
+    // A copy of the plugin as Claude Code installs it, in its cache, run directly.
+    const cached = cachedCopy(home);
+    r = await run(join(cached, 'recorder.mjs'), ['init']);
+    assert.equal(r.code, 0, r.err);
+    assert.match(r.out, /No hooks were written: this copy of the recorder is the Claude Code plugin's/);
+    assert.ok(!existsSync(join(project, '.claude')));
+    // init from another copy, with the plugin installed: the hooks are written, and the person is warned.
+    writeFileSync(join(home, 'plugins', 'installed_plugins.json'), JSON.stringify({ version: 2, plugins: { [`${manifest.name}@provared`]: [{ scope: 'user', installPath: cached }] } }));
+    r = await run(join(pluginRoot, 'recorder.mjs'), ['init']);
+    assert.equal(r.code, 0, r.err);
+    assert.match(r.out, /The hooks are in /);
+    assert.match(r.out, /Warning: the Claude Code plugin provared-recorder is installed too/);
+    // Word for word: the plugin refuses only the calls the recorder checks.
+    assert.ok(r.out.split('\n').includes(`Warning: the Claude Code plugin provared-recorder is installed too. Where it is turned on, its hooks and these both run, and the plugin refuses each tool call the recorder checks in this project until one of the two is taken out: "${asRun(join(pluginRoot, 'recorder.mjs'))} remove-hooks" takes these out again.`), r.out);
+    // remove-hooks takes them out again, and says where others are still.
+    writeFileSync(join(project, '.claude', 'settings.json'), JSON.stringify({ hooks: { PostToolUse: [{ hooks: [{ type: 'command', command: `node ${relative(project, join(pluginRoot, 'hook.mjs'))}` }] }] } }));
+    r = await run(join(pluginRoot, 'recorder.mjs'), ['remove-hooks']);
+    assert.equal(r.code, 0, r.err);
+    assert.match(r.out, /Took 4 of the recorder's hooks out of /);
+    assert.match(r.out, /other formatting in it is not kept/);
+    assert.match(r.out, /still in .*settings\.json/);
+    assert.deepEqual(readJson(join(project, '.claude', 'settings.local.json')), { hooks: {} });
+    r = await run(join(pluginRoot, 'recorder.mjs'), ['remove-hooks']);
+    assert.match(r.out, /holds none of the hooks init writes/);
+  } finally {
+    await stopService(port);
+  }
 });
 
 test('paths are compared as Windows compares them there, and exactly elsewhere', () => {

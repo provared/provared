@@ -154,14 +154,20 @@ try {
     try {
       answer = await ask('/before', call);
     } catch (e) {
-      deny(notRunning(e) && !existsSync(join(FOLDER, 'slip.json'))
-        ? `Provared: no permission has been signed for this agent yet, so the recorder beside Claude Code is not running, and this call is not recorded and is not taken. Ask the person to set it up, in a terminal: ${RUN} init (it makes the agent's keys and prints a link to https://sign.prova.red/, where they sign the permission with their own passkey), then ${RUN} use <the saved file>. Nothing signs for them.`
+      // With no keys yet, "init" is the first step; with the keys there and no permission, "ensure" starts the recorder, which waits for the first one in a fresh folder.
+      deny(notRunning(e) && !existsSync(join(FOLDER, 'slip.json')) && !existsSync(join(FOLDER, 'agent-keys.jwk'))
+        ? `Provared: no permission has been signed for this agent yet, so the recorder beside Claude Code is not running, and this call is not recorded and is not taken. Ask the person to set it up, in a terminal: ${RUN} init (it makes the agent's keys and starts the recorder, which waits for the first permission, and prints what to do next: the application, or, with "init --link", a link to https://sign.prova.red/, where they sign the permission with their own passkey). Nothing signs for them.`
+        : notRunning(e) && !existsSync(join(FOLDER, 'slip.json'))
+        ? `Provared: no permission has been signed for this agent yet, and the recorder beside Claude Code is not running, so this call is not recorded and is not taken. Ask the person to start it, in a terminal: ${RUN} ensure (where no permission was ever taken, it waits for the first one, and says what to do next). Nothing signs for them.`
         : notRunning(e)
         ? `Provared: the recorder beside Claude Code is not running, so this call is not recorded and is not taken. Ask the person to start it: ${START}`
         : `Provared: the recorder beside Claude Code did not answer (${e.message}), so this call is not recorded and is not taken.`);
       process.exit(0);
     }
-    if (!answer.allowed) {
+    if (!answer.allowed && answer.waiting === true) {
+      // The recorder waits for its first permission (waiting.mjs): the steps, in short, as recorder.mjs says them.
+      deny(`Provared: no permission has been signed for this agent yet: the recorder beside Claude Code waits for the first one, so this call (${action}) is not taken, and nothing is recorded. Ask the person to finish setting it up. Open the application, make a book, copy its one line, and run that line on this computer; then, in the application, under "Approve what it may do", approve what the agent may do in the signing window. Keep the signing window open, and run ${RUN} admit-passkey <the thumbprint>, with the thumbprint the signing window shows pasted in (the whole of it, or at least its first 16 characters), then type yes. Nothing signs for them. ${(answer.problems ?? []).map((f) => `[${f.code}]`).join(' ')}`.trim());
+    } else if (!answer.allowed) {
       const reasons = [...answer.breaches, ...answer.problems].map((f) => `[${f.code}] ${f.message}`).join(' ');
       deny(`Provared: this call (${action}) is outside the permission the person signed, so it is not taken. ${reasons}`);
     }

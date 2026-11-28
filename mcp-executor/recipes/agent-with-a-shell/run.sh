@@ -58,7 +58,7 @@ docker exec "$G" mkdir -p /data /sdk /work
 docker exec "$S" mkdir -p /work /secret
 docker exec "$A" mkdir -p /work
 
-step "install provared-mcp-executor 0.5.2 in the guard container, from its lockfile (guard/package-lock.json: npm checks each package against its hash)"
+step "install provared-mcp-executor 0.5.3 in the guard container, from its lockfile (guard/package-lock.json: npm checks each package against its hash)"
 docker cp guard/package.json "$G":/data/package.json || die "copy guard/package.json"
 docker cp guard/package-lock.json "$G":/data/package-lock.json || die "copy guard/package-lock.json"
 docker exec "$G" sh -c 'cd /data && timeout 300 npm ci --ignore-scripts 2>&1 | tail -3' || die "npm ci of the executor"

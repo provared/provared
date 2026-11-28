@@ -35,8 +35,14 @@
       <p>Your device asks you to confirm it is you before it signs. The first time on this device, it may first ask you to make a passkey for this website, or to choose the passkey you signed with before. The passkey is kept by your device; this page remembers only its public key and identifier, in this browser, so that you can sign again later.</p>
       <p id="return-line" hidden>Where the signed permission goes: <span class="mono" id="return-address"></span>. <span id="return-warning"></span></p>
       <ul id="warnings" class="warnings" hidden></ul>
+      <p id="agent-check-line" hidden><label for="agent-check">Paste the fingerprint your agent's software printed on the agent's computer (for Claude Code, the one <code>init</code> printed), the whole of it or at least its first 16 characters. Copy it there after this window has opened, not before, and check that what this box then shows is what was printed there. This page signs for a key set it has not signed for before only if what you paste matches the fingerprint shown above.</label><br><input id="agent-check" type="text" size="48" spellcheck="false" autocomplete="off"></p>
       <p><button type="button" id="sign" disabled>Sign this permission with a passkey</button></p>
       <p id="sign-status" role="status"></p>
+      <div id="copy-box" tabindex="-1" hidden>
+        <p>The thumbprint of your passkey: <span class="mono" id="copy-thumbprint"></span></p>
+        <p>The permission's fingerprint: <span class="mono" id="copy-fingerprint"></span></p>
+        <p class="quiet">For Claude Code, the command on the agent's computer: <span class="mono" id="copy-command"></span></p>
+      </div>
       <p id="passkey-line" class="quiet" hidden>The thumbprint of your passkey, which whoever checks the record names as the passkey they trust (<code>--issuer</code>): <span class="mono" id="thumbprint"></span></p>
     </li>
     <li id="step3" class="waiting">

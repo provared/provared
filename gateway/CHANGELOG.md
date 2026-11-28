@@ -1,8 +1,22 @@
 # Changelog of provared-gateway
 
-## Unreleased
+## 0.1.1 (28 November 2026)
 
-Version 0.1.0 has not been published. What it holds, as it stands:
+### The fingerprint of the agent's key set (26 November 2026)
+
+- **`keys --agent`** now says on its standard error the fingerprint of the
+  agent's key set, worked out with the library's `keySetFingerprint`, in
+  the guard's words: the signing window asks for it, and it is to be copied
+  only once the window has opened. `keys --recorder` and `keys --gateway`
+  give none. The README says so. Test: `test/cli.test.mjs` (fails without
+  the change).
+- The guard's `keys` and the gateway's `keys --agent` add "If the window
+  says it does not match, the keys it holds are not this agent's: do not
+  sign.", as the recorder's `init` and Hermes's `init` say.
+
+## 0.1.0 (22 November 2026)
+
+The first version on npm. What it holds:
 
 - **The gateway's own countersignature.** A new setting, `gateway`
   (`keys`, the gateway's own key file of Ed25519 and ML-DSA-87; `name`;

@@ -586,8 +586,14 @@ test('init: "disableAllHooks" is pointed out', async () => {
   const { dir } = project('{"disableAllHooks": true}');
   assert.equal(writeHooks(dir).switchedOff, true);
   const folder = tempFolder();
-  const r = await runCommand(['init'], { folder, port: await freePort(), cwd: dir });
-  assert.equal(r.code, 0, r.err);
-  assert.match(r.out, /"disableAllHooks": true, so Claude Code runs no hook/);
-  assert.ok(existsSync(join(folder, 'agent-keys.jwk')));
+  const port = await freePort();
+  try {
+    const r = await runCommand(['init'], { folder, port, cwd: dir });
+    assert.equal(r.code, 0, r.err);
+    assert.match(r.out, /"disableAllHooks": true, so Claude Code runs no hook/);
+    assert.ok(existsSync(join(folder, 'agent-keys.jwk')));
+  } finally {
+    // "init" started the recorder that waits in this fresh folder.
+    await stopService(port);
+  }
 });

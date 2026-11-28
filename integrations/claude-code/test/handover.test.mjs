@@ -19,7 +19,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 const { assembleCancellation, checkBook, prepareCancellation, thumbprint } = await import('provared');
 const { developmentPasskey } = await import('provared/dev');
 const { FEED_LABELS, FEED_MAX_HANDING, FEED_MAX_HAND_OVER_BYTES, feedHmac, feedReader } = await import('../feed.mjs');
-const { HAND_OVER_ALLOWANCE_MS, MAX_WAITING_PERMISSIONS, SIGNING_ORIGIN, readTrusted, readWaitingPermissions, retirePasskey, signingOriginsFrom, startService } = await import('../recorder.mjs');
+const { HAND_OVER_ALLOWANCE_MS, MAX_WAITING_PERMISSIONS, admitWaiting, SIGNING_ORIGIN, readTrusted, readWaitingPermissions, retirePasskey, signingOriginsFrom, startService } = await import('../recorder.mjs');
 const { runCommand, runHook, signSlip, status, world } = await import('./world.mjs');
 
 const read = (folder, name) => readFileSync(join(folder, name), 'utf8');
@@ -39,7 +39,7 @@ async function running(more = LOCAL) {
     assert.equal(r.proved, true);
     return r.body;
   };
-  return { ...w, service, port: service.port, hand };
+  return { ...w, service, port: service.port, hand, reader };
 }
 
 async function cancel(passkey, slipFingerprint, when = Date.now()) {
@@ -48,6 +48,13 @@ async function cancel(passkey, slipFingerprint, when = Date.now()) {
 }
 
 const pre = (port, id) => runHook(port, 'PreToolUse', 'Bash', { command: `npm run ${id}` }, { more: { tool_use_id: id } });
+
+// "admit-passkey" as a person runs it at a terminal, typing "typed" (from a pipe it takes nothing): its exit code and words.
+async function typedAt(w, given, typed) {
+  const said = [];
+  const code = await admitWaiting(w.folder, w.port, given, { answer: async () => typed, terminal: true, say: (words) => said.push(words) });
+  return { code, out: said.join('\n') };
+}
 
 test('a renewal handed over from a passkey the recorder trusts is taken, once; the agent acts under it at once', async () => {
   const w = await running();
@@ -82,18 +89,18 @@ test('a renewal from a passkey the recorder does not trust is refused and report
     const first = (await status(w.port)).slip;
     assert.deepEqual(kinds(w.folder), ['slip']);
     // On this computer, the command shows the permission waiting, and takes nothing unless the person types "yes".
-    const declined = await runCommand(['admit-passkey', T], { folder: w.folder, port: w.port, input: 'no\n' });
+    const declined = await typedAt(w, T, 'maybe');
     assert.equal(declined.code, 1);
     assert.match(declined.out, new RegExp(`Passkey \\(thumbprint\\)\\s+${T}`));
-    assert.match(declined.out, /Signed at\s+http:\/\/localhost/);
+    assert.match(declined.out, /Signed at\s+"http:\/\/localhost"/);
     assert.match(declined.out, /Nothing was changed/);
     assert.equal(readTrusted(w.folder).includes(T), false);
     assert.equal((await status(w.port)).slip, first);
     // Nothing typed at all: nothing is changed either.
-    assert.equal((await runCommand(['admit-passkey', T], { folder: w.folder, port: w.port })).code, 1);
+    assert.equal((await typedAt(w, T, '')).code, 1);
     assert.equal(readTrusted(w.folder).includes(T), false);
-    const admitted = await runCommand(['admit-passkey', T], { folder: w.folder, port: w.port, input: 'yes\n' });
-    assert.equal(admitted.code, 0, admitted.err);
+    const admitted = await typedAt(w, T, 'yes');
+    assert.equal(admitted.code, 0, admitted.out);
     assert.match(admitted.out, /is trusted from now on, with the permission it signed/);
     assert.equal(readTrusted(w.folder).includes(T), true);
     assert.deepEqual(kinds(w.folder), ['slip', 'slip']);
@@ -101,9 +108,9 @@ test('a renewal from a passkey the recorder does not trust is refused and report
     assert.equal((await w.hand({ kind: 'renewal', slip: renewal })).outcome, 'already');
     // A passkey never trusted, with nothing waiting from it: nothing is admitted.
     const another = await thumbprint((await developmentPasskey()).key);
-    const none = await runCommand(['admit-passkey', another], { folder: w.folder, port: w.port, input: 'yes\n' });
+    const none = await typedAt(w, another, 'yes');
     assert.equal(none.code, 1);
-    assert.match(none.out, /No permission signed by the passkey/);
+    assert.match(none.out, /No permission from a passkey starting with/);
     assert.equal(readTrusted(w.folder).includes(another), false);
   } finally {
     await w.service.close();
@@ -535,7 +542,7 @@ test('a renewal that starts more than five minutes ahead when handed over is ref
   }
 });
 
-test('"admit-passkey" runs the hand-over\'s checks: a renewal from a new passkey that waits from before a cancellation is dropped, not taken, and the agent stays stopped', async () => {
+test('"admit-passkey" runs the hand-over\'s checks: a renewal from a new passkey that waits from before a cancellation is left waiting, not taken, and the agent stays stopped', async () => {
   const w = await running();
   try {
     const mine = await developmentPasskey(); // the person's second passkey, not yet trusted here
@@ -546,13 +553,13 @@ test('"admit-passkey" runs the hand-over\'s checks: a renewal from a new passkey
     assert.equal((await w.hand({ kind: 'cancellation', cancellation: await cancel(w.passkey, (await status(w.port)).slip) })).outcome, 'taken');
     // Handed over again after the cancellation: it still waits (its passkey is looked at first).
     assert.equal((await w.hand({ kind: 'renewal', slip: early })).code, 'passkey-not-trusted');
-    const out = await runCommand(['admit-passkey', T], { folder: w.folder, port: w.port, input: 'yes\n' });
+    const out = await typedAt(w, T, 'yes');
     assert.equal(out.code, 1, out.out);
-    assert.match(out.out, /Dropped from the list, and not taken/);
+    assert.match(out.out, /Not taken, and left waiting/);
     assert.match(out.out, /less than 5 minutes after the person's cancellation/);
-    assert.match(out.out, /Nothing is left waiting from the passkey/);
+    assert.match(out.out, /Nothing from the passkey .* can be taken now/);
     assert.equal(readTrusted(w.folder).includes(T), false, 'the passkey is not admitted');
-    assert.equal(readWaitingPermissions(w.folder).length, 0, 'dropped from the list');
+    assert.equal(readWaitingPermissions(w.folder).length, 1, 'left in the list: a check drops nothing');
     assert.deepEqual(kinds(w.folder), ['slip', 'cancellation', 'acknowledgement']);
     assert.equal((await pre(w.port, 'after-admit')).decision.permissionDecision, 'deny', 'the agent stays stopped');
   } finally {
@@ -590,9 +597,9 @@ test('"admit-passkey" shows only what that passkey signed, by the permission its
     const list = JSON.parse(read(w.folder, 'waiting-permissions.json'));
     list.permissions[0].thumbprint = T;
     writeFileSync(path, JSON.stringify(list));
-    const out = await runCommand(['admit-passkey', T], { folder: w.folder, port: w.port, input: 'yes\n' });
+    const out = await typedAt(w, T, 'yes');
     assert.equal(out.code, 1);
-    assert.match(out.out, /No permission signed by the passkey/);
+    assert.match(out.out, /No permission from a passkey starting with/);
     assert.doesNotMatch(out.out, /The stranger's/);
     assert.equal(readWaitingPermissions(w.folder).length, 1, 'the stranger\'s still waits');
     assert.equal(readTrusted(w.folder).includes(T), false);
@@ -601,8 +608,8 @@ test('"admit-passkey" shows only what that passkey signed, by the permission its
     const shown = await runCommand(['admit-passkey', S], { folder: w.folder, port: w.port, input: 'no\n' });
     assert.match(shown.out, new RegExp(`Passkey \\(thumbprint\\)\\s+${S}`));
     assert.match(shown.out, /The stranger's/);
-    // And the service itself takes nothing for one passkey that another signed.
-    const said = await (await fetch(`http://127.0.0.1:${w.port}/admit`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slip: list.permissions[0].slip, thumbprint: T, take: true }) })).json();
+    // And the service itself takes nothing for one passkey that another signed (asked with the feed's proof, as the command asks).
+    const said = (await w.reader.post('/admit', { fingerprint: list.permissions[0].fingerprint, thumbprint: T, take: true })).body;
     assert.equal(said.code, 'other-passkey');
     assert.deepEqual(kinds(w.folder), ['slip']);
   } finally {
@@ -624,7 +631,7 @@ test(`the waiting list keeps one permission for each passkey, the one that start
     assert.equal(waiting[0].thumbprint, T);
     assert.equal(waiting[0].slip.payload, newer.payload, 'the one that starts latest, though handed over first');
     const shown = await runCommand(['admit-passkey', T], { folder: w.folder, port: w.port, input: 'no\n' });
-    assert.match(shown.out, /Purpose\s+NEWER/);
+    assert.match(shown.out, /Purpose\s+"NEWER/);
     assert.doesNotMatch(shown.out, /OLDER/);
     // A later one replaces it.
     const latest = await signSlip({ agentKeys: w.agent.keys, passkey: mine, from: Date.now() + 2000, purpose: 'LATEST' });
@@ -710,7 +717,7 @@ test('"admit-passkey" with two waiting from one passkey (a list written by an ea
     const both = await runCommand(['admit-passkey', T], { folder: w.folder, port: w.port, input: 'no\n' });
     assert.match(both.out, /2 permissions handed over from the application wait here/);
     assert.ok(both.out.indexOf('NEWER') >= 0 && both.out.indexOf('NEWER') < both.out.indexOf('OLDER'), 'the one that starts latest first');
-    const took = await runCommand(['admit-passkey', T], { folder: w.folder, port: w.port, input: 'yes\n' });
+    const took = await typedAt(w, T, 'yes');
     assert.equal(took.code, 0, took.out);
     assert.equal((await status(w.port)).slip, kept.fingerprint, 'the one that starts latest is taken');
     assert.equal(readTrusted(w.folder).includes(T), true);

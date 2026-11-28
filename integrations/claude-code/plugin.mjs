@@ -66,7 +66,7 @@ try {
     // From here hook.mjs reads the input, and its own guard answers for whatever goes wrong in it.
     await import('./hook.mjs');
   } else if (!library) {
-    const words = `Provared: the recorder beside Claude Code cannot run, because its library is not installed for the plugin (${problem}). Until it is, every tool call is refused: no record, no action. ${remedy}`;
+    const words = `Provared: the recorder beside Claude Code cannot run, because its library is not installed for the plugin (${problem}). Until it is, each tool call the recorder would check is refused: no record, no action. ${remedy}`;
     if (command === 'session-start') {
       console.log(JSON.stringify({ systemMessage: words, hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: words } }));
     } else {
@@ -92,7 +92,7 @@ try {
     console.error(`Provared: the plugin's hook failed (${e && e.message ? e.message : e}). The call is not checked or recorded.`);
     process.exit(2);
   } else if (command === 'session-start') {
-    const words = `Provared: the plugin could not run (${e && e.message ? e.message : e}), so every tool call is refused: no record, no action. If its files are damaged, install it again (/plugin).`;
+    const words = `Provared: the plugin could not run (${e && e.message ? e.message : e}), so each tool call the recorder would check is refused, and where the plugin's hook cannot run either, every other tool call too: no record, no action. If its files are damaged, install it again (/plugin).`;
     console.log(JSON.stringify({ systemMessage: words, hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: words } }));
   } else {
     console.error(`Provared: the plugin could not run (${e && e.message ? e.message : e}).`);

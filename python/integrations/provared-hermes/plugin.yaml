@@ -1,5 +1,5 @@
 name: provared
-version: 0.1.0
+version: 0.1.1
 description: "Checks each tool call against a permission a person signed with a passkey, runs only what it allows, and keeps a signed receipt of every call in a book anyone can check. Evidence, not a verdict. Runs only in Hermes's own process (plugins.isolation: in_process)."
 author: Pavel Izmaylov
 license: Apache-2.0

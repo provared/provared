@@ -1,4 +1,4 @@
-// The link "init" prints, read by the signing page's own code: the page's
+// The link "init --link" prints, read by the signing page's own code: the page's
 // reading of its address is a plain function (readStartingPermission in
 // page/sign-page.js), tested here without a browser. The page's other
 // behaviour is tried in a browser by hand; the repository has no browser
@@ -11,7 +11,7 @@ import { test } from 'node:test';
 const { keySetFingerprint, toBase64url, utf8 } = await import('provared');
 const { EXAMPLE, agentKeySet, readStartingPermission, serviceWords, shownByItself } = await import('../../../page/sign-page.js');
 const { loadAgentKeys, makeAgentKeys, signingLink, startingPermission } = await import('../recorder.mjs');
-const { freePort, runCommand, tempFolder } = await import('./world.mjs');
+const { freePort, runCommand, stopService, tempFolder } = await import('./world.mjs');
 
 test('the page offers to sign only where it is shown by itself, not inside another page', () => {
   const alone = {};
@@ -37,16 +37,21 @@ test('init and keys print the fingerprint of the agent\'s key set, exactly as th
   const project = tempFolder('provared-project-');
   const port = await freePort();
   const printed = (out) => (out.match(/The fingerprint of the agent's key set: ([A-Za-z0-9_-]{43})/) ?? [])[1];
-  const init = await runCommand(['init'], { folder, port, cwd: project });
-  assert.equal(init.code, 0, init.err);
-  const keys = await runCommand(['keys'], { folder, port });
-  assert.equal(keys.code, 0, keys.err);
-  const { fingerprint } = await agentKeySet((await loadAgentKeys(folder)).keys);
-  assert.equal(printed(init.out), fingerprint);
-  assert.equal(printed(keys.out), fingerprint);
-  // The page shows the same, for the permission the link carries.
-  const link = init.out.split('\n').map((l) => l.trim()).find((l) => l.startsWith('https://sign.prova.red/#permission='));
-  assert.equal((await agentKeySet(readStartingPermission(new URL(link).hash).permission.agent.keys)).fingerprint, fingerprint);
+  // "init" starts the recorder that waits in this fresh folder, and prints the link only with --link.
+  try {
+    const init = await runCommand(['init', '--link'], { folder, port, cwd: project });
+    assert.equal(init.code, 0, init.err);
+    const keys = await runCommand(['keys'], { folder, port });
+    assert.equal(keys.code, 0, keys.err);
+    const { fingerprint } = await agentKeySet((await loadAgentKeys(folder)).keys);
+    assert.equal(printed(init.out), fingerprint);
+    assert.equal(printed(keys.out), fingerprint);
+    // The page shows the same, for the permission the link carries.
+    const link = init.out.split('\n').map((l) => l.trim()).find((l) => l.startsWith('https://sign.prova.red/#permission='));
+    assert.equal((await agentKeySet(readStartingPermission(new URL(link).hash).permission.agent.keys)).fingerprint, fingerprint);
+  } finally {
+    await stopService(port);
+  }
 });
 
 test('the link init prints opens the page with the agent\'s permission filled in, and the page\'s own times', async () => {

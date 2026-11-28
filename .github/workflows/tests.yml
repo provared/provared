@@ -120,9 +120,10 @@ jobs:
   # repository's own library (test/local-library.mjs in each folder); the
   # conformance kit loads the library's files from this repository
   # directly. So they test the library as it is in this commit, not a
-  # published version. Nothing is installed: the MCP executor's only
-  # runtime dependency is the library, and the pages of its owner's check
-  # are served the library's files from this repository too.
+  # published version. Nothing is installed but, for the recorder, the
+  # uploader's dependencies (below): the MCP executor's only runtime
+  # dependency is the library, and the pages of its owner's check are
+  # served the library's files from this repository too.
   javascript-packages:
     name: ${{ matrix.package }}
     runs-on: ubuntu-latest
@@ -138,10 +139,42 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
+      # The recorder's tests load the uploader (connect/), whose own
+      # dependencies are installed here: the exact versions in
+      # connect/package-lock.json; no install script runs.
+      - name: Install the uploader's dependencies
+        if: matrix.package == 'integrations/claude-code'
+        working-directory: connect
+        run: npm ci --ignore-scripts --no-audit --no-fund
       # As "npm test" in each folder, without hiding warnings.
       - name: Run the tests
         working-directory: ${{ matrix.package }}
         run: set -o pipefail; node --test test/*.test.mjs 2>&1 | tee "$RUNNER_TEMP/test-output.txt"
+      - name: Fail on any warning but the expected one
+        run: sh tools/lint/node-warnings.sh "$RUNNER_TEMP/test-output.txt"
+
+  # The uploader beside the recorder (connect/). Its tests point the name
+  # "provared" at this repository's own library, as above, but through
+  # --import, as its "npm test" does; its own dependencies are the exact
+  # versions in connect/package-lock.json, with no install script run.
+  connect:
+    name: connect
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: Install the dependencies
+        working-directory: connect
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      # As "npm test" there, without hiding warnings.
+      - name: Run the tests
+        working-directory: connect
+        run: set -o pipefail; node --import ./test/local-library.mjs --test --test-timeout=180000 --test-force-exit test/*.test.mjs 2>&1 | tee "$RUNNER_TEMP/test-output.txt"
       - name: Fail on any warning but the expected one
         run: sh tools/lint/node-warnings.sh "$RUNNER_TEMP/test-output.txt"
 

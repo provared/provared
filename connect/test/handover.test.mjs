@@ -13,7 +13,7 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createCryptoCore } from '@microtoll/crypto-core';
 import { assembleCancellation, assembleSlip, formatTime, prepareCancellation, prepareSlip, thumbprint } from 'provared';
 import { developmentPasskey } from 'provared/dev';
@@ -176,12 +176,15 @@ test('a renewal from a passkey the agent\'s computer does not trust is refused a
   const shown = r.answered('no', 'admit-passkey', T);
   assert.equal(shown.status, 1);
   assert.ok(shown.stdout.includes(T), shown.stdout);
-  assert.match(shown.stdout, /Purpose\s+From another passkey\./);
+  assert.match(shown.stdout, /Purpose\s+"From another passkey\."/);
   assert.match(shown.stdout, /Nothing was changed/);
   assert.equal(JSON.parse(readFileSync(join(r.folder, 'trusted-passkeys.json'), 'utf8')).passkeys.includes(T), false);
-  // The person confirms: the passkey is taken with that permission, which the book now holds.
-  const admitted = r.answered('yes', 'admit-passkey', T);
-  assert.equal(admitted.status, 0, admitted.stderr || admitted.stdout);
+  // The person confirms, typing "yes" at a terminal (the recorder takes nothing typed into a pipe): the passkey is
+  // taken with that permission, which the book now holds.
+  const { admitWaiting } = await import(pathToFileURL(recorderFile).href);
+  const said = [];
+  const admitted = await admitWaiting(r.folder, r.port, T, { answer: async () => 'yes', terminal: true, say: (words) => said.push(words) });
+  assert.equal(admitted, 0, said.join('\n'));
   assert.deepEqual(kinds(r.book()), ['slip', 'slip']);
   // A minute later it is handed over again: the book holds it already.
   clock.now += 61000;
@@ -241,6 +244,18 @@ test('what the book keeps is read with the book\'s key: content the server chang
   const h = createHandover({ feed: { handOver: async () => { handed++; return { outcome: 'taken' }; } }, readKept: side.readKept, putOutcomes: async () => {}, log: quiet });
   await assert.rejects(h.round());
   assert.equal(handed, 0);
+});
+
+test('a record the recorder refuses because it is still starting ("not-started") is handed over again in the next round', async () => {
+  const slip = { payload: Buffer.from(JSON.stringify({ validFrom: '2026-11-01T10:00:00.000Z' })).toString('base64url') };
+  const answers = [{ outcome: 'refused', code: 'not-started' }, { outcome: 'taken' }];
+  let handed = 0;
+  const clock = { now: Date.now() };
+  const h = createHandover({ feed: { handOver: async () => answers[handed++] }, readKept: async () => ({ renewals: [{ slip }], cancellations: [] }), putOutcomes: async () => {}, log: quiet, now: () => clock.now, againMs: 1000 });
+  assert.deepEqual((await h.round()).map((a) => a.code), ['not-started']);
+  clock.now += 1001;
+  assert.deepEqual((await h.round()).map((a) => a.outcome), ['taken']);
+  assert.equal(handed, 2);
 });
 
 test('the note of outcomes opens only for its own book, and holds only outcomes in its form', async () => {

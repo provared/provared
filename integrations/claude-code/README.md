@@ -27,26 +27,65 @@ The first line installs the package from npm, with its one dependency,
 the library `provared`. To install it from a copy of the repository
 instead: `git clone https://github.com/provared/provared.git`, then, in
 `provared/integrations/claude-code`, `npm pack` and
-`npm install -g provared-claude-code-0.1.1.tgz` (`npm pack` makes the
+`npm install -g provared-claude-code-0.2.0.tgz` (`npm pack` makes the
 package as npm would, so that `provared` is installed with it).
 
-`init` makes the agent's keys, writes the hooks into the project's
-`.claude/settings.local.json` (next to anything already there), and
-prints a link and **the fingerprint of the agent's key set** (`keys`
-prints it too). **Open the link in a browser:** the signing page
-opens with a starting permission for this agent filled in. (The link
-begins `https://sign.prova.red/`, the signing page's own address since
-25 October 2026; a link printed by an earlier version begins
+`init` makes the agent's keys and writes the hooks into the project's
+`.claude/settings.local.json` (next to anything already there). In a
+fresh folder, one where no permission was ever taken ("The first
+permission, while the recorder waits", below), it then starts the
+recorder in the background, and the recorder **waits for the agent's
+first permission**: until one is taken, each tool call it checks is
+refused and nothing is recorded (the eight tools above go ahead, as the
+recorder is never asked about them). `init` prints **the fingerprint of
+the agent's key set** (`keys` prints it too) and the next steps, with no
+link:
+
+1. Open the Provared application, make a book, copy its one line, and run
+   that line on this computer. It starts the application's uploader
+   beside the recorder (the package `provared-connect`).
+2. In the application, under "Approve what it may do", choose what the
+   agent may do, and confirm it in the signing window with your passkey.
+   The signing window asks for the fingerprint of the agent's key set:
+   copy the one `init` printed only once the window has opened, paste it
+   there (the whole of it, or at least its first 16 characters), and check
+   that what the box then shows is the one printed. If the window says it
+   does not match, the keys it holds are not this agent's: do not sign.
+3. Keep the signing window open. The uploader hands the signed permission
+   to the recorder, which keeps it waiting and does not take it by itself.
+   On this computer, in a terminal, run
+
+   ```
+   provared-claude-code admit-passkey <the thumbprint>
+   ```
+
+   with the passkey's thumbprint pasted from the signing window (the whole
+   of it, or at least its first 16 characters), not from the application.
+   It shows the permission handed over: compare its fingerprint with the
+   one the signing window shows, then type `yes`.
+
+The Provared application is not yet open to other people. Without it,
+`init --link` prints, as well as the fingerprint, a link to the signing
+page, which opens with a starting permission for this agent filled in.
+(The link begins `https://sign.prova.red/`, the signing page's own address
+since 25 October 2026; a link printed by an earlier version begins
 `https://prova.red/sign/`, which now says so: open the same link with that
-part replaced by `https://sign.prova.red/`.)
-Write your name and read the permission: the page shows the same
-fingerprint of the agent's key set, and if it differs from the one
-`init` printed, the page holds someone else's keys, so do not sign. Change
-the permission if you wish, sign with your passkey, and save the file it
-gives you. Keep the passkey's thumbprint the page shows. The part of the
-link after `#` stays in your browser; it is never sent to any server. The
-page offers nothing to sign when another site shows it inside its own
-page: open it in a tab of its own.
+part replaced by `https://sign.prova.red/`.) Write your name and read the
+permission. Change it if you wish, sign with your passkey, and save the
+file it gives you. Keep the passkey's thumbprint the page shows. The part
+of the link after `#` stays in your browser; it is never sent to any
+server. The page offers nothing to sign when another site shows it inside
+its own page: open it in a tab of its own.
+
+The signing page as this repository holds it (`page/`) asks for the
+fingerprint, and hands a first permission back to the application only
+when you press its button, so that you can copy the thumbprint first. It
+is served at `sign.prova.red` from version 0.9.2. The copy of the
+page at version 0.9.1 of this repository does not ask for the
+fingerprint: it shows it, for you to compare with the one `init` printed.
+It hands the permission back as soon as it is signed, and closes its
+window a second after the application says it kept it; copy the
+thumbprint before then, or save the file and run `use`.
 
 ```
 provared-claude-code use ~/Downloads/slip.json
@@ -54,10 +93,13 @@ claude
 provared-claude-code check --issuer <your passkey's thumbprint>
 ```
 
-`use` puts the signed permission in place and starts the recorder.
-From then on Claude Code's tool calls in that project, except the eight
-above, are checked and recorded. `check` gives the checker's answer for the book, trusting the
-passkey you name and no other.
+`use` puts the signed permission in place and starts the recorder (where
+the recorder waits, `use` checks the file first, then stops the waiting
+recorder and starts it again with the permission). From then on, after
+`use` or after `admit-passkey` and `yes`, Claude Code's tool calls in that
+project, except the eight above, are checked and recorded. `check` gives
+the checker's answer for the book, trusting the passkey you name and no
+other.
 
 On Windows, if PowerShell refuses to run the command, write
 `provared-claude-code.cmd` in its place.
@@ -81,7 +123,7 @@ Adding the marketplace downloads a copy of this repository (about 60 MB);
 integrations/claude-code` downloads only the two folders the plugin uses.
 
 Claude Code copies this folder into its plugin cache
-(`~/.claude/plugins/cache/provared/provared-recorder/0.1.1/`). The library
+(`~/.claude/plugins/cache/provared/provared-recorder/0.2.0/`). The library
 `provared` comes separately:
 
 - Some versions of Claude Code install it beside the plugin, from
@@ -104,13 +146,13 @@ Claude Code copies this folder into its plugin cache
   where an unrelated copy could be.
 - The witness (`provared-witness`) has no entry in the plugin: run it from
   a copy installed from npm, or from a copy of the repository.
-- If it cannot be installed (no npm, no network), the session says so, every
-  tool call is refused, and each refusal gives the one command that mends
-  it: `node <the plugin's folder>/plugin.mjs install-library`.
+- If it cannot be installed (no npm, no network), the session says so,
+  each tool call the recorder would check is refused, and each refusal
+  gives the one command that mends it: `node <the plugin's folder>/plugin.mjs install-library`.
 
 A plugin is installed for you in every project unless you say otherwise
-(the scope "user"). From then on every tool call that is recorded, in
-every session, is refused until you have signed a permission: no
+(the scope "user"). From then on each tool call the recorder checks, in
+every session, is refused until a permission you signed is taken: no
 record, no action. To
 record one project only, install it from that project's folder with
 `claude plugin install provared-recorder@provared --scope local`, or
@@ -120,13 +162,22 @@ The first session after installing says what to do, and so does each
 call it refuses:
 
 1. In a terminal: `node <the plugin's folder>/plugin.mjs init`. Claude
-   Code's message gives the whole path. `init` makes the agent's keys and
-   prints a link to https://sign.prova.red/ with the fingerprint of the
-   agent's key set; run through the plugin, it writes no hooks.
-2. Open the link, write your name, read the permission, compare the
-   fingerprint with the one `init` printed, sign with your passkey, and
-   save the file the page gives you.
-3. `node <the plugin's folder>/plugin.mjs use <the saved file>`
+   Code's message gives the whole path. `init` makes the agent's keys,
+   starts the recorder, which waits for the agent's first permission, and
+   prints the fingerprint of the agent's key set and the steps; run
+   through the plugin, it writes no hooks.
+2. Run the book's line from the Provared application on this computer,
+   approve what the agent may do in the application, and confirm it in
+   the signing window with your passkey, pasting the fingerprint `init`
+   printed where the window asks for it (as in "From nothing to a recorded
+   session", above). Keep the signing window open.
+3. `node <the plugin's folder>/plugin.mjs admit-passkey <the thumbprint>`,
+   with the thumbprint pasted from the signing window, then type `yes`.
+
+Without the application, `node <the plugin's folder>/plugin.mjs init --link`
+prints a link to https://sign.prova.red/ as well: sign there, save the
+file the page gives you, and run
+`node <the plugin's folder>/plugin.mjs use <the saved file>`.
 
 Nothing signs for you. From then on the tool calls are checked and
 recorded, as with the hooks `init` writes. The other commands (`check`,
@@ -140,10 +191,13 @@ What the plugin brings (`hooks/hooks.json`): the hooks `init` writes,
 before, after, and after a failed call, for every tool, with
 `"onFailure": "block"`, each run through `plugin.mjs`; and, when a
 session starts, `session-start`, which installs the library if it is
-missing, starts the recorder as `ensure` does and, where something stands
-in the way (no library, no permission yet, a recorder that does not start
-or is still starting, or the recorder's hooks in force twice), tells you
-and Claude, so that the refusals that follow are not taken for a fault.
+missing, starts the recorder as `ensure` does (in a fresh folder, the
+recorder that waits for the first permission) and, where something stands
+in the way (no library, no keys yet, a recorder that waits for its first
+permission, with the steps, or that waits holding other keys than the
+folder's, a recorder that does not start or is still starting, or the
+recorder's hooks in force twice), tells you and Claude, so that the
+refusals that follow are not taken for a fault.
 Where all is well it says nothing. It keeps within 27 seconds, inside the
 hook's 30.
 
@@ -198,8 +252,8 @@ JSON only, and leaves any other file as it is.
 
 A hook that reaches the recorder in any other way (a script of your own
 that calls it, a variable of your own, an organisation's managed
-settings) is not recognised, and each call is then asked about and
-recorded twice. Where it finds one, it refuses the call and says how to
+settings) is not recognised, and each call the recorder checks is then
+asked about and recorded twice. Where it finds one, it refuses the call and says how to
 take one of the two out:
 
 - `remove-hooks`, run in the project's folder, takes out of
@@ -284,8 +338,9 @@ which no checker can test.
 
 ## A new permission when the one before ends
 
-A permission ends at the time it states. Sign a new one (run `init`
-again for a fresh link) and take it into the book:
+A permission ends at the time it states. Sign a new one (`init --link`
+prints a fresh link; a renewal signed in the Provared application is
+handed over by its uploader, below) and take it into the book:
 
 ```
 provared-claude-code renew ~/Downloads/slip.json
@@ -311,7 +366,9 @@ the book. The permission before is kept beside it, as
 
 The recorder takes a permission only from a passkey on its list,
 `trusted-passkeys.json` in its folder: the first `use` writes it, with
-that permission's passkey, and only `renew <file> --new-passkey` and
+that permission's passkey, or, while the recorder waits for its first
+permission, `admit-passkey` and `yes` write it as that one passkey
+(below); after that only `renew <file> --new-passkey` and
 `admit-passkey <thumbprint>` (for a permission handed over and waiting,
 below) add to it, both run on this computer, each with a permission that
 passkey signed.
@@ -370,8 +427,8 @@ takes as one file. While a new book cannot be started, the book in force
 goes on growing past 100 MB and costs more with each receipt: on the
 author's computer, at about 256 MB, about 120 thousandths of a second for
 each receipt, about 1.5 GB of memory and over a minute to start, with
-every call refused meanwhile; near 76,000 entries it no longer fits in
-Node.js, and every call is refused. So check `status` when a new book is
+each call it checks refused meanwhile; near 76,000 entries it no longer
+fits in Node.js, and each call it checks is refused. So check `status` when a new book is
 due. To start a new book yourself, at any time:
 
 ```
@@ -402,7 +459,7 @@ the book is as it was, with a seal (run `new-book` again; a book that
 was full is switched at the next start); between the last two, there is
 no `book.jsonl`, and the next start begins one with the permission in
 `slip.json`, which completes the switch, even where that permission has
-ended since (the recorder then starts, refuses every call, and `status`
+ended since (the recorder then starts, refuses each call it checks, and `status`
 and `seal` work). A switch took 1.9 seconds on a
 book of 3,000 receipts (21 MB), measured on the author's computer, most
 of it the seal's quantum-safe signature, and takes longer on a full
@@ -687,20 +744,33 @@ POST http://127.0.0.1:8794/hand-over      {"kind": "renewal", "slip": …} or {"
   waits in `waiting-permissions.json` (nothing in it trusted): at most one
   for each passkey, the one that starts latest, whichever was handed over
   last, and at most eight in all. On this computer, `admit-passkey
-  <thumbprint>` asks the running recorder (it refuses while the recorder
-  is stopped: start it first) to run every check above on each
+  <thumbprint>` takes the passkey's thumbprint, or at least its first 16
+  characters, pasted from the signing window, never from the application:
+  the server between the application and this computer could put a
+  permission signed by anyone's passkey where the uploader reads. The
+  match is exact, with upper and lower case told apart, at the start of
+  the thumbprint worked out from each waiting permission itself; where it
+  matches more than one passkey, nothing is taken, and it asks for more
+  characters. With no thumbprint it only lists what waits. It asks the
+  running recorder (it refuses while the recorder is stopped: start it
+  first), with the feed's proof (below), to run every check above on each
   permission waiting from that passkey, with that one passkey admitted
   for that one permission; one that fails, such as a permission signed
-  before a cancellation, is dropped from the list and said. It then shows
-  what is left in full (the thumbprint of the passkey, worked out from the
-  permission itself; who signed it, where, the agent, what it may do, its
-  limits, its dates, its purpose), the one that starts latest first, and
-  takes that one, with its passkey, only once the person types `yes`
-  there; with no permission waiting from that passkey, it admits nothing.
-  The server between the application and this computer could put a
-  permission signed by anyone's passkey where the uploader reads, so
-  compare the thumbprint shown with the one your signing page or
-  application shows before you type `yes`.
+  before a cancellation, is left waiting, and why is said: the command
+  never writes the list. It then shows what is left in full (the
+  thumbprint of the passkey, worked out from the permission itself; who
+  signed it, where, the agent and the fingerprint of its key set, what it
+  may do, its limits, its dates, its purpose, and the permission's
+  fingerprint), the one that starts latest first. Compare that
+  fingerprint with the one the signing window shows: an older permission
+  of yours, put there again, has another. It takes that one, with its
+  passkey, only once the person types `yes`, and only where the command's
+  input is a terminal (from a pipe or a file it says so and takes
+  nothing). A typed `no` declines it, and it is refused from then on
+  (`declined`; the last 64 declined are remembered); anything else leaves
+  it waiting. Where no permission waits from the passkey named, it admits
+  nothing, says how many others wait, and points to saving the permission
+  from the signing window as a file.
   A retired passkey is refused (`passkey-retired`) until `admit-passkey`
   admits it again. A
   permission that does not pass its check (`not-sound`), or that names
@@ -762,8 +832,8 @@ POST http://127.0.0.1:8794/hand-over      {"kind": "renewal", "slip": …} or {"
   page could open the signing page by such a link. The limit is measured
   by the same clock, so the case of a fast clock above stands. A copy of
   the signing page from before that limit sets none
-  (the page served at https://sign.prova.red is such a copy until it is
-  brought up to date), and there the rule also rests on the
+  (the page served at https://sign.prova.red was such a copy before
+  version 0.9.2), and there the rule also rests on the
   application's page, which could ask for a start further ahead and hold
   the renewal back. A start refused as `starts-later` is remembered in memory
   only, for the last 1,000 refused: after a restart of the recorder, or
@@ -780,17 +850,114 @@ POST http://127.0.0.1:8794/hand-over      {"kind": "renewal", "slip": …} or {"
   can still be taken, as above. Many permissions from passkeys this computer does not
   trust, handed over by the server, can push the person's own waiting
   permission out of `waiting-permissions.json` (eight in all): it is then
-  put in place by file (`renew <file> --new-passkey`). Any program on
+  put in place by file (`use <file>` while the recorder waits for its
+  first permission, `renew <file> --new-passkey` once one is in force).
+  Any program on
   this computer that holds no token can open the four places for records
   handed over and hold each for 10 seconds at a time, so that the
   uploader's records wait; the agent can already stop the uploader, so
-  this gives it nothing new. Any program
-  on this computer can type `yes` to `admit-passkey`, or ask the
-  recorder directly to take a permission and its passkey with nobody
-  typing anything, as it can run `renew --new-passkey`: the evidence that
-  holds is a checker naming the person's own passkey. The application's note of what the recorder did
+  this gives it nothing new. A program on this computer that can read
+  the recorder's folder, and so the feed's token (the agent, which runs
+  as you, among them), can ask the recorder directly to take a permission
+  and its passkey with nobody typing anything, as it can run
+  `renew --new-passkey`; a program that drives a terminal can type `yes`
+  to `admit-passkey`. One that cannot read the folder cannot have a
+  passkey trusted. The evidence that holds is a checker naming the
+  person's own passkey. The application's note of what the recorder did
   with each record is not proved to come from the uploader (see the
   application's README); only the book confirms anything.
+
+### The first permission, while the recorder waits
+
+The recorder waits for a first permission only in a **fresh folder**:
+the agent's keys are there, and none of `slip.json`, `book.jsonl`, a
+kept book (`book-<n>.jsonl`), a kept permission (`slip-<fingerprint>.json`),
+`trusted-passkeys.json` or `held-cancellations.json` is.
+`waiting-permissions.json` may be there, since the waiting recorder
+writes it itself. `init`, `ensure`, `start` and the start of a session
+start the recorder that waits in such a folder. In any other folder
+without `slip.json` the recorder does not start, and `ensure` says so,
+names the files that stand in the way where there are any, and points to
+`use <the saved file>`.
+
+One module (`port.mjs`) makes the recorder's one server on its port, and
+listens once. Every request goes through the same checks first (a web
+page is refused, below), and then to the handler in place: first the
+waiting recorder's (`waiting.mjs`), and, once a permission is taken, the
+full recorder's. The feed is made once, with its token, so the token
+file is there from the waiting recorder's start, and the book's line
+from the application works before any permission is taken. While it
+waits, the recorder writes no book and no line:
+
+- `GET /status` answers `{"waiting": true, ...}`, with its version, the
+  fingerprint of the agent's key set it holds (`agentKeySet`), the
+  recorder's (`sealer`), how many permissions wait, the feed, when it
+  started and its folder.
+- `POST /before` refuses every call it is asked about
+  (`no-permission-yet`); the hook's refusal then gives the steps.
+  `POST /record`, `/seal`, `/renew` and `/new-book` are refused (409,
+  `no-permission-yet`), and nothing is written.
+- The feed lists no book. `GET /agent`, proved as every answer of the
+  feed is, gives the agent's public key set and its fingerprint, worked
+  out from the agent's key file, never the file itself; the full
+  recorder gives it too. The uploader puts it with the book, sealed, for
+  the application to fill in the agent's keys.
+- A first permission handed over (`POST /hand-over`) goes through the
+  checks above that need no permission in force: a sound permission with
+  a valid passkey signature, signed at the signing page, for this agent's
+  keys, not ended, starting no more than 300 seconds ahead, from a passkey
+  not retired, and not one declined. It is then kept in `waiting-permissions.json` and answered
+  `refused` with the code `waits-for-yes`, the passkey's thumbprint and
+  the permission's fingerprint; the uploader hands it over again a minute
+  later. Where one from the same passkey that starts no earlier waits
+  already, nothing is kept (`not-kept`). A cancellation is refused with
+  `nothing-in-force`, and the uploader hands it over again once a
+  permission is in force. Nothing handed over is taken: `slip.json`, the
+  list of trusted passkeys and the book are not written.
+- `POST /admit`, which `admit-passkey` sends, takes one permission at a
+  time (a second, while one runs, is answered `busy`). The recorder takes it from
+  its own waiting list by its fingerprint, never from the request, checks
+  again that the folder is still fresh (`not-fresh`) and runs every check
+  before it writes anything. It then writes the list of trusted passkeys
+  as exactly that one passkey (a list left in the folder is not kept),
+  writes `slip.json`, starts the full recorder on the same port and feed,
+  which writes the permission as the book's first line, and puts it in
+  place in one step: nothing closes and nothing listens again, so each
+  tool call asked meanwhile is answered, refused or allowed. Only then does it answer
+  `taken`. Where the start fails, what it wrote is put back, the
+  recorder goes on waiting, the permission still waits, and the answer is
+  `not-started` with the reason.
+- `use <file>` while the recorder waits checks the file, asks the waiting
+  recorder to stop (`POST /stop` with `{"waiting": true}`, which only a
+  recorder that waits, and is not taking a permission, obeys), waits
+  until the port is free, and then puts the file in place as it does
+  where nothing runs. `renew <file>` says that there is nothing to renew
+  yet, and points to `use` and `admit-passkey`.
+
+`ensure`, `status` (on its standard error, beside the JSON) and the start
+of a session say that the recorder waits, with the steps. Where the agent's
+keys were made again while the recorder waited, `init`, `ensure`, `status`
+and the start of a session say instead that it holds other keys than the
+folder's, give both fingerprints and the cure (`stop`, then `ensure`),
+and give no steps; `init` and `ensure` then end with 1. (`status` still
+prints the JSON and ends with 0.) `ensure`, and `init` through it,
+keep to 20 seconds in all, on the monotonic clock: where nothing answers
+on the port in that time, no recorder is started, they say so, and end
+with 1.
+
+**The feed's proof on two routes.** A request that would make the
+recorder trust a passkey it does not trust, `POST /admit` and `POST /renew`
+with a new passkey, must carry the feed's proof, in either recorder: it
+is asked in a conversation the recorder began, with the token from the
+folder, and proved over the method, the path and every byte of its body,
+once; the answer carries the recorder's proof. Without it the request is
+refused (401) and nothing is written. `admit-passkey`, and `renew` or
+`use` with `--new-passkey` while the recorder runs, ask this way; where
+the token file cannot be read, they say so and take nothing. `/renew`
+with a passkey already trusted, and `/stop`, take no proof. This keeps
+out a program that cannot read the recorder's folder, such as one run by
+another account on the computer. It does not keep out the agent, which
+runs as you and can read the token.
 
 ## Witnesses for the seals
 
@@ -1089,14 +1256,14 @@ version too (`npx provared-check` takes the latest).
 
 | Command | What it does |
 |---|---|
-| `init` | Make the keys if they are missing, write the hooks into this project's `.claude/settings.local.json`, and print the link to sign a permission; with `--no-hooks`, or run from the Claude Code plugin's folder, write no hooks |
-| `use <file>` | Put a signed permission in place and start the recorder; where a book exists already, the same as `renew` |
+| `init` | Make the keys if they are missing, and write the hooks into this project's `.claude/settings.local.json` (with `--no-hooks`, or run from the Claude Code plugin's folder, write none); in a fresh folder, start the recorder in the background, waiting for the agent's first permission, and print the fingerprint of the agent's key set and the steps; in any other folder, start nothing and change nothing in the record but keys it had to make, and say what is there. With `--link`, also print the link to sign a permission on the signing page, for `use <file>`. Ends with 1 where the recorder did not start within 20 seconds, where the recorder that waits holds other keys, or where what answers is another folder's |
+| `use <file>` | Put a signed permission in place and start the recorder (where the recorder waits for its first permission, it stops it first); where a book exists already, the same as `renew` |
 | `renew <file>` | Take a new signed permission into the book, while the recorder runs or not; `--new-passkey` where you signed it with a passkey of yours that signed none before |
 | `retire-passkey <thumbprint>` | Take no new permission from that passkey, with or without `--new-passkey`; what it signed stands, and limits are still counted across the books it signed |
-| `admit-passkey <thumbprint>` | Take new permissions from a retired passkey again; for a passkey this recorder has never trusted (with the recorder running), check the permission it signed that was handed over and refused as every record handed over is checked, show it, and take both only once you type `yes` |
+| `admit-passkey [<thumbprint>]` | Take new permissions from a retired passkey again; for a passkey this recorder has never trusted (with the recorder running), named by its thumbprint or at least its first 16 characters, pasted from the signing window, check the permission it signed that was handed over and waits here as every record handed over is checked, show it, and take both only once you type `yes` at a terminal (`no` declines it); with no thumbprint, list what waits. It asks the recorder with the feed's proof |
 | `start` | Run the recorder in this terminal, and see what it says |
-| `ensure` | Start the recorder in the background if it is not running (the hooks run this when a session starts); where the recorder that answers is not the version installed, say so, with the commands to restart it |
-| `status` | What the recorder holds: the permission, until when, the number of entries, the passkeys whose permissions are in the record and those retired (`trusted`, `retired`), the calls allowed and not yet recorded (`callsNotYetRecorded`), the books kept (`keptBooks`), when a new one is started (`newBookAt`), the feed's token file and how many questions wait (`feed`), and for each witness what it holds and why it is behind (`witnesses`), and whether the permission in force is cancelled (`cancelled`) |
+| `ensure` | Start the recorder in the background if it is not running (the hooks run this when a session starts), within 20 seconds in all; in a fresh folder it waits for the agent's first permission, and `ensure` says so, with the steps; where the recorder that answers is not the version installed, say so, with the commands to restart it |
+| `status` | Where the recorder waits for its first permission: `waiting: true`, the fingerprint of the agent's key set it holds and how many permissions wait, with the steps on the standard error (or, where it holds other keys than the agent's keys in the folder, that and the cure in their place). Otherwise, what the recorder holds: the permission, until when, the number of entries, the passkeys whose permissions are in the record and those retired (`trusted`, `retired`), the calls allowed and not yet recorded (`callsNotYetRecorded`), the books kept (`keptBooks`), when a new one is started (`newBookAt`), the feed's token file and how many questions wait (`feed`), and for each witness what it holds and why it is behind (`witnesses`), and whether the permission in force is cancelled (`cancelled`) |
 | `seal` | Seal the book now, with the recorder's three keys, and ask the witnesses named, waiting up to five seconds while no other request waits |
 | `new-book` | Seal the book, keep it as `book-<n>.jsonl`, and start a new one that begins with the permission in force (done by itself at 90,000 entries, or at 100 MB of text) |
 | `check [file]` | The checker's answer for the book, or, given a name such as `book-1.jsonl`, for a book kept before it. Name your passkey with `--issuer <its thumbprint>`, once for each passkey of yours; without it, `check` lists the passkeys the book's permissions name, as read from the book, and the checker takes none of them as one you trust. It names the witnesses in `witnesses.json` (`--witness`) and hands over the statements kept beside the book (`--seal`), unless you give your own |
@@ -1106,7 +1273,7 @@ version too (`npx provared-check` takes the latest).
 | `session-start` | What the Claude Code plugin runs when a session starts: `ensure`, and what stands in the way, if anything, told to you and to Claude, within 27 seconds |
 | `install-library` | Only through the plugin's entry (`node <the plugin's folder>/plugin.mjs install-library`): install the library into the plugin's data folder now |
 | `stop` | Stop the recorder |
-| `keys` | Make the keys, and print the agent's public keys |
+| `keys` | Make the keys, and print the agent's public keys and the fingerprint of their key set, which the signing window asks for |
 
 `check` runs the library's own command-line checker, so its words and
 its exit code are the checker's: 0 only where the record is intact,
@@ -1120,8 +1287,8 @@ recorder's own:
 npx provared-check ~/.provared/claude-code/book.jsonl --issuer <your passkey's thumbprint> --sealer <the recorder's fingerprint>
 ```
 
-`status` prints the recorder's fingerprint; the signing page shows the
-passkey's thumbprint when it signs.
+`status` prints the recorder's fingerprint (`sealer`); the signing page
+shows the passkey's thumbprint when it signs.
 
 ## How it works
 
@@ -1313,7 +1480,9 @@ The recorder keeps everything in one folder, `~/.provared/claude-code`
 (`agent-keys.jwk`), the recorder's private keys (`recorder-keys.jwk`),
 the permission it acts under (`slip.json`) and those before it, the list
 of passkeys whose permissions are in the record, and which of them are
-retired (`trusted-passkeys.json`), the book (`book.jsonl`), the books kept before it (`book-1.jsonl` and
+retired (`trusted-passkeys.json`), the permissions handed over from
+passkeys it does not trust, which wait for `admit-passkey`, and those
+declined (`waiting-permissions.json`), the book (`book.jsonl`), the books kept before it (`book-1.jsonl` and
 so on), the token of its feed (`feed-token`, above), the witnesses it
 asks, with their tokens (`witnesses.json`), the statements they handed
 back after a seal's line was written (`witnessed/`), and, while `seal`
@@ -1380,9 +1549,14 @@ along with everything else. To keep the record on another disk:
   refuses a body that is not sent as `application/json`; the feed's
   requests carry the proof of its token instead, as before. It refuses
   such a request before it reads the body, and reads and writes nothing
-  for it. Any program on the computer can still use the port, as
-  before: the recorder's own routes ask for no secret, so this holds
-  whoever runs the program.
+  for it. The same checks guard the recorder that waits for its first
+  permission. Any program on the computer can still use the port, as
+  before: the recorder's own routes ask for no secret, but for the two
+  that would make it trust a new passkey (`POST /admit`, and `POST
+  /renew` with a new passkey), which ask for the feed's proof ("The feed's
+  proof on two routes", above). So a program that cannot read the
+  recorder's folder cannot have a passkey trusted; one that can (the
+  agent among them) can.
   The list of trusted passkeys raises the bar; it does not close the
   gap. The evidence that holds is a checker that names your own passkey
   (`check --issuer`, or `provared-check --issuer`): a permission signed
@@ -1474,7 +1648,9 @@ node integrations/claude-code/recorder.mjs init
 
 The first command writes `integrations/claude-code/node_modules/provared`
 as a few small files that only point at the repository's `src/` and
-`bin/`: nothing is linked or copied. The commands are then
+`bin/`: nothing is linked or copied. As from an install, `init` in a
+fresh folder also starts the recorder that waits, in the background;
+`node integrations/claude-code/recorder.mjs stop` stops it. The commands are then
 `node integrations/claude-code/recorder.mjs <command>`, and the
 witness's `node integrations/claude-code/witness.mjs <command>`.
 

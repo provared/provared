@@ -107,7 +107,12 @@ agent did was right.
    The first prints the agent's two public keys. They go into the slip, as
    `agent.keys`, so that the slip names the gateway's keys as the agent's.
    Give the agent a name that says so, for example "Patching agent, through
-   the gateway at gateway.example.internal".
+   the gateway at gateway.example.internal". On its standard error it also
+   says the fingerprint of the agent's key set: the signing window asks for
+   it before the person signs a permission for keys it has not seen, the
+   whole of it or at least its first 16 characters. The second prints the
+   recorder's public keys, with which the books are sealed; they go into
+   no slip, and it gives no fingerprint.
 
    For the gateway's own countersignature, make its key set too:
 
@@ -122,7 +127,13 @@ agent did was right.
 
 4. The person signs the slip with their passkey (on the signing page at
    https://sign.prova.red, or with the library) and the file is saved where the
-   settings say. Its passkey's thumbprint goes into `issuerKeys`.
+   settings say. Where the signing window asks for the fingerprint of the
+   agent's key set, paste the one `keys --agent` printed, copied once the
+   window has opened, and check that the box then shows it; if the window
+   says it does not match, do not sign. (The signing page as this
+   repository holds it asks for it; `sign.prova.red` serves
+   that copy from version 0.9.2.) The passkey's thumbprint
+   goes into `issuerKeys`.
 
 5. Check the settings. This reads every rule and says what it maps to, and
    what is wrong. It prints no credential.

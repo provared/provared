@@ -17,6 +17,11 @@
 // refuses, or holds, is said in a sealed note of outcomes (outcomes.mjs),
 // which the page reads and shows as this uploader's report.
 //
+// ONE FOR EACH PASSKEY. Of the new permissions from one passkey, only the
+// one that starts latest is handed over in a round, of those the recorder
+// has not answered for good, as the waiting recorder keeps one for each
+// passkey.
+//
 // ONCE EACH. A record is handed over until the recorder answers that the
 // book holds it ("taken", "already") or refuses it for good; a refusal the
 // person can put right on that computer (a passkey it does not trust, or
@@ -28,11 +33,12 @@
 // WHEN. As soon as the book's sealed content changes (the engine tells
 // whoever watches the book's shelf), and once a minute besides.
 
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { createAccess, openContent } from '@microtoll/access';
 import { describe } from './book.mjs';
 import { COLLECTION } from './entry.mjs';
 import { readOutcomes, sealOutcomes } from './outcomes.mjs';
+import { sealAgent } from './agent.mjs';
 import { sendAndAwait } from '@microtoll/identity';
 
 export const HAND_OVER_AGAIN_MS = 60000;
@@ -43,8 +49,14 @@ export const HAND_OVER_AGAIN_MS = 60000;
  * before it, and is not handed over.
  */
 export const CANCELLATION_ALLOWANCE_MS = 300 * 1000;
-/** Refusals the person can put right on the agent's computer, or that may pass: handed over again. */
-export const AGAIN = Object.freeze(['passkey-not-trusted', 'passkey-retired', 'cancellation-held', 'failed', 'not-taken']);
+/**
+ * Refusals the person can put right on the agent's computer, or that may
+ * pass: handed over again. "not-started": the recorder was still starting.
+ * "waits-for-yes": a first permission waits there for the person's
+ * thumbprint and "yes"; "nothing-in-force": a cancellation came while no
+ * permission was in force yet, and is handed over again once one is.
+ */
+export const AGAIN = Object.freeze(['passkey-not-trusted', 'passkey-retired', 'cancellation-held', 'failed', 'not-taken', 'not-started', 'waits-for-yes', 'nothing-in-force']);
 
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('base64url');
 
@@ -99,6 +111,23 @@ export function recordsToHand(kept) {
 }
 
 /**
+ * The passkey a renewal is signed with, as its content names it (not
+ * checked here: the recorder checks it), as the text of its key with its
+ * members in order; null where it cannot be read.
+ */
+function passkeyOf(record) {
+  const key = contentOf(record.body.slip)?.issuer?.key;
+  if (!key || typeof key !== 'object' || Array.isArray(key)) return null;
+  return JSON.stringify(Object.keys(key).sort().map((n) => [n, key[n]]));
+}
+
+/** The start a renewal states, in milliseconds; -Infinity where it cannot be read. */
+function startOf(record) {
+  const from = Date.parse(contentOf(record.body.slip)?.validFrom);
+  return Number.isNaN(from) ? -Infinity : from;
+}
+
+/**
  * createHandover({ feed, readKept, putOutcomes, log, now })
  *   feed         the recorder's feed client (upload.mjs: feedClient), with handOver
  *   readKept     () => { renewals, cancellations } that the book keeps, opened; null where it cannot be read now
@@ -115,19 +144,45 @@ export function createHandover({ feed, readKept, putOutcomes, log = console, now
     const kept = await readKept();
     if (!kept) return [];
     const records = recordsToHand(kept);
-    const answers = [];
+    // At most one renewal for each passkey in a round: of those the recorder has not answered for good, the one
+    // that starts latest (the first kept, of two that start alike), as the waiting recorder keeps one for each
+    // passkey. One whose passkey cannot be read is its own. Where the one chosen gets no answer (its hand-over
+    // fails), the passkey's next, by its start, is handed over in the same round: so a record that cannot be
+    // handed over does not keep the others from the same passkey back.
+    const groups = new Map();
     for (const r of records) {
+      if (r.kind !== 'renewal' || handled.get(sha256(JSON.stringify(r.body)))?.due === Infinity) continue;
+      const p = passkeyOf(r) ?? r;
+      if (!groups.has(p)) groups.set(p, []);
+      groups.get(p).push(r);
+    }
+    const heads = new Map();
+    for (const group of groups.values()) {
+      group.sort((a, b) => (startOf(b) > startOf(a)) - (startOf(b) < startOf(a)));
+      heads.set(group[0], group);
+    }
+    const answers = [];
+    // One record handed over: "answered", "failed" (no answer: tried again later) or "not-due".
+    async function handOne(r) {
       const key = sha256(JSON.stringify(r.body));
       const last = handled.get(key);
-      if (last && last.due > now()) continue;
+      if (last && last.due > now()) return 'not-due';
       let answer;
       try {
         answer = await feed.handOver(r.body);
       } catch (e) {
+        if (e.reason === 'too-large') {
+          // Larger than the recorder's feed takes: it never can be handed over, so it is answered for good here.
+          const item = { kind: r.kind, fingerprint: r.fingerprint, outcome: 'refused', code: 'too-large', at: new Date(now()).toISOString() };
+          handled.set(key, { item, due: Infinity });
+          answers.push({ ...item, message: e.message });
+          log.error(`provared-connect: a ${r.kind} kept with the book was not handed to the recorder: ${e.message}`);
+          return 'failed';
+        }
         // The recorder stopped, busy, or not proving itself: tried again later, and said once.
         if (!last?.failed) log.error(`provared-connect: a ${r.kind} could not be handed to the recorder now: ${e.message}`);
         handled.set(key, { ...(last ?? {}), failed: true, due: now() + againMs });
-        continue;
+        return 'failed';
       }
       const outcome = ['taken', 'already', 'held', 'refused'].includes(answer.outcome) ? answer.outcome : 'refused';
       const final = outcome === 'taken' || outcome === 'already' || (outcome === 'refused' && !AGAIN.includes(answer.code));
@@ -141,6 +196,14 @@ export function createHandover({ feed, readKept, putOutcomes, log = console, now
       if (!last || last.item?.outcome !== item.outcome || last.item?.code !== item.code) {
         log.info(`provared-connect: the recorder answered ${outcome}${item.code ? ` (${item.code})` : ''} for a ${r.kind} handed over`);
       }
+      return 'answered';
+    }
+    for (const r of records) {
+      if (r.kind !== 'renewal') { await handOne(r); continue; }
+      const group = heads.get(r);
+      if (!group) continue;
+      // The passkey's latest first; the next only where the one before got no answer.
+      for (const c of group) if ((await handOne(c)) !== 'failed') break;
     }
     // The note: one outcome for each record the book keeps now, the latest the recorder gave.
     const current = new Set(records.map((r) => sha256(JSON.stringify(r.body))));
@@ -165,8 +228,43 @@ export function createHandover({ feed, readKept, putOutcomes, log = console, now
   return Object.freeze({ round });
 }
 
+/** How long a message to the server waits for its answer: 20 seconds. */
+export const SERVER_ANSWER_MS = 20000;
+
 /**
- * The book's kept records and its note of outcomes, through the uploader's
+ * Sends a message to the server with an id of its own, and resolves on its
+ * answer okType; rejects on failType, on the server's own refusal of a
+ * message it does not take ({ type: "error", reason }, with the same id:
+ * "unknown-type" from a server that does not know the message yet), when
+ * the connection closes, or after SERVER_ANSWER_MS.
+ */
+function askServer(ws, request, okType, failType, waitMs = SERVER_ANSWER_MS) {
+  const requestId = `a${randomUUID()}`;
+  return new Promise((resolve, reject) => {
+    const end = (fn, value) => {
+      clearTimeout(timer);
+      ws.removeEventListener('message', onMessage);
+      ws.removeEventListener('close', onClose);
+      fn(value);
+    };
+    const refused = (msg) => Object.assign(new Error(typeof msg.reason === 'string' ? msg.reason : 'refused'), { reason: msg.reason, code: msg.reason, serverMessage: msg });
+    function onMessage(event) {
+      let msg;
+      try { msg = JSON.parse(event.data); } catch { return; }
+      if (!msg || msg.requestId !== requestId) return;
+      if (msg.type === okType) end(resolve, msg);
+      else if (msg.type === failType || msg.type === 'error') end(reject, refused(msg));
+    }
+    function onClose() { end(reject, Object.assign(new Error('the connection to the server closed before it answered'), { reason: 'closed' })); }
+    const timer = setTimeout(() => end(reject, Object.assign(new Error('the server did not answer in time'), { reason: 'timeout' })), waitMs);
+    ws.addEventListener('message', onMessage);
+    ws.addEventListener('close', onClose);
+    ws.send(JSON.stringify({ ...request, requestId }));
+  });
+}
+
+/**
+ * The book's kept records, its note of outcomes and its agent note, through the uploader's
  * own signed-in connection to the server (connect), opened with the book's
  * key from the connection file. watch(handler) asks the engine to say when
  * the book's sealed content changes (its shelf is watched; other books on
@@ -196,6 +294,14 @@ export function bookSide({ cc, connection, connect, key }) {
       type: 'provared-put-outcomes', objectId: connection.objectId, appendCapabilitySecret: connection.appendCapabilitySecret, sealed: cc.toBase64Url(sealed),
     }, 'provared-put-outcomes-ok', 'provared-put-outcomes-failed');
   }
+  /** Writes the agent note (agent.mjs): the agent's public key set, sealed under the book's key with its id bound in. */
+  async function putAgent(agent) {
+    const sealed = await sealAgent(cc, await key(), connection.objectId, agent);
+    // Asked with its own wait, which takes the server's refusal of a message it does not know yet at once.
+    await askServer(await connect(), {
+      type: 'provared-put-agent', objectId: connection.objectId, appendCapabilitySecret: connection.appendCapabilitySecret, sealed: cc.toBase64Url(sealed),
+    }, 'provared-put-agent-ok', 'provared-put-agent-failed');
+  }
   /** Watches the book's shelf on the connection in use; handler() once the book's content changes. Again on a new connection. */
   async function watch(handler) {
     const socket = await connect();
@@ -205,5 +311,5 @@ export function bookSide({ cc, connection, connect, key }) {
     await access.watchObjects(socket, { collection: COLLECTION, selectors: [shelf] });
     watchedOn = socket;
   }
-  return { readKept, putOutcomes, watch };
+  return { readKept, putOutcomes, putAgent, watch };
 }
