@@ -207,6 +207,11 @@ figcaption { color: var(--quiet); font-size: 0.9rem; margin-top: 0.4rem; }
 .dr .ring-slip { fill: var(--card); stroke: var(--slip); }
 .dr .ring-stub { fill: var(--card); stroke: var(--stub); }
 .dr .ring-show { fill: var(--card); stroke: var(--show); }
+.dr .ring-seal { fill: var(--card); stroke: var(--seal); }
+/* The large-company drawing: bands round groups, and two lines run past them. */
+.dr .band { fill: none; stroke: var(--line); }
+.dr .rail-slip { stroke: var(--slip); }
+.dr .rail-stub { stroke: var(--stub); }
 
 .qa p { margin: 0.75rem 0; }
 .qa b { display: block; }

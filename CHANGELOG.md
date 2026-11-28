@@ -282,6 +282,262 @@ Version 0.8.1 changes how the library reads one kind of time and what the signin
 
 - **The recorder beside Claude Code: the hooks in force twice** (`integrations/claude-code/settings-hooks.mjs`, not yet published). The message now says that each tool call the recorder checks, not each tool call, would be asked about and recorded twice: the plugin's hook refuses only those, and the tools the recorder is never asked about go ahead. Word-for-word checks in `test/plugin.test.mjs` and `test/renew.test.mjs` now read that message and three others changed earlier in this release (a permission not yet in force, a settings file too large at the start of a session, the plugin installed beside `init`'s hooks); each fails with the earlier words.
 
+- **`provared-mcp-executor` 0.5.2 (published by hand to npm on 23 November 2026): a security fix, and the faults found by the check against the MCP TypeScript SDK's advisories of October 2026.**
+  - **Upgrade notes: what a user may notice after 0.5.1.**
+    - A body over 4 MiB is refused (413): the default `bodyLimit` was
+      10 MiB. Set `bodyLimit` to take larger ones.
+    - One agent's bodies in flight together, and the upstream's answers
+      the executor holds for it, are each held to `waitingBytes` (32 MiB):
+      past it a request, or an answer, is refused with 503.
+    - A message of more than 100,000 elements is refused (over HTTP with
+      400, over stdio with JSON-RPC error -32600), on every transport, and
+      no setting changes the number. A tool server's
+      answer of more is not read: it is handed on as it came, and the
+      call's receipt says the answer could not be read. But a `tools/list`
+      answer of more is answered with an error (-32603), unless
+      `hideUnlisted` is false and `allowTasks` true: a list of many tools
+      may pass that limit.
+    - Without `allowTasks`, an answer to `initialize`, `server/discover` or
+      `tools/list` that holds a result is read and written out afresh, to
+      take the offer of tasks out of it; one that holds no result is
+      handed on as it came.
+    - In front of an upstream, tasks are refused until `allowTasks` is
+      true: every `tasks/` request, a request with `params.task`, and a
+      subscription that names tasks. The upstream's offer of tasks is not
+      handed on (`capabilities.tasks`, and the 2026-07-28 tasks extension
+      in `capabilities.extensions`), and that extension is taken out of
+      what an agent declares, so a tool server that follows the
+      specification answers a call at once.
+    - `allowTasks: true` is a settings error unless the settings name
+      exactly one agent: with more, the executor does not start.
+    - In front of an upstream with more than one agent, a GET stream
+      without a session is refused (405): there, an agent gets no
+      list-change notices on such a stream, and cannot resume a broken
+      stream by a GET with no session.
+    - An agent's response is refused (400) unless it answers a request the
+      upstream sent to that agent, under the same session, once.
+    - `Last-Event-ID` is dropped unless it names an event the executor
+      gave that agent.
+    - A `notifications/cancelled` cuts a call only under the call's own
+      session.
+    - A session the upstream opened under one OAuth connection is answered
+      404 under another connection of the same agent; the client begins a
+      new session.
+  - The security advisory: https://github.com/provared/provared/security/advisories/GHSA-2frr-c2h5-hcwc
+  - **Versions.** 0.5.2 in `package.json`, its lockfile and `server.json`
+    (both fields); the `npm pack` file name in the README. The root
+    README, the home page and "Provared in three minutes" name 0.5.2 as
+    the guard's version, and the home page's "What is new" has an entry
+    for it. Both recipes build 0.5.2: their `package.json` files name it,
+    and their lockfiles were made from npm after 0.5.2 was published, with
+    npm's hash
+    (`sha512-MCN+r5eYBDQu8VvW8hNyZMSA/l+wiXsNRmv8JlLiYXRhxfY0CoSj0DV3Pg/6UNCy/1U1N54Jf+rTp2M8q0p4gA==`);
+    `node tools/release/check-recipe-lock.mjs --registry` passes. The
+    claude.ai recipe's README, the Dockerfile's comment and the Docker
+    check's examples name 0.5.2. Still asks for `provared` 0.9.0.
+  - **What one agent's messages may hold (F1).** With 0.5.1 each request
+    was bounded (a body of 10 MiB, no batch, 256 levels of nesting, 256
+    requests in flight for an agent) but nothing bounded the number of
+    elements in a message, nor what one agent's requests held together, and
+    a request kept its message as read until the upstream answered. So one
+    signed-in agent could, with requests inside every limit, end the
+    executor ("JavaScript heap out of memory") for every agent: six 10 MiB
+    requests of one-item lists at once with a heap of 1 GiB, and two 10 MiB
+    tool calls with the heap the claude.ai recipe's container gives (likely:
+    measured with the same limit, not in the container); or stall every other agent's
+    answers for seconds at a time. Now: the bodies of one agent's requests
+    in flight may hold `waitingBytes` together (new setting, default 32 MiB,
+    as the gateway's), each counted from its declared length or its first
+    byte until its request has been answered, past which the request is
+    refused with 503 and read no further; a message of the agent's of more
+    than 100,000 elements (list items and member names, `MAX_ELEMENTS` in
+    `jsonrpc.mjs`, a fixed number that no setting changes) is refused
+    before it is read (over HTTP with 400, over stdio with -32600),
+    counted in the one walk of the text that also finds its depth; a
+    request that only passes through lets go of its message as read once
+    it has been sent on (measured: a held request of 383 KiB of small
+    objects kept about 850 KiB of the heap in place of 3.1 MiB); and `bodyLimit` is
+    4 MiB by default, the SDK's, in place of 10 MiB. The claude.ai recipe's
+    settings take bodies of 1 MiB. One agent's messages are read one at a
+    time, each in a turn of the event loop of its own: read back to back,
+    30 messages of 1 MiB with 95,000 member names each held the thread for
+    9 to 11 seconds while another agent's ping waited; now that ping waits
+    for about one of them for each step of its own exchange (measured on
+    Windows: 0.6 to 0.9 seconds, each read 0.16 seconds). On Linux this
+    does not hold: in the same test another agent still waited 7.3
+    seconds. That is a known limit; the test runs on Windows only. Tests: `test/limits.test.mjs`.
+  - **Tasks in front of an upstream (F2).** With 0.5.1 every request but a
+    tool call passed through unchecked, under the executor's one
+    credential, so an upstream that keeps tasks for its caller rather than
+    for a session let one agent list another's tasks (`tasks/list`), take
+    its result (`tasks/result`) and cancel it (`tasks/cancel`), with
+    nothing in that agent's book and no line in the log. Now tasks are
+    refused unless the new setting `allowTasks` is true: a `tasks/` request
+    with JSON-RPC error -32601, a request that asks for a task
+    (`params.task`) with -32602, each under the request's id with 200, as
+    the executor's other refusals of a request it has read, and nothing is
+    sent. With
+    `allowTasks` (which now needs exactly one agent: see below), each task
+    is held to the agent whose call made it:
+    `tasks/get`, `tasks/result` and `tasks/cancel` for another agent's task
+    are refused and not sent, `tasks/list` comes back with the agent's own
+    tasks alone, and an event that names another agent's task is dropped
+    from its streams. `Last-Event-ID` goes on only where it names an event
+    the executor gave that agent, so an upstream that replays a stream by
+    event id alone no longer replays one agent's stream to another. The
+    README says that to the upstream all agents are one caller. Tests:
+    `test/tasks.test.mjs`; two tests of a fast stream in
+    `test/http.test.mjs` now open the made-up upstream's fast stream by its
+    session, since a `Last-Event-ID` no event gave is no longer sent on.
+  - **Two sessions of one agent in front of an upstream (F3).** With 0.5.1
+    a call in flight was held by the agent and its id alone, so a second
+    session of the same agent was refused a call under an id in flight in
+    the first, and its `notifications/cancelled` for that id cut the first
+    session's call, whose receipt then said the agent had cancelled it.
+    Now, where a request names a session, a call is held by that session
+    and its id, as in front of a local program, and a cancellation under a
+    session names a call of that session only. No other agent could do
+    either. Test: `test/upstream-sessions.test.mjs`.
+  - **A session outlived its OAuth connection in front of an upstream
+    (F4).** With 0.5.1 an upstream's session was remembered for the agent's
+    name alone, so after a second approval of the same agent, the new
+    connection could go on under a session the first connection had begun,
+    if it knew the session's id. Now the session is also held to the
+    connection it was begun under, as in front of a local program: used
+    under another, it is forgotten and answered 404. Test:
+    `test/upstream-sessions.test.mjs`.
+  - **The recipe `agent-with-a-shell` (F5).** Its stand-in tool server read
+    the whole of any body, with no limit, before it checked the token; now
+    it checks the token first, refuses a body over 4 MiB (413) and reads
+    no further. The recipe installed the guard 0.3.0 by name, with no
+    lockfile; now it installs 0.5.2, the version the claude.ai recipe
+    builds, with `npm ci` from `guard/package-lock.json`, whose hashes are
+    the claude.ai recipe's, npm's own (`npm ci` from npm's registry
+    passed with it on 23 November 2026; with the 0.5.1 lockfile,
+    `npm ci --offline` from a local cache passed, and the recipe's set-up
+    of the guard gave settings that 0.5.1's `check` reads with no
+    problem). The SDK
+    (1.32.2) is installed the same way, with `npm ci` from the recipe's
+    `package-lock.json` (95 packages, each with npm's hash), made from
+    npm's registry. The recipe has not been run since. Test:
+    `test/recipe-shell.test.mjs` runs the stand-in server with a made-up
+    stand-in for the SDK.
+  - In front of an upstream, the upstream's answers to an agent (up to
+    16 MiB each, 256 at once) were outside the agent's byte budget, so one
+    agent could make the executor hold gigabytes of answers it did not
+    read. Now what the executor holds of them for one agent is held to
+    `waitingBytes`, counted apart from the agent's bodies: past it a JSON
+    answer is refused with 503 (a call is recorded with its outcome not
+    known) and a stream is closed; other agents go on. Test:
+    `test/limits.test.mjs`.
+  - In front of an upstream that keeps no sessions, the upstream's own
+    requests and notifications on a GET stream could reach whichever agent
+    had opened one, and any agent's response under a request's id went on
+    to the upstream, so one agent could answer a request sent to another.
+    Now, with more than one agent, a GET without a session id is answered
+    405 and does not reach the upstream; and an agent's response goes on
+    only where it answers a request of the upstream's that the executor
+    handed on to that agent, under the same session, once (the last 1,000
+    for each agent); any other is refused with 400. Tests:
+    `test/upstream-streams.test.mjs`; the tests that opened GET streams
+    with two agents now open them under a session.
+  - Tasks of the 2026-07-28 revision, an extension the client declares and
+    the server decides on, were not covered: with the default settings a
+    call became a task that its own agent could then not fetch, and
+    another agent could subscribe to it (`subscriptions/listen` with
+    `notifications.taskIds`) and be given its result. Now, without
+    `allowTasks`, the extension is taken out of what is sent on, so the
+    upstream answers at once; a subscription that names tasks is refused
+    and not sent; and a call answered with a task all the same has its
+    outcome not known. With `allowTasks` (one agent only: see below), the
+    flat handle
+    (`result.resultType` `"task"`, `result.taskId`) is learnt from any
+    answer, `tasks/update` is served to the task's agent alone, a
+    subscription goes on only where every task it names is the agent's,
+    `notifications/tasks` of another agent's task is dropped, and a task
+    named in answers to two agents is neither's. The README now says
+    which revisions are covered. Tests: `test/tasks.test.mjs`.
+  - With tasks not allowed, the upstream's offer of tasks still reached the
+    agent, so a client could be asked by the upstream to call a tool as a
+    task, which the executor then refused. Now, without `allowTasks`, the
+    answer to `initialize` or `server/discover` loses `capabilities.tasks`,
+    and each tool in a `tools/list` loses `execution.taskSupport`. Test:
+    `test/tasks.test.mjs`.
+  - A tool server's answer of many small elements (15 MiB of one-item
+    lists) ended the executor at the claude.ai recipe's heap, once read:
+    the limit of 100,000 elements held only for the agent's messages. Now
+    it holds for the server's too, on every transport: past it, the answer
+    is not read; a call's is handed on as it came, its receipt saying the
+    answer could not be read; and a `tools/list` that is to be filtered is
+    answered with an error. And a call sent on unchecked
+    (`"unlisted": "forward"`) kept its message as read until the upstream
+    answered, as requests did before F1 (measured: 3.1 MiB held for
+    383 KiB of text); now it lets go of it once sent. Tests:
+    `test/limits.test.mjs`.
+  - Sentences that were not true, or no longer, are mended: the SDK's
+    lockfile in `agent-with-a-shell` (above), DESIGN's word that a GET with
+    no session id passes (it is refused with 405 where there are several
+    agents), X112's list of the executor's statuses (the new 405, the two
+    503s, the 400 for a response not asked for, and ids counted by session
+    where one is named), and the README on what `waitingBytes` counts
+    (bytes as they came; the memory they take is several times that).
+  - Seven parts of these fixes could be taken out with no test noticing.
+    Each was given a test that fails without it; one of those tests was
+    later removed with the one-agent rule (below). They are: the session
+    in the key of
+    a cancellation (`test/upstream-sessions.test.mjs`, whose step had come
+    after the call it was to cancel had ended); methods and `params.task`
+    in other capitals (`test/tasks.test.mjs`); a message that ties itself
+    to another agent's task (its test removed, as below); the session in the key of an answer to
+    the upstream's request (`test/upstream-streams.test.mjs`); the budget
+    given back when an unread answer's connection closes
+    (`test/limits.test.mjs`, which skips where the computer's connection
+    takes the whole answer at once, as Windows does; on Linux it runs and passes); the claude.ai
+    recipe's `bodyLimit` (`test/recipe-compose.test.mjs`); and `npm ci`
+    for the SDK in `agent-with-a-shell` (`test/recipe-shell.test.mjs`).
+  - `test/recipe-shell.test.mjs` did not load on a clean checkout, where
+    nothing is installed: it named the library before `local-library.mjs`
+    was loaded. It now loads that file first. A new test,
+    `test/test-files.test.mjs`, loads every test file with the library kept
+    out of `node_modules`.
+  - `allowTasks: true` is now a settings error unless the settings name
+    exactly one agent, because several agents share one caller at the tool
+    server, so one agent could reach another's task. With several agents,
+    tasks are refused as without `allowTasks`. The code that holds each
+    task to its agent is kept. The tests of tasks with `allowTasks` now use
+    one agent; the three checks that need a second agent (a message tied to
+    another agent's task, another agent's notifications, a task named to
+    two agents) have no test, since those settings no longer start. Test:
+    `test/tasks.test.mjs`.
+  - With `allowTasks`, a client of the 2026-07-28 revision could not fetch
+    its task: it must send the task id in the `Mcp-Name` header on
+    `tasks/get`, `tasks/update` and `tasks/cancel`, and the executor
+    refused (400) any `Mcp-Name` on those methods. Now `Mcp-Name` there is
+    checked against `params.taskId` and sent on; one that differs is still
+    refused with 400 and not sent. Test: `test/tasks.test.mjs`.
+  - Without `allowTasks`, the 2026-07-28 offer of tasks still reached the
+    agent (`capabilities.extensions["io.modelcontextprotocol/tasks"]` in
+    the answer to `server/discover`), so a client could call a tool that
+    needs a task and get the server's error. Now that extension is taken
+    out of the answer to `server/discover` or `initialize`, as
+    `capabilities.tasks` already was; other extensions are kept. Test:
+    `test/tasks.test.mjs`.
+  - Taking the offer of tasks out made the executor answer with its own
+    error (-32603) where the upstream's answer to `server/discover`,
+    `initialize` or (with `hideUnlisted` false) `tools/list` was a page
+    that is not JSON, such as an older server's 404. Now an answer that
+    holds no result is handed on as it came, with its status, as before.
+    A `tools/list` that `hideUnlisted` filters is answered with the error
+    as before. Test: `test/tasks.test.mjs`.
+  - Where the tasks extension was taken out of a request that is not a
+    call, the request was written out afresh and its numbers changed
+    (`[1.0,1e2,0.1000000000000000055,-0]` went on as `[1,100,0.1,0]`, and
+    `1e400` as `null`). Now every number goes on as the agent wrote it.
+    And where the offer of tasks was taken out of an answer, a number
+    where an object was looked for (`capabilities`, `extensions`, a tool's
+    `execution`) went on as `{"rawJSON": ...}`; now it goes on as
+    written. Test: `test/tasks.test.mjs`.
+
 - **The recorder beside Claude Code, `provared-claude-code` 0.1.1: a web page cannot use its port.** With 0.1.0, a web page open in a browser on the same computer could ask the recorder to take a permission, trust a passkey, write a receipt for a call that never happened, or stop. 0.1.1 refuses what a browser sends for a web page, or under another website's name, on every route of the recorder's port, and for it reads and writes nothing. 0.1.0 is affected, and updating is not enough on its own: a recorder already running keeps the code it started with until it is restarted. After updating, restart it once, with both commands on one line so that no tool call falls between them: `provared-claude-code stop; provared-claude-code ensure`. With the Claude Code plugin, they are `node <the plugin's folder>/plugin.mjs stop; node <the plugin's folder>/plugin.mjs ensure`. A tool call does not start the recorder: while it is stopped, tool calls are refused, until `ensure` or the start of the next Claude Code session (with the plugin) starts it. From 0.1.1, `ensure` and the start of a session say so where the recorder that answers is not the version installed, with these commands; they do not stop it.
   In `integrations/claude-code/recorder.mjs`, every route, the feed's four (`/hello`, `/books`, `/lines` and `/hand-over`) among them, first refuses, before it reads the body, a request with an `Origin` header, with a `Sec-Fetch-Site` header other than `none`, or with a `Host` other than `127.0.0.1:<port>` (on port 80, `127.0.0.1` alone as well, as a client sends it there), and answers 403. Every route but the feed's then refuses, with 415, a POST whose `Content-Type`, read before the first `;`, trimmed and in any case, is not `application/json`. The port is kept once the recorder listens, so a request that came before the port closed (`close()`, or `POST /stop`) is still answered and its call recorded. Where the file `feed-token` holds no token, the feed's answer no longer names the folder, whose path names the person's account; the recorder's status still gives it. The status gives the package's version, from its `package.json`, as `version`. The hook, the recorder's commands, the feed's reader in `feed.mjs` and the uploader in `connect/upload.mjs` already sent all of this; the tests that ask the recorder directly, in `integrations/claude-code/test/` and `connect/test/`, now send `Content-Type: application/json` too, and three requests that `test/handover.test.mjs` writes by hand now name the port in `Host`. Any program on the computer can still use the port, as before; the README says so, in "What the record shows, and what it does not". `package.json`, its lockfile and `.claude-plugin/plugin.json` say 0.1.1, and the README names 0.1.1 where it names the version. New tests, in `test/local-port.test.mjs`: each route, with each of those headers wrong in turn (`Sec-Fetch-Site` of `same-site` or any value but `none`, a `Content-Type` that only names `application/json` after a `;`), is refused, the trusted passkeys, the permission in force and every file in the folder are unchanged, and the recorder still runs; a POST is refused with its body never sent; the feed's four routes refuse such a request and give it no session and no proof, and the feed's reader is still answered; a call whose request came before `close()` or `POST /stop` is answered and recorded; on port 80, `Host: 127.0.0.1` is taken (where port 80 can be taken); `ensure`, with an earlier recorder answering, says so and stops nothing. In `test/feed.test.mjs`, the feed's answer where its token file holds no token names no folder; in `test/plugin.test.mjs`, the start of a session says so where the recorder that answers is an earlier version. With any one of the checks taken out, a test fails. Published on npm on 22 November 2026, with the advisory GHSA-cj2m-rqh6-5984.
 

@@ -43,6 +43,7 @@
   "denialsPerHour": 600,
   "callIdInMeta": true,
   "maxWaiting": 16,
-  "bodyLimit": 10485760,
+  "bodyLimit": 4194304,
+  "waitingBytes": 33554432,
   "allowedOrigins": []
 }

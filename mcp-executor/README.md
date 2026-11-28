@@ -124,7 +124,7 @@ npm install -g provared-mcp-executor
 ```
 
 Or from a copy of the repository: in `mcp-executor`, `npm pack`, then
-`npm install -g ./provared-mcp-executor-0.5.1.tgz`.
+`npm install -g ./provared-mcp-executor-0.5.2.tgz`.
 
 Use version 0.4.2 or later. Every version from 0.1.0 to 0.4.1 has two
 weaknesses: in front of a tool server whose JSON reader ignores capitals
@@ -275,11 +275,14 @@ What the executor does with each request:
   executor's own credential, a bearer token read from the file
   `upstream.credential.file`. Of the agent's headers only `Accept`,
   `Accept-Language`, `Content-Type`, `Mcp-Session-Id` and `Last-Event-ID`
-  go on, with the `MCP-Protocol-Version` the body states, and the mirrored
+  go on (`Last-Event-ID`, which asks the upstream to replay a stream, only
+  where it names an event the executor gave that agent, among the last
+  1,000), with the `MCP-Protocol-Version` the body states, and the mirrored
   headers of the 2026-07-28 revision where each agrees with the body:
   `Mcp-Method` with the body's `method`, `Mcp-Name` with its
-  `params.uri` on a `resources/read` or its `params.name` on a
-  `tools/call` or `prompts/get`, and `Mcp-Param-<name>` with the call's
+  `params.uri` on a `resources/read`, its `params.name` on a
+  `tools/call` or `prompts/get`, or its `params.taskId` on a `tasks/get`,
+  `tasks/update` or `tasks/cancel`, and `Mcp-Param-<name>` with the call's
   argument at the
   property of the tool's `inputSchema` that the upstream's `tools/list`
   annotated `x-mcp-header: <name>` (a value wrapped as `=?base64?…?=` is
@@ -317,9 +320,58 @@ What the executor does with each request:
   recorded as "outcome not known", and its body is not relayed.
 - Legacy sessions pass through: the `Mcp-Session-Id` the upstream gives
   comes back as it is, the GET stream of server messages and `initialize`
-  pass through, and a session belongs to the agent that opened it. Another
-  agent's request under it, or an unknown id (after a restart, the executor
-  knows none), is answered 404, and the client begins a new session.
+  pass through, and a session belongs to the agent that opened it and, for
+  an agent that connects through OAuth, to the connection it was begun
+  under. Another agent's request under it, a request under it from another
+  connection (the session is then forgotten), or an unknown id (after a
+  restart, the executor knows none), is answered 404, and the client
+  begins a new session. Where a request names a session, a call in flight
+  is held by that session and its id, so two sessions of one agent may use
+  the same ids, and a `notifications/cancelled` names a call of its own
+  session only.
+- To the upstream all agents are one caller: each request reaches it with
+  the executor's one credential, and only a session, which belongs to the
+  agent that opened it, tells one agent's requests from another's there.
+  So what the upstream keeps for its caller rather than for a session is
+  shared by every agent. What it sends on a GET stream opened without a
+  session would go to whichever agent opened one, so where the settings
+  name more than one agent, such a GET is answered 405 (the
+  specification's "no stream offered here") and does not reach the
+  upstream; under a session, or with one agent, it passes. A response an
+  agent sends goes on only where it answers a request of the upstream's
+  own that the executor handed on to that agent, under the same session,
+  and only once (the last 1,000 unanswered for each agent); any other is
+  refused with 400 and does not reach the upstream. A task it keeps for its
+  caller could be read or cancelled by any agent. Tasks are therefore
+  refused unless the settings allow them (`allowTasks`). Then every
+  `tasks/` request is answered with JSON-RPC error -32601, and a request
+  that asks for a task (`params.task`, 2025-11-25) or a subscription that
+  names tasks (`params.notifications.taskIds` of `subscriptions/listen`,
+  2026-07-28) with -32602, each under the request's id with 200, as the
+  executor's other refusals of a request it has read; none of these
+  reaches the upstream. In the 2026-07-28 revision tasks are an extension
+  (`io.modelcontextprotocol/tasks`) that a client declares in the client
+  capabilities of its request's `_meta`, and the server decides whether
+  to make a task: the executor takes the extension out of every request
+  it sends on, so the upstream answers at once, with the result. A call
+  that the upstream answers with a task all the same is recorded with its
+  outcome not known, and the agent is told so. `allowTasks` can be true
+  only where the settings name exactly one agent; with several, the
+  executor does not start, because they share one caller at the tool
+  server and one agent could reach another's task. With it, the
+  extension goes on, and a call that becomes a task is checked and
+  receipted as any call (its receipt's result is the task's handle; a
+  later `tasks/result` or `tasks/get` passes with no receipt). The
+  executor remembers the task an answer names (`result.task.taskId` where
+  the request asked for one; `result.taskId` where `result.resultType` is
+  `"task"`, in any answer), the last 1,000. `tasks/get`, `tasks/result`,
+  `tasks/cancel` and `tasks/update` that name a task the executor did not
+  see made (by another caller of the upstream, or before a restart) are
+  refused (-32602) and not sent, and so is a subscription that names one
+  in `notifications.taskIds`; `tasks/list` comes back with the tasks it
+  saw made alone; and any other `tasks/` method is refused. The methods
+  and fields covered are those of the 2025-11-25 revision and, for
+  2026-07-28, those named here.
 - Cancellation follows the era. On the 2026-07-28 revision, closing the
   response stream is the cancellation: the executor then closes its stream
   to the upstream, the outcome is recorded as not known, as on stdio, and
@@ -332,9 +384,19 @@ What the executor does with each request:
   then the stream is closed; the agent merely disconnecting leaves the
   call running, bounded by `timeout`, and its real outcome is recorded.
 - A request that names an `Origin` is refused (403) unless
-  `allowedOrigins` lists it; a body over `bodyLimit` (10 MiB) is refused
+  `allowedOrigins` lists it; a body over `bodyLimit` (4 MiB) is refused
   (413), and one that does not arrive whole within `timeout` is refused
-  (408); an answer or an event of the upstream over 16 MiB is cut off; a
+  (408); a body that would take the bodies of one agent's requests in
+  flight past `waitingBytes` (32 MiB) is refused (503); a message of more
+  than 100,000 elements (list items and member names together) is
+  refused (400) before it is read, on stdio as over HTTP (the number is
+  fixed: no setting changes it, so a call whose arguments hold more, such
+  as 34,000 rows of three fields, is refused wherever it is sent); a message of the
+  tool server's of more than 100,000 elements is not read either: a call's
+  answer is handed on as it came and its receipt says the answer could not
+  be read (no fingerprint of the result), another answer is handed on as
+  it came, and a `tools/list` that is to be filtered is answered with an
+  error; an answer or an event of the upstream over 16 MiB is cut off; a
   call the upstream does not answer within `timeout` is cancelled and gets
   a receipt that says its outcome is not known; an agent whose connection
   does not take what the executor has waiting within `timeout` has that
@@ -384,6 +446,19 @@ The settings (`executor-http.example.json` is a start): `name`, `service`,
   about) and `credential`: `{"file": <path>}`, the file that holds the
   bearer token, readable by the executor alone. Without `credential` the
   upstream is called with none, and the start says so.
+- `allowTasks`, in front of an upstream only: `true` lets the agent use the
+  upstream's tasks, and is a settings error unless the settings name
+  exactly one agent; default `false`, every task request refused (see "To
+  the upstream all agents are one caller", above). With `false`, the upstream's offer of tasks is not
+  handed on either, so that a client is not asked to use what is refused:
+  the answer to `initialize` or `server/discover` loses
+  `capabilities.tasks` and the 2026-07-28 tasks extension
+  (`capabilities.extensions["io.modelcontextprotocol/tasks"]`), and each
+  tool in a `tools/list` loses
+  `execution.taskSupport`. A tool the upstream marks as one that must be
+  called as a task may then fail when called. An answer that holds no
+  result (a JSON-RPC error, an empty body, or a page that is not JSON) is
+  handed on as it came, with its status.
 - `server`, in place of `upstream` and never beside it: a local program,
   with `shutdownWait` and `sessions` (below).
 - `agents`: one member for each agent, by name (1 to 64 lower-case letters,
@@ -399,7 +474,30 @@ The settings (`executor-http.example.json` is a start): `name`, `service`,
   secret, for the executor's own addresses (status, seal, acknowledge; see
   "Sealing, acknowledging, and what the executor says about itself").
   Without it those addresses answer nothing. It may not be an agent's.
-- `bodyLimit`: the most a POST body may be, in bytes (default 10,485,760).
+- `bodyLimit`: the most a POST body may be, in bytes (default 4,194,304,
+  the MCP TypeScript SDK's own limit).
+- `waitingBytes`: the most bytes of bodies one agent's requests may hold
+  at once, in bytes (default 33,554,432, as the gateway's). A body counts
+  from its declared length, or from its first byte, until its request has
+  been answered; a request that would take the agent past it is refused
+  with 503, and other agents are not touched. In front of an upstream,
+  what the executor holds of the upstream's answers to one agent (read
+  and not yet handed on, or waiting for the agent's connection to take
+  it) is held to the same number, counted apart: past it a JSON answer is
+  refused with 503 (a call's outcome is then not known) and a stream is
+  closed. What is counted is bytes as they came: one agent's bodies and
+  answers together count at most about twice `waitingBytes`. The memory
+  they take is more, since a message read takes several times its bytes
+  (measured in the review of this release, with the default 32 MiB and
+  bodies of 1 MiB: the whole 32 MiB of bodies held took about 470 MiB
+  more of the executor's memory, 542 MiB at its peak). Lower
+  `waitingBytes` and `bodyLimit` where memory is short, as the claude.ai
+  recipe does with `bodyLimit`. One agent's messages are read one at a
+  time, so that another agent need not wait for all of them; but in a
+  test this held on Windows only (under a second there, and 7.3
+  seconds on Linux, with one agent sending 30 costly messages of 1 MiB at
+  once). Where agents must not slow each other, give each a guard of its
+  own.
 - `allowedOrigins`: the origins (scheme, host and port) whose pages may
   call the executor. Default none.
 - `oauth`: where agents connect through OAuth (below): `issuer`,

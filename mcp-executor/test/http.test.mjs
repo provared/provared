@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 
 const { checkBook, identifierFingerprint } = await import('provared');
-const { httpWorld, openHttpWorld, call, request, post, rawRequest, auth, META, TOKEN } = await import('./http-world.mjs');
+const { httpWorld, openHttpWorld, call, request, post, rawRequest, auth, beginSession, META, TOKEN } = await import('./http-world.mjs');
 const { CALL_DOCUMENT, RESULT_DOCUMENT, TOOL_DOCUMENT, CALL_META, EXECUTOR_STOPPED, UNLISTED_ACTION, UNREADABLE_ANSWER } = await import('../executor.mjs');
 const { CREDENTIAL_REMOVED, MAX_OPEN, MAX_SESSIONS, readHttpSettings, sseReader, sseEvent, secretHash } = await import('../http.mjs');
 const { readCopy, loadCopyKey } = await import('../copy.mjs');
@@ -626,7 +626,9 @@ test('the reader of server-sent events: line endings, comments, a BOM, data over
 test('attack: an agent that stops reading a fast stream. The upstream is paused, so memory is bounded; the other agent is served meanwhile; after the timeout the exchange is cut and the slot freed', async () => {
   const w = await httpWorld({ config: { timeout: 1500 } });
   try {
-    const s = await rawRequest(w, { method: 'GET', headers: { accept: 'text/event-stream', 'last-event-id': 'fast', ...auth(w, 'alpha') }, stream: true });
+    // The made-up upstream's fast stream is the one of its session "fast", which alpha opens first (Last-Event-ID goes on only for an event alpha was given).
+    await request(w, 'alpha', 'with-session', { session: 'fast' });
+    const s = await rawRequest(w, { method: 'GET', headers: { accept: 'text/event-stream', 'mcp-session-id': 'fast', ...auth(w, 'alpha') }, stream: true });
     assert.equal(s.status, 200);
     s.res.pause(); // the agent reads nothing
     await pause(700);
@@ -652,7 +654,8 @@ test('attack: an agent that stops reading a fast stream. The upstream is paused,
 test('a very slow reader is cut too: the clock stops only when the connection has taken all that is waiting, not at each part read', async () => {
   const w = await httpWorld({ config: { timeout: 1000 } });
   try {
-    const s = await rawRequest(w, { method: 'GET', headers: { accept: 'text/event-stream', 'last-event-id': 'fast', ...auth(w, 'alpha') }, stream: true });
+    await request(w, 'alpha', 'with-session', { session: 'fast' });
+    const s = await rawRequest(w, { method: 'GET', headers: { accept: 'text/event-stream', 'mcp-session-id': 'fast', ...auth(w, 'alpha') }, stream: true });
     assert.equal(s.status, 200);
     s.res.pause();
     let taken = 0;
@@ -933,9 +936,10 @@ test('defences on the agent\'s side, each with what it changes: the cap on reque
   const w = await httpWorld({ config: { bodyLimit: 2048, timeout: 5000 } });
   try {
     const a = w.executor.agent('alpha');
-    // 256 GET streams held open fill the agent's cap; the next is refused, and only for this agent.
+    // 256 GET streams held open fill the agent's cap; the next is refused, and only for this agent. (Under a session: with two agents, a GET without one is not opened.)
+    const session = await beginSession(w, 'alpha');
     const streams = [];
-    for (let i = 0; i < MAX_OPEN; i++) streams.push(await rawRequest(w, { method: 'GET', headers: { accept: 'text/event-stream', ...auth(w, 'alpha') }, stream: true }));
+    for (let i = 0; i < MAX_OPEN; i++) streams.push(await rawRequest(w, { method: 'GET', headers: { accept: 'text/event-stream', ...auth(w, 'alpha'), 'mcp-session-id': session }, stream: true }));
     assert.equal(a.open(), MAX_OPEN);
     const over = await request(w, 'alpha', 'ping');
     assert.equal(over.status, 503);
@@ -1025,7 +1029,7 @@ test('a body that never finishes: an authenticated POST that stops sending is re
     await until(() => a.open() === 0);
     assert.ok(w.logs.some((e) => e.event === 'refused' && e.code === 'body-timeout'));
     // The GET stream of server messages has no such limit.
-    const s = await rawRequest(w, { method: 'GET', headers: { accept: 'text/event-stream', ...auth(w, 'alpha') }, stream: true });
+    const s = await rawRequest(w, { method: 'GET', headers: { accept: 'text/event-stream', ...auth(w, 'alpha'), 'mcp-session-id': await beginSession(w, 'alpha') }, stream: true });
     await new Promise((d) => s.res.once('data', d));
     await pause(1500);
     assert.equal(a.open(), 1, 'the stream is still open after the timeout');

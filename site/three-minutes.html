@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; img-src 'self'; form-action 'none'; base-uri 'none'">
-<meta name="description" content="Provared in plain words, three minutes for a reader who does not write code: how to prove what an AI agent was allowed to do and what it then did, the four parts, the guard that stops a tool call that was not allowed, how a record is made and checked, why it is different, every piece of Provared and where each stands, and what a record does not prove.">
+<meta name="description" content="Provared in plain words, three minutes for a reader who does not write code: how to prove what an AI agent was allowed to do and what it then did, the four parts, the checkpoint that stops an action that was not allowed, how a record is made and checked, how all the parts fit together in a large company that uses AI agents, why it is different, every piece of Provared and where each stands, and what a record does not prove.">
 <link rel="canonical" href="https://prova.red/three-minutes.html">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <meta property="og:type" content="article">
@@ -18,7 +18,7 @@
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://prova.red/preview.png">
 <title>Provared in plain words</title>
-<link rel="stylesheet" href="style.css?v=6">
+<link rel="stylesheet" href="style.css?v=7">
 </head>
 <body>
 <header>
@@ -36,9 +36,14 @@
   <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 7v5l3 2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
   <symbol id="i-book" viewBox="0 0 24 24"><path d="M5 4h12a2 2 0 0 1 2 2v14H7a2 2 0 0 1-2-2z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M5 18a2 2 0 0 1 2-2h12" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
   <symbol id="i-glass" viewBox="0 0 24 24"><circle cx="10" cy="10" r="6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="m14.5 14.5 5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="i-server" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="6.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="4" y="13.5" width="16" height="6.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M7.5 7.25h.01M7.5 16.75h.01" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-chip" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10 3.5v3.5M14 3.5v3.5M10 17v3.5M14 17v3.5M3.5 10H7M3.5 14H7M17 10h3.5M17 14h3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3.5l7 2.8v5.4c0 4.4-3 7.4-7 9-4-1.6-7-4.6-7-9V6.3z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8.8 12l2.2 2.2 4.2-4.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-docs" viewBox="0 0 24 24"><path d="M7 3.5h7.5l3.5 3.5v13.5H7z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M14.5 3.5V7H18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M10 12h5M10 15.5h5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.3" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="13" y="4" width="7" height="7" rx="1.3" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="4" y="13" width="7" height="7" rx="1.3" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="13" y="13" width="7" height="7" rx="1.3" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
 </svg>
 
-<p>Provared proves what an AI agent was allowed to do, and what it then did. Its guard can also stop, before it happens, a tool call that the person did not allow. It is for anyone who runs an agent for other people, or has to check one.</p>
+<p>Provared proves what an AI agent was allowed to do, and what it then did. Its checkpoint can also stop, before it happens, an action that the person did not allow. It is for businesses that use AI agents, and for whoever has to check them.</p>
 
 <p>Companies are starting to let AI agents act for them: order, pay, send, change records. When one goes wrong, nobody can prove what it was allowed to do. That is the gap Provared fills: a flight recorder for AI agents.</p>
 
@@ -60,19 +65,19 @@
   <li class="slip"><strong><span class="kind">Slip</span>, the permission</strong>A person signs it on their phone, with a fingerprint or face: what the agent may do, how much, with whom, until when. Like a signed school-trip form.</li>
   <li class="stub"><strong><span class="kind">Stub</span>, the receipt</strong>One for every action, signed by the agent and by whoever it dealt with. Like a ticket stub.</li>
   <li class="seal"><strong><span class="kind">Seal</span>, the sealed book</strong>The receipts chained in order and dated by an outside clock, so that none can be changed, moved or taken out of the middle unnoticed. Like a wax-sealed ledger.</li>
-  <li class="show"><strong><span class="kind">Show</span>, one page with proof</strong>The inspector sees the page they need, with proof that it belongs to the book, and the rest stays closed. Like a certified extract.</li>
+  <li class="show"><strong><span class="kind">Show</span>, chosen pages with proof</strong>The inspector sees the pages they need, with proof that they belong to the book, and the rest stays closed. Like a certified extract.</li>
 </ul>
 
 <p>And a free checker, which anyone can run on their own device. It answers one question in seconds: did the agent stay within what it was allowed? Yes, or no and where.</p>
 
-<p>It can also stop an action before it happens. The guard stands between an agent and the tools it uses, and holds the tools' credentials (the passwords and keys that open them) in place of the agent. It refuses any call the permission does not allow before the call reaches the tool, and writes a signed receipt for each call it lets through. It keeps the credentials from the agent only where the agent cannot read the guard's files: for example, when the guard runs under a separate user account that the agent cannot use, or when the agent cannot run commands or read files itself.</p>
+<p>It can also stop an action before it happens. Provared's checkpoint stands between an agent and the systems it uses, and holds the systems' passwords and keys in place of the agent. It blocks any action the permission does not allow before the action reaches the system, and writes a signed receipt for each action it lets through. The passwords are out of the agent's reach only where it cannot read the checkpoint's files, for example when the checkpoint runs under another user account; and the agent must have no other way into the systems. The checkpoint comes in two versions. The guard is for the add-on tools that AI assistants use to act; a company can run it on its own server and add it to the claude.ai assistant, and the owner confirms each new connection with a fingerprint or face. The gateway is for business systems the AI reaches with no add-on tool, such as finance or HR.</p>
 
 <h2>How it works</h2>
 
-<p>The drawing below follows the <a href="over-the-limit.html">sample record</a> that ships with the software: an invented office agent, allowed up to £200 of supplies, which goes over at its fifth order.</p>
+<p>The drawing below follows the <a href="over-the-limit.html">sample record</a> that ships with the software: an invented office agent, allowed up to £200 of supplies, which goes over that limit, without the approval it needed, at its fourth order.</p>
 
 <figure>
-  <svg class="dr" fill="#1c1b1f" color="#1c1b1f" viewBox="0 0 372 560" role="img" aria-label="A person signs the slip on their phone. The agent writes a stub for each action and the supplier countersigns it. The stubs are chained into a sealed book, dated by an outside clock. One page is cut from the book as a Show, and an inspector runs the free checker, which says whether the agent stayed within its slip and where it went outside.">
+  <svg class="dr" fill="#1c1b1f" color="#1c1b1f" viewBox="0 0 372 582" role="img" aria-label="A person signs the slip on their phone: up to £200 of supplies for one week, their own approval for anything over £60, never delete. The agent writes a stub for each action and the supplier countersigns it. The stubs are chained into a sealed book, dated by an outside clock. The slip and order 4 are cut from the book as a Show, and an inspector runs the free checker. From those pages it finds order 4 outside the slip: £80 with no approval. From the whole book it also finds the total of £230, over the £200 limit.">
     <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5 0 10z" fill="currentColor"/></marker></defs>
     <g font-size="11">
       <circle class="ring" fill="none" stroke="currentColor" cx="44" cy="62" r="20" stroke-width="1.4"/>
@@ -82,8 +87,8 @@
       <line x1="66" y1="62" x2="97" y2="62" stroke="currentColor" stroke-width="1.4" marker-end="url(#ah)"/>
       <rect class="box-slip" fill="#f6f6f8" stroke="#1d5fbf" x="100" y="34" width="240" height="58" rx="6" stroke-width="1.4"/>
       <text class="ink-slip" fill="#1d5fbf" color="#1d5fbf" x="110" y="52" font-size="12" font-weight="800">SLIP: the permission</text>
-      <text x="110" y="68">Up to £200 of supplies, from one</text>
-      <text x="110" y="82">supplier, for one week. Never delete.</text>
+      <text x="110" y="68">Up to £200 of supplies, one week.</text>
+      <text x="110" y="82">Over £60, ask me first. Never delete.</text>
 
       <line x1="185" y1="93" x2="185" y2="139" stroke="currentColor" stroke-width="1.4" marker-end="url(#ah)"/>
       <text class="mute" fill="#5c5c66" x="193" y="120" font-size="10">each receipt names its slip</text>
@@ -122,12 +127,12 @@
       <line x1="300" y1="282" x2="283" y2="282" stroke="currentColor" stroke-width="1.4" marker-end="url(#ah)"/>
 
       <line x1="185" y1="311" x2="185" y2="357" stroke="currentColor" stroke-width="1.4" marker-end="url(#ah)"/>
-      <text class="mute" fill="#5c5c66" x="193" y="338" font-size="10">one page, cut from the book</text>
+      <text class="mute" fill="#5c5c66" x="193" y="338" font-size="10">chosen pages, cut from the book</text>
 
       <rect class="box-show" fill="#f6f6f8" stroke="#6b3fa0" x="100" y="362" width="240" height="58" rx="6" stroke-width="1.4"/>
-      <text class="ink-show" fill="#6b3fa0" color="#6b3fa0" x="110" y="380" font-size="12" font-weight="800">SHOW: one page, with proof</text>
-      <text x="110" y="396">Order 5, and proof it is in the book.</text>
-      <text x="110" y="410">Names covered.</text>
+      <text class="ink-show" fill="#6b3fa0" color="#6b3fa0" x="110" y="380" font-size="12" font-weight="800">SHOW: chosen pages, with proof</text>
+      <text x="110" y="396">The slip and order 4, with proof</text>
+      <text x="110" y="410">both are in the book. Names covered.</text>
 
       <line x1="185" y1="421" x2="185" y2="467" stroke="currentColor" stroke-width="1.4" marker-end="url(#ah)"/>
       <text class="mute" fill="#5c5c66" x="193" y="448" font-size="10">handed to the inspector</text>
@@ -137,14 +142,16 @@
       <text x="44" y="546" text-anchor="middle" font-weight="700">Inspector</text>
       <text class="mute" fill="#5c5c66" x="44" y="558" text-anchor="middle" font-size="10">runs the checker</text>
       <line x1="66" y1="512" x2="97" y2="512" stroke="currentColor" stroke-width="1.4" marker-end="url(#ah)"/>
-      <rect class="box-plain" fill="none" stroke="currentColor" x="100" y="472" width="240" height="74" rx="6" stroke-width="1.6"/>
+      <rect class="box-plain" fill="none" stroke="currentColor" x="100" y="472" width="240" height="104" rx="6" stroke-width="1.6"/>
       <text x="110" y="490" font-size="12" font-weight="800">CHECKER: free, asks nobody</text>
       <text x="110" y="506">Did the agent stay within its slip?</text>
-      <text class="warn" fill="#b3261e" x="110" y="520" font-weight="700">Outside at order 5: the total is</text>
-      <text class="warn" fill="#b3261e" x="110" y="534" font-weight="700">£230, over the £200 limit.</text>
+      <text class="warn" fill="#b3261e" x="110" y="520" font-weight="700">Outside at order 4: £80, and</text>
+      <text class="warn" fill="#b3261e" x="110" y="534" font-weight="700">no approval from the person.</text>
+      <text x="110" y="552">The whole book also shows the total:</text>
+      <text class="warn" fill="#b3261e" x="110" y="566" font-weight="700">£230, over the £200 limit.</text>
     </g>
   </svg>
-  <figcaption>Who signs what, in order. Every box is signed by the one who wrote it. The checker runs on the inspector's own device and asks nobody.</figcaption>
+  <figcaption>Who signs what, in order. Every box is signed by the one who wrote it. The checker runs on the inspector's own device and asks nobody. Chosen pages prove only what each says on its own; a total, or an earlier cancellation, shows only in the whole book.</figcaption>
 </figure>
 
 <figure>
@@ -184,9 +191,169 @@
 
 <p>With Provared, the auditor is handed the permission the manager signed, the receipt the supplier countersigned, and the sealed, dated book they sit in. Anyone can check it in seconds.</p>
 
+<h2>In a large company</h2>
+
+<p>When a company lets AI agents act in its systems, three questions matter: what is each agent allowed to do, what stops it doing more, and how can both be proved later? The drawing answers them from the top down: the company's people, its AI, Provared's checkpoint, the company's systems, the book of receipts that is kept, and the proof handed to an auditor.</p>
+
+<p>Two words used below. An action is one thing the AI asks a company system to do, such as raising an order, changing a record or sending an email. The checkpoint is Provared's software that stands between the AI and the company's systems and checks each action. It comes in two versions, the guard and the gateway.</p>
+
+<figure>
+  <svg class="dr" fill="#1c1b1f" color="#1c1b1f" viewBox="0 0 372 1230" role="img" aria-label="At the top, the company's people: managers sign on their phone what an AI agent may do, and later a cancellation; IT puts Provared's checkpoint in front of the company's systems and gives the systems' passwords to it, not to the AI; audit, risk and legal check each agent's book and hand pages of it to a regulator or a customer. The manager's signature makes the permission, the Slip, at sign.prova.red. Provared's application, not yet open to others, is where managers are to read each book and sign a renewal or a cancellation. Below sit the company's AI assistants and agents. Every action the AI asks for passes Provared's checkpoint, which checks it against the permission: an allowed action is passed on with a signed receipt; any other is blocked before it reaches the system, and a signed note of the block usually goes in the book. The AI cannot go round the checkpoint unless it can read the checkpoint's files or has another way in. The checkpoint comes in two versions: the guard, for the add-on tools that AI assistants use to act, and the gateway, for business systems the AI reaches with no add-on tool. Allowed actions reach the company's business systems and data. The receipts go into a sealed book; where the guard is used, the keys that seal it can be held by another team; an outside clock dates each seal where one is set up. Chosen pages of the book, the Show, and the free checker then give proof to audit, a regulator, a customer or a court: the whole book shows whether the agent kept to its permission; a few pages show only whether any one of them, on its own, went outside it.">
+  <defs><marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5 0 10z" fill="currentColor"/></marker><marker id="ah-slip" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path class="ink-slip" d="M0 0L10 5 0 10z" fill="#1d5fbf"/></marker><marker id="ah-stub" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path class="ink-stub" d="M0 0L10 5 0 10z" fill="#1f7a3f"/></marker></defs>
+  <g font-size="11">
+  <rect class="band" fill="none" stroke="#d0d0d7" x="4" y="4" width="364" height="192" rx="9" stroke-width="1.2"/>
+  <text class="mute" fill="#5c5c66" x="13" y="20" font-size="10" font-weight="700">THE COMPANY'S PEOPLE</text>
+  <rect class="box" fill="#f6f6f8" stroke="#d0d0d7" x="12" y="28" width="348" height="50" rx="6" stroke-width="1.4"/>
+  <circle class="ring" fill="none" stroke="currentColor" cx="36" cy="53" r="15" stroke-width="1.4"/>
+  <use href="#i-person" x="25.125" y="42.125" width="21.75" height="21.75"/>
+  <text x="58" y="44" font-weight="700">Managers who own a task</text>
+  <text x="58" y="58" font-size="10">Sign, on their phone, what an AI agent may do:</text>
+  <text x="58" y="71" font-size="10">how much, with whom, until when; later, a cancellation.</text>
+  <rect class="box" fill="#f6f6f8" stroke="#d0d0d7" x="12" y="83" width="348" height="50" rx="6" stroke-width="1.4"/>
+  <circle class="ring" fill="none" stroke="currentColor" cx="36" cy="108" r="15" stroke-width="1.4"/>
+  <use href="#i-server" x="25.125" y="97.125" width="21.75" height="21.75"/>
+  <text x="58" y="99" font-weight="700">IT and security</text>
+  <text x="58" y="113" font-size="10">Put Provared's checkpoint in front of the company's</text>
+  <text x="58" y="126" font-size="10">systems, and give the passwords to it, not to the AI.</text>
+  <rect class="box" fill="#f6f6f8" stroke="#d0d0d7" x="12" y="138" width="348" height="50" rx="6" stroke-width="1.4"/>
+  <circle class="ring" fill="none" stroke="currentColor" cx="36" cy="163" r="15" stroke-width="1.4"/>
+  <use href="#i-glass" x="25.125" y="152.125" width="21.75" height="21.75"/>
+  <text x="58" y="154" font-weight="700">Audit, risk and legal</text>
+  <text x="58" y="168" font-size="10">Check each agent's book on their own computer,</text>
+  <text x="58" y="181" font-size="10">and hand pages of it to a regulator or a customer.</text>
+  <line x1="90" y1="196" x2="90" y2="217" stroke="currentColor" stroke-width="1.4" marker-end="url(#ah2)"/>
+  <text class="mute" fill="#5c5c66" x="98" y="210" font-size="10">a manager signs</text>
+  <rect class="box-slip" fill="#f6f6f8" stroke="#1d5fbf" x="4" y="218" width="178" height="78" rx="6" stroke-width="1.4"/>
+  <text class="ink-slip" fill="#1d5fbf" color="#1d5fbf" x="13" y="234" font-weight="700">THE PERMISSION (the Slip)</text>
+  <text x="13" y="248" font-size="10">What the agent may do,</text>
+  <text x="13" y="261" font-size="10">signed with a fingerprint</text>
+  <text x="13" y="274" font-size="10">or face at sign.prova.red.</text>
+  <rect class="box-slip dash" fill="#f6f6f8" stroke="#1d5fbf" x="190" y="218" width="178" height="78" rx="6" stroke-width="1.4" stroke-dasharray="5 3"/>
+  <text class="ink-slip" fill="#1d5fbf" color="#1d5fbf" x="199" y="234" font-weight="700">THE APPLICATION</text>
+  <text x="199" y="248" font-size="10">Managers read each agent's</text>
+  <text x="199" y="261" font-size="10">book there, and sign a</text>
+  <text x="199" y="274" font-size="10">renewal or a cancellation.</text>
+  <text class="mute" fill="#5c5c66" x="199" y="287" font-size="10">Not yet open to others.</text>
+  <rect class="band" fill="none" stroke="#d0d0d7" x="26" y="308" width="320" height="95" rx="9" stroke-width="1.2"/>
+  <text class="mute" fill="#5c5c66" x="35" y="324" font-size="10" font-weight="700">THE COMPANY'S AI</text>
+  <rect class="box" fill="#f6f6f8" stroke="#d0d0d7" x="34" y="332" width="304" height="63" rx="6" stroke-width="1.4"/>
+  <circle class="ring" fill="none" stroke="currentColor" cx="58" cy="363.5" r="15" stroke-width="1.4"/>
+  <use href="#i-agent" x="47.125" y="352.625" width="21.75" height="21.75"/>
+  <text x="80" y="348" font-weight="700">AI assistants and agents</text>
+  <text x="80" y="362" font-size="10">Staff chat assistants (such as claude.ai),</text>
+  <text x="80" y="375" font-size="10">and agents built in-house, on AI models of</text>
+  <text x="80" y="388" font-size="10">the company's choice.</text>
+  <line x1="186" y1="403" x2="186" y2="424" stroke="currentColor" stroke-width="1.4" marker-end="url(#ah2)"/>
+  <text class="mute" fill="#5c5c66" x="194" y="417" font-size="10">every action the AI asks for</text>
+  <rect class="band" fill="none" stroke="#d0d0d7" x="4" y="425" width="364" height="211" rx="9" stroke-width="1.2"/>
+  <text class="mute" fill="#5c5c66" x="13" y="441" font-size="10" font-weight="700">PROVARED'S CHECKPOINT</text>
+  <text class="mute" fill="#5c5c66" x="18" y="453" font-size="10">Blue line: the permission arrives. Green line: receipts leave.</text>
+  <rect class="box-stub" fill="#f6f6f8" stroke="#1f7a3f" x="12" y="461" width="348" height="80" rx="6" stroke-width="1.4"/>
+  <text class="ink-stub" fill="#1f7a3f" color="#1f7a3f" x="21" y="477" font-weight="700">CHECKS EACH ACTION AGAINST THE PERMISSION</text>
+  <text x="21" y="491" font-size="10">Allowed: passed on to the system, with a signed receipt.</text>
+  <text x="21" y="504" font-size="10">Not allowed: blocked; a signed note usually goes in the book.</text>
+  <text x="21" y="517" font-size="10">It holds the systems' passwords; the AI cannot go round it</text>
+  <text x="21" y="530" font-size="10">unless it can read its files or has another way in.</text>
+  <rect class="box-stub" fill="#f6f6f8" stroke="#1f7a3f" x="12" y="547" width="172" height="63" rx="6" stroke-width="1.4"/>
+  <text class="ink-stub" fill="#1f7a3f" color="#1f7a3f" x="21" y="563" font-weight="700">THE GUARD</text>
+  <text x="21" y="577" font-size="10">for the add-on tools that AI</text>
+  <text x="21" y="590" font-size="10">assistants use to act.</text>
+  <text x="21" y="603" font-size="10">Can be added to claude.ai.</text>
+  <rect class="box-stub" fill="#f6f6f8" stroke="#1f7a3f" x="190" y="547" width="170" height="63" rx="6" stroke-width="1.4"/>
+  <text class="ink-stub" fill="#1f7a3f" color="#1f7a3f" x="199" y="563" font-weight="700">THE GATEWAY</text>
+  <text x="199" y="577" font-size="10">for business systems the AI</text>
+  <text x="199" y="590" font-size="10">reaches with no add-on tool,</text>
+  <text x="199" y="603" font-size="10">such as finance or HR.</text>
+  <text class="warn" fill="#b3261e" x="18" y="626" font-size="10" font-weight="700">A blocked action never reaches the system.</text>
+  <line x1="186" y1="636" x2="186" y2="657" stroke="currentColor" stroke-width="1.4" marker-end="url(#ah2)"/>
+  <text class="mute" fill="#5c5c66" x="194" y="650" font-size="10">allowed actions only</text>
+  <rect class="band" fill="none" stroke="#d0d0d7" x="26" y="658" width="320" height="95" rx="9" stroke-width="1.2"/>
+  <text class="mute" fill="#5c5c66" x="35" y="674" font-size="10" font-weight="700">THE COMPANY'S SYSTEMS</text>
+  <rect class="box" fill="#f6f6f8" stroke="#d0d0d7" x="34" y="682" width="304" height="63" rx="6" stroke-width="1.4"/>
+  <circle class="ring" fill="none" stroke="currentColor" cx="58" cy="713.5" r="15" stroke-width="1.4"/>
+  <use href="#i-grid" x="47.125" y="702.625" width="21.75" height="21.75"/>
+  <text x="80" y="698" font-weight="700">Business systems and data</text>
+  <text x="80" y="712" font-size="10">Finance, HR, customer records, email, files,</text>
+  <text x="80" y="725" font-size="10">document search, an online shop: reached</text>
+  <text x="80" y="738" font-size="10">through the checkpoint.</text>
+  <rect class="band" fill="none" stroke="#d0d0d7" x="4" y="773" width="364" height="218" rx="9" stroke-width="1.2"/>
+  <text class="mute" fill="#5c5c66" x="13" y="789" font-size="10" font-weight="700">THE BOOK: RECEIPTS ARRIVE BY THE GREEN LINE</text>
+  <rect class="box-seal" fill="#f6f6f8" stroke="#b85c00" x="12" y="797" width="348" height="63" rx="6" stroke-width="1.4"/>
+  <circle class="ring-seal" fill="#f6f6f8" stroke="#b85c00" cx="36" cy="828.5" r="15" stroke-width="1.4"/>
+  <use class="ink-seal" fill="#b85c00" color="#b85c00" href="#i-book" x="25.125" y="817.625" width="21.75" height="21.75"/>
+  <text class="ink-seal" fill="#b85c00" color="#b85c00" x="58" y="813" font-weight="700">THE SEALED BOOK (the Seal)</text>
+  <text x="58" y="827" font-size="10">Each agent's receipts, chained in order and sealed,</text>
+  <text x="58" y="840" font-size="10">so a receipt changed, moved or taken out of the middle</text>
+  <text x="58" y="853" font-size="10">shows when the book is checked.</text>
+  <rect class="box-seal dash" fill="#f6f6f8" stroke="#b85c00" x="12" y="865" width="348" height="63" rx="6" stroke-width="1.4" stroke-dasharray="5 3"/>
+  <circle class="ring-seal" fill="#f6f6f8" stroke="#b85c00" cx="36" cy="896.5" r="15" stroke-width="1.4"/>
+  <use class="ink-seal" fill="#b85c00" color="#b85c00" href="#i-seal" x="25.125" y="885.625" width="21.75" height="21.75"/>
+  <text class="ink-seal" fill="#b85c00" color="#b85c00" x="58" y="881" font-weight="700">SEALING BY A SEPARATE TEAM</text>
+  <text x="58" y="895" font-size="10">The keys that seal the book are held by another team,</text>
+  <text x="58" y="908" font-size="10">not by those who run the AI. Works with the guard only,</text>
+  <text x="58" y="921" font-size="10">not yet published; the gateway seals with its own keys.</text>
+  <rect class="box" fill="#f6f6f8" stroke="#d0d0d7" x="12" y="933" width="348" height="50" rx="6" stroke-width="1.4"/>
+  <circle class="ring" fill="none" stroke="currentColor" cx="36" cy="958" r="15" stroke-width="1.4"/>
+  <use href="#i-clock" x="25.125" y="947.125" width="21.75" height="21.75"/>
+  <text x="58" y="949" font-weight="700">Outside clock</text>
+  <text x="58" y="963" font-size="10">An independent time service, where one is set up,</text>
+  <text x="58" y="976" font-size="10">dates each seal: evidence the book existed by then.</text>
+  <line x1="186" y1="991" x2="186" y2="1012" stroke="currentColor" stroke-width="1.4" marker-end="url(#ah2)"/>
+  <text class="mute" fill="#5c5c66" x="194" y="1005" font-size="10">chosen pages are handed over</text>
+  <rect class="band" fill="none" stroke="#d0d0d7" x="4" y="1013" width="364" height="150" rx="9" stroke-width="1.2"/>
+  <text class="mute" fill="#5c5c66" x="13" y="1029" font-size="10" font-weight="700">THE PROOF, HANDED OVER</text>
+  <rect class="box-show" fill="#f6f6f8" stroke="#6b3fa0" x="12" y="1037" width="348" height="50" rx="6" stroke-width="1.4"/>
+  <circle class="ring-show" fill="#f6f6f8" stroke="#6b3fa0" cx="36" cy="1062" r="15" stroke-width="1.4"/>
+  <use class="ink-show" fill="#6b3fa0" color="#6b3fa0" href="#i-docs" x="25.125" y="1051.125" width="21.75" height="21.75"/>
+  <text class="ink-show" fill="#6b3fa0" color="#6b3fa0" x="58" y="1053" font-weight="700">CHOSEN PAGES, WITH PROOF (the Show)</text>
+  <text x="58" y="1067" font-size="10">The pages a reader needs, with proof that they belong</text>
+  <text x="58" y="1080" font-size="10">to the book. The rest stays closed.</text>
+  <rect class="box-show" fill="#f6f6f8" stroke="#6b3fa0" x="12" y="1092" width="348" height="63" rx="6" stroke-width="1.4"/>
+  <circle class="ring-show" fill="#f6f6f8" stroke="#6b3fa0" cx="36" cy="1123.5" r="15" stroke-width="1.4"/>
+  <use class="ink-show" fill="#6b3fa0" color="#6b3fa0" href="#i-glass" x="25.125" y="1112.625" width="21.75" height="21.75"/>
+  <text class="ink-show" fill="#6b3fa0" color="#6b3fa0" x="58" y="1108" font-weight="700">FREE CHECKER</text>
+  <text x="58" y="1122" font-size="10">Runs on the reader's own computer and asks nobody.</text>
+  <text x="58" y="1135" font-size="10">Whole book: did the agent keep to its permission?</text>
+  <text x="58" y="1148" font-size="10">A few pages: did any one, on its own, go outside it?</text>
+  <line class="rail-slip" stroke="#1d5fbf" x1="16" y1="296" x2="16" y2="424" stroke-width="2.4" marker-end="url(#ah-slip)"/>
+  <line class="rail-stub" stroke="#1f7a3f" x1="356" y1="636" x2="356" y2="772" stroke-width="2.4" marker-end="url(#ah-stub)"/>
+  <rect fill="none" stroke="#1d5fbf" x="8" y="1175" width="14" height="10" rx="2" stroke-width="1.4"/><rect fill="none" stroke="#1f7a3f" x="24" y="1175" width="14" height="10" rx="2" stroke-width="1.4"/><rect fill="none" stroke="#b85c00" x="40" y="1175" width="14" height="10" rx="2" stroke-width="1.4"/><rect fill="none" stroke="#6b3fa0" x="56" y="1175" width="14" height="10" rx="2" stroke-width="1.4"/>
+  <text x="78" y="1184" font-size="10">Coloured: Provared's parts</text>
+  <rect class="box" fill="#f6f6f8" stroke="#d0d0d7" x="8" y="1193" width="14" height="10" rx="2" stroke-width="1.4"/>
+  <text x="78" y="1202" font-size="10">Grey: the company's own, or other makers'</text>
+  <rect class="box dash" fill="none" stroke="currentColor" x="8" y="1211" width="14" height="10" rx="2" stroke-width="1.4" stroke-dasharray="3 2"/>
+  <text x="78" y="1220" font-size="10">Dashed: built, but not yet published or open to others</text>
+  </g>
+  </svg>
+  <figcaption>Provared checks and records each action where it passes the checkpoint. Some things pass it unchecked, such as a document the AI only reads. Provared does not see what the AI is thinking, does not judge whether what the AI finds in the company's documents is right, and proves nothing about a system the AI can reach another way.</figcaption>
+</figure>
+
+<p>For the checkpoint to work, the AI must reach the company's systems only through it. IT gives the systems' passwords to the checkpoint, not to the AI; runs the checkpoint where the AI cannot read its files; and blocks any other route to the systems. IT also writes the rules that tell the checkpoint what each request to a system means, such as "an order of £8,000": the check is only as right as those rules. A cancellation the manager signs does not yet reach the checkpoint by itself; IT has to carry it out by hand, for example by stopping the agent's access. Agents the company builds itself can also have the check built in, with Provared's ready-made code, but there it works only if the agent's own software asks for it.</p>
+
+<p>One task, in an invented example:</p>
+
+<ol>
+  <li>The finance director signs, on their phone, what a purchasing agent may do: raise purchase orders, up to £10,000 in total and at most ten orders, using only the finance system and the document search, never deleting anything, until the end of the quarter.</li>
+  <li>IT gives Provared's checkpoint the passwords of the finance system and the document search, takes them away from the agent, runs the checkpoint where the agent cannot read its files, and blocks any other route to the two systems. It also writes the rules that tell the checkpoint what each request means.</li>
+  <li>The agent looks up the purchasing policy in the document search and raises an order for £8,000. Each action is passed on with a signed receipt. It then asks to raise an order for £14,000, over the limit. The checkpoint blocks it before the finance system sees it, and signs a note of the block.</li>
+  <li>Each checkpoint puts its receipts into a book, in order, and seals it at the times IT has set. Where an outside time service is set up, it dates each seal.</li>
+  <li>Months later an auditor asks who allowed the £8,000 order. The company hands over two pages of the book: the permission and that order's receipt. The auditor's checker, on the auditor's own computer, shows the signed permission and whether that order, on its own, went outside it. Whether the £10,000 total was kept, and the permission not cancelled first, needs the whole book. Evidence, not a verdict.</li>
+</ol>
+
+<p>Where each part stands today:</p>
+
+<ul>
+  <li>Published, and free for anyone to use: the signing page, the checkpoint in both versions, Provared's ready-made code for agents, and the checker.</li>
+  <li>The application, where a manager is to read each agent's book and sign a renewal or a cancellation, is not yet open to others, and cannot yet pass either back to the checkpoint.</li>
+  <li>Sealing by a separate team works with the guard only, on the guard's own computer, and is not yet a published package. The gateway seals with keys of its own for now.</li>
+  <li>The checking page in a web browser cannot yet check a sealed book in full; the checker installed on a computer can.</li>
+  <li>As far as the author knows, no company has yet run all of these together. The section "Where it is today", below, says how far each part has been tried.</li>
+</ul>
+
 <h2>Why it is different</h2>
 
 <ol>
+  <li>Several large platforms for AI agents now offer to hold the passwords of the systems an agent uses, and to check each action. Provared's checkpoint does that too, and adds the proof: what you allowed, in a permission you signed on your phone, and what the agent did through it, in a signed receipt for each action. Anyone can check both later, on their own computer, rather than rely on a platform's own logs.</li>
   <li>Other projects record what an agent did. Provared also records what it was allowed to do, and compares the two automatically.</li>
   <li>The permission has limits a machine can check: £200 in total, five orders, this supplier only, until Friday, never delete.</li>
   <li>The person can cancel at any time. The agent signs that it was told. The book shows if it carried on.</li>
@@ -198,6 +365,8 @@
 <p>At least four other open projects make signed, time-stamped receipts. Provared adds the permission the person signed, with limits a machine can check, and a checker that says whether each action stayed within it.</p>
 
 <h2>The whole of Provared</h2>
+
+<p class="small">Detail for technical readers: this section and "Where it is today". "Hard questions" and "What a record does not prove", after them, are for everyone.</p>
 
 <p>Every piece writes or reads the same kind of record, and the same free checker reads them all. In short: a person signs a permission at the signing page; the guard, or another recorder beside the agent, checks the agent's actions against it and writes a receipt for each; the sealer seals the book; an inspector checks it with the checker.</p>
 
@@ -213,12 +382,12 @@
 
 <h3>Beside the agent: ways to record it</h3>
 <ul>
-  <li><strong>The guard</strong>, <a href="https://www.npmjs.com/package/provared-mcp-executor">provared-mcp-executor</a> 0.5.1, for agents that use MCP tool servers. It stands in front of the tools, refuses any call the permission does not allow, and signs a receipt for each call it lets through. It runs on the agent's computer, or over the network for several agents, each with its own permission and record. It can also check what a call asks for, for example which file names a file tool is given.</li>
+  <li><strong>The guard</strong>, <a href="https://www.npmjs.com/package/provared-mcp-executor">provared-mcp-executor</a> 0.5.2, for agents that use MCP tool servers. It stands in front of the tools, refuses any call the permission does not allow, and signs a receipt for each call it lets through. It runs on the agent's computer, or over the network for several agents, each with its own permission and record, and can be added to claude.ai as a custom connector. It can also check what a call asks for, for example which file names a file tool is given, seal the receipts into a book, and, where a time-stamp service is set up, have each seal dated by it.</li>
   <li><strong>The library</strong>, <a href="https://www.npmjs.com/package/provared">provared</a> 0.9.1, in JavaScript and <a href="https://pypi.org/project/provared/">Python</a>, for an agent a developer writes: each action is checked against the permission first and receipted after.</li>
   <li><strong>The recorder beside Claude Code</strong>, <a href="https://www.npmjs.com/package/provared-claude-code">provared-claude-code</a> 0.1.1. Claude Code is an AI coding agent. The recorder checks Claude Code's tool calls against the permission before they run, and receipts each one taken. It leaves out eight tools that only ask the person something or change what the agent itself holds, such as its plan or its list of tasks. It keeps <a href="records/">the author's own record</a>, which is public.</li>
   <li><strong>Add-ons for <a href="https://pypi.org/project/provared-langchain/">LangChain</a> and <a href="https://pypi.org/project/pydantic-ai-provared/">Pydantic AI</a></strong>, 0.2.0 each, two of the most-used toolkits for building agents.</li>
   <li><strong>A tool server for one Shopify store</strong>, <a href="https://www.npmjs.com/package/provared-shopify">provared-shopify</a> 0.1.0, made to run behind the guard. Through it an agent can read products and orders, change a price, make and stop discount codes, and refund an order; the guard checks each call against the permission first, and the server itself checks none. It has been run only against a made-up Shopify, in its tests, not against a real store.</li>
-  <li><strong>The gateway</strong>, for agents that act through web services: it stands in front of each service, holds its credential and receipts each call. <a href="https://www.npmjs.com/package/provared-gateway">provared-gateway on npm</a>; see <a href="https://github.com/provared/provared/tree/main/gateway">its folder in the repository</a>.</li>
+  <li><strong>The gateway</strong>, for agents that act through web services: it stands in front of each service, holds its credential, refuses any call the permission does not allow, and receipts each call. It can also countersign each call it lets through, under keys of its own; that is the gateway's own word, not the service's. <a href="https://www.npmjs.com/package/provared-gateway">provared-gateway</a> 0.1.0 on npm; see <a href="https://github.com/provared/provared/tree/main/gateway">its folder in the repository</a>.</li>
 </ul>
 
 <h3>Keeping the book</h3>
@@ -238,11 +407,11 @@
 
 <h2>Where it is today</h2>
 
-<p>The library, the guard, the recorder beside Claude Code and the two add-ons are published, for anyone to install, on <a href="https://www.npmjs.com/package/provared">npm</a> and on the <a href="https://pypi.org/project/provared/">Python Package Index</a>. The core of the format is an <a href="https://datatracker.ietf.org/doc/draft-izmaylov-agent-permission-receipts/">Internet-Draft at the IETF</a>; an Internet-Draft is a working document, not a standard. Every line of code and every test is public on <a href="https://github.com/provared/provared">GitHub</a>, and the <a href="check/">checking page</a>, which also works as <a href="provared-check.html" download>one file</a> with no connection, has a sample record to try.</p>
+<p>The library, the guard, the gateway, the recorder beside Claude Code, the Shopify tool server and the two add-ons are published, for anyone to install, on <a href="https://www.npmjs.com/package/provared">npm</a> and on the <a href="https://pypi.org/project/provared/">Python Package Index</a>. The core of the format is an <a href="https://datatracker.ietf.org/doc/draft-izmaylov-agent-permission-receipts/">Internet-Draft at the IETF</a>; an Internet-Draft is a working document, not a standard. Every line of code and every test is public on <a href="https://github.com/provared/provared">GitHub</a>, and the <a href="check/">checking page</a>, which also works as <a href="provared-check.html" download>one file</a> with no connection, has a sample record to try.</p>
 
 <p>The library depends on no outside code in JavaScript, and on one package in Python. It sends nothing home, holds no money and starts no payment. It is held to more than 750 automated tests, and to more than 14,000 shared test cases that the JavaScript and Python versions must answer alike. It has been through more than 80 rounds of review by AI reviewers, each a fresh session given the code, the documents and a brief of what to look at. Until 7 November 2026 each reviewer likely also had the author's private planning notes loaded, so could see the author's reasoning; since then reviewers start without them. Every fault was fixed, or stated as a limit, and kept as a test. No person other than the author has reviewed it yet. That is an invitation.</p>
 
-<p>The guard works with tool servers that speak the Model Context Protocol (MCP), the common way for AI agents to reach tools. It is published on npm as <a href="https://www.npmjs.com/package/provared-mcp-executor">provared-mcp-executor</a>, version 0.5.1, and is listed in the official MCP Registry. Version 0.4.2, published on 15 November 2026, fixed two weaknesses in every earlier version: in front of some tool servers, an agent could have a tool run that the guard never checked, with no receipt or with a receipt for a different tool. npm marks versions 0.1.0 to 0.4.1 as out of date ("deprecated"), and <a href="https://github.com/provared/provared/security/advisories/GHSA-q53c-6wvv-gfj8">the security advisory</a> says which tool servers are affected. A <a href="https://github.com/provared/provared/blob/main/mcp-executor/README.md#quick-start">demonstration</a> runs it in front of a made-up tool server, with no passkey and no settings; its records prove nothing about anyone. Over the network, it has been tried only with every program on one computer, not yet on separate computers.</p>
+<p>The guard works with tool servers that speak the Model Context Protocol (MCP), the common way for AI agents to reach tools. It is published on npm as <a href="https://www.npmjs.com/package/provared-mcp-executor">provared-mcp-executor</a>, version 0.5.2, and is listed in the official MCP Registry. Version 0.4.2, published on 15 November 2026, fixed two weaknesses in every earlier version: in front of some tool servers, an agent could have a tool run that the guard never checked, with no receipt or with a receipt for a different tool. <a href="https://github.com/provared/provared/security/advisories/GHSA-q53c-6wvv-gfj8">Its security advisory</a> says which tool servers are affected. Version 0.5.2, published on 23 November 2026, fixed a further weakness in versions 0.3.0 to 0.5.1: over the network, with several agents, one agent could list, read or cancel another agent's unfinished jobs ("tasks") at a tool server that keeps them for whoever holds its credential. <a href="https://github.com/provared/provared/security/advisories/GHSA-2frr-c2h5-hcwc">That advisory</a> has the details. npm marks every earlier version as out of date ("deprecated"). A <a href="https://github.com/provared/provared/blob/main/mcp-executor/README.md#quick-start">demonstration</a> runs the guard in front of a made-up tool server, with no passkey and no settings; its records prove nothing about anyone. Over the network, on 15 November 2026, an earlier build of version 0.5.0 was tried with claude.ai and a server on the internet: claude.ai connected after one passkey prompt, and the guard let two tool calls through and refused a third. Apart from that, it has been tried only with every program on one computer, not yet on separate computers.</p>
 
 <p>It is one author, in their own time, on their own equipment. Building started on 3 October 2026, with AI tools.</p>
 
@@ -252,8 +421,8 @@
   <p><b>A log file does this already.</b>A log is written by the one being questioned, and can be edited. This is signed by the person, the agent and the other side, and dated by an outside clock. An auditor would rather be handed the second.</p>
   <p><b>One person, in spare time?</b>Yes. That is why it is open, held to 750 tests, reviewed in more than 80 rounds by AI reviewers and not yet by anyone else, and published where anyone can check it. If the author vanishes, the records still check. The standard does not depend on one person.</p>
   <p><b>How long did it take?</b>Building started on 3 October 2026. Published on 6 October. Built with AI tools, reviewed in more than 80 rounds by AI reviewers, every fault fixed or stated as a limit, and kept as a test. Judge the code, not the calendar.</p>
-  <p><b>Can it stop a bad agent?</b>The guard can, for the tools it stands in front of: it refuses any call outside the slip before the call reaches the tool, and the agent cannot go round it as long as the guard alone holds the tools' credentials and the agent has no other way to the tools. Without the guard, the check stops only an agent whose own software asks it. Neither can judge right from wrong. Evidence, not a verdict.</p>
-  <p><b>Does it hold my money or my data?</b>It holds no money, starts no payment, issues no token, and sends nothing home. The guard keeps your tools' credentials, and its own copy of each call, on the computer where you run it. The application, when it opens to others, keeps each book on its server encrypted with the book's key, which the server is not given, so it cannot read the book. The checker asks nobody.</p>
+  <p><b>Can it stop a bad agent?</b>The guard can, for the tools it stands in front of, and the gateway for the web services it stands in front of: each refuses any call outside the slip before the call reaches the tool or service, and the agent cannot go round it as long as the guard or gateway alone holds the credentials and the agent has no other way to the tools or services. Without the guard or gateway, the check stops only an agent whose own software asks it. Neither can judge right from wrong. Evidence, not a verdict.</p>
+  <p><b>Does it hold my money or my data?</b>It holds no money, starts no payment, issues no token, and sends nothing home. The guard and the gateway keep your tools' and services' credentials on the computer where you run them, and, where set up, their own copy of each call. The application, when it opens to others, keeps each book on its server encrypted with the book's key, which the server is not given, so it cannot read the book. The checker asks nobody.</p>
   <p><b>Why bother with quantum computers?</b>A record must still check in ten years. Today's signatures may not. It costs the user nothing.</p>
   <p><b>Prove it.</b>The pages linked above are public. Or give a technical person thirty minutes to try to break it; a hole found is fixed in public. Found one? Open an <a href="https://github.com/provared/provared/issues">issue on GitHub</a>. It is fixed in public, and you are named in the change log if you wish.</p>
 </div>
@@ -282,7 +451,10 @@
   <p><b>Credential:</b> a password, key or token that lets software use a tool or a service.</p>
   <p><b>Guard:</b> software that stands between an agent and its tools, holds the tools' credentials in place of the agent (it keeps them from the agent only where the agent cannot read the guard's files), and refuses any call the permission does not allow. Provared's guard is the package provared-mcp-executor.</p>
   <p><b>Sealer:</b> a program, run apart from the agent, that holds the keys that seal a book.</p>
-  <p><b>Gateway:</b> the guard's counterpart for web services: it stands in front of each service an agent uses, holds its credential and receipts each call.</p>
+  <p><b>Gateway:</b> the guard's counterpart for web services: it stands in front of each service an agent uses, holds its credential, refuses any call the permission does not allow, and receipts each call.</p>
+  <p><b>Checkpoint:</b> the guard and the gateway together: Provared's software between an AI agent and a company's systems, which checks each action against the permission.</p>
+  <p><b>Tool server:</b> a program an agent calls to do one kind of thing, such as reading files, searching documents or changing a shop's prices.</p>
+  <p><b>RAG, retrieval-augmented generation:</b> a way of making an AI model look things up in a store of the company's own documents before it answers. Where the search is offered to the agent as a tool, Provared sees it as one more tool call: it can allow or refuse it, and receipts it, but it does not judge what comes back. Documents offered as MCP resources, and searches that do not pass the guard, are not checked.</p>
   <p><b>MCP, the Model Context Protocol:</b> the common way for AI agents to reach tools, such as reading files or searching the web.</p>
   <p><b>Checker:</b> the free program that reads a record and says whether it is intact, and whether the agent stayed within its permission.</p>
   <p><b>Quantum-safe signature:</b> a signature method that a future quantum computer is not expected to break. Provared uses two methods side by side, so that a record still checks in decades.</p>

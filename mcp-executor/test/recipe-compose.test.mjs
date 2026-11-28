@@ -717,3 +717,8 @@ test('the boot unit: after a restart of the server, it starts whichever containe
   const check = readFileSync(new URL('./recipe-compose/docker-check.sh', import.meta.url), 'utf8');
   assert.ok(check.includes('boot/provared-guard-boot.service'), 'the Docker check runs the unit\'s own command');
 });
+
+test('the guard\'s settings in the recipe take bodies of 1 MiB at most, less than the default of 4 MiB, for the heap the container gives (F1)', () => {
+  const settings = JSON.parse(readFileSync(new URL('../recipes/claude-ai/executor-oauth.example.json', import.meta.url), 'utf8'));
+  assert.equal(settings.bodyLimit, 1048576);
+});

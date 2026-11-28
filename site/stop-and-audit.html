@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; img-src 'self'; form-action 'none'; base-uri 'none'">
+<meta name="description" content="For a business whose AI agents act on real systems: how to put a hard stop and a signed audit trail in front of an agent's tools with Provared's guard, what a security review gets, and what it does not cover.">
+<title>A hard stop and an audit trail in front of an AI agent's tools</title>
+<link rel="canonical" href="https://prova.red/stop-and-audit.html">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Provared">
+<meta property="og:title" content="A hard stop and an audit trail in front of an AI agent's tools">
+<meta property="og:description" content="The guard holds the tools' credentials in place of the agent, refuses what a signed permission does not allow before the tool sees it, and signs a receipt for every call it lets through.">
+<meta property="og:url" content="https://prova.red/stop-and-audit.html">
+<meta property="og:image" content="https://prova.red/preview.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://prova.red/preview.png">
+<link rel="stylesheet" href="style.css?v=6">
+</head>
+<body>
+<header>
+  <p class="small"><a href="./"><svg class="mark" viewBox="0 0 64 64" width="20" height="20" aria-hidden="true"><circle cx="32" cy="32" r="32" fill="#8f000f"/><path d="M20 15 H37 L45 23 V49 H20 Z" fill="#ffffff"/><path d="M37 15 V23 H45" fill="none" stroke="#8f000f" stroke-width="2.5" stroke-linejoin="round"/><path d="M25 29 H40 M25 35 H36" stroke="#8f000f" stroke-width="2.5" stroke-linecap="round"/><path d="M24.5 43 C27 39, 29 46, 31.5 42.5 C34 39, 36 46, 40.5 41.5" fill="none" stroke="#8f000f" stroke-width="3" stroke-linecap="round"/></svg>Provared</a></p>
+  <h1>A hard stop and an audit trail in front of an AI agent's tools</h1>
+  <p class="motto">For a business whose AI agents act on real systems: email, customer records, a database. Evidence, not a verdict.</p>
+</header>
+<main>
+
+<p>An agent can do what nobody meant it to: a test run that emails real customers, a change to live data. Asking a person to approve every step often does not last: after a few weeks the approvals are clicked without being read. And the log of what happened is usually written by the same software, and can be edited by whoever runs it.</p>
+
+<h2>What the guard does</h2>
+
+<ul>
+  <li><b>Holds the credentials.</b> The guard sits between the agent and one tool server: the program through which the agent uses a system such as email or a database. It holds the tool server's access key in place of the agent.</li>
+  <li><b>One permission, signed once.</b> A person signs it with a passkey (the fingerprint, face or PIN prompt on a phone or computer). It says which actions the agent may take (the guard's settings say which tool is which action), how many in a period, until when, and for what purpose.</li>
+  <li><b>A hard stop.</b> The guard checks each call against the permission. A call it does not allow is refused before it reaches the tool, and the guard signs a note of the refusal. By default, a tool you have not listed is not shown to the agent, and a call to it is refused.</li>
+  <li><b>An audit trail.</b> For each call it lets through, the guard signs a receipt that points back to the permission. The receipts can be sealed, so a later change to one shows when they are checked.</li>
+  <li><b>Checked by anyone.</b> A security reviewer or an auditor checks the permission, the receipts and the refusals on their own computer, with the free checker.</li>
+</ul>
+
+<h2>Where it works</h2>
+
+<p>With tools that use the Model Context Protocol (MCP), the common way for AI agents to reach tools. The guard runs on the same computer as the agent, or on a server for several agents, each with its own permission and its own record. A business can run it on its own server and add it to claude.ai as a custom connector; the owner approves each new connection with a passkey. It is the npm package <code>provared-mcp-executor</code>.</p>
+
+<h2>What it does not do</h2>
+
+<ul class="answers">
+  <li class="no">It covers only calls that go through it. A tool the agent can reach another way, or a step in your own software that is not a tool call, is not covered.</li>
+  <li class="no">It keeps the credential from the agent only where the agent cannot read the guard's files: a separate user account, no shell or file tools for the agent, or the guard run apart from the agent, over the network, where the agent cannot read its files (tried with separate containers on one computer; on separate computers it has not been tried). <a href="./#credentials">The home page</a> says more.</li>
+  <li class="no">It knows a call by the tool's name and your rule for it. It does not understand what the tool does.</li>
+  <li class="no">A tool server reached over the network must accept a fixed access key. One that only accepts its own sign-in (OAuth) is not served yet.</li>
+  <li class="no">One guard stands in front of one tool server.</li>
+  <li class="no">Unless a central sealer holds the sealing keys, whoever can read the guard's files can write and seal a record of their own.</li>
+  <li class="no">A record does not show that an action was wise, lawful or wanted.</li>
+</ul>
+
+<h2>Cost, data and review</h2>
+
+<div class="qa">
+  <p><b>Cost.</b>Free and open source, under the Apache License 2.0. Nothing is sold here. There is no hosted service: you run the guard yourself.</p>
+  <p><b>Your data.</b>Nothing is sent to the author (no telemetry). The credentials and the records stay where you run the guard. The guard sends each allowed call on to your tool server and, where you set one up, asks a time-stamp service to date each seal.</p>
+  <p><b>Review.</b>Draft software, built by one author with AI tools since 3 October 2026. No person other than the author has reviewed the code yet.</p>
+</div>
+
+<h2>Try it on one tool for a week</h2>
+
+<ol>
+  <li>See it work in front of a made-up tool, with no passkey and no settings, on a computer with Node.js 24.7 or later:
+<pre>npm install -g provared-mcp-executor
+provared-mcp-executor demo</pre>
+  Its records prove nothing about anyone.</li>
+  <li>Put it in front of one real tool: <a href="https://github.com/provared/provared/blob/main/mcp-executor/README.md">the guard's README</a> sets it up in five steps, and <a href="https://github.com/provared/provared/blob/main/mcp-executor/recipes/claude-ai/README.md">the claude.ai recipe</a> adds it to claude.ai. The recipe has been tried only in a test on one computer; an earlier build of the guard itself ran with claude.ai on a server on the internet on 15 November 2026.</li>
+  <li>Questions: <a href="mailto:hello@prova.red?subject=Provared">hello@prova.red</a>.</li>
+</ol>
+
+</main>
+<footer>
+  <p><b>About the author.</b> Pavel Izmaylov builds Provared alone, in their own time and under their own name; on GitHub, <a href="https://github.com/sealwright">sealwright</a>. Every email to <a href="mailto:hello@prova.red?subject=Provared">hello@prova.red</a> is read and answered within a few days.</p>
+  <p>This page loads nothing from anywhere but its own style sheet and icon, and keeps nothing about you.</p>
+</footer>
+</body>
+</html>

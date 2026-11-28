@@ -13,7 +13,7 @@ import { syncBuiltinESMExports } from 'node:module';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-const { call, rawRequest } = await import('./http-world.mjs');
+const { call, rawRequest, beginSession } = await import('./http-world.mjs');
 const { until } = await import('./world.mjs');
 const { MAX_ACCESS, REQUEST_LIFE, STATE_RETRY } = await import('../oauth.mjs');
 const { CHALLENGE_PATH, LINK_PATH, SETUP_PATH } = await import('../owner-steps.mjs');
@@ -173,7 +173,9 @@ test('N1: the command "http", stopped while a connection\'s end is unwritten, sa
 
 /** The GET stream of server messages, opened as an agent: {res, closed (a promise)}. */
 async function openStream(w, authorization) {
-  const s = await rawRequest(w, { method: 'GET', headers: { accept: 'text/event-stream', authorization }, stream: true });
+  // Under a session begun with the same authorization: with more than one agent, a GET without one is not opened.
+  const session = await beginSession(w, authorization);
+  const s = await rawRequest(w, { method: 'GET', headers: { accept: 'text/event-stream', authorization, 'mcp-session-id': session }, stream: true });
   assert.equal(s.status, 200);
   s.closed = new Promise((done) => s.res.on('close', done));
   s.res.resume();
